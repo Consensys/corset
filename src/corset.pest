@@ -1,0 +1,11 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+corset = { SOI ~ constraint* ~ EOI }
+
+constraint = { sexpr }
+sexpr = { "(" ~ function ~ expr+ ~ ")" }
+expr = { column | sexpr | value }
+
+column = @{ (ASCII_ALPHA)+ }
+function = @{ (ASCII_ALPHA | "-" | "+" | "=" )+ | "sub" }
+value = @{ ASCII_DIGIT+ }
