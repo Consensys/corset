@@ -26,8 +26,20 @@ impl ConstraintsSet {
         Self::from_str(&file_content, settings)
     }
 
-    pub fn render(&self) -> Vec<String> {
-        self.constraints.iter().map(|c| c.render()).collect()
+    pub fn render(&self) -> String {
+        if self.constraints.len() > 1 {
+            format!(
+                "{} := []column.Expression{{{}}}",
+                self.settings.name,
+                self.constraints.iter().map(|c| c.render()).collect::<Vec<_>>().join(",\n")
+            )
+        } else {
+            format!(
+                "{} := {}",
+                self.settings.name,
+                self.constraints.iter().map(|c| c.render()).collect::<Vec<_>>().join(",\n")
+            )
+        }
     }
 }
 
