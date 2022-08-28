@@ -1,4 +1,6 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* }
+
 
 corset = { SOI ~ constraint* ~ EOI }
 
