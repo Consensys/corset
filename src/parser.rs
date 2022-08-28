@@ -199,8 +199,6 @@ pub fn parse(source: &str) -> Result<Vec<AstNode>, Error<Rule>> {
             Rule::corset => {
                 for constraint in pair.into_inner() {
                     if constraint.as_rule() != Rule::EOI {
-                        dbg!(constraint.as_rule());
-                        dbg!(constraint.as_str());
                         ast.push(build_ast_from_expr(constraint));
                     }
                 }
