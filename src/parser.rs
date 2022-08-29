@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Parser)]
 #[grammar = "corset.pest"]
-pub struct CorsetParser;
+struct CorsetParser;
 
 lazy_static::lazy_static! {
     static ref BUILTINS: HashMap<&'static str, Builtin> = maplit::hashmap!{
@@ -106,25 +106,25 @@ pub enum Builtin {
 impl Builtin {}
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum VerbStatus {
+enum VerbStatus {
     Builtin(Builtin),
     Defined,
 }
 #[derive(Debug, PartialEq, Clone)]
-pub struct Verb {
+struct Verb {
     name: String,
     status: VerbStatus,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum SymbolStatus {
+enum SymbolStatus {
     Pending,
     Resolved,
     Functional,
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum AstNode {
+enum AstNode {
     Ignore,
     Value(i32),
     Symbol { name: String, status: SymbolStatus },
@@ -223,6 +223,15 @@ struct SymbolsTable {
     symbols: HashMap<String, Symbol>,
 }
 impl SymbolsTable {
+    fn insert_alias(&mut self, from: &str, to: &str) -> Result<()> {
+        // FIXME: should work better with defcolumns
+        // if self.symbols.contains_key(from) {
+        //     Err(anyhow!("`{}` already exists", from))
+        // } else {
+        self.symbols.insert(from.into(), Symbol::Alias(to.into()));
+        Ok(())
+        // }
+    }
     fn _resolve_symbol(&self, name: &str, ax: &mut HashSet<String>) -> Result<String> {
         if ax.contains(name) {
             Err(eyre!("Circular definitions found for {}", name))
@@ -389,8 +398,8 @@ impl Compiler {
                     } = &args[1]
                     {
                         self.table
-                            .symbols
-                            .insert(from.into(), Symbol::Alias(to.into()));
+                            .insert_alias(from, to)
+                            .with_context(|| format!("while defining alias {} -> {}", from, to,))?
                     } else {
                         return Err(eyre!("Invalid argument found in DEFALIAS: {:?}", args[1]));
                     }
