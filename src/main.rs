@@ -1,10 +1,10 @@
 #[macro_use]
 extern crate pest_derive;
+use crate::parser::Transpiler;
 use clap::Parser;
 use color_eyre::eyre::*;
 use std::io::prelude::*;
 use std::path::Path;
-use crate::parser::Exporter;
 
 mod go;
 mod parser;
@@ -36,12 +36,14 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     let constraints = if Path::new(&args.source).is_file() {
-        parser::ConstraintsSet::from_file(&args.source, &args)
+        parser::ConstraintsSet::from_file(&args.source)
     } else {
-        parser::ConstraintsSet::from_str(&args.source, &args)
+        parser::ConstraintsSet::from_str(&args.source)
     }?;
 
-    let go_exporter = go::GoExporter{settings: args.clone()};
+    let go_exporter = go::GoExporter {
+        settings: args.clone(),
+    };
     let out = go_exporter.render(&constraints)?;
     if let Some(out_file) = args.out_file {
         std::fs::File::create(&out_file)?.write_all(out.as_bytes())?;
