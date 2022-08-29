@@ -10,13 +10,20 @@ lazy_static::lazy_static! {
     static ref BUILTINS: HashMap<&'static str, Builtin> = maplit::hashmap!{
         "defun" => Builtin::Defun,
         "defalias" => Builtin::Defalias,
+        "defunalias" => Builtin::Defalias,
         "defcolumns" => Builtin::Defcolumns,
+
+        "+" => Builtin::Add,
+        "*" => Builtin::Mul,
+        "-" => Builtin::Sub,
 
         "add" => Builtin::Add,
         "mul" => Builtin::Mul,
+        "and" => Builtin::Mul,
         "sub" => Builtin::Sub,
 
         "eq" => Builtin::Equals,
+         "=" => Builtin::Equals,
     };
 }
 
@@ -41,11 +48,6 @@ impl ConstraintsSet {
     pub fn from_str<S: AsRef<str>>(s: S) -> Result<Self> {
         let exprs = parse(s.as_ref())?;
         Compiler::compile(exprs)
-    }
-
-    pub fn from_file<S: AsRef<str>>(filename: S) -> Result<Self> {
-        let file_content = std::fs::read_to_string(filename.as_ref())?;
-        Self::from_str(&file_content)
     }
 }
 
@@ -107,7 +109,16 @@ impl ParsingAst {
                         },
                         ..
                     }
-                ) || matches!(
+                )
+            })
+            .collect::<Vec<_>>()
+    }
+
+    fn get_funaliases(&self) -> Vec<&AstNode> {
+        self.exprs
+            .iter()
+            .filter(|e| {
+                matches!(
                     e,
                     AstNode::Funcall {
                         verb: Verb {
@@ -249,8 +260,13 @@ enum Symbol {
     Final(String),
 }
 #[derive(Debug)]
+enum FunctionSymbol {
+    Alias(String),
+    Final(Function),
+}
+#[derive(Debug)]
 struct SymbolsTable {
-    funcs: HashMap<String, Function>,
+    funcs: HashMap<String, FunctionSymbol>,
     symbols: HashMap<String, Symbol>,
 }
 impl SymbolsTable {
@@ -265,7 +281,6 @@ impl SymbolsTable {
     }
 
     fn insert_alias(&mut self, from: &str, to: &str) -> Result<()> {
-        // FIXME: should work better with defcolumns
         if self.symbols.contains_key(from) {
             Err(anyhow!(
                 "`{}` already exists: {} -> {:?}",
@@ -278,6 +293,21 @@ impl SymbolsTable {
             Ok(())
         }
     }
+
+    fn insert_funalias(&mut self, from: &str, to: &str) -> Result<()> {
+        if self.symbols.contains_key(from) {
+            Err(anyhow!(
+                "`{}` already exists: {} -> {:?}",
+                from,
+                from,
+                self.symbols[from]
+            ))
+        } else {
+            self.symbols.insert(from.into(), Symbol::Alias(to.into()));
+            Ok(())
+        }
+    }
+
     fn _resolve_symbol(&self, name: &str, ax: &mut HashSet<String>) -> Result<String> {
         if ax.contains(name) {
             Err(eyre!("Circular definitions found for {}", name))
@@ -295,11 +325,21 @@ impl SymbolsTable {
         self._resolve_symbol(name, &mut HashSet::new())
     }
 
-    fn resolve_function(&self, name: &str) -> Result<&Function> {
-        match self.funcs.get(name) {
-            Some(f) => Ok(f),
-            None => Err(eyre!("{}: function unknown", name)),
+    fn _resolve_function(&self, name: &str, ax: &mut HashSet<String>) -> Result<&Function> {
+        if ax.contains(name) {
+            Err(eyre!("Circular definitions found for {}", name))
+        } else {
+            ax.insert(name.into());
+            match self.funcs.get(name) {
+                Some(FunctionSymbol::Alias(name)) => self._resolve_function(name, ax),
+                Some(FunctionSymbol::Final(f)) => Ok(f),
+                None => Err(eyre!("Can not find column `{}`", name)),
+            }
         }
+    }
+
+    fn resolve_function(&self, name: &str) -> Result<&Function> {
+        self._resolve_function(name, &mut HashSet::new())
     }
 }
 impl SymbolsTable {
@@ -397,11 +437,11 @@ impl Compiler {
             } else {
                 self.table.funcs.insert(
                     name.to_owned(),
-                    Function {
+                    FunctionSymbol::Final(Function {
                         name,
                         args: args.into_iter().enumerate().map(|(i, a)| (a, i)).collect(),
                         body: body.to_owned(),
-                    },
+                    }),
                 );
             }
         }
@@ -438,6 +478,38 @@ impl Compiler {
                     }
                 } else {
                     return Err(eyre!("Invalid argument found in DEFALIAS: {:?}", args[0]));
+                }
+            };
+        }
+
+        let defunaliases = self.ast.get_funaliases();
+        for defunalias in defunaliases.iter() {
+            if let AstNode::Funcall { args, .. } = defunalias {
+                if args.len() != 2 {
+                    return Err(eyre!(
+                        "`DEFUNALIAS`: two arguments expected, {} found",
+                        args.len()
+                    ));
+                }
+
+                if let AstNode::Symbol {
+                    name: from,
+                    status: SymbolStatus::Functional,
+                } = &args[0]
+                {
+                    if let AstNode::Symbol {
+                        name: to,
+                        status: SymbolStatus::Functional,
+                    } = &args[1]
+                    {
+                        self.table.insert_funalias(from, to).with_context(|| {
+                            format!("while defining function alias {} -> {}", from, to,)
+                        })?
+                    } else {
+                        return Err(eyre!("Invalid argument found in DEFUNALIAS: {:?}", args[1]));
+                    }
+                } else {
+                    return Err(eyre!("Invalid argument found in DEFUNALIAS: {:?}", args[0]));
                 }
             };
         }
@@ -578,6 +650,7 @@ impl Compiler {
 
         compiler.register_columns()?;
         compiler.compile_funcs()?;
+
         compiler.compile_aliases()?;
         let cs = compiler.build_constraints()?;
         Ok(cs)
