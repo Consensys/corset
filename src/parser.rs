@@ -8,55 +8,30 @@ pub struct CorsetParser;
 
 
 pub struct ConstraintsSet {
-    settings: crate::Args,
-    constraints: Vec<AstNode>
+    pub constraints: Vec<AstNode>,
 }
 impl ConstraintsSet {
     pub fn from_str<S: AsRef<str>>(s: S, settings: &crate::Args) -> Result<Self> {
         let constraints = parse(s.as_ref())?;
 
-        Ok(ConstraintsSet{
-            settings: settings.clone(),
-            constraints,
-        })
+        Ok(ConstraintsSet { constraints })
     }
 
     pub fn from_file<S: AsRef<str>>(filename: S, settings: &crate::Args) -> Result<Self> {
         let file_content = std::fs::read_to_string(filename.as_ref())?;
         Self::from_str(&file_content, settings)
     }
-
-    pub fn render(&self) -> Result<String> {
-        let prelude = format!("
-package {}
-
-import (
-    \"github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column\"
-    // \"github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/constraint\"
-    // \"github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/module\"
-)
-", self.settings.package);
-
-        let body = self.constraints.iter()
-                .map(|c| c.render().map(|s| format!("  {},", s)))
-                .collect::<Result<Vec<_>>>()?.join("\n");
-
-        let r = format!(
-            "{}\nfunc {}() []column.Expression {{\n  return[]column.Expression{{\n {} }}\n}}\n",
-            prelude, &self.settings.name, body);
-        Ok(r)
-    }
 }
 
 fn make_chain(xs: &[AstNode], operand: &str) -> Result<String> {
     let head = xs[0].render()?;
-    let tail = xs[1..].iter()
+    let tail = xs[1..]
+        .iter()
         .map(|x| AstNode::render(x).map(|s| format!("{}({})", operand, s)))
-             .collect::<Result<Vec<_>>>()?
-             .join(".");
+        .collect::<Result<Vec<_>>>()?
+        .join(".");
     Ok(format!("{}{}", head, tail))
 }
-
 
 #[derive(Debug, PartialEq)]
 enum Verb {
@@ -93,7 +68,6 @@ enum Verb {
     BranchIfZeroElse,
     BranchIfNotZeroElse,
 
-
     BranchBinIfZeroElse,
     BranchBinIfOneElse,
 
@@ -109,28 +83,22 @@ impl Verb {
         match self {
             Verb::BranchIfZero => {
                 let cond = args[0].render()?;
-                let then = args[1..].iter().map(AstNode::render).collect::<Result<Vec<_>>>()?.join(", ");
+                let then = args[1..]
+                    .iter()
+                    .map(AstNode::render)
+                    .collect::<Result<Vec<_>>>()?
+                    .join(", ");
                 Ok(format!("{}.BranchIfZero({})", cond, then))
             }
             Verb::Vanishes => {
                 assert!(args.len() == 1);
                 args[0].render()
             }
-            Verb::Add => {
-                make_chain(args, ".Add")
-            }
-            Verb::And => {
-                make_chain(args, ".Mul")
-            }
-            Verb::Mul => {
-                make_chain(args, ".Mul")
-            }
-            Verb::Sub => {
-                make_chain(args, ".Sub")
-            }
-            Verb::Equals => {
-                make_chain(args, ".Equals")
-            }
+            Verb::Add => make_chain(args, ".Add"),
+            Verb::And => make_chain(args, ".Mul"),
+            Verb::Mul => make_chain(args, ".Mul"),
+            Verb::Sub => make_chain(args, ".Sub"),
+            Verb::Equals => make_chain(args, ".Equals"),
             Verb::BinIfOne => {
                 if args.len() != 2 {
                     Err(anyhow!("if-one takes two argument {}", 3))
@@ -162,28 +130,21 @@ pub enum AstNode {
     Ignore,
     Value(i32),
     Column(String),
-    Function {
-        verb: Verb,
-        exprs: Vec<AstNode>
-    },
+    Function { verb: Verb, exprs: Vec<AstNode> },
 }
 impl AstNode {
     pub fn render(&self) -> Result<String> {
         match self {
             Self::Value(x) => match x {
                 0..=2 | 127 | 256 => Ok(format!("column.CONST_{}()", x)),
-                x @ _ => Ok(format!("column.CONST_UINT64({})", x))
-            }
+                x @ _ => Ok(format!("column.CONST_UINT64({})", x)),
+            },
             Self::Column(name) => Ok(format!("CE[{}.Name()]", name)),
-            Self::Function { verb, exprs } => {
-                verb.render(exprs)
-            }
-            _ => Ok("??".into())
+            Self::Function { verb, exprs } => verb.render(exprs),
+            _ => Ok("??".into()),
         }
     }
 }
-
-
 
 fn build_ast_from_expr(pair: Pair<Rule>) -> AstNode {
     // println!("parsing {:?}", pair.as_rule());
@@ -192,18 +153,14 @@ fn build_ast_from_expr(pair: Pair<Rule>) -> AstNode {
         Rule::sexpr => {
             let mut content = pair.into_inner();
             let verb = parse_verb(content.next().unwrap());
-            let exprs = content.map(|p| build_ast_from_expr(p)).filter(|x| *x != AstNode::Ignore).collect();
-            AstNode::Function {
-                verb,
-                exprs
-            }
+            let exprs = content
+                .map(|p| build_ast_from_expr(p))
+                .filter(|x| *x != AstNode::Ignore)
+                .collect();
+            AstNode::Function { verb, exprs }
         }
-        Rule::column => {
-            AstNode::Column(pair.as_str().into())
-        }
-        Rule::value => {
-            AstNode::Value(pair.as_str().parse().unwrap())
-        }
+        Rule::column => AstNode::Column(pair.as_str().into()),
+        Rule::value => AstNode::Value(pair.as_str().parse().unwrap()),
         // Rule::function => {}
         x @ _ => {
             dbg!(&x);
@@ -229,7 +186,6 @@ fn parse_verb(pair: Pair<Rule>) -> Verb {
         }
     }
 }
-
 
 pub fn parse(source: &str) -> Result<Vec<AstNode>, Error<Rule>> {
     let mut ast = vec![];
