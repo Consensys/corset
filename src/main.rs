@@ -26,18 +26,26 @@ pub struct Args {
 
     #[clap(short = 'o', long = "out")]
     out_file: Option<String>,
+
+    #[clap(long = "no-stdlib")]
+    no_stdlib: bool,
 }
 
 fn main() -> Result<()> {
     color_eyre::install()?;
     let args = Args::parse();
 
-    let constraints = if Path::new(&args.source).is_file() {
-        parser::ConstraintsSet::from_file(&args.source)
+    let mut source = if Path::new(&args.source).is_file() {
+        std::fs::read_to_string(&args.source)?
     } else {
-        parser::ConstraintsSet::from_str(&args.source)
+        args.source.clone()
+    };
+    if !args.no_stdlib {
+        source.push_str(include_str!("stdlib.lisp"))
     }
-    .with_context(|| format!("while parsing `{}`", &args.source))?;
+
+    let constraints = parser::ConstraintsSet::from_str(&source)
+        .with_context(|| format!("while parsing `{}`", &args.source))?;
 
     let go_exporter = go::GoExporter {
         settings: args.clone(),
