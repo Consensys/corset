@@ -1,0 +1,25 @@
+* Corset
+
+Corset is a Lisp-based DSL designed to modelize constraint systems in the context of zero-knowledge proof systems. It aims at simplifying the writing and understanding of complicated, intricate, commitments by abstracting over cryptographic polynomial primitives; all the while letting users work at their preferred granularity level.
+
+* Examples
+
+#+begin_src lisp
+;; HU = (2*SUX - 1)*(DELTA - HEIGHT) - SUX
+(= HEIGHT_UNDER
+   (- (* (- (* 2 STACK_UNDERFLOW_EXCEPTION) 1)
+         (- DELTA HEIGHT))
+      STACK_UNDERFLOW_EXCEPTION))
+
+;; SUX and SOX are mutually exclusive
+(if-one STACK_UNDERFLOW_EXCEPTION STACK_OVERFLOW_EXCEPTION)
+
+;; (SUX == 0) ==> HO = (2*SOX - 1)*(HEIGHT_UNDER + ALPHA - 1024) - SOX
+(vanishes
+ (if-zero STACK_UNDERFLOW_EXCEPTION (= HEIGHT_OVER (- (* (- (* 2 STACK_OVERFLOW_EXCEPTION) 1)
+                                                        (- (+ HEIGHT_UNDER ALPHA) 1024))
+                                                     STACK_OVERFLOW_EXCEPTION))))
+
+;; If SUX or SOX is set, then SEX is set; and they are mutually exclusive
+(= STACK_EXCEPTION (+ STACK_OVERFLOW_EXCEPTION STACK_UNDERFLOW_EXCEPTION))
+#+end_src
