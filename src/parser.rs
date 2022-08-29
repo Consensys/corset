@@ -23,8 +23,24 @@ pub(crate) trait Transpiler {
     fn render(&self, cs: &ConstraintsSet) -> Result<String>;
 }
 
+pub enum Constraint {
+    Funcall { func: String, args: Vec<Constraint> },
+    Const(i32),
+    Column(String),
+}
 pub struct ConstraintsSet {
-    pub constraints: Vec<AstNode>,
+    pub constraints: Vec<Constraint>,
+}
+impl ConstraintsSet {
+    pub fn from_str<S: AsRef<str>>(s: S) -> Result<Self> {
+        let exprs = parse(s.as_ref())?;
+        Compiler::compile(exprs)
+    }
+
+    pub fn from_file<S: AsRef<str>>(filename: S) -> Result<Self> {
+        let file_content = std::fs::read_to_string(filename.as_ref())?;
+        Self::from_str(&file_content)
+    }
 }
 
 struct ParsingAst {
@@ -68,18 +84,6 @@ impl ParsingAst {
                 )
             })
             .collect::<Vec<_>>()
-    }
-}
-
-impl ConstraintsSet {
-    pub fn from_str<S: AsRef<str>>(s: S) -> Result<Self> {
-        let exprs = parse(s.as_ref())?;
-        Compiler::compile(exprs)
-    }
-
-    pub fn from_file<S: AsRef<str>>(filename: S) -> Result<Self> {
-        let file_content = std::fs::read_to_string(filename.as_ref())?;
-        Self::from_str(&file_content)
     }
 }
 
@@ -309,14 +313,18 @@ impl Compiler {
                 Ok(()),
             )
             .with_context(|| format!("while parsing function `{}`", name))?;
-            self.table.funcs.insert(
-                name.to_owned(),
-                Function {
-                    name,
-                    args,
-                    body: body.to_owned(),
-                },
-            );
+            if self.table.funcs.contains_key(&name) {
+                return Err(eyre!("DEFUN: function `{}` already exists", name));
+            } else {
+                self.table.funcs.insert(
+                    name.to_owned(),
+                    Function {
+                        name,
+                        args,
+                        body: body.to_owned(),
+                    },
+                );
+            }
         }
 
         // dbg!(defuns);
