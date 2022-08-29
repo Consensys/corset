@@ -6,7 +6,7 @@ use color_eyre::eyre::*;
 use std::io::prelude::*;
 use std::path::Path;
 
-mod go;
+// mod go;
 mod parser;
 
 #[derive(Parser, Debug, Clone)]
@@ -41,16 +41,16 @@ fn main() -> Result<()> {
         parser::ConstraintsSet::from_str(&args.source)
     }?;
 
-    let go_exporter = go::GoExporter {
-        settings: args.clone(),
-    };
-    let out = go_exporter.render(&constraints)?;
-    if let Some(out_file) = args.out_file {
-        std::fs::File::create(&out_file)?.write_all(out.as_bytes())?;
-        println!("{} generated", out_file);
-    } else {
-        println!("{}", out);
-    }
+    // let go_exporter = go::GoExporter {
+    //     settings: args.clone(),
+    // };
+    // let out = go_exporter.render(&constraints)?;
+    // if let Some(out_file) = args.out_file {
+    //     std::fs::File::create(&out_file)?.write_all(out.as_bytes())?;
+    //     println!("{} generated", out_file);
+    // } else {
+    //     println!("{}", out);
+    // }
 
     Ok(())
 }
