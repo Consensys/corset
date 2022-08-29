@@ -2,11 +2,34 @@
 
 Corset is a Lisp-based DSL designed to modelize constraint systems in the context of zero-knowledge proof systems. It aims at simplifying the writing and understanding of complicated, intricate, commitments by abstracting over cryptographic polynomial primitives; all the while letting users work at their preferred granularity level.
 
-* Examples
+* Installation
+The only dependency to run Corset is [[https://www.rust-lang.org/][the Rust compiler]]. Once it is available, Corset can be installed with ~cargo install --git https://github.com/ConsenSys/corset~.
+* Usage
+Corset is a simple Lisp dialect, compiling expressions to a representation compatible with a polynomial cryptographic proof system featuring the following operations: ~Add~, ~Mul~, ~Sub~, and ~Equals~.
 
+** Standard library
+Unless specified otherwise, Corset provides the following functions:
+ - ~(not x)~
+ - ~(neq x y)~
+ - ~(if-one COND THEN)~
+ - ~(if-zero COND THEN)~
+* Corset Example
 #+begin_src lisp
+(defun (vanishes x) x)
+
+(defcolumns
+  ALPHA DELTA
+  HEIGHT HEIGHT_UNDER HEIGHT_OVER
+  STACK_EXCEPTION STACK_UNDERFLOW_EXCEPTION STACK_OVERFLOW_EXCEPTION)
+
+(defalias HU HEIGHT_UNDER)
+(defalias HO HEIGHT_OVER)
+(defalias SUX STACK_UNDERFLOW_EXCEPTION)
+(defalias SOX STACK_OVERFLOW_EXCEPTION)
+(defalias SEX STACK_EXCEPTION)
+
 ;; HU = (2*SUX - 1)*(DELTA - HEIGHT) - SUX
-(= HEIGHT_UNDER
+(= HU
    (- (* (- (* 2 STACK_UNDERFLOW_EXCEPTION) 1)
          (- DELTA HEIGHT))
       STACK_UNDERFLOW_EXCEPTION))
@@ -16,10 +39,17 @@ Corset is a Lisp-based DSL designed to modelize constraint systems in the contex
 
 ;; (SUX == 0) ==> HO = (2*SOX - 1)*(HEIGHT_UNDER + ALPHA - 1024) - SOX
 (vanishes
- (if-zero STACK_UNDERFLOW_EXCEPTION (= HEIGHT_OVER (- (* (- (* 2 STACK_OVERFLOW_EXCEPTION) 1)
-                                                        (- (+ HEIGHT_UNDER ALPHA) 1024))
-                                                     STACK_OVERFLOW_EXCEPTION))))
+ (if-zero SUX (= HO (- (* (- (* 2 SOX) 1)
+                          (- (+ HU ALPHA) 1024))
+                       SOX))))
 
 ;; If SUX or SOX is set, then SEX is set; and they are mutually exclusive
-(= STACK_EXCEPTION (+ STACK_OVERFLOW_EXCEPTION STACK_UNDERFLOW_EXCEPTION))
+(= SEX (+ SOX SUX))
+#+end_src
+* Integrating with Go
+By default, Corset will produce a function ~NAME~ in the package ~package~ ready to be integrated with your go code.
+
+To link the two, you can use the ~go generate~ feature. For instance:
+#+begin_src go
+//go:generate corset --name stackExceptionsConstraints --package hub --out ./stackEx.go pipo.lisp
 #+end_src
