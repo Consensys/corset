@@ -406,10 +406,11 @@ impl Compiler {
     fn apply(&self, f: &Function, args: Vec<Constraint>) -> Result<Constraint> {
         if f.args.len() != args.len() {
             return Err(eyre!(
-                "Inconsistent arity: {} declares {} args ({:?}) but received {}",
+                "Inconsistent arity: function `{}` takes {} argument{} ({}) but received {}",
                 f.name,
                 f.args.len(),
-                f.args,
+                if f.args.len() > 1 { "" } else { "s" },
+                f.args.keys().cloned().collect::<Vec<_>>().join(", "),
                 args.len()
             ));
         }
