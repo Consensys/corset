@@ -26,28 +26,35 @@ impl ConstraintsSet {
         Self::from_str(&file_content, settings)
     }
 
-    pub fn render(&self) -> String {
-        if self.constraints.len() > 1 {
-            format!(
-                "{} := []column.Expression{{{}}}",
-                self.settings.name,
-                self.constraints.iter().map(|c| c.render()).collect::<Vec<_>>().join(",\n")
-            )
-        } else {
-            format!(
-                "{} := {}",
-                self.settings.name,
-                self.constraints.iter().map(|c| c.render()).collect::<Vec<_>>().join(",\n")
-            )
-        }
+    pub fn render(&self) -> Result<String> {
+        let prelude = format!("
+package {}
+
+import (
+    \"github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column\"
+    // \"github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/constraint\"
+    // \"github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/module\"
+)
+", self.settings.package);
+
+        let body = self.constraints.iter()
+                .map(|c| c.render().map(|s| format!("  {},", s)))
+                .collect::<Result<Vec<_>>>()?.join("\n");
+
+        let r = format!(
+            "{}\nfunc {}() []column.Expression {{\n  return[]column.Expression{{\n {} }}\n}}\n",
+            prelude, &self.settings.name, body);
+        Ok(r)
     }
 }
 
-fn make_chain(xs: &[AstNode], operand: &str) -> String {
-    let head = xs[0].render();
+fn make_chain(xs: &[AstNode], operand: &str) -> Result<String> {
+    let head = xs[0].render()?;
     let tail = xs[1..].iter()
-        .map(|x| format!("{}({})", operand, AstNode::render(x))).collect::<Vec<_>>().join(".");
-    format!("{}{}", head, tail)
+        .map(|x| AstNode::render(x).map(|s| format!("{}({})", operand, s)))
+             .collect::<Result<Vec<_>>>()?
+             .join(".");
+    Ok(format!("{}{}", head, tail))
 }
 
 
@@ -63,6 +70,7 @@ enum Verb {
     Neg,
     Inv,
     Shift,
+    Vanishes,
 
     BinIfOneElse,
     BinIfZeroElse,
@@ -97,35 +105,54 @@ enum Verb {
     IsBinary,
 }
 impl Verb {
-    pub fn render(&self, args: &[AstNode]) -> String {
+    pub fn render(&self, args: &[AstNode]) -> Result<String> {
         match self {
             Verb::BranchIfZero => {
-                let cond = args[0].render();
-                let then = args[1..].iter().map(AstNode::render).collect::<Vec<_>>().join(", ");
-                format!("{}.BranchIfZero({})", cond, then)
+                let cond = args[0].render()?;
+                let then = args[1..].iter().map(AstNode::render).collect::<Result<Vec<_>>>()?.join(", ");
+                Ok(format!("{}.BranchIfZero({})", cond, then))
+            }
+            Verb::Vanishes => {
+                assert!(args.len() == 1);
+                args[0].render()
             }
             Verb::Add => {
-                format!("({}.Add({}))", args[0].render(), args[1].render())
+                make_chain(args, ".Add")
             }
             Verb::And => {
-                let others = args[1..].iter()
-                    .map(|x| format!(".Mul({})", x.render())).collect::<Vec<_>>().join("");
-                format!("{}{}", args[0].render(), others)
+                make_chain(args, ".Mul")
             }
             Verb::Mul => {
-                let others = args[1..].iter()
-                    .map(|x| format!(".Mul({})", x.render())).collect::<Vec<_>>().join("");
-                format!("{}{}", args[0].render(), others)
+                make_chain(args, ".Mul")
             }
             Verb::Sub => {
-                let others = args[1..].iter()
-                    .map(|x| format!(".Sub({})", x.render())).collect::<Vec<_>>().join("");
-                format!("({}{})", args[0].render(), others)
+                make_chain(args, ".Sub")
             }
             Verb::Equals => {
                 make_chain(args, ".Equals")
             }
-            _ => todo!()
+            Verb::BinIfOne => {
+                if args.len() != 2 {
+                    Err(anyhow!("if-one takes two argument {}", 3))
+                } else {
+                    let lhs = args[0].render()?;
+                    let rhs = args[1].render()?;
+                    Ok(format!("{}.BinIfOne({})", lhs, rhs))
+                }
+            }
+            Verb::BinIfZero => {
+                if args.len() != 2 {
+                    Err(anyhow!("if-one takes two argument {}", 3))
+                } else {
+                    let lhs = args[0].render()?;
+                    let rhs = args[1].render()?;
+                    Ok(format!("{}.BinIfZero({})", lhs, rhs))
+                }
+            }
+            x @ _ => {
+                dbg!(x);
+                todo!()
+            }
         }
     }
 }
@@ -141,17 +168,17 @@ pub enum AstNode {
     },
 }
 impl AstNode {
-    pub fn render(&self) -> String {
+    pub fn render(&self) -> Result<String> {
         match self {
             Self::Value(x) => match x {
-                0..=2 | 127 | 256 => format!("CONST_{}()", x),
-                x @ _ => format!("CONST_UINT64({})", x)
+                0..=2 | 127 | 256 => Ok(format!("column.CONST_{}()", x)),
+                x @ _ => Ok(format!("column.CONST_UINT64({})", x))
             }
-            Self::Column(name) => format!("CE[{}]", name),
+            Self::Column(name) => Ok(format!("CE[{}.Name()]", name)),
             Self::Function { verb, exprs } => {
                 verb.render(exprs)
             }
-            _ => "??".into()
+            _ => Ok("??".into())
         }
     }
 }
@@ -187,12 +214,15 @@ fn build_ast_from_expr(pair: Pair<Rule>) -> AstNode {
 
 fn parse_verb(pair: Pair<Rule>) -> Verb {
     match pair.as_str().to_lowercase().as_str() {
-        "add" => Verb::Add,
+        "add" | "+" => Verb::Add,
         "and" => Verb::And,
-        "mul" => Verb::Mul,
+        "and" | "mul" | "*" => Verb::Mul,
         "branch-if-zero" => Verb::BranchIfZero,
-        "sub" => Verb::Sub,
-        "eq" | "=" => Verb::Equals,
+        "sub" | "-" => Verb::Sub,
+        "eq" => Verb::Equals,
+        "if-one" | "if-1" => Verb::BinIfOne,
+        "if-zero" | "if-0" => Verb::BinIfZero,
+        "vanishes" | "⪝" => Verb::Vanishes,
         x @ _ => {
             eprintln!("`{}`: unknown function", x);
             unimplemented!()

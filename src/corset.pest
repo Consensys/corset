@@ -8,6 +8,6 @@ constraint = { sexpr }
 sexpr = { "(" ~ function ~ expr+ ~ ")" }
 expr = { column | sexpr | value }
 
-column = @{ (ASCII_ALPHA)+ }
-function = @{ (ASCII_ALPHA | "-" | "+" | "=" )+ | "sub" }
+column = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+function = @{ (ASCII_ALPHA | "-" | "+" | "=" | "*" )+  }
 value = @{ ASCII_DIGIT+ }

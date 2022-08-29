@@ -2,6 +2,7 @@
 use color_eyre::eyre::*;
 use clap::Parser;
 use std::path::Path;
+use std::io::prelude::*;
 
 mod parser;
 
@@ -11,11 +12,17 @@ pub struct Args {
     #[clap(long = "CE", default_value="CE")]
     columns_assignment: String,
 
-    #[clap(long, value_parser, default_value="constraint")]
+    #[clap(short, long, value_parser)]
     name: String,
 
-    #[clap(required=true, default_value="constraint")]
+    #[clap(required=true)]
     source: String,
+
+    #[clap(short='P', long="package", required=true)]
+    package: String,
+
+    #[clap(short='o', long="out")]
+    out_file: Option<String>,
 }
 
 
@@ -27,25 +34,19 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
 
-
-    let constraint = "
-(eq HU
-    (sub
-      (and ;; Comment
-        (sub (mul 2 SUX) 1)
-        (sub DELTA HEIGHT))
-      SUX))
-";
     let constraints = if Path::new(&args.source).is_file() {
         parser::ConstraintsSet::from_file(&args.source, &args)
     } else {
-        parser::ConstraintsSet::from_str(constraint, &args)
+        parser::ConstraintsSet::from_str(&args.source, &args)
     }?;
 
+    if let Some(out_file) = args.out_file {
+        std::fs::File::create(&out_file)?.write_all(constraints.render()?.as_bytes())?;
+        println!("{} generated", out_file);
+    } else {
+        println!("{}", constraints.render()?);
+    }
 
-
-
-    println!("{:?}", constraints.render());
 
     Ok(())
 }
