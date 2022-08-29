@@ -23,11 +23,16 @@ pub(crate) trait Transpiler {
     fn render(&self, cs: &ConstraintsSet) -> Result<String>;
 }
 
+#[derive(Debug, Clone)]
 pub enum Constraint {
-    Funcall { func: String, args: Vec<Constraint> },
+    Funcall {
+        func: Builtin,
+        args: Vec<Constraint>,
+    },
     Const(i32),
     Column(String),
 }
+#[derive(Debug)]
 pub struct ConstraintsSet {
     pub constraints: Vec<Constraint>,
 }
@@ -103,8 +108,7 @@ impl Builtin {}
 #[derive(Debug, PartialEq, Clone)]
 pub enum VerbStatus {
     Builtin(Builtin),
-    Ready(Box<AstNode>),
-    Pending,
+    Defined,
 }
 #[derive(Debug, PartialEq, Clone)]
 pub struct Verb {
@@ -159,7 +163,7 @@ fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
                 })
                 .unwrap_or(Verb {
                     name: verb_name.into(),
-                    status: VerbStatus::Pending,
+                    status: VerbStatus::Defined,
                 });
             let in_def = in_def
                 || verb.status == VerbStatus::Builtin(Builtin::Defun)
@@ -235,6 +239,13 @@ impl SymbolsTable {
     fn resolve_symbol(&self, name: &str) -> Result<String> {
         self._resolve_symbol(name, &mut HashSet::new())
     }
+
+    fn resolve_function(&self, name: &str) -> Result<&Function> {
+        match self.funcs.get(name) {
+            Some(f) => Ok(f),
+            None => Err(eyre!("{}: function unknown", name)),
+        }
+    }
 }
 impl SymbolsTable {
     pub fn new() -> SymbolsTable {
@@ -248,7 +259,7 @@ impl SymbolsTable {
 #[derive(Debug)]
 struct Function {
     name: String,
-    args: Vec<String>,
+    args: HashMap<String, usize>,
     body: AstNode,
 }
 struct Compiler {
@@ -287,7 +298,7 @@ impl Compiler {
                 verb:
                     Verb {
                         name: n,
-                        status: VerbStatus::Pending,
+                        status: VerbStatus::Defined,
                     },
                 args,
             } = header
@@ -345,7 +356,7 @@ impl Compiler {
                     name.to_owned(),
                     Function {
                         name,
-                        args,
+                        args: args.into_iter().enumerate().map(|(i, a)| (a, i)).collect(),
                         body: body.to_owned(),
                     },
                 );
@@ -392,6 +403,127 @@ impl Compiler {
         Ok(())
     }
 
+    fn apply(&self, f: &Function, args: Vec<Constraint>) -> Result<Constraint> {
+        if f.args.len() != args.len() {
+            return Err(eyre!(
+                "Inconsistent arity: {} declares {} args ({:?}) but received {}",
+                f.name,
+                f.args.len(),
+                f.args,
+                args.len()
+            ));
+        }
+
+        self.reduce_function(&f.body, f, &args).map(Option::unwrap)
+    }
+    fn reduce_function(
+        &self,
+        e: &AstNode,
+        f: &Function,
+        ctx: &[Constraint],
+    ) -> Result<Option<Constraint>> {
+        match e {
+            AstNode::Ignore => Ok(None),
+            AstNode::Value(x) => Ok(Some(Constraint::Const(*x))),
+            AstNode::Symbol { name, status } => {
+                if matches!(status, SymbolStatus::Functional) {
+                    let position = f.args.get(name).unwrap();
+                    Ok(Some(ctx[*position].clone()))
+                } else {
+                    Err(eyre!("{}: undefined symbol", name))
+                }
+            }
+            AstNode::Funcall { verb, args } => match verb.status {
+                VerbStatus::Defined => {
+                    let func = self.table.resolve_function(&verb.name)?;
+                    let mut reduced_args: Vec<Constraint> = vec![];
+                    for arg in args.iter() {
+                        let reduced = self.reduce_function(arg, f, ctx)?;
+                        if let Some(reduced) = reduced {
+                            reduced_args.push(reduced);
+                        }
+                    }
+                    let applied = self.apply(func, reduced_args)?;
+                    Ok(Some(applied))
+                }
+                VerbStatus::Builtin(builtin) => match builtin {
+                    Builtin::Defun | Builtin::Defalias => Ok(None),
+                    builtin @ _ => {
+                        let mut traversed_args: Vec<Constraint> = vec![];
+                        for arg in args.iter() {
+                            let traversed = self.reduce_function(arg, f, ctx)?;
+                            if let Some(traversed) = traversed {
+                                traversed_args.push(traversed);
+                            }
+                        }
+                        Ok(Some(Constraint::Funcall {
+                            func: builtin,
+                            args: traversed_args,
+                        }))
+                    }
+                },
+            },
+        }
+    }
+
+    fn reduce(&self, e: &AstNode) -> Result<Option<Constraint>> {
+        match e {
+            AstNode::Ignore => Ok(None),
+            AstNode::Value(x) => Ok(Some(Constraint::Const(*x))),
+            AstNode::Symbol { name, status } => {
+                if matches!(status, SymbolStatus::Pending) {
+                    Err(eyre!("{}: undefined symbol", name))
+                } else {
+                    let symbol = self.table.resolve_symbol(name)?;
+                    Ok(Some(Constraint::Column(symbol)))
+                }
+            }
+            AstNode::Funcall { verb, args } => match verb.status {
+                VerbStatus::Defined => {
+                    let func = self.table.resolve_function(&verb.name)?;
+                    let mut reduced_args: Vec<Constraint> = vec![];
+                    for arg in args.iter() {
+                        let reduced = self.reduce(arg)?;
+                        if let Some(reduced) = reduced {
+                            reduced_args.push(reduced);
+                        }
+                    }
+                    let applied = self.apply(func, reduced_args)?;
+                    Ok(Some(applied))
+                }
+                VerbStatus::Builtin(builtin) => match builtin {
+                    Builtin::Defun | Builtin::Defalias => Ok(None),
+                    builtin @ _ => {
+                        let mut traversed_args: Vec<Constraint> = vec![];
+                        for arg in args.iter() {
+                            let traversed = self.reduce(arg)?;
+                            if let Some(traversed) = traversed {
+                                traversed_args.push(traversed);
+                            }
+                        }
+                        Ok(Some(Constraint::Funcall {
+                            func: builtin,
+                            args: traversed_args,
+                        }))
+                    }
+                },
+            },
+        }
+    }
+
+    fn build_constraints(&mut self) -> Result<ConstraintsSet> {
+        let mut cs = ConstraintsSet {
+            constraints: vec![],
+        };
+
+        for exp in &self.ast.exprs.to_vec() {
+            self.reduce(exp)
+                .with_context(|| "while assembling top-level constraint")?
+                .map(|c| cs.constraints.push(c));
+        }
+        Ok(cs)
+    }
+
     fn compile(ast: ParsingAst) -> Result<ConstraintsSet> {
         let mut compiler = Compiler {
             table: SymbolsTable::new(),
@@ -401,8 +533,11 @@ impl Compiler {
         compiler.compile_funcs()?;
         compiler.compile_aliases()?;
 
-        dbg!(&compiler.table);
+        let cs = compiler.build_constraints()?;
 
-        Err(eyre!("XXX"))
+        dbg!(&compiler.table);
+        dbg!(&cs);
+
+        Ok(cs)
     }
 }
