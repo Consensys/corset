@@ -13,17 +13,29 @@ lazy_static::lazy_static! {
         "defunalias" => Builtin::Defalias,
         "defcolumns" => Builtin::Defcolumns,
 
-        "+" => Builtin::Add,
-        "*" => Builtin::Mul,
-        "-" => Builtin::Sub,
 
+        // monadic
+        "inv" => Builtin::Inv,
+        "neg" => Builtin::Neg,
+
+        // polyadic
+        "+" => Builtin::Add,
         "add" => Builtin::Add,
+
+        "*" => Builtin::Mul,
         "mul" => Builtin::Mul,
         "and" => Builtin::Mul,
-        "sub" => Builtin::Sub,
 
-        "eq" => Builtin::Equals,
-         "=" => Builtin::Equals,
+        "-" => Builtin::Sub,
+        "sub" => Builtin::Sub,
+        "eq" => Builtin::Sub,
+         "=" => Builtin::Sub,
+
+        "if-zero" => Builtin::IfZero,
+
+
+
+        "begin" => Builtin::Begin,
     };
 }
 
@@ -139,12 +151,14 @@ pub enum Builtin {
     Defalias,
     Defunalias,
     Defcolumns,
+    Begin,
 
     Add,
     Sub,
     Mul,
-
-    Equals,
+    IfZero,
+    Neg,
+    Inv,
 }
 impl Builtin {}
 

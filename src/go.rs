@@ -35,7 +35,10 @@ impl GoExporter {
             Builtin::Add => self.make_chain(args, "Add", true),
             Builtin::Mul => self.make_chain(args, "Mul", false),
             Builtin::Sub => self.make_chain(args, "Sub", true),
-            Builtin::Equals => self.make_chain(args, "Equals", true),
+
+            Builtin::Sub => self.make_chain(args, "Sub", true),
+            Builtin::Sub => self.make_chain(args, "Sub", true),
+            Builtin::Sub => self.make_chain(args, "Sub", true),
 
             Builtin::Defcolumns | Builtin::Defalias | Builtin::Defun | Builtin::Defunalias => {
                 panic!("Should never happen")
