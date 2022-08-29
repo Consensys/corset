@@ -29,9 +29,6 @@ pub struct Args {
 }
 
 fn main() -> Result<()> {
-    if std::env::var("RUST_SPANTRACE").is_err() {
-        std::env::set_var("RUST_SPANTRACE", "0");
-    }
     color_eyre::install()?;
     let args = Args::parse();
 
@@ -39,7 +36,8 @@ fn main() -> Result<()> {
         parser::ConstraintsSet::from_file(&args.source)
     } else {
         parser::ConstraintsSet::from_str(&args.source)
-    }?;
+    }
+    .with_context(|| format!("while parsing `{}`", &args.source))?;
 
     let go_exporter = go::GoExporter {
         settings: args.clone(),

@@ -37,7 +37,9 @@ impl GoExporter {
             Builtin::Sub => self.make_chain(args, "Sub", true),
             Builtin::Equals => self.make_chain(args, "Equals", true),
 
-            Builtin::Defalias | Builtin::Defun => panic!("Should never happen"),
+            Builtin::Defcolumns | Builtin::Defalias | Builtin::Defun | Builtin::Defunalias => {
+                panic!("Should never happen")
+            }
         }
     }
 }
@@ -45,7 +47,7 @@ impl GoExporter {
 impl crate::parser::Transpiler for GoExporter {
     fn render(&self, cs: &ConstraintsSet) -> Result<String> {
         let prelude = format!(
-            " package {}
+            "package {}
 import (
     \"github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column\"
     // \"github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/constraint\"

@@ -10,6 +10,7 @@ lazy_static::lazy_static! {
     static ref BUILTINS: HashMap<&'static str, Builtin> = maplit::hashmap!{
         "defun" => Builtin::Defun,
         "defalias" => Builtin::Defalias,
+        "defcolumns" => Builtin::Defcolumns,
 
         "add" => Builtin::Add,
         "mul" => Builtin::Mul,
@@ -52,6 +53,26 @@ struct ParsingAst {
     exprs: Vec<AstNode>,
 }
 impl ParsingAst {
+    fn get_defcolumns(&self) -> Vec<&[AstNode]> {
+        self.exprs
+            .iter()
+            .filter_map(|e| {
+                if let AstNode::Funcall {
+                    verb:
+                        Verb {
+                            status: VerbStatus::Builtin(Builtin::Defcolumns),
+                            ..
+                        },
+                    args,
+                } = e
+                {
+                    Some(args.as_slice())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    }
     fn get_defuns(&self) -> Vec<&[AstNode]> {
         self.exprs
             .iter()
@@ -86,6 +107,15 @@ impl ParsingAst {
                         },
                         ..
                     }
+                ) || matches!(
+                    e,
+                    AstNode::Funcall {
+                        verb: Verb {
+                            status: VerbStatus::Builtin(Builtin::Defunalias),
+                            ..
+                        },
+                        ..
+                    }
                 )
             })
             .collect::<Vec<_>>()
@@ -96,6 +126,8 @@ impl ParsingAst {
 pub enum Builtin {
     Defun,
     Defalias,
+    Defunalias,
+    Defcolumns,
 
     Add,
     Sub,
@@ -185,7 +217,6 @@ fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
             },
         }),
         Rule::value => Ok(AstNode::Value(pair.as_str().parse().unwrap())),
-        // Rule::function => {}
         x @ _ => {
             dbg!(&x);
             Ok(AstNode::Ignore)
@@ -223,14 +254,29 @@ struct SymbolsTable {
     symbols: HashMap<String, Symbol>,
 }
 impl SymbolsTable {
+    fn insert_symbol(&mut self, symbol: &str) -> Result<()> {
+        if self.symbols.contains_key(symbol) {
+            Err(anyhow!("`{}` already exists", symbol))
+        } else {
+            self.symbols
+                .insert(symbol.into(), Symbol::Final(symbol.into()));
+            Ok(())
+        }
+    }
+
     fn insert_alias(&mut self, from: &str, to: &str) -> Result<()> {
         // FIXME: should work better with defcolumns
-        // if self.symbols.contains_key(from) {
-        //     Err(anyhow!("`{}` already exists", from))
-        // } else {
-        self.symbols.insert(from.into(), Symbol::Alias(to.into()));
-        Ok(())
-        // }
+        if self.symbols.contains_key(from) {
+            Err(anyhow!(
+                "`{}` already exists: {} -> {:?}",
+                from,
+                from,
+                self.symbols[from]
+            ))
+        } else {
+            self.symbols.insert(from.into(), Symbol::Alias(to.into()));
+            Ok(())
+        }
     }
     fn _resolve_symbol(&self, name: &str, ax: &mut HashSet<String>) -> Result<String> {
         if ax.contains(name) {
@@ -240,7 +286,7 @@ impl SymbolsTable {
             match self.symbols.get(name) {
                 Some(Symbol::Alias(name)) => self._resolve_symbol(name, ax),
                 Some(Symbol::Final(name)) => Ok(name.into()),
-                None => Err(eyre!("Can not find symbol `{}`", name)),
+                None => Err(eyre!("Can not find column `{}`", name)),
             }
         }
     }
@@ -277,27 +323,15 @@ struct Compiler {
 }
 impl Compiler {
     fn register_columns(&mut self) -> Result<()> {
-        let mut columns = vec![];
-        for n in self.ast.exprs.iter() {
-            let _ = n.fold(
-                &|ax: &mut Vec<String>, n| {
-                    if let AstNode::Symbol {
-                        name,
-                        status: SymbolStatus::Resolved,
-                    } = n
-                    {
-                        ax.push(name.clone());
-                    }
-                    ax
-                },
-                &mut columns,
-            );
+        let defcolumns = self.ast.get_defcolumns();
+        for def in defcolumns {
+            for col in def {
+                match col {
+                    AstNode::Symbol { name, .. } => self.table.insert_symbol(name),
+                    _ => Err(eyre!("Invalid column name found in defcolumns")),
+                }?
+            }
         }
-        columns.into_iter().for_each(|s| {
-            self.table
-                .symbols
-                .insert(s.clone(), Symbol::Final(s.into()));
-        });
 
         Ok(())
     }
@@ -378,7 +412,6 @@ impl Compiler {
     fn compile_aliases(&mut self) -> Result<()> {
         let defaliases = self.ast.get_aliases();
         for defalias in defaliases.iter() {
-            dbg!(defalias);
             if let AstNode::Funcall { args, .. } = defalias {
                 if args.len() != 2 {
                     return Err(eyre!(
@@ -502,7 +535,10 @@ impl Compiler {
                     Ok(Some(applied))
                 }
                 VerbStatus::Builtin(builtin) => match builtin {
-                    Builtin::Defun | Builtin::Defalias => Ok(None),
+                    Builtin::Defun
+                    | Builtin::Defalias
+                    | Builtin::Defcolumns
+                    | Builtin::Defunalias => Ok(None),
                     builtin @ _ => {
                         let mut traversed_args: Vec<Constraint> = vec![];
                         for arg in args.iter() {
@@ -539,15 +575,13 @@ impl Compiler {
             table: SymbolsTable::new(),
             ast,
         };
+
         compiler.register_columns()?;
         compiler.compile_funcs()?;
         compiler.compile_aliases()?;
-
         let cs = compiler.build_constraints()?;
-
-        dbg!(&compiler.table);
-        dbg!(&cs);
-
         Ok(cs)
+
+        // Err(eyre!("ADFA"))
     }
 }
