@@ -204,6 +204,7 @@ fn parse(source: &str) -> Result<ParsingAst> {
     Ok(ast)
 }
 
+#[derive(Debug)]
 struct SymbolsTable {
     funcs: HashMap<String, Function>,
     symbols: HashMap<String, String>,
@@ -229,7 +230,7 @@ struct Compiler {
 }
 impl Compiler {
     fn register_columns(&mut self) -> Result<()> {
-        let mut columns = vec!["CANARY".to_owned()];
+        let mut columns = vec![];
         for n in self.ast.exprs.iter() {
             let _ = n.fold(
                 &|ax: &mut Vec<String>, n| {
@@ -324,8 +325,36 @@ impl Compiler {
 
     fn compile_aliases(&mut self) -> Result<()> {
         let defaliases = self.ast.get_aliases();
+        for defalias in defaliases.iter() {
+            dbg!(defalias);
+            if let AstNode::Funcall { args, .. } = defalias {
+                if args.len() != 2 {
+                    return Err(eyre!(
+                        "`defalias`: two arguments expected, {} found",
+                        args.len()
+                    ));
+                }
 
-        dbg!(defaliases);
+                if let AstNode::Symbol {
+                    name: from,
+                    status: SymbolStatus::Functional,
+                } = &args[0]
+                {
+                    if let AstNode::Symbol {
+                        name: to,
+                        status: SymbolStatus::Functional,
+                    } = &args[1]
+                    {
+                        self.table.symbols.insert(from.into(), to.into());
+                    } else {
+                        return Err(eyre!("Invalid argument found in DEFALIAS: {:?}", args[1]));
+                    }
+                } else {
+                    return Err(eyre!("Invalid argument found in DEFALIAS: {:?}", args[0]));
+                }
+            };
+        }
+
         Ok(())
     }
 
@@ -336,8 +365,9 @@ impl Compiler {
         };
         compiler.register_columns()?;
         compiler.compile_funcs()?;
-
         compiler.compile_aliases()?;
+
+        dbg!(&compiler.table);
 
         Err(eyre!("XXX"))
     }
