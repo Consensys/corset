@@ -1,6 +1,6 @@
 use color_eyre::eyre::*;
 use pest::{error::Error, iterators::Pair, Parser};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Parser)]
 #[grammar = "corset.pest"]
@@ -209,9 +209,32 @@ fn parse(source: &str) -> Result<ParsingAst> {
 }
 
 #[derive(Debug)]
+enum Symbol {
+    Alias(String),
+    Final(String),
+}
+#[derive(Debug)]
 struct SymbolsTable {
     funcs: HashMap<String, Function>,
-    symbols: HashMap<String, String>,
+    symbols: HashMap<String, Symbol>,
+}
+impl SymbolsTable {
+    fn _resolve_symbol(&self, name: &str, ax: &mut HashSet<String>) -> Result<String> {
+        if ax.contains(name) {
+            Err(eyre!("Circular definitions found for {}", name))
+        } else {
+            ax.insert(name.into());
+            match self.symbols.get(name) {
+                Some(Symbol::Alias(name)) => self._resolve_symbol(name, ax),
+                Some(Symbol::Final(name)) => Ok(name.into()),
+                None => Err(eyre!("Can not find symbol `{}`", name)),
+            }
+        }
+    }
+
+    fn resolve_symbol(&self, name: &str) -> Result<String> {
+        self._resolve_symbol(name, &mut HashSet::new())
+    }
 }
 impl SymbolsTable {
     pub fn new() -> SymbolsTable {
@@ -251,7 +274,9 @@ impl Compiler {
             );
         }
         columns.into_iter().for_each(|s| {
-            self.table.symbols.insert(s.clone(), s.clone());
+            self.table
+                .symbols
+                .insert(s.clone(), Symbol::Final(s.into()));
         });
 
         Ok(())
@@ -327,7 +352,6 @@ impl Compiler {
             }
         }
 
-        // dbg!(defuns);
         Ok(())
     }
 
@@ -353,7 +377,9 @@ impl Compiler {
                         status: SymbolStatus::Functional,
                     } = &args[1]
                     {
-                        self.table.symbols.insert(from.into(), to.into());
+                        self.table
+                            .symbols
+                            .insert(from.into(), Symbol::Alias(to.into()));
                     } else {
                         return Err(eyre!("Invalid argument found in DEFALIAS: {:?}", args[1]));
                     }
