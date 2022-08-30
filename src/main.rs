@@ -15,16 +15,33 @@ pub struct Args {
     #[clap(long = "CE", default_value = "CE")]
     columns_assignment: String,
 
-    #[clap(short, long, value_parser)]
-    name: String,
+    #[clap(
+        short = 'F',
+        long = "function-name",
+        value_parser,
+        help = "The name of the function to be generated"
+    )]
+    fname: String,
 
-    #[clap(required = true)]
+    #[clap(
+        required = true,
+        help = "Either a file or a string containing the Corset code to process"
+    )]
     source: String,
 
-    #[clap(short = 'P', long = "package", required = true)]
+    #[clap(
+        short = 'P',
+        long = "package",
+        required = true,
+        help = "In which package the function will be generated"
+    )]
     package: String,
 
-    #[clap(short = 'o', long = "out")]
+    #[clap(
+        short = 'o',
+        long = "out",
+        help = "If set, write the result to this file"
+    )]
     out_file: Option<String>,
 
     #[clap(long = "no-stdlib")]

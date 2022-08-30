@@ -122,7 +122,7 @@ import (
             .join("\n");
 
         let r = self.indented_block(
-            &format!("func {}() (r []column.Expression) ", &self.settings.name),
+            &format!("func {}() (r []column.Expression) ", &self.settings.fname),
             &format!(
                 "{}\n{}",
                 &self.indented_block("r = []column.Expression ", &body, INDENT),
