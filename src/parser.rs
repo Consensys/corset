@@ -38,6 +38,13 @@ lazy_static::lazy_static! {
             class: FunctionClass::Builtin(Builtin::Neg)
         },
 
+        // Dyadic
+        "if-zero" => Function{
+            name: "if-zero".into(),
+            class: FunctionClass::Builtin(Builtin::IfZero),
+        },
+
+
         // polyadic
         "add" => Function{
             name: "add".into(),
@@ -79,11 +86,7 @@ lazy_static::lazy_static! {
             class: FunctionClass::Alias("sub".into())
         },
 
-        "if-zero" => Function{
-            name: "if-zero".into(),
-            class: FunctionClass::Builtin(Builtin::IfZero),
-        },
-
+        // Special form
         "begin" => Function{name: "begin".into(), class: FunctionClass::SpecialForm(Form::Begin)},
     };
 }
