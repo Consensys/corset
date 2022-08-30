@@ -125,12 +125,8 @@ impl GoExporter {
                     ))
                 }
             }
-            Builtin::Defcolumns | Builtin::Defalias | Builtin::Defun | Builtin::Defunalias => {
-                panic!("Should never happen")
-            }
             x @ _ => {
-                dbg!(x);
-                unimplemented!()
+                unimplemented!("Unimplemented: {:?}", x)
             }
         }?;
         Ok(format!("{}{}", ".".repeat(indent), r))

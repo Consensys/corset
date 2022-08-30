@@ -7,39 +7,118 @@ use std::collections::{HashMap, HashSet};
 struct CorsetParser;
 
 lazy_static::lazy_static! {
-    static ref BUILTINS: HashMap<&'static str, Builtin> = maplit::hashmap!{
-        "defun" => Builtin::Defun,
-        "defalias" => Builtin::Defalias,
-        "defunalias" => Builtin::Defunalias,
-        "defcolumns" => Builtin::Defcolumns,
+    static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
+        "defun" => Function {
+            name: "defun".into(),
+            class: FunctionClass::SpecialForm(Form::Defun),
+        },
+
+        "defunalias" => Function {
+            name: "defunalias".into(),
+            class: FunctionClass::SpecialForm(Form::Defunalias),
+        },
+
+        "defalias" => Function {
+            name: "defalias".into(),
+            class: FunctionClass::SpecialForm(Form::Defalias),
+        },
+        "defcolumns" => Function {
+            name: "defcolumns".into(),
+            class: FunctionClass::SpecialForm(Form::Defcolumns),
+        },
 
 
         // monadic
-        "inv" => Builtin::Inv,
-        "neg" => Builtin::Neg,
+        "inv" => Function{
+            name: "inv".into(),
+            class: FunctionClass::Builtin{
+                builtin: Builtin::Inv,
+                prototype: vec![ArgumentType::Constraint]
+            }
+        },
+        "neg" => Function{
+            name: "neg".into(),
+            class: FunctionClass::Builtin{
+                builtin: Builtin::Neg,
+                prototype: vec![ArgumentType::Constraint]
+            }
+        },
+
         // polyadic
+        "add" => Function{
+            name: "add".into(),
+            class: FunctionClass::Builtin{
+                builtin: Builtin::Add,
+                prototype: vec![ArgumentType::Variadic]
+            }
+        },
+        "+" => Function {
+            name: "+".into(),
+            class: FunctionClass::Alias("add".into())
+        },
 
-        "+" => Builtin::Add,
-        "add" => Builtin::Add,
 
-        "*" => Builtin::Mul,
-        "mul" => Builtin::Mul,
-        "and" => Builtin::Mul,
+        "mul" => Function{
+            name: "mul".into(),
+            class: FunctionClass::Builtin{
+                builtin: Builtin::Mul,
+                prototype: vec![ArgumentType::Variadic]
+            }
+        },
+        "*" => Function {
+            name: "*".into(),
+            class: FunctionClass::Alias("mul".into())
+        },
+        "and" => Function {
+            name: "and".into(),
+            class: FunctionClass::Alias("mul".into())
+        },
 
-        "-" => Builtin::Sub,
-        "sub" => Builtin::Sub,
-        "eq" => Builtin::Sub,
-        "=" => Builtin::Sub,
+        "sub" => Function{
+            name: "mul".into(),
+            class: FunctionClass::Builtin{
+                builtin: Builtin::Sub,
+                prototype: vec![ArgumentType::Variadic]
+            }
+        },
+        "-" => Function {
+            name: "sub".into(),
+            class: FunctionClass::Alias("sub".into())
+        },
+        "eq" => Function {
+            name: "sub".into(),
+            class: FunctionClass::Alias("sub".into())
+        },
+        "=" => Function {
+            name: "sub".into(),
+            class: FunctionClass::Alias("sub".into())
+        },
 
-        "if-zero" => Builtin::IfZero,
-        "if-zero-else" => Builtin::IfZeroElse,
+        // "if-zero" => Function::Builtin(Builtin::IfZero),
+        "if-0-else" => Function{
+            name: "if-0-else".into(),
+            class: FunctionClass::Builtin{
+                builtin: Builtin::IfZeroElse,
+                prototype: vec![ArgumentType::Variadic]
+            }
+        },
+        // "if-0-else" => Function::Builtin(Builtin::IfZeroElse),
 
-        "begin" => Builtin::Begin,
+        "begin" => Function{name: "begin".into(), class: FunctionClass::SpecialForm(Form::Begin)},
     };
 }
 
 pub(crate) trait Transpiler {
     fn render(&self, cs: &ConstraintsSet) -> Result<String>;
+}
+
+#[derive(Debug, Clone)]
+enum ArgumentType {
+    Natural,
+    Integer,
+    ConstraintList,
+    Constraint,
+    Variadic,
 }
 
 #[derive(Debug, Clone)]
@@ -67,12 +146,12 @@ struct ParsingAst {
     exprs: Vec<AstNode>,
 }
 impl ParsingAst {
-    fn get_defbuiltin(&self, b: Builtin) -> Vec<&[AstNode]> {
+    fn get_forms(&self, b: Form) -> Vec<&[AstNode]> {
         let builtin_name = match b {
-            Builtin::Defcolumns => "defcolumns",
-            Builtin::Defunalias => "defunalias",
-            Builtin::Defalias => "defalias",
-            Builtin::Defun => "defun",
+            Form::Defcolumns => "defcolumns",
+            Form::Defunalias => "defunalias",
+            Form::Defalias => "defalias",
+            Form::Defun => "defun",
             _ => unimplemented!(),
         };
         self.exprs
@@ -97,13 +176,16 @@ impl ParsingAst {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Builtin {
+pub enum Form {
     Defun,
     Defalias,
     Defunalias,
     Defcolumns,
     Begin,
+}
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Builtin {
     Add,
     Sub,
     Mul,
@@ -224,11 +306,12 @@ impl SymbolsTable {
         SymbolsTable {
             funcs: BUILTINS
                 .iter()
-                .map(|(k, v)| (k.to_string(), Function::Builtin(v.clone())))
+                .map(|(k, v)| (k.to_string(), v.clone()))
                 .collect(),
             symbols: HashMap::new(),
         }
     }
+
     fn insert_symbol(&mut self, symbol: &str) -> Result<()> {
         if self.symbols.contains_key(symbol) {
             Err(anyhow!("`{}` already exists", symbol))
@@ -237,6 +320,15 @@ impl SymbolsTable {
                 symbol.into(),
                 Symbol::Final(Constraint::Column(symbol.to_string())),
             );
+            Ok(())
+        }
+    }
+
+    fn insert_func(&mut self, f: Function) -> Result<()> {
+        if self.funcs.contains_key(&f.name) {
+            Err(anyhow!("function `{}` already defined", &f.name))
+        } else {
+            self.funcs.insert(f.name.clone(), f);
             Ok(())
         }
     }
@@ -264,7 +356,13 @@ impl SymbolsTable {
                 self.symbols[from]
             ))
         } else {
-            self.funcs.insert(from.into(), Function::Alias(to.into()));
+            self.funcs.insert(
+                from.into(),
+                Function {
+                    name: from.into(),
+                    class: FunctionClass::Alias(to.into()),
+                },
+            );
             Ok(())
         }
     }
@@ -288,10 +386,12 @@ impl SymbolsTable {
         } else {
             ax.insert(name.into());
             match self.funcs.get(name) {
-                Some(Function::Alias(name)) => self._resolve_function(name, ax),
-                Some(f @ Function::Defined { .. }) => Ok(f.to_owned()),
-                Some(f @ Function::Builtin(..)) => Ok(f.to_owned()),
                 None => Err(eyre!("Function `{}` unknown", name)),
+                Some(Function {
+                    class: FunctionClass::Alias(ref name),
+                    ..
+                }) => self._resolve_function(name, ax),
+                Some(f) => Ok(f.to_owned()),
             }
         }
     }
@@ -302,11 +402,7 @@ impl Resolver for SymbolsTable {
     }
 
     fn resolve_function(&self, name: &str) -> Result<Function> {
-        BUILTINS
-            .get(name)
-            .map(|b| Function::Builtin(*b))
-            .ok_or(eyre!("fubction not found"))
-            .or(self._resolve_function(name, &mut HashSet::new()))
+        self._resolve_function(name, &mut HashSet::new())
     }
 
     fn name(&self) -> String {
@@ -338,13 +434,22 @@ impl<'a> Resolver for FunctionTable<'a> {
 }
 
 #[derive(Debug, Clone)]
-enum Function {
+struct Function {
+    name: String,
+    class: FunctionClass,
+}
+
+#[derive(Debug, Clone)]
+enum FunctionClass {
     Defined {
-        name: String,
         args: HashMap<String, usize>,
         body: AstNode,
     },
-    Builtin(Builtin),
+    SpecialForm(Form),
+    Builtin {
+        builtin: Builtin,
+        prototype: Vec<ArgumentType>,
+    },
     Alias(String),
 }
 struct Compiler {
@@ -353,7 +458,7 @@ struct Compiler {
 }
 impl Compiler {
     fn register_columns(&mut self) -> Result<()> {
-        let defcolumns = self.ast.get_defbuiltin(Builtin::Defcolumns);
+        let defcolumns = self.ast.get_forms(Form::Defcolumns);
         for def in defcolumns {
             for col in def {
                 match col {
@@ -390,7 +495,7 @@ impl Compiler {
             }
         }
 
-        let defuns = self.ast.get_defbuiltin(Builtin::Defun);
+        let defuns = self.ast.get_forms(Form::Defun);
 
         for defun in defuns.iter() {
             if defun.len() != 2 {
@@ -402,14 +507,15 @@ impl Compiler {
             if self.table.funcs.contains_key(&name) {
                 return Err(eyre!("DEFUN: function `{}` already exists", name));
             } else {
-                self.table.funcs.insert(
-                    name.to_owned(),
-                    Function::Defined {
-                        name,
-                        args: args.into_iter().enumerate().map(|(i, a)| (a, i)).collect(),
-                        body: body.to_owned(),
-                    },
-                );
+                self.table.insert_func({
+                    Function {
+                        name: name.to_owned(),
+                        class: FunctionClass::Defined {
+                            args: args.into_iter().enumerate().map(|(i, a)| (a, i)).collect(),
+                            body: body.to_owned(),
+                        },
+                    }
+                })?;
             }
         }
 
@@ -417,7 +523,7 @@ impl Compiler {
     }
 
     fn compile_aliases(&mut self) -> Result<()> {
-        let defaliases = self.ast.get_defbuiltin(Builtin::Defalias);
+        let defaliases = self.ast.get_forms(Form::Defalias);
         for defalias in defaliases.iter() {
             if defalias.len() != 2 {
                 return Err(eyre!(
@@ -445,7 +551,7 @@ impl Compiler {
             }
         }
 
-        let defunaliases = self.ast.get_defbuiltin(Builtin::Defunalias);
+        let defunaliases = self.ast.get_forms(Form::Defunalias);
         for defunalias in defunaliases.iter() {
             if defunalias.len() != 2 {
                 return Err(eyre!(
@@ -490,26 +596,23 @@ impl Compiler {
             }
         }
 
-        match f {
-            Function::Builtin(builtin) => match builtin {
-                Builtin::Defun | Builtin::Defalias | Builtin::Defcolumns | Builtin::Defunalias => {
-                    Ok(None)
-                }
-                Builtin::Begin => Ok(Some(Constraint::List(traversed_args))),
-                builtin @ _ => Ok(Some(Constraint::Funcall {
-                    func: *builtin,
-                    args: traversed_args,
-                })),
-            },
-            Function::Defined {
-                name: fname,
-                args: f_args,
-                body,
-            } => {
+        match dbg!(&f.class) {
+            FunctionClass::SpecialForm(Form::Begin) => {
+                println!("coucou");
+                Ok(Some(Constraint::List(traversed_args)))
+            }
+            FunctionClass::SpecialForm(_) => Ok(None),
+
+            FunctionClass::Builtin { builtin, .. } => Ok(Some(Constraint::Funcall {
+                func: *builtin,
+                args: traversed_args,
+            })),
+
+            FunctionClass::Defined { args: f_args, body } => {
                 if f_args.len() != args.len() {
                     return Err(eyre!(
                         "Inconsistent arity: function `{}` takes {} argument{} ({}) but received {}",
-                        fname,
+                        f.name,
                         f_args.len(),
                         if f_args.len() > 1 { "" } else { "s" },
                         f_args.keys().cloned().collect::<Vec<_>>().join(", "),
@@ -517,16 +620,15 @@ impl Compiler {
                     ));
                 }
                 self.reduce(
-                    body,
+                    &body,
                     &FunctionTable {
                         args_mapping: f_args
                             .into_iter()
-                            .map(|x| x.0)
-                            .cloned()
+                            .map(|x| x.0.to_owned())
                             .zip(traversed_args.into_iter())
                             .collect(),
                         parent: ctx,
-                        name: format!("FU {}", fname),
+                        name: format!("FU {}", f.name),
                     },
                 )
             }
@@ -543,20 +645,21 @@ impl Compiler {
                 if let AstNode::Symbol(verb) = &args[0] {
                     let func = self.table.resolve_function(&verb)?;
                     if matches!(
-                        func,
-                        Function::Builtin(Builtin::Defalias)
-                            | Function::Builtin(Builtin::Defun)
-                            | Function::Builtin(Builtin::Defcolumns)
-                            | Function::Builtin(Builtin::Defunalias)
+                        func.class,
+                        FunctionClass::SpecialForm(Form::Defun)
+                            | FunctionClass::SpecialForm(Form::Defalias)
+                            | FunctionClass::SpecialForm(Form::Defunalias)
+                            | FunctionClass::SpecialForm(Form::Defcolumns)
                     ) {
                         return Ok(None);
                     };
 
-                    let func_args = match &func {
-                        Function::Builtin(_) => vec![],
-                        Function::Defined { ref args, .. } => args.keys().cloned().collect(),
-                        _ => unimplemented!(),
-                    };
+                    // let func_args = match &func.class {
+                    //     FunctionClass::SpecialForm(_) => vec![],
+                    //     FunctionClass::Builtin { .. } => vec![],
+                    //     FunctionClass::Defined { ref args, .. } => args.keys().cloned().collect(),
+                    //     x @ _ => unimplemented!("Unimplemented: {:?}", x),
+                    // };
                     self.apply(&func, &args[1..], ctx)
                 } else {
                     Err(eyre!("Not a function: {:?}", args[0]))
