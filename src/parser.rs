@@ -383,7 +383,7 @@ impl Compiler {
                         .with_context(|| format!("while parsing function {}", fname))?;
                     Ok((fname.to_owned(), arg_names))
                 } else {
-                    Err(eyre!("Not a functopn: {:?}", args[0]))
+                    Err(eyre!("Not a function: {:?}", args[0]))
                 }
             } else {
                 bail!("SSS")
@@ -399,22 +399,6 @@ impl Compiler {
             let header = &defun[0];
             let body = &defun[1];
             let (name, args) = parse_header(header)?;
-            body.fold(
-                &|ax: Result<()>, n| {
-                    if let AstNode::Symbol(name) = n {
-                        ax.and_then(|_| {
-                            self.table.resolve_function(name).map(|_| ()).or(args
-                                .contains(&name)
-                                .then(|| ())
-                                .ok_or(eyre!("symbol `{}` unknown", name)))
-                        })
-                    } else {
-                        ax
-                    }
-                },
-                Ok(()),
-            )
-            .with_context(|| format!("while parsing function `{}`", name))?;
             if self.table.funcs.contains_key(&name) {
                 return Err(eyre!("DEFUN: function `{}` already exists", name));
             } else {
