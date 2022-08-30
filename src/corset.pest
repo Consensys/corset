@@ -4,10 +4,9 @@ COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* }
 
 corset = { SOI ~ constraint* ~ EOI }
 
-constraint = { sexpr }
-sexpr = { "(" ~ function ~ expr+ ~ ")" }
-expr = { column | sexpr | value }
+constraint = { list }
+list = { "(" ~ expr* ~ ")" }
+expr = { integer | symbol | list }
 
-column = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
-function = @{ (LETTER | NUMBER | SYMBOL | "-" | "*")+  }
-value = @{ ASCII_DIGIT+ }
+symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" )+  }
+integer = @{ ASCII_DIGIT+ }
