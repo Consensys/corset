@@ -79,12 +79,10 @@ lazy_static::lazy_static! {
             class: FunctionClass::Alias("sub".into())
         },
 
-        // "if-zero" => Function::Builtin(Builtin::IfZero),
-        "if-0-else" => Function{
-            name: "if-0-else".into(),
-            class: FunctionClass::Builtin(Builtin::IfZeroElse),
+        "if-zero" => Function{
+            name: "if-zero".into(),
+            class: FunctionClass::Builtin(Builtin::IfZero),
         },
-        // "if-0-else" => Function::Builtin(Builtin::IfZeroElse),
 
         "begin" => Function{name: "begin".into(), class: FunctionClass::SpecialForm(Form::Begin)},
     };
@@ -163,11 +161,9 @@ pub enum Builtin {
     Sub,
     Mul,
     IfZero,
-    IfZeroElse,
     Neg,
     Inv,
 }
-impl Builtin {}
 
 #[derive(Debug, PartialEq, Clone)]
 enum VerbStatus {
@@ -411,6 +407,96 @@ struct Function {
     name: String,
     class: FunctionClass,
 }
+impl Function {
+    const VARIADIC_0: isize = -1;
+    const VARIADIC_1: isize = -2;
+    const VARIADIC_2: isize = -3;
+    fn arity(&self) -> isize {
+        match &self.class {
+            FunctionClass::Defined { args, .. } => args.len() as isize,
+            FunctionClass::SpecialForm(f) => match f {
+                Form::Defun => 2,
+                Form::Begin => Self::VARIADIC_1,
+                Form::Defalias => 2,
+                Form::Defunalias => 2,
+                Form::Defcolumns => Self::VARIADIC_1,
+            },
+            FunctionClass::Builtin(f) => match f {
+                Builtin::Add => Self::VARIADIC_2,
+                Builtin::Sub => Self::VARIADIC_2,
+                Builtin::Mul => Self::VARIADIC_2,
+                Builtin::Neg => 1,
+                Builtin::Inv => 1,
+                Builtin::IfZero => 2,
+            },
+            FunctionClass::Alias(_) => unreachable!(),
+        }
+    }
+
+    fn make_arity_error(&self, args: &[Constraint]) -> String {
+        let arity = self.arity();
+        return format!(
+            "`{}` expects {} argument{} but received {}",
+            self.name,
+            match arity {
+                Self::VARIADIC_1 => String::from("at least one"),
+                Self::VARIADIC_2 => String::from("at least two"),
+                arity @ _ => arity.to_string(),
+            },
+            if arity <= Self::VARIADIC_1 || arity > 1 {
+                "s"
+            } else {
+                ""
+            },
+            args.len(),
+        );
+    }
+
+    fn validate_arity(&self, args: &[Constraint]) -> Result<()> {
+        let arity = self.arity();
+        ((arity == Self::VARIADIC_1 && args.len() >= 1)
+            || (arity == Self::VARIADIC_2 && args.len() >= 2)
+            || (arity == args.len() as isize))
+            .then(|| ())
+            .ok_or(eyre!(self.make_arity_error(&args)))
+    }
+
+    fn validate_types(&self, args: &[Constraint]) -> Result<()> {
+        match &self.class {
+            FunctionClass::SpecialForm(_) => Ok(()),
+            FunctionClass::Defined { .. } => Ok(()),
+            FunctionClass::Builtin(b) => match b {
+                Builtin::Add | Builtin::Sub | Builtin::Mul | Builtin::IfZero => {
+                    if args.iter().all(|a| !matches!(a, Constraint::List(_))) {
+                        Ok(())
+                    } else {
+                        Err(eyre!(
+                            "`{}` expects scalar arguments but received a list",
+                            self.name
+                        ))
+                    }
+                }
+                Builtin::Neg | Builtin::Inv => {
+                    if args.iter().all(|a| !matches!(a, Constraint::List(_))) {
+                        Ok(())
+                    } else {
+                        Err(eyre!(
+                            "`{}` expects a scalar argument but received a list",
+                            self.name
+                        ))
+                    }
+                }
+            },
+            _ => unreachable!(),
+        }
+    }
+
+    fn validate_args(&self, args: Vec<Constraint>) -> Result<Vec<Constraint>> {
+        self.validate_arity(&args)
+            .and(self.validate_types(&args))
+            .and(Ok(args))
+    }
+}
 
 #[derive(Debug, Clone)]
 enum FunctionClass {
@@ -572,33 +658,21 @@ impl Compiler {
 
             FunctionClass::Builtin(builtin) => Ok(Some(Constraint::Funcall {
                 func: *builtin,
-                args: traversed_args,
+                args: f.validate_args(traversed_args)?,
             })),
 
-            FunctionClass::Defined { args: f_args, body } => {
-                if f_args.len() != args.len() {
-                    return Err(eyre!(
-                        "Inconsistent arity: function `{}` takes {} argument{} ({}) but received {}",
-                        f.name,
-                        f_args.len(),
-                        if f_args.len() > 1 { "" } else { "s" },
-                        f_args.keys().cloned().collect::<Vec<_>>().join(", "),
-                        args.len()
-                    ));
-                }
-                self.reduce(
-                    &body,
-                    &FunctionTable {
-                        args_mapping: f_args
-                            .into_iter()
-                            .map(|x| x.0.to_owned())
-                            .zip(traversed_args.into_iter())
-                            .collect(),
-                        parent: ctx,
-                        name: format!("FU {}", f.name),
-                    },
-                )
-            }
+            FunctionClass::Defined { args: f_args, body } => self.reduce(
+                &body,
+                &FunctionTable {
+                    args_mapping: f_args
+                        .into_iter()
+                        .map(|x| x.0.to_owned())
+                        .zip(f.validate_args(traversed_args)?.into_iter())
+                        .collect(),
+                    parent: ctx,
+                    name: format!("FU {}", f.name),
+                },
+            ),
             _ => unimplemented!(),
         }
     }
