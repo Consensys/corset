@@ -8,7 +8,7 @@ pub(crate) struct GoExporter {
 }
 impl GoExporter {
     fn indented_block(&self, header: &str, content: &str, indent: usize) -> String {
-        let I = "-".repeat(indent);
+        let I = " ".repeat(indent);
         format!(
             "{}{}{{\n{}{}\n{}}}",
             I,
@@ -88,48 +88,16 @@ impl GoExporter {
             Builtin::Add => self.make_chain(args, "Add", true, 0),
             Builtin::Mul => self.make_chain(args, "Mul", false, 0),
             Builtin::Sub => self.make_chain(args, "Sub", true, 0),
-            Builtin::IfZero => {
-                if args.len() != 2 {
-                    Err(eyre!(
-                        "IfZero should have two arguments; received {}: {}",
-                        args.len(),
-                        args.iter()
-                            .map(|x| format!("{:?}", x))
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    ))
-                } else {
-                    Ok(format!(
-                        "({}).IfZero({})",
-                        self.render_node(&args[0], 0)?,
-                        self.render_node(&args[1], 0)?
-                    ))
-                }
-            }
-            Builtin::IfZeroElse => {
-                if args.len() != 3 {
-                    Err(eyre!(
-                        "IfZeroElse should have three arguments; received {}: {}",
-                        args.len(),
-                        args.iter()
-                            .map(|x| format!("{:?}", x))
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    ))
-                } else {
-                    Ok(format!(
-                        "({}).IfZeroElse(\n{},\n{},)",
-                        self.render_node(&args[0], indent)?,
-                        self.render_node(&args[1], indent + INDENT)?,
-                        self.render_node(&args[2], indent + INDENT)?,
-                    ))
-                }
-            }
+            Builtin::IfZero => Ok(format!(
+                "({}).IfZeroThen({})",
+                self.render_node(&args[0], 0)?,
+                self.render_node(&args[1], 0)?
+            )),
             x @ _ => {
                 unimplemented!("Unimplemented: {:?}", x)
             }
         }?;
-        Ok(format!("{}{}", ".".repeat(indent), r))
+        Ok(format!("{}{}", " ".repeat(indent), r))
     }
 }
 
@@ -149,12 +117,17 @@ import (
             .constraints
             .iter()
             .map(|c| self.render_node(c, 2 * INDENT))
+            .map(|c| c.map(|c| format!("{},", c)))
             .collect::<Result<Vec<_>>>()?
             .join("\n");
 
         let r = self.indented_block(
-            &format!("func {}() []column.Expression ", &self.settings.name),
-            &body,
+            &format!("func {}() (r []column.Expression) ", &self.settings.name),
+            &format!(
+                "{}\n{}",
+                &self.indented_block("r = []column.Expression ", &body, INDENT),
+                "return"
+            ),
             0,
         );
         Ok(format!("{}\n{}", prelude, r))
