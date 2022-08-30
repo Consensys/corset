@@ -31,26 +31,17 @@ lazy_static::lazy_static! {
         // monadic
         "inv" => Function{
             name: "inv".into(),
-            class: FunctionClass::Builtin{
-                builtin: Builtin::Inv,
-                prototype: vec![ArgumentType::Constraint]
-            }
+            class: FunctionClass::Builtin(Builtin::Inv)
         },
         "neg" => Function{
             name: "neg".into(),
-            class: FunctionClass::Builtin{
-                builtin: Builtin::Neg,
-                prototype: vec![ArgumentType::Constraint]
-            }
+            class: FunctionClass::Builtin(Builtin::Neg)
         },
 
         // polyadic
         "add" => Function{
             name: "add".into(),
-            class: FunctionClass::Builtin{
-                builtin: Builtin::Add,
-                prototype: vec![ArgumentType::Variadic]
-            }
+            class: FunctionClass::Builtin(Builtin::Add)
         },
         "+" => Function {
             name: "+".into(),
@@ -60,10 +51,7 @@ lazy_static::lazy_static! {
 
         "mul" => Function{
             name: "mul".into(),
-            class: FunctionClass::Builtin{
-                builtin: Builtin::Mul,
-                prototype: vec![ArgumentType::Variadic]
-            }
+            class: FunctionClass::Builtin(Builtin::Mul)
         },
         "*" => Function {
             name: "*".into(),
@@ -76,10 +64,7 @@ lazy_static::lazy_static! {
 
         "sub" => Function{
             name: "mul".into(),
-            class: FunctionClass::Builtin{
-                builtin: Builtin::Sub,
-                prototype: vec![ArgumentType::Variadic]
-            }
+            class: FunctionClass::Builtin(Builtin::Sub,)
         },
         "-" => Function {
             name: "sub".into(),
@@ -97,10 +82,7 @@ lazy_static::lazy_static! {
         // "if-zero" => Function::Builtin(Builtin::IfZero),
         "if-0-else" => Function{
             name: "if-0-else".into(),
-            class: FunctionClass::Builtin{
-                builtin: Builtin::IfZeroElse,
-                prototype: vec![ArgumentType::Variadic]
-            }
+            class: FunctionClass::Builtin(Builtin::IfZeroElse),
         },
         // "if-0-else" => Function::Builtin(Builtin::IfZeroElse),
 
@@ -110,15 +92,6 @@ lazy_static::lazy_static! {
 
 pub(crate) trait Transpiler {
     fn render(&self, cs: &ConstraintsSet) -> Result<String>;
-}
-
-#[derive(Debug, Clone)]
-enum ArgumentType {
-    Natural,
-    Integer,
-    ConstraintList,
-    Constraint,
-    Variadic,
 }
 
 #[derive(Debug, Clone)]
@@ -446,10 +419,7 @@ enum FunctionClass {
         body: AstNode,
     },
     SpecialForm(Form),
-    Builtin {
-        builtin: Builtin,
-        prototype: Vec<ArgumentType>,
-    },
+    Builtin(Builtin),
     Alias(String),
 }
 struct Compiler {
@@ -596,14 +566,11 @@ impl Compiler {
             }
         }
 
-        match dbg!(&f.class) {
-            FunctionClass::SpecialForm(Form::Begin) => {
-                println!("coucou");
-                Ok(Some(Constraint::List(traversed_args)))
-            }
+        match &f.class {
+            FunctionClass::SpecialForm(Form::Begin) => Ok(Some(Constraint::List(traversed_args))),
             FunctionClass::SpecialForm(_) => Ok(None),
 
-            FunctionClass::Builtin { builtin, .. } => Ok(Some(Constraint::Funcall {
+            FunctionClass::Builtin(builtin) => Ok(Some(Constraint::Funcall {
                 func: *builtin,
                 args: traversed_args,
             })),
