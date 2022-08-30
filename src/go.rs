@@ -93,6 +93,15 @@ impl GoExporter {
                 self.render_node(&args[0], 0)?,
                 self.render_node(&args[1], 0)?
             )),
+            Builtin::Shift => Ok(format!(
+                "({}).Shift({})",
+                self.render_node(&args[0], 0)?,
+                if let Constraint::Const(x) = &args[1] {
+                    x
+                } else {
+                    unreachable!()
+                }
+            )),
             x @ _ => {
                 unimplemented!("Unimplemented: {:?}", x)
             }

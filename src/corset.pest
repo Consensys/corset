@@ -9,5 +9,5 @@ list = { "(" ~ expr* ~ ")" }
 expr = { integer | symbol | list }
 arg_type = { "NATURAL" | "CONSTRAINT" | "CONSTRAINTS" } // WiP functions typing
 
+integer = @{ "-"? ~ ASCII_DIGIT+ }
 symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" )+  }
-integer = @{ ASCII_DIGIT+ }

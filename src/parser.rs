@@ -1,6 +1,8 @@
 use color_eyre::eyre::*;
-use pest::{error::Error, iterators::Pair, Parser};
+use pest::{iterators::Pair, Parser};
 use std::collections::{HashMap, HashSet};
+use std::fmt;
+use std::fmt::Debug;
 
 #[derive(Parser)]
 #[grammar = "corset.pest"]
@@ -42,6 +44,11 @@ lazy_static::lazy_static! {
         "if-zero" => Function{
             name: "if-zero".into(),
             class: FunctionClass::Builtin(Builtin::IfZero),
+        },
+
+        "shift" => Function{
+            name: "shift".into(),
+            class: FunctionClass::Builtin(Builtin::Shift),
         },
 
 
@@ -95,7 +102,7 @@ pub(crate) trait Transpiler {
     fn render(&self, cs: &ConstraintsSet) -> Result<String>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Constraint {
     Funcall {
         func: Builtin,
@@ -105,6 +112,24 @@ pub enum Constraint {
     Column(String),
     List(Vec<Constraint>),
 }
+impl Debug for Constraint {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn format_list(cs: &[Constraint]) -> String {
+            cs.iter()
+                .map(|c| format!("{:?}", c))
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+
+        match self {
+            Constraint::Const(x) => write!(f, "{}", x),
+            Constraint::Column(name) => write!(f, "{}", name),
+            Constraint::List(cs) => write!(f, "'({})", format_list(cs)),
+            Self::Funcall { func, args } => write!(f, "({:?} {})", func, format_list(args)),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ConstraintsSet {
     pub constraints: Vec<Constraint>,
@@ -164,6 +189,7 @@ pub enum Builtin {
     Sub,
     Mul,
     IfZero,
+    Shift,
     Neg,
     Inv,
 }
@@ -431,6 +457,7 @@ impl Function {
                 Builtin::Neg => 1,
                 Builtin::Inv => 1,
                 Builtin::IfZero => 2,
+                Builtin::Shift => 2,
             },
             FunctionClass::Alias(_) => unreachable!(),
         }
@@ -486,6 +513,18 @@ impl Function {
                         Err(eyre!(
                             "`{}` expects a scalar argument but received a list",
                             self.name
+                        ))
+                    }
+                }
+                Builtin::Shift => {
+                    if matches!(args[0], Constraint::Column(_))
+                        && matches!(args[1], Constraint::Const(x) if x != 0)
+                    {
+                        Ok(())
+                    } else {
+                        Err(eyre!(
+                            "`shift` expects a COLUMN and a non-null INTEGER but received {:?}",
+                            args
                         ))
                     }
                 }
