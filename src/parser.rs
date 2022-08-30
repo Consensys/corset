@@ -10,7 +10,7 @@ lazy_static::lazy_static! {
     static ref BUILTINS: HashMap<&'static str, Builtin> = maplit::hashmap!{
         "defun" => Builtin::Defun,
         "defalias" => Builtin::Defalias,
-        "defunalias" => Builtin::Defalias,
+        "defunalias" => Builtin::Defunalias,
         "defcolumns" => Builtin::Defcolumns,
 
 
@@ -222,7 +222,10 @@ struct SymbolsTable {
 impl SymbolsTable {
     pub fn new() -> SymbolsTable {
         SymbolsTable {
-            funcs: HashMap::new(),
+            funcs: BUILTINS
+                .iter()
+                .map(|(k, v)| (k.to_string(), Function::Builtin(v.clone())))
+                .collect(),
             symbols: HashMap::new(),
         }
     }
@@ -261,7 +264,7 @@ impl SymbolsTable {
                 self.symbols[from]
             ))
         } else {
-            self.symbols.insert(from.into(), Symbol::Alias(to.into()));
+            self.funcs.insert(from.into(), Function::Alias(to.into()));
             Ok(())
         }
     }
@@ -560,23 +563,11 @@ impl Compiler {
                         Function::Builtin(Builtin::Defalias)
                             | Function::Builtin(Builtin::Defun)
                             | Function::Builtin(Builtin::Defcolumns)
+                            | Function::Builtin(Builtin::Defunalias)
                     ) {
                         return Ok(None);
                     };
 
-                    // match func {
-                    //     Function::Builtin(builtin) => match builtin {
-                    //         Builtin::Defun
-                    //         | Builtin::Defalias
-                    //         | Builtin::Defcolumns
-                    //         | Builtin::Defunalias => Ok(None),
-                    //         // Builtin::Begin => Ok(Some(Constraint::List(traversed_args))),
-                    //         // builtin @ _ => Ok(Some(Constraint::Funcall {
-                    //         //     func: *builtin,
-                    //         //     args: traversed_args,
-                    //         // })),
-                    //     },
-                    // };
                     let func_args = match &func {
                         Function::Builtin(_) => vec![],
                         Function::Defined { ref args, .. } => args.keys().cloned().collect(),
@@ -613,6 +604,7 @@ impl Compiler {
         compiler.compile_funcs()?;
 
         compiler.compile_aliases()?;
+
         let cs = compiler.build_constraints()?;
         Ok(cs)
 
