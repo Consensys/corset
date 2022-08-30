@@ -52,7 +52,15 @@ fn main() -> Result<()> {
     };
     let out = go_exporter.render(&constraints)?;
     if let Some(out_file) = args.out_file {
-        std::fs::File::create(&out_file)?.write_all(out.as_bytes())?;
+        std::fs::File::create(&out_file)
+            .with_context(|| {
+                eyre!(
+                    "while creating `{}` in `{}",
+                    Path::new(&out_file).display(),
+                    std::env::current_dir().unwrap().display()
+                )
+            })?
+            .write_all(out.as_bytes())?;
         println!("{} generated", out_file);
     } else {
         println!("{}", out);
