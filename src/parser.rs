@@ -542,10 +542,7 @@ impl Function {
 
 #[derive(Debug, Clone)]
 enum FunctionClass {
-    Defined {
-        args: HashMap<String, usize>,
-        body: AstNode,
-    },
+    Defined { args: Vec<String>, body: AstNode },
     SpecialForm(Form),
     Builtin(Builtin),
     Alias(String),
@@ -609,7 +606,7 @@ impl Compiler {
                     Function {
                         name: name.to_owned(),
                         class: FunctionClass::Defined {
-                            args: args.into_iter().enumerate().map(|(i, a)| (a, i)).collect(),
+                            args,
                             body: body.to_owned(),
                         },
                     }
@@ -703,18 +700,21 @@ impl Compiler {
                 args: f.validate_args(traversed_args)?,
             })),
 
-            FunctionClass::Defined { args: f_args, body } => self.reduce(
-                &body,
-                &FunctionTable {
-                    args_mapping: f_args
-                        .into_iter()
-                        .map(|x| x.0.to_owned())
-                        .zip(f.validate_args(traversed_args)?.into_iter())
-                        .collect(),
-                    parent: ctx,
-                    name: format!("FU {}", f.name),
-                },
-            ),
+            FunctionClass::Defined { args: f_args, body } => {
+                let traversed_args = f.validate_args(traversed_args)?;
+                self.reduce(
+                    &body,
+                    &FunctionTable {
+                        args_mapping: f_args
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, f_arg)| (f_arg.to_owned(), traversed_args[i].clone()))
+                            .collect(),
+                        parent: ctx,
+                        name: format!("FU {}", f.name),
+                    },
+                )
+            }
             _ => unimplemented!(),
         }
     }
@@ -737,12 +737,6 @@ impl Compiler {
                         return Ok(None);
                     };
 
-                    // let func_args = match &func.class {
-                    //     FunctionClass::SpecialForm(_) => vec![],
-                    //     FunctionClass::Builtin { .. } => vec![],
-                    //     FunctionClass::Defined { ref args, .. } => args.keys().cloned().collect(),
-                    //     x @ _ => unimplemented!("Unimplemented: {:?}", x),
-                    // };
                     self.apply(&func, &args[1..], ctx)
                 } else {
                     Err(eyre!("Not a function: {:?}", args[0]))
