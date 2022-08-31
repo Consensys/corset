@@ -95,6 +95,17 @@ lazy_static::lazy_static! {
 
         // Special form
         "begin" => Function{name: "begin".into(), class: FunctionClass::SpecialForm(Form::Begin)},
+
+
+        // Special form for now, see later if implementing map...
+        "branch-if-zero" => Function {
+            name:"branch-if-zero".into(),
+            class: FunctionClass::SpecialForm(Form::BranchIfZero)
+        },
+        "branch-if-zero-else" => Function {
+            name:"branch-if-zero-else".into(),
+            class: FunctionClass::SpecialForm(Form::BranchIfZero)
+        },
     };
 }
 
@@ -181,6 +192,15 @@ pub enum Form {
     Defunalias,
     Defcolumns,
     Begin,
+    // Don't like it :/
+    BranchIfZero,
+    BranchIfNotZero,
+    BranchBinIfZero,
+    BranchBinIfOne,
+    BranchIfZeroElse,
+    BranchIfNotZeroElse,
+    BranchBinIfZeroElse,
+    BranchBinIfOneElse,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -449,6 +469,9 @@ impl Function {
                 Form::Defalias => 2,
                 Form::Defunalias => 2,
                 Form::Defcolumns => Self::VARIADIC_1,
+                Form::BranchIfZero => 2,
+                Form::BranchIfZeroElse => 3,
+                x @ _ => unimplemented!("TBI: {:?}", x),
             },
             FunctionClass::Builtin(f) => match f {
                 Builtin::Add => Self::VARIADIC_2,
@@ -493,7 +516,38 @@ impl Function {
 
     fn validate_types(&self, args: &[Constraint]) -> Result<()> {
         match &self.class {
-            FunctionClass::SpecialForm(_) => Ok(()),
+            FunctionClass::SpecialForm(f) => match f {
+                Form::Begin => Ok(()),
+                Form::BranchIfZero => {
+                    if !matches!(args[0], Constraint::List(_))
+                        && matches!(args[1], Constraint::List(_))
+                    {
+                        Ok(())
+                    } else {
+                        Err(eyre!(
+                            "`{}` expects scalar arguments but received a list",
+                            self.name
+                        ))
+                    }
+                }
+                Form::BranchIfZeroElse => {
+                    if !matches!(args[0], Constraint::List(_))
+                        && matches!(args[1], Constraint::List(_))
+                        && matches!(args[2], Constraint::List(_))
+                    {
+                        Ok(())
+                    } else {
+                        Err(eyre!(
+                            "`{}` expects scalar arguments but received a list",
+                            self.name
+                        ))
+                    }
+                }
+                x @ _ => {
+                    eprintln!("WARN: {:?} not yet checked", x);
+                    Ok(())
+                }
+            },
             FunctionClass::Defined { .. } => Ok(()),
             FunctionClass::Builtin(b) => match b {
                 Builtin::Add | Builtin::Sub | Builtin::Mul | Builtin::IfZero => {
@@ -693,6 +747,46 @@ impl Compiler {
 
         match &f.class {
             FunctionClass::SpecialForm(Form::Begin) => Ok(Some(Constraint::List(traversed_args))),
+            FunctionClass::SpecialForm(Form::BranchIfZero) => {
+                println!("TA: {:?}", traversed_args);
+                let cond = traversed_args[0].clone();
+                if let Constraint::List(then) = &traversed_args[1] {
+                    Ok(Some(Constraint::List(
+                        then.into_iter()
+                            .map(|a| Constraint::Funcall {
+                                func: Builtin::IfZero,
+                                args: vec![cond.clone(), a.clone()],
+                            })
+                            .collect(),
+                    )))
+                } else {
+                    unreachable!()
+                }
+            }
+            FunctionClass::SpecialForm(Form::BranchIfZeroElse) => {
+                let cond = traversed_args[0].clone();
+                if let Constraint::List(tthen) = &traversed_args[1] {
+                    if let Constraint::List(eelse) = &traversed_args[2] {
+                        Ok(Some(Constraint::List(
+                            tthen
+                                .into_iter()
+                                .map(|a| Constraint::Funcall {
+                                    func: Builtin::IfZero,
+                                    args: vec![cond.clone(), a.clone()],
+                                })
+                                .chain(eelse.iter().map(|a| Constraint::Funcall {
+                                    func: Builtin::Mul,
+                                    args: vec![cond.clone(), a.clone()],
+                                }))
+                                .collect(),
+                        )))
+                    } else {
+                        unreachable!()
+                    }
+                } else {
+                    unreachable!()
+                }
+            }
             FunctionClass::SpecialForm(_) => Ok(None),
 
             FunctionClass::Builtin(builtin) => Ok(Some(Constraint::Funcall {
