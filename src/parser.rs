@@ -210,38 +210,43 @@ struct Verb {
     name: String,
 }
 
+#[derive(PartialEq, Clone)]
+struct AstNode {
+    class: Token,
+    src: String,
+    lc: (usize, usize),
+}
 #[derive(Debug, PartialEq, Clone)]
-enum AstNode {
+enum Token {
     Ignore,
     Value(i32),
     Symbol(String),
     List { args: Vec<AstNode> },
     TopLevelForm { args: Vec<AstNode> },
 }
-impl AstNode {
-    fn fold<T>(&self, f: &dyn Fn(T, &Self) -> T, ax: T) -> T {
-        match self {
-            AstNode::Ignore => ax,
-            AstNode::Symbol { .. } | AstNode::Value(_) => f(ax, self),
-            AstNode::List { args } => {
-                let mut aax = ax;
-                for s in args.iter() {
-                    aax = s.fold(f, aax);
-                }
-                aax
-            }
-            AstNode::TopLevelForm { args } => {
-                let mut aax = ax;
-                for s in args.iter() {
-                    aax = s.fold(f, aax);
-                }
-                aax
-            }
+impl Debug for AstNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn format_list(cs: &[AstNode]) -> String {
+            cs.iter()
+                .map(|c| format!("{:?}", c))
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+
+        match self.class {
+            Token::Ignore => write!(f, "IGNORED VALUE"),
+            Token::Value(x) => write!(f, "{}:IMMEDIATE VALUE", x),
+            Token::Symbol(ref name) => write!(f, "{}:SYMBOL", name),
+            Token::List { ref args } => write!(f, "'({})", format_list(&args)),
+            Token::TopLevelForm { ref args } => write!(f, "{}", format_list(&args)),
         }
     }
 }
 
 fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
+    let lc = pair.as_span().start_pos().line_col();
+    let src = pair.as_str().to_owned();
+
     match pair.as_rule() {
         Rule::expr | Rule::constraint => {
             build_ast_from_expr(pair.into_inner().next().unwrap(), in_def)
@@ -254,9 +259,13 @@ fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
                 .map(|p| build_ast_from_expr(p, in_def))
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
-                .filter(|x| *x != AstNode::Ignore)
+                .filter(|x| x.class != Token::Ignore)
                 .collect::<Vec<_>>();
-            Ok(AstNode::TopLevelForm { args })
+            Ok(AstNode {
+                class: Token::TopLevelForm { args },
+                lc,
+                src,
+            })
         }
         Rule::list => {
             let args = pair
@@ -264,12 +273,24 @@ fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
                 .map(|p| build_ast_from_expr(p, in_def))
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
-                .filter(|x| *x != AstNode::Ignore)
+                .filter(|x| x.class != Token::Ignore)
                 .collect::<Vec<_>>();
-            Ok(AstNode::List { args })
+            Ok(AstNode {
+                class: Token::List { args },
+                lc,
+                src,
+            })
         }
-        Rule::symbol | Rule::defform => Ok(AstNode::Symbol(pair.as_str().to_owned())),
-        Rule::integer => Ok(AstNode::Value(pair.as_str().parse().unwrap())),
+        Rule::symbol | Rule::defform => Ok(AstNode {
+            class: Token::Symbol(pair.as_str().to_owned()),
+            lc,
+            src,
+        }),
+        Rule::integer => Ok(AstNode {
+            class: Token::Value(pair.as_str().parse().unwrap()),
+            lc,
+            src,
+        }),
         x @ _ => unimplemented!("{:?}", x),
     }
 }
@@ -371,7 +392,7 @@ impl SymbolTable {
 
     fn insert_symbol(&mut self, symbol: &str) -> Result<()> {
         if self.symbols.contains_key(symbol) {
-            Err(anyhow!("`{}` already exists", symbol))
+            Err(anyhow!("column `{}` already exists", symbol))
         } else {
             self.symbols.insert(
                 symbol.into(),
@@ -471,7 +492,7 @@ trait FuncVerifier<T> {
     fn validate_types(&self, args: &[T]) -> Result<()>;
 
     fn validate_arity(&self, args: &[T]) -> Result<()> {
-        let arity = dbg!(self.arity());
+        let arity = self.arity();
         ((arity == VARIADIC_1 && args.len() >= 1)
             || (arity == VARIADIC_2 && args.len() >= 2)
             || (arity == args.len() as isize)
@@ -481,7 +502,7 @@ trait FuncVerifier<T> {
     }
 
     fn validate_args(&self, args: Vec<T>) -> Result<Vec<T>> {
-        dbg!(self.validate_arity(&args))
+        self.validate_arity(&args)
             .and_then(|_| self.validate_types(&args))
             .and(Ok(args))
     }
@@ -500,15 +521,15 @@ impl FuncVerifier<AstNode> for Form {
     fn validate_types(&self, args: &[AstNode]) -> Result<()> {
         match self {
             Form::Defcolumns => {
-                if args.iter().all(|a| matches!(a, AstNode::Symbol(_))) {
+                if args.iter().all(|a| matches!(a.class, Token::Symbol(_))) {
                     Ok(())
                 } else {
                     Err(eyre!("DEFCOLUMNS expects only symbols"))
                 }
             }
             Form::Defun => {
-                if matches!(args[0], AstNode::List { .. })
-                    && matches!(args[1], AstNode::List { .. })
+                if matches!(args[0].class, Token::List { .. })
+                    && matches!(args[1].class, Token::List { .. })
                 {
                     Ok(())
                 } else {
@@ -516,7 +537,7 @@ impl FuncVerifier<AstNode> for Form {
                 }
             }
             Form::Defalias | Form::Defunalias => {
-                if args.iter().all(|a| matches!(a, AstNode::Symbol(_))) {
+                if args.iter().all(|a| matches!(a.class, Token::Symbol(_))) {
                     Ok(())
                 } else {
                     Err(eyre!("DEFCOLUMNS expects only symbols"))
@@ -681,16 +702,16 @@ impl Compiler {
         match (f, pass) {
             (Form::Defcolumns, Pass::Definition) => {
                 for arg in args.iter() {
-                    if let AstNode::Symbol(name) = arg {
-                        ctx.borrow_mut().insert_symbol(&name)?
+                    if let Token::Symbol(name) = &arg.class {
+                        ctx.borrow_mut().insert_symbol(name)?
                     }
                 }
 
                 Ok(None)
             }
             (Form::Defconst, Pass::Definition) => {
-                for pair in args.chunks(2) {
-                    if let [AstNode::Symbol(name), AstNode::Value(x)] = pair {
+                for p in args.chunks(2) {
+                    if let (Token::Symbol(name), Token::Value(x)) = (&p[0].class, &p[1].class) {
                         ctx.borrow_mut().insert_constant(name, *x)?
                     }
                 }
@@ -698,8 +719,8 @@ impl Compiler {
                 Ok(None)
             }
             (Form::Defalias, Pass::Definition) => {
-                for pair in args.chunks(2) {
-                    if let [AstNode::Symbol(from), AstNode::Symbol(to)] = pair {
+                for p in args.chunks(2) {
+                    if let (Token::Symbol(from), Token::Symbol(to)) = (&p[0].class, &p[1].class) {
                         ctx.borrow_mut().insert_alias(from, to)?
                     }
                 }
@@ -707,8 +728,8 @@ impl Compiler {
                 Ok(None)
             }
             (Form::Defunalias, Pass::Definition) => {
-                for pair in args.chunks(2) {
-                    if let [AstNode::Symbol(from), AstNode::Symbol(to)] = pair {
+                for p in args.chunks(2) {
+                    if let (Token::Symbol(from), Token::Symbol(to)) = (&p[0].class, &p[1].class) {
                         ctx.borrow_mut().insert_funalias(from, to)?
                     }
                 }
@@ -719,12 +740,12 @@ impl Compiler {
                 let header = &args[0];
                 let body = &args[1];
 
-                if let AstNode::List { args } = header {
-                    if let AstNode::Symbol(fname) = &args[0] {
+                if let Token::List { ref args } = header.class {
+                    if let Token::Symbol(fname) = &args[0].class {
                         let arg_names = args
                             .iter()
                             .map(|a| {
-                                if let AstNode::Symbol(n) = a {
+                                if let Token::Symbol(ref n) = a.class {
                                     Ok(n.to_owned())
                                 } else {
                                     Err(eyre!("{:?} is not a valid argument", a))
@@ -869,12 +890,12 @@ impl Compiler {
         ctx: Rc<RefCell<SymbolTable>>,
         pass: Pass,
     ) -> Result<Option<Constraint>> {
-        match (e, pass) {
-            (AstNode::Ignore, _) => Ok(None),
-            (AstNode::Value(x), _) => Ok(Some(Constraint::Const(*x))),
-            (AstNode::Symbol(name), _) => Ok(Some(ctx.borrow_mut().resolve_symbol(name)?)),
-            (AstNode::TopLevelForm { args }, Pass::Definition) => {
-                if let AstNode::Symbol(verb) = &args[0] {
+        match (&e.class, pass) {
+            (Token::Ignore, _) => Ok(None),
+            (Token::Value(x), _) => Ok(Some(Constraint::Const(*x))),
+            (Token::Symbol(name), _) => Ok(Some(ctx.borrow_mut().resolve_symbol(&name)?)),
+            (Token::TopLevelForm { args }, Pass::Definition) => {
+                if let Token::Symbol(verb) = &args[0].class {
                     let func = ctx
                         .borrow()
                         .resolve_function(&verb)
@@ -885,8 +906,8 @@ impl Compiler {
                     unimplemented!()
                 }
             }
-            (AstNode::List { args }, Pass::Compilation) => {
-                if let AstNode::Symbol(verb) = &args[0] {
+            (Token::List { args }, Pass::Compilation) => {
+                if let Token::Symbol(verb) = &args[0].class {
                     let func = ctx
                         .borrow()
                         .resolve_function(&verb)
@@ -897,9 +918,10 @@ impl Compiler {
                     Err(eyre!("Not a function: {:?}", args[0]))
                 }
             }
-            (AstNode::List { .. }, Pass::Definition) => Ok(None),
-            (AstNode::TopLevelForm { .. }, Pass::Compilation) => Ok(None),
+            (Token::List { .. }, Pass::Definition) => Ok(None),
+            (Token::TopLevelForm { .. }, Pass::Compilation) => Ok(None),
         }
+        .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))
     }
 
     fn build_constraints<'a>(
@@ -913,7 +935,9 @@ impl Compiler {
 
         for exp in &self.ast.exprs.to_vec() {
             self.reduce(exp, ctx.clone(), pass)
-                .with_context(|| "assembling top-level constraint")?
+                .with_context(|| {
+                    format!("at line {}, col.{}: \"{}\"", exp.lc.0, exp.lc.1, exp.src)
+                })?
                 .map(|c| cs.constraints.push(c));
         }
         Ok(cs)
