@@ -37,6 +37,11 @@ lazy_static::lazy_static! {
             class: FunctionClass::SpecialForm(Form::Defconst),
         },
 
+        "ith" => Function {
+            name: "ith".into(),
+            class: FunctionClass::Builtin(Builtin::Ith),
+        },
+
 
         // monadic
         "inv" => Function{
@@ -101,9 +106,7 @@ lazy_static::lazy_static! {
             class: FunctionClass::Alias("sub".into())
         },
 
-        // Special form
         "begin" => Function{name: "begin".into(), class: FunctionClass::Builtin(Builtin::Begin)},
-
 
         // Special form for now, see later if implementing map...
         "branch-if-zero" => Function {
@@ -145,8 +148,8 @@ impl Debug for Constraint {
         }
 
         match self {
-            Constraint::Const(x) => write!(f, "{}", x),
-            Constraint::Column(name) => write!(f, "{}", name),
+            Constraint::Const(x) => write!(f, "{}:CONST", x),
+            Constraint::Column(name) => write!(f, "{}:COLUMN", name),
             Constraint::List(cs) => write!(f, "'({})", format_list(cs)),
             Self::Funcall { func, args } => write!(f, "({:?} {})", func, format_list(args)),
         }
@@ -184,38 +187,6 @@ pub enum Form {
     BranchBinIfZeroElse,
     BranchBinIfOneElse,
 }
-impl Form {
-    fn validate_args(&self, args: &[AstNode]) -> Result<()> {
-        match self {
-            Form::Defcolumns => {
-                if args.iter().all(|a| matches!(a, AstNode::Symbol(_))) {
-                    Ok(())
-                } else {
-                    Err(eyre!("DEFCOLUMNS expects only symbols"))
-                }
-            }
-            Form::Defun => {
-                if matches!(args[0], AstNode::List { .. })
-                    && matches!(args[1], AstNode::List { .. })
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!("DEFUN expects two expressions; received: {:?}", args))
-                }
-            }
-            Form::Defalias | Form::Defunalias => {
-                if args.iter().all(|a| matches!(a, AstNode::Symbol(_))) {
-                    Ok(())
-                } else {
-                    Err(eyre!("DEFCOLUMNS expects only symbols"))
-                }
-            }
-            _ => {
-                bail!("validate_args not implemented for `{:?}`", self)
-            }
-        }
-    }
-}
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Builtin {
@@ -228,6 +199,7 @@ pub enum Builtin {
     Inv,
 
     Begin,
+    Ith,
 
     BranchIfZero,
     BranchIfZeroElse,
@@ -499,7 +471,7 @@ trait FuncVerifier<T> {
     fn validate_types(&self, args: &[T]) -> Result<()>;
 
     fn validate_arity(&self, args: &[T]) -> Result<()> {
-        let arity = self.arity();
+        let arity = dbg!(self.arity());
         ((arity == VARIADIC_1 && args.len() >= 1)
             || (arity == VARIADIC_2 && args.len() >= 2)
             || (arity == args.len() as isize)
@@ -509,8 +481,8 @@ trait FuncVerifier<T> {
     }
 
     fn validate_args(&self, args: Vec<T>) -> Result<Vec<T>> {
-        self.validate_arity(&args)
-            .and(self.validate_types(&args))
+        dbg!(self.validate_arity(&args))
+            .and_then(|_| self.validate_types(&args))
             .and(Ok(args))
     }
 }
@@ -522,11 +494,38 @@ impl FuncVerifier<AstNode> for Form {
             Form::Defunalias => 2,
             Form::Defcolumns => VARIADIC_1,
             Form::Defconst => EVEN,
-            x @ _ => unimplemented!("TBI: {:?}", x),
+            _ => todo!(),
         }
     }
     fn validate_types(&self, args: &[AstNode]) -> Result<()> {
-        Ok(())
+        match self {
+            Form::Defcolumns => {
+                if args.iter().all(|a| matches!(a, AstNode::Symbol(_))) {
+                    Ok(())
+                } else {
+                    Err(eyre!("DEFCOLUMNS expects only symbols"))
+                }
+            }
+            Form::Defun => {
+                if matches!(args[0], AstNode::List { .. })
+                    && matches!(args[1], AstNode::List { .. })
+                {
+                    Ok(())
+                } else {
+                    Err(eyre!("DEFUN expects two expressions; received: {:?}", args))
+                }
+            }
+            Form::Defalias | Form::Defunalias => {
+                if args.iter().all(|a| matches!(a, AstNode::Symbol(_))) {
+                    Ok(())
+                } else {
+                    Err(eyre!("DEFCOLUMNS expects only symbols"))
+                }
+            }
+            _ => {
+                unimplemented!("{:?}", self)
+            }
+        }
     }
 }
 
@@ -543,9 +542,11 @@ impl FuncVerifier<Constraint> for Builtin {
             Builtin::Begin => VARIADIC_1,
             Builtin::BranchIfZero => 2,
             Builtin::BranchIfZeroElse => 3,
+            Builtin::Ith => 2,
         }
     }
     fn validate_types(&self, args: &[Constraint]) -> Result<()> {
+        println!("{:?}: {:?}", self, &args);
         match self {
             f @ (Builtin::Add | Builtin::Sub | Builtin::Mul | Builtin::IfZero) => {
                 if args.iter().all(|a| !matches!(a, Constraint::List(_))) {
@@ -604,10 +605,20 @@ impl FuncVerifier<Constraint> for Builtin {
                     ))
                 }
             }
-            x @ _ => {
-                eprintln!("WARN: {:?} not yet checked", x);
-                Ok(())
+            Builtin::Ith => {
+                if matches!(args[0], Constraint::Column(_))
+                    && matches!(args[1], Constraint::Const(_))
+                {
+                    Ok(())
+                } else {
+                    Err(eyre!(
+                        "`{:?}` expects (COLUMN, CONST) but received {:?}",
+                        self,
+                        args
+                    ))
+                }
             }
+            _ => todo!(),
         }
     }
 }
@@ -663,8 +674,9 @@ impl Compiler {
         ctx: Rc<RefCell<SymbolTable>>,
         pass: Pass,
     ) -> Result<Option<Constraint>> {
-        f.validate_args(&args)
-            .with_context(|| eyre!("while evaluating call to {:?}", f))?;
+        let args = f
+            .validate_args(args.to_vec())
+            .with_context(|| eyre!("evaluating call to {:?}", f))?;
 
         match (f, pass) {
             (Form::Defcolumns, Pass::Definition) => {
@@ -719,7 +731,7 @@ impl Compiler {
                                 }
                             })
                             .collect::<Result<Vec<_>>>()
-                            .with_context(|| format!("while parsing function {}", fname))?;
+                            .with_context(|| format!("parsing function {}", fname))?;
 
                         ctx.borrow_mut().insert_func({
                             Function {
@@ -739,8 +751,7 @@ impl Compiler {
                 Ok(None)
             }
             _ => {
-                bail!("{:?}/{:?}: not yet implemented", f, pass);
-                Ok(None)
+                bail!("{:?}/{:?}: not yet implemented", f, pass)
             }
         }
     }
@@ -806,17 +817,32 @@ impl Compiler {
                         unreachable!()
                     }
                 }
-                FunctionClass::Builtin(b @ builtin) => Ok(Some(Constraint::Funcall {
-                    func: *builtin,
-                    args: b
-                        .validate_args(traversed_args)
-                        .with_context(|| eyre!("while validating call to `{}`", f.name))?,
-                })),
+                FunctionClass::Builtin(b @ builtin) => match b {
+                    Builtin::Ith => {
+                        if let (Constraint::Column(c), Constraint::Const(x)) =
+                            (&traversed_args[0], &traversed_args[1])
+                        {
+                            let ith = format!("{}_{}", c, x);
+                            ctx.borrow()
+                                .resolve_symbol(&ith)
+                                .and_then(|_| Ok(Some(Constraint::Column(ith))))
+                                .with_context(|| eyre!("evaluating ith {:?}", traversed_args))
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    _ => Ok(Some(Constraint::Funcall {
+                        func: *builtin,
+                        args: b
+                            .validate_args(traversed_args)
+                            .with_context(|| eyre!("validating call to `{}`", f.name))?,
+                    })),
+                },
 
                 FunctionClass::UserDefined(b @ Defined { args: f_args, body }) => {
                     let traversed_args = b
                         .validate_args(traversed_args)
-                        .with_context(|| eyre!("while validating call to `{}`", f.name))?;
+                        .with_context(|| eyre!("validating call to `{}`", f.name))?;
                     self.reduce(
                         &body,
                         Rc::new(RefCell::new(SymbolTable::new_derived(
@@ -830,7 +856,7 @@ impl Compiler {
                         pass,
                     )
                 }
-                _ => unreachable!(),
+                _ => unimplemented!("{:?}", f),
             }
         } else {
             Ok(None)
@@ -852,7 +878,7 @@ impl Compiler {
                     let func = ctx
                         .borrow()
                         .resolve_function(&verb)
-                        .with_context(|| eyre!("while resolving form `{}`", verb))?;
+                        .with_context(|| eyre!("resolving form `{}`", verb))?;
 
                     Ok(self.apply(&func, &args[1..], ctx, pass)?)
                 } else {
@@ -864,7 +890,7 @@ impl Compiler {
                     let func = ctx
                         .borrow()
                         .resolve_function(&verb)
-                        .with_context(|| eyre!("while resolving function `{}`", verb))?;
+                        .with_context(|| eyre!("resolving function `{}`", verb))?;
 
                     self.apply(&func, &args[1..], ctx, pass)
                 } else {
@@ -887,7 +913,7 @@ impl Compiler {
 
         for exp in &self.ast.exprs.to_vec() {
             self.reduce(exp, ctx.clone(), pass)
-                .with_context(|| "while assembling top-level constraint")?
+                .with_context(|| "assembling top-level constraint")?
                 .map(|c| cs.constraints.push(c));
         }
         Ok(cs)
@@ -899,11 +925,11 @@ impl Compiler {
 
         let _ = compiler
             .build_constraints(table.clone(), Pass::Definition)
-            .with_context(|| eyre!("while parsing top-level definitions"))?;
+            .with_context(|| eyre!("parsing top-level definitions"))?;
 
         let cs = compiler
             .build_constraints(table.clone(), Pass::Compilation)
-            .with_context(|| eyre!("while compiling constraints"))?;
+            .with_context(|| eyre!("compiling constraints"))?;
         Ok(cs)
     }
 }

@@ -103,7 +103,7 @@ impl GoExporter {
                 }
             )),
             x @ _ => {
-                unimplemented!("Unimplemented: {:?}", x)
+                unimplemented!("{:?}", x)
             }
         }?;
         Ok(format!("{}{}", " ".repeat(indent), r))
