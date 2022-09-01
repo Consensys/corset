@@ -2,8 +2,9 @@ WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* }
 
 
-corset = { SOI ~ constraint* ~ EOI }
+corset = { SOI ~ (definition | constraint)* ~ EOI }
 
+definition = { "(" ~ defform ~ expr* ~ ")"}
 constraint = { list }
 list = { "(" ~ expr* ~ ")" }
 expr = { integer | symbol | list }
@@ -11,3 +12,4 @@ arg_type = { "NATURAL" | "CONSTRAINT" | "CONSTRAINTS" } // WiP functions typing
 
 integer = @{ "-"? ~ ASCII_DIGIT+ }
 symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" )+  }
+defform = @{ "defalias" | "defunalias" | "defun" | "defconstant" | "defcolumns" }
