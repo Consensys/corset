@@ -119,6 +119,16 @@ lazy_static::lazy_static! {
             name:"branch-if-zero-else".into(),
             class: FunctionClass::Builtin(Builtin::BranchIfZeroElse)
         },
+
+        "branch-if-not-zero" => Function {
+            name:"branch-if-not-zero".into(),
+            class: FunctionClass::Builtin(Builtin::BranchIfNotZero)
+        },
+
+        "branch-if-not-zero-else" => Function {
+            name:"branch-if-not-zero-else".into(),
+            class: FunctionClass::Builtin(Builtin::BranchIfNotZeroElse)
+        },
     };
 }
 
@@ -217,8 +227,8 @@ pub enum Builtin {
     // Don't like it :/
     BranchIfZero,
     BranchIfZeroElse,
-    // BranchIfNotZero,
-    // BranchIfNotZeroElse,
+    BranchIfNotZero,
+    BranchIfNotZeroElse,
 
     // BranchBinIfOne,
     // BranchBinIfZero,
@@ -557,6 +567,8 @@ impl FuncVerifier<Constraint> for Builtin {
             Builtin::Begin => Arity::AtLeast(1),
             Builtin::BranchIfZero => Arity::Dyadic,
             Builtin::BranchIfZeroElse => Arity::Exactly(3),
+            Builtin::BranchIfNotZero => Arity::Dyadic,
+            Builtin::BranchIfNotZeroElse => Arity::Exactly(3),
         }
     }
     fn validate_types(&self, args: &[Constraint]) -> Result<()> {
@@ -594,7 +606,7 @@ impl FuncVerifier<Constraint> for Builtin {
                     ))
                 }
             }
-            Builtin::BranchIfZero => {
+            Builtin::BranchIfZero | Builtin::BranchIfNotZero => {
                 if !matches!(args[0], Constraint::List(_)) && matches!(args[1], Constraint::List(_))
                 {
                     Ok(())
@@ -605,7 +617,7 @@ impl FuncVerifier<Constraint> for Builtin {
                     ))
                 }
             }
-            Builtin::BranchIfZeroElse => {
+            Builtin::BranchIfZeroElse | Builtin::BranchIfNotZeroElse => {
                 if !matches!(args[0], Constraint::List(_))
                     && matches!(args[1], Constraint::List(_))
                     && matches!(args[2], Constraint::List(_))
@@ -863,6 +875,49 @@ impl Compiler {
                                         .chain(eelse.iter().cloned().flat_map(|c: Constraint| {
                                             c.flat_fold(&|x| Constraint::Funcall {
                                                 func: Builtin::Mul,
+                                                args: vec![cond.clone(), x.clone()],
+                                            })
+                                        }))
+                                        .collect(),
+                                )))
+                            } else {
+                                unreachable!()
+                            }
+                        },
+                        Builtin::BranchIfNotZero => {
+                            let cond = traversed_args[0].clone();
+                            if let Constraint::List(then) = &traversed_args[1] {
+                                Ok(Some(Constraint::List(
+                                    then.iter()
+                                        .map(|a| Constraint::Funcall {
+                                            func: Builtin::Mul,
+                                            args: vec![cond.clone(), a.clone()],
+                                        })
+                                        .collect(),
+                                )))
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        Builtin::BranchIfNotZeroElse => {
+                            let cond = traversed_args[0].clone();
+                            if let (Constraint::List(tthen), Constraint::List(eelse)) =
+                                (&traversed_args[1], &traversed_args[2])
+                            {
+                                Ok(Some(Constraint::List(
+                                    tthen
+                                        .iter()
+                                        .cloned()
+                                        .flat_map(|c: Constraint| {
+                                            c.flat_fold(&|x| Constraint::Funcall {
+                                                func: Builtin::Mul,
+                                                args: vec![cond.clone(), x.clone()],
+                                            })
+                                        })
+                                        .into_iter()
+                                        .chain(eelse.iter().cloned().flat_map(|c: Constraint| {
+                                            c.flat_fold(&|x| Constraint::Funcall {
+                                                func: Builtin::IfZero,
                                                 args: vec![cond.clone(), x.clone()],
                                             })
                                         }))
