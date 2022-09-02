@@ -161,9 +161,13 @@ pub struct ConstraintsSet {
     pub constraints: Vec<Constraint>,
 }
 impl ConstraintsSet {
-    pub fn from_str<S: AsRef<str>>(s: S) -> Result<Self> {
-        let exprs = parse(s.as_ref())?;
-        Compiler::compile(exprs)
+    pub fn from_sources<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<Self> {
+        Compiler::compile(
+            &sources
+                .iter()
+                .map(|(n, s)| (*n, s.as_ref()))
+                .collect::<Vec<_>>(),
+        )
     }
 }
 
@@ -567,7 +571,6 @@ impl FuncVerifier<Constraint> for Builtin {
         }
     }
     fn validate_types(&self, args: &[Constraint]) -> Result<()> {
-        println!("{:?}: {:?}", self, &args);
         match self {
             f @ (Builtin::Add | Builtin::Sub | Builtin::Mul | Builtin::IfZero) => {
                 if args.iter().all(|a| !matches!(a, Constraint::List(_))) {
@@ -679,7 +682,7 @@ enum FunctionClass {
     Alias(String),
 }
 struct Compiler {
-    ast: ParsingAst,
+    // ast: ParsingAst,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -926,34 +929,46 @@ impl Compiler {
 
     fn build_constraints<'a>(
         &mut self,
+        ast: &ParsingAst,
         ctx: Rc<RefCell<SymbolTable>>,
         pass: Pass,
-    ) -> Result<ConstraintsSet> {
-        let mut cs = ConstraintsSet {
-            constraints: vec![],
-        };
+    ) -> Result<Vec<Constraint>> {
+        let mut r = vec![];
 
-        for exp in &self.ast.exprs.to_vec() {
-            self.reduce(exp, ctx.clone(), pass)
+        for exp in ast.exprs.to_vec() {
+            self.reduce(&exp, ctx.clone(), pass)
                 .with_context(|| {
                     format!("at line {}, col.{}: \"{}\"", exp.lc.0, exp.lc.1, exp.src)
                 })?
-                .map(|c| cs.constraints.push(c));
+                .map(|c| r.push(c));
         }
-        Ok(cs)
+        Ok(r)
     }
 
-    fn compile(ast: ParsingAst) -> Result<ConstraintsSet> {
-        let mut compiler = Compiler { ast };
+    fn compile(sources: &[(&str, &str)]) -> Result<ConstraintsSet> {
         let table = Rc::new(RefCell::new(SymbolTable::new_root()));
+        let mut compiler = Compiler {};
+        let mut asts = vec![];
 
-        let _ = compiler
-            .build_constraints(table.clone(), Pass::Definition)
-            .with_context(|| eyre!("parsing top-level definitions"))?;
+        for (name, content) in sources.iter() {
+            let ast = parse(content).with_context(|| eyre!("parsing `{}`", name))?;
+            let _ = compiler
+                .build_constraints(&ast, table.clone(), Pass::Definition)
+                .with_context(|| eyre!("parsing top-level definitions in `{}`", name))?;
+            asts.push((name, ast));
+        }
 
-        let cs = compiler
-            .build_constraints(table.clone(), Pass::Compilation)
-            .with_context(|| eyre!("compiling constraints"))?;
-        Ok(cs)
+        let constraints = asts
+            .into_iter()
+            .map(|(name, ast)| {
+                compiler
+                    .build_constraints(&ast, table.clone(), Pass::Compilation)
+                    .with_context(|| eyre!("compiling constraints"))
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+        Ok(ConstraintsSet { constraints })
     }
 }

@@ -27,7 +27,7 @@ pub struct Args {
         required = true,
         help = "Either a file or a string containing the Corset code to process"
     )]
-    source: String,
+    source: Vec<String>,
 
     #[clap(
         short = 'P',
@@ -52,17 +52,15 @@ fn main() -> Result<()> {
     color_eyre::install()?;
     let args = Args::parse();
 
-    let mut source = if Path::new(&args.source).is_file() {
-        std::fs::read_to_string(&args.source)?
-    } else {
-        args.source.clone()
-    };
-    if !args.no_stdlib {
-        source.push_str(include_str!("stdlib.lisp"))
+    let mut inputs = vec![];
+    for f in args.source.iter() {
+        inputs.push((
+            f.as_str(),
+            std::fs::read_to_string(f).with_context(|| eyre!("reading `{}`", f))?,
+        ));
     }
 
-    let constraints = parser::ConstraintsSet::from_str(&source)
-        .with_context(|| format!("while parsing `{}`", &args.source))?;
+    let constraints = parser::ConstraintsSet::from_sources(inputs.as_slice())?;
 
     let go_exporter = go::GoExporter {
         settings: args.clone(),
