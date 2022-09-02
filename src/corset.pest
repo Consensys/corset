@@ -12,4 +12,4 @@ arg_type = { "NATURAL" | "CONSTRAINT" | "CONSTRAINTS" } // WiP functions typing
 
 integer = @{ "-"? ~ ASCII_DIGIT+ }
 symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" )+  }
-defform = @{ "defalias" | "defunalias" | "defun" | "defconstant" | "defcolumns" }
+defform = @{ "defalias" | "defunalias" | "defun" | "defconst" | "defcolumns" }
