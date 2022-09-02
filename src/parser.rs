@@ -198,15 +198,14 @@ pub enum Builtin {
     // Don't like it :/
     BranchIfZero,
     BranchIfZeroElse,
+    // BranchIfNotZero,
+    // BranchIfNotZeroElse,
 
-    BranchIfNotZero,
-    BranchIfNotZeroElse,
+    // BranchBinIfOne,
+    // BranchBinIfZero,
 
-    BranchBinIfOne,
-    BranchBinIfZero,
-
-    BranchBinIfOneElse,
-    BranchBinIfZeroElse,
+    // BranchBinIfOneElse,
+    // BranchBinIfZeroElse,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -468,36 +467,13 @@ impl SymbolTable {
 }
 
 trait FuncVerifier<T> {
-    fn arity(&self) -> isize;
-    fn make_arity_error(&self, args: &[T]) -> String {
-        let arity = self.arity();
-        return format!(
-            "expected {} argument{}, received {}",
-            match arity {
-                VARIADIC_1 => String::from("at least one"),
-                VARIADIC_2 => String::from("at least two"),
-                EVEN => String::from("even number of"),
-                arity @ _ => arity.to_string(),
-            },
-            if arity <= VARIADIC_1 || arity > 1 {
-                "s"
-            } else {
-                ""
-            },
-            args.len(),
-        );
-    }
+    fn arity(&self) -> Arity;
 
     fn validate_types(&self, args: &[T]) -> Result<()>;
 
     fn validate_arity(&self, args: &[T]) -> Result<()> {
-        let arity = self.arity();
-        ((arity == VARIADIC_1 && args.len() >= 1)
-            || (arity == VARIADIC_2 && args.len() >= 2)
-            || (arity == args.len() as isize)
-            || (arity == EVEN && args.len() % 2 == 0))
-            .then(|| ())
-            .ok_or(eyre!(self.make_arity_error(args)))
+        self.arity()
+            .validate(args.len())
     }
 
     fn validate_args(&self, args: Vec<T>) -> Result<Vec<T>> {
@@ -507,14 +483,13 @@ trait FuncVerifier<T> {
     }
 }
 impl FuncVerifier<AstNode> for Form {
-    fn arity(&self) -> isize {
+    fn arity(&self) -> Arity {
         match self {
-            Form::Defun => 2,
-            Form::Defalias => EVEN,
-            Form::Defunalias => 2,
-            Form::Defcolumns => VARIADIC_1,
-            Form::Defconst => EVEN,
-            _ => todo!(),
+            Form::Defun => Arity::Exactly(2),
+            Form::Defalias => Arity::Even,
+            Form::Defunalias => Arity::Exactly(2),
+            Form::Defcolumns => Arity::AtLeast(1),
+            Form::Defconst => Arity::Even,
         }
     }
     fn validate_types(&self, args: &[AstNode]) -> Result<()> {
@@ -527,8 +502,7 @@ impl FuncVerifier<AstNode> for Form {
                 }
             }
             Form::Defun => {
-                if matches!(args[0].class, Token::List { .. })
-                {
+                if matches!(args[0].class, Token::List { .. }) {
                     Ok(())
                 } else {
                     Err(eyre!("invalid DEFUN syntax; received: {:?}", args))
@@ -550,28 +524,24 @@ impl FuncVerifier<AstNode> for Form {
                     Err(eyre!("DEFCONST expects alternating symbols and values"))
                 }
             }
-            _ => {
-                unimplemented!("{:?}", self)
-            }
         }
     }
 }
 
 impl FuncVerifier<Constraint> for Builtin {
-    fn arity(&self) -> isize {
+    fn arity(&self) -> Arity {
         match self {
-            Builtin::Add => VARIADIC_2,
-            Builtin::Sub => VARIADIC_2,
-            Builtin::Mul => VARIADIC_2,
-            Builtin::Neg => 1,
-            Builtin::Inv => 1,
-            Builtin::IfZero => 2,
-            Builtin::Shift => 2,
-            Builtin::Begin => VARIADIC_1,
-            Builtin::BranchIfZero => 2,
-            Builtin::BranchIfZeroElse => 3,
-            Builtin::Ith => 2,
-            _ => unimplemented!("{:?}", self),
+            Builtin::Add => Arity::AtLeast(2),
+            Builtin::Sub => Arity::AtLeast(2),
+            Builtin::Mul => Arity::AtLeast(2),
+            Builtin::Neg => Arity::Monadic,
+            Builtin::Inv => Arity::Monadic,
+            Builtin::IfZero => Arity::Dyadic,
+            Builtin::Shift => Arity::Dyadic,
+            Builtin::Ith => Arity::Dyadic,
+            Builtin::Begin => Arity::AtLeast(1),
+            Builtin::BranchIfZero => Arity::Dyadic,
+            Builtin::BranchIfZeroElse => Arity::Exactly(3),
         }
     }
     fn validate_types(&self, args: &[Constraint]) -> Result<()> {
@@ -652,8 +622,8 @@ impl FuncVerifier<Constraint> for Builtin {
 }
 
 impl FuncVerifier<Constraint> for Defined {
-    fn arity(&self) -> isize {
-        self.args.len() as isize
+    fn arity(&self) -> Arity {
+        Arity::Exactly(self.args.len())
     }
 
     fn validate_types(&self, _args: &[Constraint]) -> Result<()> {
@@ -667,10 +637,45 @@ struct Function {
     class: FunctionClass,
 }
 
-const VARIADIC_0: isize = -1;
-const VARIADIC_1: isize = -2;
-const VARIADIC_2: isize = -3;
-const EVEN: isize = -4;
+enum Arity {
+    AtLeast(usize),
+    AtMost(usize),
+    Even,
+    Odd,
+    Monadic,
+    Dyadic,
+    Exactly(usize),
+}
+impl Arity {
+    fn make_error(&self, l: usize) -> String {
+        fn arg_count(x: usize) -> String {
+            format!("{} argument{}", x, if x > 1 { "s" } else {""})
+        }
+        match self {
+            Arity::AtLeast(x) => format!("expected at least {}, but received {}", arg_count(*x), l),
+            Arity::AtMost(x) => format!("expected at most {}, but received {}", arg_count(*x), l),
+            Arity::Even => format!("expected an even numer of arguments, but received {}", l),
+            Arity::Odd => format!("expected an odd numer of arguments, but received {}", l),
+            Arity::Monadic => format!("expected {}, but received {}", arg_count(1), l),
+            Arity::Dyadic => format!("expected {}, but received {}", arg_count(2), l),
+            Arity::Exactly(x) => format!("expected {}, but received {}", arg_count(*x), l),
+        }
+    }
+
+    fn validate(&self, l: usize) -> Result<()> {
+        match self {
+            Arity::AtLeast(x) => l >= *x,
+            Arity::AtMost(x) => l <= *x,
+            Arity::Even => l % 2 == 0,
+            Arity::Odd => l % 2 == 1,
+            Arity::Monadic => l == 1,
+            Arity::Dyadic => l == 2,
+            Arity::Exactly(x) => l == *x,
+        }
+        .then(|| ())
+        .ok_or_else(|| eyre!(self.make_error(l)))
+    }
+}
 
 #[derive(Debug, Clone)]
 struct Defined {
@@ -685,9 +690,8 @@ enum FunctionClass {
     Builtin(Builtin),
     Alias(String),
 }
-struct Compiler {
-    // ast: ParsingAst,
-}
+
+struct Compiler {}
 
 #[derive(Debug, Clone, Copy)]
 enum Pass {
