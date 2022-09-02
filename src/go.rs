@@ -92,7 +92,7 @@ impl crate::parser::Transpiler for GoExporter {
             .iter()
             .map(|c| self.render_node(c))
             .collect::<Result<Vec<_>>>()?
-            .join("\n")
+            .join(",\n")
             .replace(",,", ","); // Screw you, Go
 
         let r = format!(
@@ -105,12 +105,19 @@ import (
 
 func {}() (r []column.Expression) {{
 r = []column.Expression {{
-{}
+{}{}
 }}
 return
 }}
 "#,
-            self.settings.package, self.settings.fname, body,
+            self.settings.package,
+            self.settings.fname,
+            body,
+            if body.chars().last().unwrap() == ',' {
+                ""
+            } else {
+                ","
+            },
         );
         writeln!(out, "{}", r).with_context(|| eyre!("rendering result"))
     }
