@@ -113,14 +113,6 @@ lazy_static::lazy_static! {
             name:"branch-if-zero".into(),
             class: FunctionClass::Builtin(Builtin::BranchIfZero)
         },
-        "branch-if-zero" => Function {
-            name:"branch-if-zero".into(),
-            class: FunctionClass::Builtin(Builtin::BranchIfZero)
-        },
-        "branch-if-zero-else" => Function {
-            name:"branch-if-zero-else".into(),
-            class: FunctionClass::Builtin(Builtin::BranchIfZero)
-        },
     };
 }
 
@@ -183,13 +175,6 @@ pub enum Form {
     Defunalias,
     Defcolumns,
     Defconst,
-    // Don't like it :/
-    BranchIfNotZero,
-    BranchBinIfZero,
-    BranchBinIfOne,
-    BranchIfNotZeroElse,
-    BranchBinIfZeroElse,
-    BranchBinIfOneElse,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -205,8 +190,18 @@ pub enum Builtin {
     Begin,
     Ith,
 
+    // Don't like it :/
     BranchIfZero,
     BranchIfZeroElse,
+
+    BranchIfNotZero,
+    BranchIfNotZeroElse,
+
+    BranchBinIfOne,
+    BranchBinIfZero,
+
+    BranchBinIfOneElse,
+    BranchBinIfZeroElse,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -417,12 +412,7 @@ impl SymbolTable {
 
     fn insert_alias(&mut self, from: &str, to: &str) -> Result<()> {
         if self.symbols.contains_key(from) {
-            Err(anyhow!(
-                "`{}` already exists: {} -> {:?}",
-                from,
-                from,
-                self.symbols[from]
-            ))
+            Err(anyhow!("`{}` already exists", from))
         } else {
             self.symbols.insert(from.into(), Symbol::Alias(to.into()));
             Ok(())
@@ -547,6 +537,15 @@ impl FuncVerifier<AstNode> for Form {
                     Err(eyre!("DEFCOLUMNS expects only symbols"))
                 }
             }
+            Form::Defconst => {
+                if args.chunks(2).all(|p| {
+                    matches!(p[0].class, Token::Symbol(_)) && matches!(p[1].class, Token::Value(_))
+                }) {
+                    Ok(())
+                } else {
+                    Err(eyre!("DEFCONST expects alternating symbols and values"))
+                }
+            }
             _ => {
                 unimplemented!("{:?}", self)
             }
@@ -568,6 +567,7 @@ impl FuncVerifier<Constraint> for Builtin {
             Builtin::BranchIfZero => 2,
             Builtin::BranchIfZeroElse => 3,
             Builtin::Ith => 2,
+            _ => unimplemented!("{:?}", self),
         }
     }
     fn validate_types(&self, args: &[Constraint]) -> Result<()> {
@@ -652,7 +652,7 @@ impl FuncVerifier<Constraint> for Defined {
         self.args.len() as isize
     }
 
-    fn validate_types(&self, args: &[Constraint]) -> Result<()> {
+    fn validate_types(&self, _args: &[Constraint]) -> Result<()> {
         Ok(())
     }
 }
@@ -963,7 +963,7 @@ impl Compiler {
             .map(|(name, ast)| {
                 compiler
                     .build_constraints(&ast, table.clone(), Pass::Compilation)
-                    .with_context(|| eyre!("compiling constraints"))
+                    .with_context(|| eyre!("compiling constraints in `{}`", name))
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()
