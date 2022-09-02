@@ -113,6 +113,11 @@ lazy_static::lazy_static! {
             name:"branch-if-zero".into(),
             class: FunctionClass::Builtin(Builtin::BranchIfZero)
         },
+
+        "branch-if-zero-else" => Function {
+            name:"branch-if-zero-else".into(),
+            class: FunctionClass::Builtin(Builtin::BranchIfZeroElse)
+        },
     };
 }
 
@@ -523,11 +528,10 @@ impl FuncVerifier<AstNode> for Form {
             }
             Form::Defun => {
                 if matches!(args[0].class, Token::List { .. })
-                    && matches!(args[1].class, Token::List { .. })
                 {
                     Ok(())
                 } else {
-                    Err(eyre!("DEFUN expects two expressions; received: {:?}", args))
+                    Err(eyre!("invalid DEFUN syntax; received: {:?}", args))
                 }
             }
             Form::Defalias | Form::Defunalias => {
