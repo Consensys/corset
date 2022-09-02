@@ -245,8 +245,8 @@ impl Debug for AstNode {
             Token::Ignore => write!(f, "IGNORED VALUE"),
             Token::Value(x) => write!(f, "{}:IMMEDIATE VALUE", x),
             Token::Symbol(ref name) => write!(f, "{}:SYMBOL", name),
-            Token::List { ref args } => write!(f, "'({})", format_list(&args)),
-            Token::TopLevelForm { ref args } => write!(f, "{}", format_list(&args)),
+            Token::List { ref args } => write!(f, "'({})", format_list(args)),
+            Token::TopLevelForm { ref args } => write!(f, "{}", format_list(args)),
         }
     }
 }
@@ -299,7 +299,7 @@ fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
             lc,
             src,
         }),
-        x @ _ => unimplemented!("{:?}", x),
+        x => unimplemented!("{:?}", x),
     }
 }
 
@@ -307,15 +307,12 @@ fn parse(source: &str) -> Result<ParsingAst> {
     let mut ast = ParsingAst { exprs: vec![] };
 
     for pair in CorsetParser::parse(Rule::corset, source)? {
-        match &pair.as_rule() {
-            Rule::corset => {
-                for constraint in pair.into_inner() {
-                    if constraint.as_rule() != Rule::EOI {
-                        ast.exprs.push(build_ast_from_expr(constraint, false)?);
-                    }
+        if pair.as_rule() == Rule::corset {
+            for constraint in pair.into_inner() {
+                if constraint.as_rule() != Rule::EOI {
+                    ast.exprs.push(build_ast_from_expr(constraint, false)?);
                 }
             }
-            _ => {}
         }
     }
 
@@ -453,7 +450,7 @@ impl SymbolTable {
             .get(name)
             .map(|x| x.to_owned())
             .ok_or(eyre!("SHOULD NEVER HAPPEN"))
-            .or(self._resolve_symbol(name, &mut HashSet::new()))
+            .or_else(|_| self._resolve_symbol(name, &mut HashSet::new()))
     }
 
     fn resolve_function(&self, name: &str) -> Result<Function> {
@@ -703,7 +700,7 @@ enum Pass {
     Compilation,
 }
 impl Compiler {
-    fn apply_form<'a>(
+    fn apply_form(
         &self,
         f: Form,
         args: &[AstNode],
@@ -792,7 +789,7 @@ impl Compiler {
         }
     }
 
-    fn apply<'a>(
+    fn apply(
         &self,
         f: &Function,
         args: &[AstNode],
@@ -818,7 +815,7 @@ impl Compiler {
                     let cond = traversed_args[0].clone();
                     if let Constraint::List(then) = &traversed_args[1] {
                         Ok(Some(Constraint::List(
-                            then.into_iter()
+                            then.iter()
                                 .map(|a| Constraint::Funcall {
                                     func: Builtin::IfZero,
                                     args: vec![cond.clone(), a.clone()],
@@ -835,7 +832,7 @@ impl Compiler {
                         if let Constraint::List(eelse) = &traversed_args[2] {
                             Ok(Some(Constraint::List(
                                 tthen
-                                    .into_iter()
+                                    .iter()
                                     .map(|a| Constraint::Funcall {
                                         func: Builtin::IfZero,
                                         args: vec![cond.clone(), a.clone()],
@@ -861,7 +858,7 @@ impl Compiler {
                             let ith = format!("{}_{}", c, x);
                             ctx.borrow()
                                 .resolve_symbol(&ith)
-                                .and_then(|_| Ok(Some(Constraint::Column(ith))))
+                                .map(|_| Some(Constraint::Column(ith)))
                                 .with_context(|| eyre!("evaluating ith {:?}", traversed_args))
                         } else {
                             unreachable!()
@@ -880,11 +877,11 @@ impl Compiler {
                         .validate_args(traversed_args)
                         .with_context(|| eyre!("validating call to `{}`", f.name))?;
                     self.reduce(
-                        &body,
+                        body,
                         Rc::new(RefCell::new(SymbolTable::new_derived(
                             ctx,
                             f_args
-                                .into_iter()
+                                .iter()
                                 .enumerate()
                                 .map(|(i, f_arg)| (f_arg.to_owned(), traversed_args[i].clone()))
                                 .collect(),
@@ -899,7 +896,7 @@ impl Compiler {
         }
     }
 
-    fn reduce<'a>(
+    fn reduce(
         &self,
         e: &AstNode,
         ctx: Rc<RefCell<SymbolTable>>,
@@ -908,12 +905,12 @@ impl Compiler {
         match (&e.class, pass) {
             (Token::Ignore, _) => Ok(None),
             (Token::Value(x), _) => Ok(Some(Constraint::Const(*x))),
-            (Token::Symbol(name), _) => Ok(Some(ctx.borrow_mut().resolve_symbol(&name)?)),
+            (Token::Symbol(name), _) => Ok(Some(ctx.borrow_mut().resolve_symbol(name)?)),
             (Token::TopLevelForm { args }, Pass::Definition) => {
                 if let Token::Symbol(verb) = &args[0].class {
                     let func = ctx
                         .borrow()
-                        .resolve_function(&verb)
+                        .resolve_function(verb)
                         .with_context(|| eyre!("resolving form `{}`", verb))?;
 
                     Ok(self.apply(&func, &args[1..], ctx, pass)?)
@@ -925,7 +922,7 @@ impl Compiler {
                 if let Token::Symbol(verb) = &args[0].class {
                     let func = ctx
                         .borrow()
-                        .resolve_function(&verb)
+                        .resolve_function(verb)
                         .with_context(|| eyre!("resolving function `{}`", verb))?;
 
                     self.apply(&func, &args[1..], ctx, pass)
@@ -939,7 +936,7 @@ impl Compiler {
         .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))
     }
 
-    fn build_constraints<'a>(
+    fn build_constraints(
         &mut self,
         ast: &ParsingAst,
         ctx: Rc<RefCell<SymbolTable>>,
@@ -947,12 +944,12 @@ impl Compiler {
     ) -> Result<Vec<Constraint>> {
         let mut r = vec![];
 
-        for exp in ast.exprs.to_vec() {
-            self.reduce(&exp, ctx.clone(), pass)
-                .with_context(|| {
-                    format!("at line {}, col.{}: \"{}\"", exp.lc.0, exp.lc.1, exp.src)
-                })?
-                .map(|c| r.push(c));
+        for exp in ast.exprs.iter().cloned() {
+            if let Some(c) = self.reduce(&exp, ctx.clone(), pass).with_context(|| {
+                format!("at line {}, col.{}: \"{}\"", exp.lc.0, exp.lc.1, exp.src)
+            })? {
+                r.push(c)
+            }
         }
         Ok(r)
     }

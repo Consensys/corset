@@ -3,7 +3,6 @@ use color_eyre::eyre::*;
 
 use std::io::{BufWriter, Write};
 
-const INDENT: usize = 4;
 #[derive(Debug)]
 pub(crate) struct GoExporter {
     pub settings: crate::Args,
@@ -37,7 +36,7 @@ impl GoExporter {
         let r = match node {
             Constraint::Const(x) => match x {
                 0..=2 | 127 | 256 => Ok(format!("column.CONST_{}()", x)),
-                x @ _ => Ok(format!("column.CONST_UINT64({})", x)),
+                x => Ok(format!("column.CONST_UINT64({})", x)),
             },
             Constraint::Column(name) => Ok(format!("CE[{}.Name()]", name)),
             Constraint::Funcall { func, args } => self.render_funcall(func, args),
@@ -46,7 +45,7 @@ impl GoExporter {
                 .map(|x| self.render_node(x))
                 .map(|x| {
                     x.map(|mut r| {
-                        r.push_str(",");
+                        r.push(',');
                         r
                     })
                 })
@@ -74,7 +73,7 @@ impl GoExporter {
                     unreachable!()
                 }
             )),
-            x @ _ => {
+            x => {
                 unimplemented!("{:?}", x)
             }
         }?;
@@ -88,15 +87,6 @@ impl crate::parser::Transpiler for GoExporter {
         cs: &ConstraintsSet,
         mut out: BufWriter<Box<dyn Write + 'a>>,
     ) -> Result<()> {
-        let prelude = format!(
-            "package {}
-
-import (
-    \"github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column\"
-)
-",
-            self.settings.package
-        );
 
         let body = cs
             .constraints

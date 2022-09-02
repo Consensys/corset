@@ -4,8 +4,7 @@ use crate::parser::Transpiler;
 use clap::Parser;
 use color_eyre::eyre::*;
 use std::fs::File;
-use std::io::{prelude::*, BufWriter};
-use std::path::Path;
+use std::io::BufWriter;
 
 mod go;
 mod parser;
@@ -72,7 +71,7 @@ fn main() -> Result<()> {
     let (out_to_file, out): (bool, BufWriter<Box<dyn std::io::Write>>) =
         if let Some(out_filename) = args.out_file.as_ref() {
             println!("Generating {}", out_filename);
-            (true, BufWriter::with_capacity(30_000_000, Box::new(File::create(out_filename)?)))
+            (true, BufWriter::with_capacity(30_000_000, Box::new(File::create(out_filename).with_context(|| eyre!("creating `{}`", out_filename))?)))
         } else {
             (false, BufWriter::new(Box::new(stdout.lock())))
         };
