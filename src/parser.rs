@@ -140,6 +140,20 @@ pub enum Constraint {
     Column(String),
     List(Vec<Constraint>),
 }
+impl Constraint {
+    fn flat_fold<T>(&self, f: &dyn Fn(&Constraint) -> T) -> Vec<T> {
+        let mut ax = vec![];
+        match self {
+            Constraint::List(xs) => {
+                for x in xs {
+                    ax.push(f(x));
+                }
+            }
+            x => ax.push(f(x)),
+        }
+        ax
+    }
+}
 impl Debug for Constraint {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fn format_list(cs: &[Constraint]) -> String {
@@ -599,8 +613,9 @@ impl FuncVerifier<Constraint> for Builtin {
                     Ok(())
                 } else {
                     Err(eyre!(
-                        "`{:?}` expects scalar arguments but received a list",
-                        self
+                        "`{:?}` expects (SCALAR, LIST, LIST) but received {:?}",
+                        self,
+                        args
                     ))
                 }
             }
@@ -617,7 +632,7 @@ impl FuncVerifier<Constraint> for Builtin {
                     ))
                 }
             }
-            _ => todo!(),
+            Builtin::Begin => Ok(())
         }
     }
 }
@@ -808,69 +823,74 @@ impl Compiler {
             }
 
             match &f.class {
-                FunctionClass::Builtin(Builtin::Begin) => {
-                    Ok(Some(Constraint::List(traversed_args)))
-                }
-                FunctionClass::Builtin(Builtin::BranchIfZero) => {
-                    let cond = traversed_args[0].clone();
-                    if let Constraint::List(then) = &traversed_args[1] {
-                        Ok(Some(Constraint::List(
-                            then.iter()
-                                .map(|a| Constraint::Funcall {
-                                    func: Builtin::IfZero,
-                                    args: vec![cond.clone(), a.clone()],
-                                })
-                                .collect(),
-                        )))
-                    } else {
-                        unreachable!()
-                    }
-                }
-                FunctionClass::Builtin(Builtin::BranchIfZeroElse) => {
-                    let cond = traversed_args[0].clone();
-                    if let Constraint::List(tthen) = &traversed_args[1] {
-                        if let Constraint::List(eelse) = &traversed_args[2] {
-                            Ok(Some(Constraint::List(
-                                tthen
-                                    .iter()
-                                    .map(|a| Constraint::Funcall {
-                                        func: Builtin::IfZero,
-                                        args: vec![cond.clone(), a.clone()],
-                                    })
-                                    .chain(eelse.iter().map(|a| Constraint::Funcall {
-                                        func: Builtin::Mul,
-                                        args: vec![cond.clone(), a.clone()],
-                                    }))
-                                    .collect(),
-                            )))
-                        } else {
-                            unreachable!()
+                FunctionClass::Builtin(b) => {
+                    let traversed_args = b
+                        .validate_args(traversed_args)
+                        .with_context(|| eyre!("validating call to `{}`", f.name))?;
+                    match b {
+                        Builtin::Begin => Ok(Some(Constraint::List(traversed_args))),
+                        Builtin::BranchIfZero => {
+                            let cond = traversed_args[0].clone();
+                            if let Constraint::List(then) = &traversed_args[1] {
+                                Ok(Some(Constraint::List(
+                                    then.iter()
+                                        .map(|a| Constraint::Funcall {
+                                            func: Builtin::IfZero,
+                                            args: vec![cond.clone(), a.clone()],
+                                        })
+                                        .collect(),
+                                )))
+                            } else {
+                                unreachable!()
+                            }
                         }
-                    } else {
-                        unreachable!()
+                        Builtin::BranchIfZeroElse => {
+                            let cond = traversed_args[0].clone();
+                            if let (Constraint::List(tthen), Constraint::List(eelse)) =
+                                (&traversed_args[1], &traversed_args[2])
+                            {
+                                Ok(Some(Constraint::List(
+                                    tthen
+                                        .iter()
+                                        .cloned()
+                                        .flat_map(|c: Constraint| {
+                                            c.flat_fold(&|x| Constraint::Funcall {
+                                                func: Builtin::IfZero,
+                                                args: vec![cond.clone(), x.clone()],
+                                            })
+                                        })
+                                        .into_iter()
+                                        .chain(eelse.iter().cloned().flat_map(|c: Constraint| {
+                                            c.flat_fold(&|x| Constraint::Funcall {
+                                                func: Builtin::Mul,
+                                                args: vec![cond.clone(), x.clone()],
+                                            })
+                                        }))
+                                        .collect(),
+                                )))
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        Builtin::Ith => {
+                            if let (Constraint::Column(c), Constraint::Const(x)) =
+                                (&traversed_args[0], &traversed_args[1])
+                            {
+                                let ith = format!("{}_{}", c, x);
+                                ctx.borrow()
+                                    .resolve_symbol(&ith)
+                                    .map(|_| Some(Constraint::Column(ith)))
+                                    .with_context(|| eyre!("evaluating ith {:?}", traversed_args))
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        b => Ok(Some(Constraint::Funcall {
+                            func: *b,
+                            args: traversed_args,
+                        })),
                     }
                 }
-                FunctionClass::Builtin(b @ builtin) => match b {
-                    Builtin::Ith => {
-                        if let (Constraint::Column(c), Constraint::Const(x)) =
-                            (&traversed_args[0], &traversed_args[1])
-                        {
-                            let ith = format!("{}_{}", c, x);
-                            ctx.borrow()
-                                .resolve_symbol(&ith)
-                                .map(|_| Some(Constraint::Column(ith)))
-                                .with_context(|| eyre!("evaluating ith {:?}", traversed_args))
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => Ok(Some(Constraint::Funcall {
-                        func: *builtin,
-                        args: b
-                            .validate_args(traversed_args)
-                            .with_context(|| eyre!("validating call to `{}`", f.name))?,
-                    })),
-                },
 
                 FunctionClass::UserDefined(b @ Defined { args: f_args, body }) => {
                     let traversed_args = b

@@ -14,7 +14,7 @@ impl GoExporter {
         if xs.len() > 2 {
             let tail = tail
                 .iter()
-                .map(|x| self.render_node(x).map(|s| format!("\n{}({})", operand, s)))
+                .map(|x| self.render_node(x).map(|s| format!("{}({})", operand, s)))
                 .collect::<Result<Vec<_>>>()?
                 .join(".");
             let chain = format!("{}.{}", head, tail);
