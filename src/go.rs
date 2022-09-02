@@ -87,13 +87,13 @@ impl crate::parser::Transpiler for GoExporter {
         cs: &ConstraintsSet,
         mut out: BufWriter<Box<dyn Write + 'a>>,
     ) -> Result<()> {
-
         let body = cs
             .constraints
             .iter()
             .map(|c| self.render_node(c))
             .collect::<Result<Vec<_>>>()?
-            .join("\n");
+            .join("\n")
+            .replace(",,", ","); // Screw you, Go
 
         let r = format!(
             r#"
