@@ -53,6 +53,9 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut inputs = vec![];
+    if !args.no_stdlib {
+        inputs.push(("stdlib", include_str!("stdlib.lisp").to_owned()));
+    }
     for f in args.source.iter() {
         inputs.push((
             f.as_str(),

@@ -20,6 +20,7 @@
                           (- e0 offset)))
 (defun (remains-constant e0) (will-eq e0 e0))
 (defun (didnt-change e0) (eq 0 (shift e0 -1)))
+(defun (did-change e0) (neq 0 (shift e0 -1)))
 (defunalias equals sub)
 (defun (will-eq e0 e1) (eq (shift e0 1) e1))
 (defun (was-eq e0 e1) (eq (shift e0 -1) e1))
