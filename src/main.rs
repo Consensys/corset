@@ -3,7 +3,8 @@ extern crate pest_derive;
 use crate::parser::Transpiler;
 use clap::Parser;
 use color_eyre::eyre::*;
-use std::io::prelude::*;
+use std::fs::File;
+use std::io::{prelude::*, BufWriter};
 use std::path::Path;
 
 mod go;
@@ -65,20 +66,30 @@ fn main() -> Result<()> {
     let go_exporter = go::GoExporter {
         settings: args.clone(),
     };
-    let out = go_exporter.render(&constraints)?;
-    if let Some(out_file) = args.out_file {
-        std::fs::File::create(&out_file)
-            .with_context(|| {
-                eyre!(
-                    "while creating `{}` in `{}",
-                    Path::new(&out_file).display(),
-                    std::env::current_dir().unwrap().display()
-                )
-            })?
-            .write_all(out.as_bytes())?;
-        println!("{} generated", out_file);
-    } else {
-        println!("{}", out);
+
+
+    let stdout = std::io::stdout();
+    let (out_to_file, out): (bool, BufWriter<Box<dyn std::io::Write>>) =
+        if let Some(out_filename) = args.out_file.as_ref() {
+            println!("Generating {}", out_filename);
+            (true, BufWriter::with_capacity(30_000_000, Box::new(File::create(out_filename)?)))
+        } else {
+            (false, BufWriter::new(Box::new(stdout.lock())))
+        };
+    go_exporter.render(&constraints, out)?;
+    if out_to_file {
+        print!("Running gofmt... ");
+        let output = std::process::Command::new("gofmt")
+            .args(["-w", args.out_file.as_ref().unwrap()])
+            .output()
+            .expect("failed to execute process");
+        if output.status.success() {
+            println!("done.");
+        } else {
+            println!("failed:");
+            println!("STDOUT:\n{}", std::str::from_utf8(&output.stdout).unwrap());
+            println!("STDERR:\n{}", std::str::from_utf8(&output.stderr).unwrap());
+        }
     }
 
     Ok(())

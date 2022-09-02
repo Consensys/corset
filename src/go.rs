@@ -1,40 +1,21 @@
 use crate::parser::*;
 use color_eyre::eyre::*;
 
+use std::io::{BufWriter, Write};
+
 const INDENT: usize = 4;
 #[derive(Debug)]
 pub(crate) struct GoExporter {
     pub settings: crate::Args,
 }
 impl GoExporter {
-    fn indented_block(&self, header: &str, content: &str, indent: usize) -> String {
-        let I = " ".repeat(indent);
-        format!(
-            "{}{}{{\n{}{}\n{}}}",
-            I,
-            header,
-            I,
-            content.replace("\n", &format!("\n{}{}", I, I)),
-            I
-        )
-    }
-
-    fn make_chain(
-        &self,
-        xs: &[Constraint],
-        operand: &str,
-        surround: bool,
-        indent: usize,
-    ) -> Result<String> {
-        let head = self.render_node(&xs[0], 0)?;
+    fn make_chain(&self, xs: &[Constraint], operand: &str, surround: bool) -> Result<String> {
+        let head = self.render_node(&xs[0])?;
         let tail = &xs[1..];
         if xs.len() > 2 {
             let tail = tail
                 .iter()
-                .map(|x| {
-                    self.render_node(x, 0)
-                        .map(|s| format!("\n{}({})", operand, s))
-                })
+                .map(|x| self.render_node(x).map(|s| format!("\n{}({})", operand, s)))
                 .collect::<Result<Vec<_>>>()?
                 .join(".");
             let chain = format!("{}.{}", head, tail);
@@ -48,54 +29,45 @@ impl GoExporter {
                 "{}.{}({})",
                 head,
                 operand,
-                self.render_node(&xs[1], 0)?
+                self.render_node(&xs[1])?
             ))
         }
     }
-    pub fn render_node(&self, node: &Constraint, indent: usize) -> Result<String> {
+    pub fn render_node(&self, node: &Constraint) -> Result<String> {
         let r = match node {
             Constraint::Const(x) => match x {
                 0..=2 | 127 | 256 => Ok(format!("column.CONST_{}()", x)),
                 x @ _ => Ok(format!("column.CONST_UINT64({})", x)),
             },
             Constraint::Column(name) => Ok(format!("CE[{}.Name()]", name)),
-            Constraint::Funcall { func, args } => self.render_funcall(func, args, indent),
-            Constraint::List(constraints) => Ok(self.indented_block(
-                "[]column.Expression",
-                &constraints
-                    .iter()
-                    .map(|x| self.render_node(x, indent))
-                    .map(|x| {
-                        x.map(|mut r| {
-                            r.push_str(",");
-                            r
-                        })
+            Constraint::Funcall { func, args } => self.render_funcall(func, args),
+            Constraint::List(constraints) => Ok(constraints
+                .iter()
+                .map(|x| self.render_node(x))
+                .map(|x| {
+                    x.map(|mut r| {
+                        r.push_str(",");
+                        r
                     })
-                    .collect::<Result<Vec<_>>>()?
-                    .join("\n"),
-                indent,
-            )),
+                })
+                .collect::<Result<Vec<_>>>()?
+                .join("\n")),
         }?;
         Ok(r)
     }
-    pub fn render_funcall(
-        &self,
-        func: &Builtin,
-        args: &[Constraint],
-        indent: usize,
-    ) -> Result<String> {
+    pub fn render_funcall(&self, func: &Builtin, args: &[Constraint]) -> Result<String> {
         let r = match func {
-            Builtin::Add => self.make_chain(args, "Add", true, 0),
-            Builtin::Mul => self.make_chain(args, "Mul", false, 0),
-            Builtin::Sub => self.make_chain(args, "Sub", true, 0),
+            Builtin::Add => self.make_chain(args, "Add", true),
+            Builtin::Mul => self.make_chain(args, "Mul", false),
+            Builtin::Sub => self.make_chain(args, "Sub", true),
             Builtin::IfZero => Ok(format!(
                 "({}).IfZeroThen({})",
-                self.render_node(&args[0], 0)?,
-                self.render_node(&args[1], 0)?
+                self.render_node(&args[0])?,
+                self.render_node(&args[1])?
             )),
             Builtin::Shift => Ok(format!(
                 "({}).Shift({})",
-                self.render_node(&args[0], 0)?,
+                self.render_node(&args[0])?,
                 if let Constraint::Const(x) = &args[1] {
                     x
                 } else {
@@ -106,12 +78,16 @@ impl GoExporter {
                 unimplemented!("{:?}", x)
             }
         }?;
-        Ok(format!("{}{}", " ".repeat(indent), r))
+        Ok(r)
     }
 }
 
 impl crate::parser::Transpiler for GoExporter {
-    fn render(&self, cs: &ConstraintsSet) -> Result<String> {
+    fn render<'a>(
+        &self,
+        cs: &ConstraintsSet,
+        mut out: BufWriter<Box<dyn Write + 'a>>,
+    ) -> Result<()> {
         let prelude = format!(
             "package {}
 
@@ -125,20 +101,27 @@ import (
         let body = cs
             .constraints
             .iter()
-            .map(|c| self.render_node(c, 2 * INDENT))
-            .map(|c| c.map(|c| format!("{},", c)))
+            .map(|c| self.render_node(c))
             .collect::<Result<Vec<_>>>()?
             .join("\n");
 
-        let r = self.indented_block(
-            &format!("func {}() (r []column.Expression) ", &self.settings.fname),
-            &format!(
-                "{}\n{}",
-                &self.indented_block("r = []column.Expression ", &body, INDENT),
-                "return"
-            ),
-            0,
+        let r = format!(
+            r#"
+package {}
+
+import (
+"github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"
+)
+
+func {}() (r []column.Expression) {{
+r = []column.Expression {{
+{}
+}}
+return
+}}
+"#,
+            self.settings.package, self.settings.fname, body,
         );
-        Ok(format!("{}\n{}", prelude, r))
+        writeln!(out, "{}", r).with_context(|| eyre!("rendering result"))
     }
 }

@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fmt::Debug;
+use std::io::BufWriter;
 use std::rc::Rc;
 
 #[derive(Parser)]
@@ -122,7 +123,11 @@ lazy_static::lazy_static! {
 }
 
 pub(crate) trait Transpiler {
-    fn render(&self, cs: &ConstraintsSet) -> Result<String>;
+    fn render<'a>(
+        &self,
+        cs: &ConstraintsSet,
+        out: BufWriter<Box<dyn std::io::Write + 'a>>,
+    ) -> Result<()>;
 }
 
 #[derive(Clone)]
@@ -472,8 +477,7 @@ trait FuncVerifier<T> {
     fn validate_types(&self, args: &[T]) -> Result<()>;
 
     fn validate_arity(&self, args: &[T]) -> Result<()> {
-        self.arity()
-            .validate(args.len())
+        self.arity().validate(args.len())
     }
 
     fn validate_args(&self, args: Vec<T>) -> Result<Vec<T>> {
@@ -649,7 +653,7 @@ enum Arity {
 impl Arity {
     fn make_error(&self, l: usize) -> String {
         fn arg_count(x: usize) -> String {
-            format!("{} argument{}", x, if x > 1 { "s" } else {""})
+            format!("{} argument{}", x, if x > 1 { "s" } else { "" })
         }
         match self {
             Arity::AtLeast(x) => format!("expected at least {}, but received {}", arg_count(*x), l),
