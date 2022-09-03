@@ -1,4 +1,4 @@
-use crate::parser::*;
+use crate::utils::*;
 use color_eyre::eyre::*;
 
 use std::io::{BufWriter, Write};
@@ -81,7 +81,7 @@ impl GoExporter {
     }
 }
 
-impl crate::parser::Transpiler for GoExporter {
+impl crate::transpilers::Transpiler for GoExporter {
     fn render<'a>(
         &self,
         cs: &ConstraintsSet,

@@ -1,13 +1,14 @@
 #[macro_use]
 extern crate pest_derive;
-use crate::parser::Transpiler;
+use crate::transpilers::Transpiler;
 use clap::Parser;
 use color_eyre::eyre::*;
 use std::fs::File;
 use std::io::BufWriter;
 
-mod go;
-mod parser;
+mod compiler;
+mod transpilers;
+mod utils;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(version)]
@@ -63,18 +64,26 @@ fn main() -> Result<()> {
         ));
     }
 
-    let constraints = parser::ConstraintsSet::from_sources(inputs.as_slice())?;
+    let constraints = utils::ConstraintsSet::from_sources(inputs.as_slice())?;
 
-    let go_exporter = go::GoExporter {
+    let go_exporter = transpilers::go::GoExporter {
         settings: args.clone(),
     };
-
 
     let stdout = std::io::stdout();
     let (out_to_file, out): (bool, BufWriter<Box<dyn std::io::Write>>) =
         if let Some(out_filename) = args.out_file.as_ref() {
             println!("Generating {}", out_filename);
-            (true, BufWriter::with_capacity(30_000_000, Box::new(File::create(out_filename).with_context(|| eyre!("creating `{}`", out_filename))?)))
+            (
+                true,
+                BufWriter::with_capacity(
+                    30_000_000,
+                    Box::new(
+                        File::create(out_filename)
+                            .with_context(|| eyre!("creating `{}`", out_filename))?,
+                    ),
+                ),
+            )
         } else {
             (false, BufWriter::new(Box::new(stdout.lock())))
         };
