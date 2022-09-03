@@ -1,7 +1,24 @@
 use crate::utils::*;
 use color_eyre::eyre::*;
+use convert_case::{Case, Casing};
 
 use std::io::{BufWriter, Write};
+
+fn make_go_function(name: &str, prelude: &str, content: &str, postlude: &str) -> String {
+    format!(
+        r#"func {}() (r []column.Expression) {{
+{}
+{}
+{}
+return
+}}
+"#,
+        name.to_case(Case::Camel),
+        prelude,
+        content,
+        postlude,
+    )
+}
 
 #[derive(Debug)]
 pub(crate) struct GoExporter {
@@ -32,8 +49,10 @@ impl GoExporter {
             ))
         }
     }
+
     pub fn render_node(&self, node: &Constraint) -> Result<String> {
         let r = match node {
+            Constraint::TopLevel { .. } => unreachable!(),
             Constraint::Const(x) => match x {
                 0..=2 | 127 | 256 => Ok(format!("column.CONST_{}()", x)),
                 x => Ok(format!("column.CONST_UINT64({})", x)),
@@ -52,6 +71,7 @@ impl GoExporter {
                 .collect::<Result<Vec<_>>>()?
                 .join("\n")),
         }?;
+
         Ok(r)
     }
     pub fn render_funcall(&self, func: &Builtin, args: &[Constraint]) -> Result<String> {
@@ -87,37 +107,64 @@ impl crate::transpilers::Transpiler for GoExporter {
         cs: &ConstraintsSet,
         mut out: BufWriter<Box<dyn Write + 'a>>,
     ) -> Result<()> {
-        let body = cs
+        if cs.constraints.is_empty() {
+            return Ok(());
+        }
+
+        let constraints = cs
             .constraints
             .iter()
-            .map(|c| self.render_node(c))
+            .map(|c| {
+                if let Constraint::TopLevel { name, expr } = c {
+                    self.render_node(expr)
+                        .map(|mut r| {
+                            if r.chars().last().unwrap() != ',' {
+                                r.push(',');
+                            }
+                            r
+                        })
+                        .map(|r| {
+                            make_go_function(
+                                &name.to_case(Case::Snake),
+                                "r = []column.Expression {",
+                                &r,
+                                "}",
+                            )
+                        })
+                } else {
+                    unreachable!()
+                }
+            })
             .collect::<Result<Vec<_>>>()?
-            .join(",\n")
-            .replace(",,", ","); // Screw you, Go
+            .join("\n");
+
+        let main_function = make_go_function(
+            &self.settings.fname.to_case(Case::Pascal),
+            "",
+            &cs.constraints
+                .iter()
+                .map(|c| {
+                    if let Constraint::TopLevel { name, .. } = c {
+                        format!("r = append(r, {}()...)", name.to_case(Case::Camel))
+                    } else {
+                        unreachable!()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+            "",
+        );
 
         let r = format!(
-            r#"
-package {}
+            r#"package {}
 
-import (
-"github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"
-)
+import "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"
 
-func {}() (r []column.Expression) {{
-r = []column.Expression {{
-{}{}
-}}
-return
-}}
+{}
+
+{}
 "#,
-            self.settings.package,
-            self.settings.fname,
-            body,
-            if body.chars().last().unwrap() == ',' {
-                ""
-            } else {
-                ","
-            },
+            self.settings.package, constraints, main_function,
         );
         writeln!(out, "{}", r).with_context(|| eyre!("rendering result"))
     }

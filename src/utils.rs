@@ -4,6 +4,10 @@ use std::fmt::Debug;
 
 #[derive(Clone)]
 pub enum Constraint {
+    TopLevel {
+        name: String,
+        expr: Box<Constraint>,
+    },
     Funcall {
         func: Builtin,
         args: Vec<Constraint>,
@@ -36,6 +40,7 @@ impl Debug for Constraint {
         }
 
         match self {
+            Constraint::TopLevel { name, expr } => write!(f, "{}: {:?}", name, expr),
             Constraint::Const(x) => write!(f, "{}:CONST", x),
             Constraint::Column(name) => write!(f, "{}:COLUMN", name),
             Constraint::List(cs) => write!(f, "'({})", format_list(cs)),

@@ -6,10 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+clap = { version = "3.2", features = ["derive"] }
+color-eyre = { version = "0.6", default-features = false }
+convert_case = "0.5"
+eyre = "0.6"
+lazy_static = "1.4"
+maplit = "1.0"
 pest = "2.3"
 pest_derive = "2.0"
-maplit = "1.0"
-eyre = "0.6"
-color-eyre = { version = "0.6", default-features = false }
-clap = { version = "3.2", features = ["derive"] }
-lazy_static = "1.4"

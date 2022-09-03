@@ -9,6 +9,11 @@ use crate::utils::*;
 
 lazy_static::lazy_static! {
     static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
+        "defconstraint" => Function {
+            name: "defconstring".into(),
+            class: FunctionClass::SpecialForm(Form::Defconstraint),
+        },
+
         "defun" => Function {
             name: "defun".into(),
             class: FunctionClass::SpecialForm(Form::Defun),
@@ -186,6 +191,7 @@ impl Arity {
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum Form {
+    Defconstraint,
     Defun,
     Defalias,
     Defunalias,
@@ -200,6 +206,7 @@ impl FuncVerifier<AstNode> for Form {
             Form::Defunalias => Arity::Exactly(2),
             Form::Defcolumns => Arity::AtLeast(1),
             Form::Defconst => Arity::Even,
+            Form::Defconstraint => Arity::Dyadic,
         }
     }
     fn validate_types(&self, args: &[AstNode]) -> Result<()> {
@@ -232,6 +239,18 @@ impl FuncVerifier<AstNode> for Form {
                     Ok(())
                 } else {
                     Err(eyre!("DEFCONST expects alternating symbols and values"))
+                }
+            }
+            Form::Defconstraint => {
+                if matches!(args[0].class, Token::Symbol(_))
+                    && matches!(args[1].class, Token::List { .. })
+                {
+                    Ok(())
+                } else {
+                    Err(eyre!(
+                        "DEFCONSTRAINT expects [NAME CONSTRAINT], received: {:?}",
+                        args
+                    ))
                 }
             }
         }
@@ -373,6 +392,7 @@ struct SymbolTable {
     funcs: HashMap<String, Function>,
     symbols: HashMap<String, Symbol>,
     parent: Option<Rc<RefCell<SymbolTable>>>,
+    constraints: HashSet<String>,
 }
 impl SymbolTable {
     fn new_root() -> SymbolTable {
@@ -382,8 +402,9 @@ impl SymbolTable {
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.clone()))
                 .collect(),
-            symbols: HashMap::new(),
+            symbols: Default::default(),
             parent: None,
+            constraints: Default::default(),
         }
     }
 
@@ -393,8 +414,9 @@ impl SymbolTable {
     ) -> SymbolTable {
         SymbolTable {
             local_context,
-            funcs: HashMap::new(),
-            symbols: HashMap::new(),
+            funcs: Default::default(),
+            symbols: Default::default(),
+            constraints: Default::default(),
             parent: Some(parent),
         }
     }
@@ -436,6 +458,13 @@ impl SymbolTable {
                     }),
             }
         }
+    }
+
+    fn insert_constraint(&mut self, name: &str) -> Result<()> {
+        self.constraints
+            .insert(name.into())
+            .then(|| ())
+            .ok_or_else(|| eyre!("Constraint `{}` already defined", name))
     }
 
     fn insert_symbol(&mut self, symbol: &str) -> Result<()> {
@@ -527,6 +556,7 @@ fn apply_form(
         .with_context(|| eyre!("evaluating call to {:?}", f))?;
 
     match (f, pass) {
+        (Form::Defcolumns, Pass::Compilation) => Ok(None),
         (Form::Defcolumns, Pass::Definition) => {
             for arg in args.iter() {
                 if let Token::Symbol(name) = &arg.class {
@@ -536,6 +566,7 @@ fn apply_form(
 
             Ok(None)
         }
+        (Form::Defconst, Pass::Compilation) => Ok(None),
         (Form::Defconst, Pass::Definition) => {
             for p in args.chunks(2) {
                 if let (Token::Symbol(name), Token::Value(x)) = (&p[0].class, &p[1].class) {
@@ -545,6 +576,7 @@ fn apply_form(
 
             Ok(None)
         }
+        (Form::Defalias, Pass::Compilation) => Ok(None),
         (Form::Defalias, Pass::Definition) => {
             for p in args.chunks(2) {
                 if let (Token::Symbol(from), Token::Symbol(to)) = (&p[0].class, &p[1].class) {
@@ -554,6 +586,7 @@ fn apply_form(
 
             Ok(None)
         }
+        (Form::Defunalias, Pass::Compilation) => Ok(None),
         (Form::Defunalias, Pass::Definition) => {
             for p in args.chunks(2) {
                 if let (Token::Symbol(from), Token::Symbol(to)) = (&p[0].class, &p[1].class) {
@@ -563,6 +596,7 @@ fn apply_form(
 
             Ok(None)
         }
+        (Form::Defun, Pass::Compilation) => Ok(None),
         (Form::Defun, Pass::Definition) => {
             let header = &args[0];
             let body = &args[1];
@@ -598,8 +632,13 @@ fn apply_form(
             }?;
             Ok(None)
         }
-        _ => {
-            bail!("{:?}/{:?}: not yet implemented", f, pass)
+        (Form::Defconstraint, Pass::Definition) => Ok(None),
+        (Form::Defconstraint, Pass::Compilation) => {
+            ctx.borrow_mut().insert_constraint(&args[0].src)?;
+            Ok(Some(Constraint::TopLevel {
+                name: args[0].src.to_string(),
+                expr: Box::new(reduce(&args[1], ctx, pass)?.unwrap()),
+            }))
         }
     }
 }
@@ -763,7 +802,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, pass: Pass) -> Result<Opti
         (Token::Ignore, _) => Ok(None),
         (Token::Value(x), _) => Ok(Some(Constraint::Const(*x))),
         (Token::Symbol(name), _) => Ok(Some(ctx.borrow_mut().resolve_symbol(name)?)),
-        (Token::TopLevelForm { args }, Pass::Definition) => {
+        (Token::TopLevelForm { args }, _) => {
             if let Token::Symbol(verb) = &args[0].class {
                 let func = ctx
                     .borrow()
@@ -788,7 +827,6 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, pass: Pass) -> Result<Opti
             }
         }
         (Token::List { .. }, Pass::Definition) => Ok(None),
-        (Token::TopLevelForm { .. }, Pass::Compilation) => Ok(None),
     }
     .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))
 }
