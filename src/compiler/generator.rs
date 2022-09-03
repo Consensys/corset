@@ -540,11 +540,7 @@ impl SymbolTable {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum Pass {
-    Definition,
-    Compilation,
-}
+// Compared to a function, a form do not evaluate all of its arguments by default
 fn apply_form(
     f: Form,
     args: &[AstNode],
@@ -848,6 +844,11 @@ fn build_constraints(
     Ok(r)
 }
 
+#[derive(Debug, Clone, Copy)]
+enum Pass {
+    Definition,
+    Compilation,
+}
 pub fn compile(sources: &[(&str, &str)]) -> Result<ConstraintsSet> {
     let table = Rc::new(RefCell::new(SymbolTable::new_root()));
     let mut asts = vec![];

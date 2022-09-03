@@ -64,6 +64,7 @@ impl ConstraintsSet {
     }
 }
 
+// In opposition to a `Form`, a `Builtin` defines a function executable by the backend
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Builtin {
     Add,
