@@ -58,6 +58,7 @@ impl GoExporter {
                 x => Ok(format!("column.CONST_UINT64({})", x)),
             },
             Constraint::Column(name) => Ok(format!("CE[{}.Name()]", name)),
+            Constraint::ColumnArrayElement(name, i) => Ok(format!("CE[{}_{}.Name()]", name, i)),
             Constraint::Funcall { func, args } => self.render_funcall(func, args),
             Constraint::List(constraints) => Ok(constraints
                 .iter()

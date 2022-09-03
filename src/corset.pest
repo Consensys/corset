@@ -2,16 +2,25 @@ WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* }
 
 
-corset = { SOI ~ definition* ~ EOI }
-
-definition = { "(" ~ defform ~ expr* ~ ")"}
-defconstraint = { "(" ~ "defconstraint" ~ constraint ~ ")" }
+corset = { SOI ~ (top_level)* ~ EOI }
 
 constraint = { list }
+
+top_level = _{ defcolumns | definition }
+
+definition = { "(" ~ definition_kw ~ expr* ~ ")"}
+defcolumns = { "(" ~ defcolumn_kw ~ defcolumn* ~ ")" }
+
+definition_kw = { "defconstraint" | "defunalias" | "defun" | "defconst" | "defalias" }
+defcolumn_kw = { "defcolumns" }
+defcolumn = @{ (symbol ~ ("[" ~ natural ~ (":" ~ natural)? ~ "]")?) }
+
+
+
 list = { "(" ~ expr* ~ ")" }
 expr = { integer | symbol | list }
 arg_type = { "NATURAL" | "CONSTRAINT" | "CONSTRAINTS" } // WiP functions typing
 
-integer = @{ "-"? ~ ASCII_DIGIT+ }
+integer = @{ "-"? ~ natural }
+natural = { ASCII_DIGIT+ }
 symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" )+  }
-defform = @{ "defconstraint" | "defunalias" | "defun" | "defconst" | "defcolumns" | "defalias" }

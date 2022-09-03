@@ -58,11 +58,12 @@ fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
         Rule::expr | Rule::constraint => {
             build_ast_from_expr(pair.into_inner().next().unwrap(), in_def)
         }
-        Rule::definition => {
-            let mut inner = pair.into_inner();
-            let args = vec![inner.next().unwrap()]
+        Rule::definition | Rule::defcolumns => {
+            // let mut inner = pair.into_inner();
+            let args = pair
+                .into_inner() //vec![inner.next().unwrap()]
                 .into_iter()
-                .chain(inner)
+                // .chain(inner)
                 .map(|p| build_ast_from_expr(p, in_def))
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
@@ -88,7 +89,7 @@ fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
                 src,
             })
         }
-        Rule::symbol | Rule::defform => Ok(AstNode {
+        Rule::symbol | Rule::defcolumn | Rule::definition_kw | Rule::defcolumn_kw => Ok(AstNode {
             class: Token::Symbol(pair.as_str().to_owned()),
             lc,
             src,

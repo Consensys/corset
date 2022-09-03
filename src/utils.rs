@@ -14,6 +14,7 @@ pub enum Constraint {
     },
     Const(i32),
     Column(String),
+    ColumnArrayElement(String, usize),
     List(Vec<Constraint>),
 }
 impl Constraint {
@@ -43,6 +44,9 @@ impl Debug for Constraint {
             Constraint::TopLevel { name, expr } => write!(f, "{}: {:?}", name, expr),
             Constraint::Const(x) => write!(f, "{}:CONST", x),
             Constraint::Column(name) => write!(f, "{}:COLUMN", name),
+            Constraint::ColumnArrayElement(name, i) => {
+                write!(f, "{}[{}]:COLUMN", name, i)
+            }
             Constraint::List(cs) => write!(f, "'({})", format_list(cs)),
             Self::Funcall { func, args } => write!(f, "({:?} {})", func, format_list(args)),
         }
@@ -76,7 +80,6 @@ pub enum Builtin {
     Inv,
 
     Begin,
-    Ith,
 
     // Don't like it :/
     BranchIfZero,

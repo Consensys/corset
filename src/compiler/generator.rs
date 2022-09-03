@@ -7,6 +7,8 @@ use std::rc::Rc;
 use crate::compiler::parser::*;
 use crate::utils::*;
 
+const ARRAY_SEPARATOR: char = '_';
+
 lazy_static::lazy_static! {
     static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
         "defconstraint" => Function {
@@ -41,7 +43,7 @@ lazy_static::lazy_static! {
 
         "ith" => Function {
             name: "ith".into(),
-            class: FunctionClass::Builtin(Builtin::Ith),
+            class: FunctionClass::SpecialForm(Form::Ith),
         },
 
 
@@ -197,6 +199,7 @@ enum Form {
     Defunalias,
     Defcolumns,
     Defconst,
+    Ith,
 }
 impl FuncVerifier<AstNode> for Form {
     fn arity(&self) -> Arity {
@@ -207,6 +210,7 @@ impl FuncVerifier<AstNode> for Form {
             Form::Defcolumns => Arity::AtLeast(1),
             Form::Defconst => Arity::Even,
             Form::Defconstraint => Arity::Dyadic,
+            Form::Ith => Arity::Dyadic,
         }
     }
     fn validate_types(&self, args: &[AstNode]) -> Result<()> {
@@ -253,6 +257,19 @@ impl FuncVerifier<AstNode> for Form {
                     ))
                 }
             }
+            Form::Ith => {
+                if matches!(args[0].class, Token::Symbol(_))
+                    && matches!(args[1].class, Token::Value(x) if x >= 0)
+                {
+                    Ok(())
+                } else {
+                    Err(eyre!(
+                        "`{:?}` expects [SYMBOL VALUE] but received {:?}",
+                        self,
+                        args
+                    ))
+                }
+            }
         }
     }
 }
@@ -267,7 +284,6 @@ impl FuncVerifier<Constraint> for Builtin {
             Builtin::Inv => Arity::Monadic,
             Builtin::IfZero => Arity::Dyadic,
             Builtin::Shift => Arity::Dyadic,
-            Builtin::Ith => Arity::Dyadic,
             Builtin::Begin => Arity::AtLeast(1),
             Builtin::BranchIfZero => Arity::Dyadic,
             Builtin::BranchIfZeroElse => Arity::Exactly(3),
@@ -335,19 +351,6 @@ impl FuncVerifier<Constraint> for Builtin {
                     ))
                 }
             }
-            Builtin::Ith => {
-                if matches!(args[0], Constraint::Column(_))
-                    && matches!(args[1], Constraint::Const(_))
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects (COLUMN, CONST) but received {:?}",
-                        self,
-                        args
-                    ))
-                }
-            }
             Builtin::Begin => Ok(()),
         }
     }
@@ -384,13 +387,15 @@ impl FuncVerifier<Constraint> for Defined {
 #[derive(Debug)]
 enum Symbol {
     Alias(String),
-    Final(Constraint),
+    Scalar(Constraint),
+    Array(String, usize, usize),
 }
 #[derive(Debug)]
 struct SymbolTable {
     local_context: HashMap<String, Constraint>,
     funcs: HashMap<String, Function>,
-    symbols: HashMap<String, Symbol>,
+    arrays: HashMap<String, (String, usize, usize)>,
+    columns: HashMap<String, Symbol>,
     parent: Option<Rc<RefCell<SymbolTable>>>,
     constraints: HashSet<String>,
 }
@@ -402,7 +407,8 @@ impl SymbolTable {
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.clone()))
                 .collect(),
-            symbols: Default::default(),
+            arrays: Default::default(),
+            columns: Default::default(),
             parent: None,
             constraints: Default::default(),
         }
@@ -415,7 +421,8 @@ impl SymbolTable {
         SymbolTable {
             local_context,
             funcs: Default::default(),
-            symbols: Default::default(),
+            arrays: Default::default(),
+            columns: Default::default(),
             constraints: Default::default(),
             parent: Some(parent),
         }
@@ -426,15 +433,21 @@ impl SymbolTable {
             Err(eyre!("Circular definitions found for {}", name))
         } else {
             ax.insert(name.into());
-            match self.symbols.get(name) {
+            match self.columns.get(name) {
                 Some(Symbol::Alias(name)) => self._resolve_symbol(name, ax),
-                Some(Symbol::Final(name)) => Ok(name.clone()),
+                Some(Symbol::Scalar(name)) => Ok(name.clone()),
                 None => self
                     .parent
                     .as_ref()
                     .map_or(Err(eyre!("Column `{}` unknown", name)), |parent| {
                         parent.borrow().resolve_symbol(name)
                     }),
+                Some(Symbol::Array(name, start, stop)) => Err(eyre!(
+                    "`{}[{}:{}]` is an array and cannot be accessed as a scalar",
+                    name,
+                    start,
+                    stop
+                )),
             }
         }
     }
@@ -468,13 +481,22 @@ impl SymbolTable {
     }
 
     fn insert_symbol(&mut self, symbol: &str) -> Result<()> {
-        if self.symbols.contains_key(symbol) {
+        if self.columns.contains_key(symbol) {
             Err(anyhow!("column `{}` already exists", symbol))
         } else {
-            self.symbols.insert(
+            self.columns.insert(
                 symbol.into(),
-                Symbol::Final(Constraint::Column(symbol.to_string())),
+                Symbol::Scalar(Constraint::Column(symbol.to_string())),
             );
+            Ok(())
+        }
+    }
+
+    fn insert_array(&mut self, name: &str, start: usize, end: usize) -> Result<()> {
+        if self.arrays.contains_key(name) {
+            Err(anyhow!("column array `{}` already exists", name))
+        } else {
+            self.arrays.insert(name.into(), (name.into(), start, end));
             Ok(())
         }
     }
@@ -489,21 +511,21 @@ impl SymbolTable {
     }
 
     fn insert_alias(&mut self, from: &str, to: &str) -> Result<()> {
-        if self.symbols.contains_key(from) {
+        if self.columns.contains_key(from) {
             Err(anyhow!("`{}` already exists", from))
         } else {
-            self.symbols.insert(from.into(), Symbol::Alias(to.into()));
+            self.columns.insert(from.into(), Symbol::Alias(to.into()));
             Ok(())
         }
     }
 
     fn insert_funalias(&mut self, from: &str, to: &str) -> Result<()> {
-        if self.symbols.contains_key(from) {
+        if self.columns.contains_key(from) {
             Err(anyhow!(
                 "`{}` already exists: {} -> {:?}",
                 from,
                 from,
-                self.symbols[from]
+                self.columns[from]
             ))
         } else {
             self.funcs.insert(
@@ -525,16 +547,40 @@ impl SymbolTable {
             .or_else(|_| self._resolve_symbol(name, &mut HashSet::new()))
     }
 
+    fn resolve_array(&self, name: &str, i: usize) -> Result<Constraint> {
+        self.local_context
+            .get(name)
+            .map(|x| x.to_owned())
+            .ok_or(eyre!("SHOULD NEVER HAPPEN"))
+            .or_else(|_| {
+                if let Some((_, start, end)) = self.arrays.get(name) {
+                    if i >= *start && i <= *end {
+                        Ok(Constraint::ColumnArrayElement(name.into(), i))
+                    } else {
+                        Err(eyre!(
+                            "tried to access `{}[{}:{}]` at OOB coordinate {}",
+                            name,
+                            start,
+                            end,
+                            i
+                        ))
+                    }
+                } else {
+                    Err(eyre!("array `{}` does not exist", name))
+                }
+            })
+    }
+
     fn resolve_function(&self, name: &str) -> Result<Function> {
         self._resolve_function(name, &mut HashSet::new())
     }
 
     fn insert_constant(&mut self, name: &str, value: i32) -> Result<()> {
-        if self.symbols.contains_key(name) {
+        if self.columns.contains_key(name) {
             Err(anyhow!("`{}` already exists", name))
         } else {
-            self.symbols
-                .insert(name.into(), Symbol::Final(Constraint::Const(value)));
+            self.columns
+                .insert(name.into(), Symbol::Scalar(Constraint::Const(value)));
             Ok(())
         }
     }
@@ -552,17 +598,36 @@ fn apply_form(
         .with_context(|| eyre!("evaluating call to {:?}", f))?;
 
     match (f, pass) {
-        (Form::Defcolumns, Pass::Compilation) => Ok(None),
         (Form::Defcolumns, Pass::Definition) => {
+            let re = regex::Regex::new(r"^([^\[]+)(?:\[(\d+)(?::(\d+))?\])?$").unwrap();
             for arg in args.iter() {
                 if let Token::Symbol(name) = &arg.class {
-                    ctx.borrow_mut().insert_symbol(name)?
+                    let captures = re.captures(&name).unwrap();
+                    match (
+                        &captures.get(1).map(|x| x.as_str()),
+                        &captures
+                            .get(2)
+                            .and_then(|c| str::parse::<usize>(c.as_str()).ok()),
+                        &captures
+                            .get(3)
+                            .and_then(|c| str::parse::<usize>(c.as_str()).ok()),
+                    ) {
+                        (Some(name), None, None) => ctx.borrow_mut().insert_symbol(name)?,
+                        (Some(name), Some(count), None) => {
+                            ctx.borrow_mut().insert_array(name, 1, *count)?
+                        }
+                        (Some(name), Some(start), Some(end)) => {
+                            ctx.borrow_mut().insert_array(name, *start, *end)?
+                        }
+                        _ => unreachable!(),
+                    }
                 }
             }
 
             Ok(None)
         }
-        (Form::Defconst, Pass::Compilation) => Ok(None),
+        (Form::Defcolumns, Pass::Compilation) => Ok(None),
+
         (Form::Defconst, Pass::Definition) => {
             for p in args.chunks(2) {
                 if let (Token::Symbol(name), Token::Value(x)) = (&p[0].class, &p[1].class) {
@@ -572,7 +637,8 @@ fn apply_form(
 
             Ok(None)
         }
-        (Form::Defalias, Pass::Compilation) => Ok(None),
+        (Form::Defconst, Pass::Compilation) => Ok(None),
+
         (Form::Defalias, Pass::Definition) => {
             for p in args.chunks(2) {
                 if let (Token::Symbol(from), Token::Symbol(to)) = (&p[0].class, &p[1].class) {
@@ -582,7 +648,8 @@ fn apply_form(
 
             Ok(None)
         }
-        (Form::Defunalias, Pass::Compilation) => Ok(None),
+        (Form::Defalias, Pass::Compilation) => Ok(None),
+
         (Form::Defunalias, Pass::Definition) => {
             for p in args.chunks(2) {
                 if let (Token::Symbol(from), Token::Symbol(to)) = (&p[0].class, &p[1].class) {
@@ -592,7 +659,8 @@ fn apply_form(
 
             Ok(None)
         }
-        (Form::Defun, Pass::Compilation) => Ok(None),
+        (Form::Defunalias, Pass::Compilation) => Ok(None),
+
         (Form::Defun, Pass::Definition) => {
             let header = &args[0];
             let body = &args[1];
@@ -628,13 +696,28 @@ fn apply_form(
             }?;
             Ok(None)
         }
-        (Form::Defconstraint, Pass::Definition) => Ok(None),
+        (Form::Defun, Pass::Compilation) => Ok(None),
+
         (Form::Defconstraint, Pass::Compilation) => {
             ctx.borrow_mut().insert_constraint(&args[0].src)?;
             Ok(Some(Constraint::TopLevel {
                 name: args[0].src.to_string(),
                 expr: Box::new(reduce(&args[1], ctx, pass)?.unwrap()),
             }))
+        }
+        (Form::Defconstraint, Pass::Definition) => Ok(None),
+
+        (Form::Ith, Pass::Definition) => Ok(None),
+        (Form::Ith, Pass::Compilation) => {
+            if let (Token::Symbol(c), Token::Value(x)) = (&args[0].class, &args[1].class) {
+                Ok(Some(
+                    ctx.borrow()
+                        .resolve_array(c, *x as usize)
+                        .with_context(|| eyre!("evaluating ith {:?}", args))?,
+                ))
+            } else {
+                unreachable!()
+            }
         }
     }
 }
@@ -749,19 +832,6 @@ fn apply(
                             unreachable!()
                         }
                     }
-                    Builtin::Ith => {
-                        if let (Constraint::Column(c), Constraint::Const(x)) =
-                            (&traversed_args[0], &traversed_args[1])
-                        {
-                            let ith = format!("{}_{}", c, x);
-                            ctx.borrow()
-                                .resolve_symbol(&ith)
-                                .map(|_| Some(Constraint::Column(ith)))
-                                .with_context(|| eyre!("evaluating ith {:?}", traversed_args))
-                        } else {
-                            unreachable!()
-                        }
-                    }
                     b => Ok(Some(Constraint::Funcall {
                         func: *b,
                         args: traversed_args,
@@ -807,7 +877,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, pass: Pass) -> Result<Opti
 
                 Ok(apply(&func, &args[1..], ctx, pass)?)
             } else {
-                unimplemented!()
+                unimplemented!("{:?}", args)
             }
         }
         (Token::List { args }, Pass::Compilation) => {
@@ -860,6 +930,7 @@ pub fn compile(sources: &[(&str, &str)]) -> Result<ConstraintsSet> {
         asts.push((name, ast));
     }
 
+    dbg!(&table);
     let constraints = asts
         .into_iter()
         .map(|(name, ast)| {
