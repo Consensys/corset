@@ -88,7 +88,7 @@ pub enum Builtin {
     Shift,
     Neg,
     Inv,
-    Ith,
+    Nth,
 
     Begin,
 

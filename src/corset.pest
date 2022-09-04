@@ -12,7 +12,7 @@ definition = { "(" ~ definition_kw ~ expr* ~ ")"}
 defcolumns = { "(" ~ "defcolumns" ~ defcolumn* ~ ")" }
 
 definition_kw = { "defconstraint" | "defunalias" | "defun" | "defconst" | "defalias" }
-defcolumn = { symbol ~ interval? }
+defcolumn = { symbol ~ range? }
 
 
 

@@ -34,9 +34,9 @@ lazy_static::lazy_static! {
             class: FunctionClass::SpecialForm(Form::Defconst),
         },
 
-        "ith" => Function {
-            name: "ith".into(),
-            class: FunctionClass::Builtin(Builtin::Ith),
+        "nth" => Function {
+            name: "nth".into(),
+            class: FunctionClass::Builtin(Builtin::Nth),
         },
 
         "for" => Function {
@@ -279,7 +279,7 @@ impl FuncVerifier<Constraint> for Builtin {
             Builtin::BranchIfZeroElse => Arity::Exactly(3),
             Builtin::BranchIfNotZero => Arity::Dyadic,
             Builtin::BranchIfNotZeroElse => Arity::Exactly(3),
-            Builtin::Ith => Arity::Dyadic,
+            Builtin::Nth => Arity::Dyadic,
         }
     }
     fn validate_types(&self, args: &[Constraint]) -> Result<()> {
@@ -317,7 +317,7 @@ impl FuncVerifier<Constraint> for Builtin {
                     ))
                 }
             }
-            Builtin::Ith => {
+            Builtin::Nth => {
                 if matches!(args[0], Constraint::ArrayColumn(..))
                     && matches!(args[1], Constraint::Const(x) if x >= 0)
                 {
@@ -763,7 +763,7 @@ fn apply(
                             unreachable!()
                         }
                     }
-                    Builtin::Ith => {
+                    Builtin::Nth => {
                         if let (Constraint::ArrayColumn(cname, ..), Constraint::Const(x)) =
                             (&traversed_args[0], &traversed_args[1])
                         {
