@@ -18,9 +18,15 @@ defcolumn = @{ (symbol ~ ("[" ~ natural ~ (":" ~ natural)? ~ "]")?) }
 
 
 list = { "(" ~ expr* ~ ")" }
-expr = { integer | symbol | list }
+expr = { integer | symbol | list | form }
+form = _{ forloop }
+
+forloop = { "(" ~ "for" ~ symbol ~ range ~ expr ~ ")" }
+range = _{ immediate_range | interval }
+immediate_range = { "{" ~ natural+ ~ "}" }
+interval = { "[" ~ natural ~ ":" ~ natural ~ "]" }
 arg_type = { "NATURAL" | "CONSTRAINT" | "CONSTRAINTS" } // WiP functions typing
 
 integer = @{ "-"? ~ natural }
-natural = { ASCII_DIGIT+ }
+natural = @{ ASCII_DIGIT+ }
 symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" )+  }

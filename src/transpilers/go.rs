@@ -4,6 +4,8 @@ use convert_case::{Case, Casing};
 
 use std::io::{BufWriter, Write};
 
+const ARRAY_SEPARATOR: char = '_';
+
 fn make_go_function(name: &str, prelude: &str, content: &str, postlude: &str) -> String {
     format!(
         r#"func {}() (r []column.Expression) {{
@@ -52,20 +54,23 @@ impl GoExporter {
 
     pub fn render_node(&self, node: &Constraint) -> Result<String> {
         let r = match node {
+            Constraint::ArrayColumn(..) => unreachable!(),
             Constraint::TopLevel { .. } => unreachable!(),
             Constraint::Const(x) => match x {
                 0..=2 | 127 | 256 => Ok(format!("column.CONST_{}()", x)),
                 x => Ok(format!("column.CONST_UINT64({})", x)),
             },
             Constraint::Column(name) => Ok(format!("CE[{}.Name()]", name)),
-            Constraint::ColumnArrayElement(name, i) => Ok(format!("CE[{}_{}.Name()]", name, i)),
+            Constraint::ArrayColumnElement(name, i) => Ok(format!("CE[{}{}{}.Name()]", name, i)),
             Constraint::Funcall { func, args } => self.render_funcall(func, args),
             Constraint::List(constraints) => Ok(constraints
                 .iter()
                 .map(|x| self.render_node(x))
                 .map(|x| {
                     x.map(|mut r| {
-                        r.push(',');
+                        if let Some(true) = r.chars().last().map(|c| c != ',') {
+                            r.push(',');
+                        }
                         r
                     })
                 })
@@ -119,7 +124,7 @@ impl crate::transpilers::Transpiler for GoExporter {
                 if let Constraint::TopLevel { name, expr } = c {
                     self.render_node(expr)
                         .map(|mut r| {
-                            if r.chars().last().unwrap() != ',' {
+                            if let Some(true) = r.chars().last().map(|c| c != ',') {
                                 r.push(',');
                             }
                             r
@@ -138,6 +143,7 @@ impl crate::transpilers::Transpiler for GoExporter {
             })
             .collect::<Result<Vec<_>>>()?
             .join("\n");
+        // .replace(",,", ",");
 
         let main_function = make_go_function(
             &self.settings.fname.to_case(Case::Pascal),

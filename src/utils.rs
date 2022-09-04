@@ -14,7 +14,8 @@ pub enum Constraint {
     },
     Const(i32),
     Column(String),
-    ColumnArrayElement(String, usize),
+    ArrayColumn(String, usize, usize),
+    ArrayColumnElement(String, usize),
     List(Vec<Constraint>),
 }
 impl Constraint {
@@ -44,7 +45,10 @@ impl Debug for Constraint {
             Constraint::TopLevel { name, expr } => write!(f, "{}: {:?}", name, expr),
             Constraint::Const(x) => write!(f, "{}:CONST", x),
             Constraint::Column(name) => write!(f, "{}:COLUMN", name),
-            Constraint::ColumnArrayElement(name, i) => {
+            Constraint::ArrayColumn(name, start, end) => {
+                write!(f, "{}[{}:{}]:ARRAYCOLUMN", name, start, end)
+            }
+            Constraint::ArrayColumnElement(name, i) => {
                 write!(f, "{}[{}]:COLUMN", name, i)
             }
             Constraint::List(cs) => write!(f, "'({})", format_list(cs)),
@@ -78,6 +82,7 @@ pub enum Builtin {
     Shift,
     Neg,
     Inv,
+    Ith,
 
     Begin,
 

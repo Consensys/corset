@@ -1,4 +1,4 @@
-(defcolumns A B C ACC A_3 ACC_2)
+(defcolumns A[1:3] B C ACC[1:2])
 
 (defconstraint test (eq (ith A 3) B))
 
