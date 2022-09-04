@@ -23,7 +23,18 @@ pub struct AstNode {
     pub src: String,
     pub lc: (usize, usize),
 }
-
+#[derive(Debug, PartialEq, Clone)]
+pub enum Token {
+    Ignore,
+    Value(i32),
+    Symbol(String),
+    Form { args: Vec<AstNode> },
+    TopLevelForm { args: Vec<AstNode> },
+    Range(Vec<usize>),
+    DefColumns(Vec<AstNode>),
+    DefColumn(String),
+    DefArrayColumn(String, Vec<usize>),
+}
 impl AstNode {
     pub fn transform(self, f: &dyn Fn(AstNode) -> AstNode) -> Self {
         match self {
@@ -54,15 +65,6 @@ impl AstNode {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Token {
-    Ignore,
-    Value(i32),
-    Symbol(String),
-    Form { args: Vec<AstNode> },
-    TopLevelForm { args: Vec<AstNode> },
-    Range(Vec<usize>),
-}
 impl Debug for AstNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fn format_list(cs: &[AstNode]) -> String {
@@ -72,30 +74,31 @@ impl Debug for AstNode {
                 .join(" ")
         }
 
-        match self.class {
+        match &self.class {
             Token::Ignore => write!(f, "IGNORED VALUE"),
             Token::Value(x) => write!(f, "{}:IMMEDIATE VALUE", x),
             Token::Symbol(ref name) => write!(f, "{}:SYMBOL", name),
             Token::Form { ref args } => write!(f, "'({})", format_list(args)),
             Token::TopLevelForm { ref args } => write!(f, "{}", format_list(args)),
             Token::Range(ref args) => write!(f, "{:?}", args),
+            Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
+            Token::DefColumn(name) => write!(f, "DECLARATION {}", name),
+            Token::DefArrayColumn(name, range) => write!(f, "DECLARATION {}{:?}", name, range),
         }
     }
 }
 
-fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
+fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
     let lc = pair.as_span().start_pos().line_col();
     let src = pair.as_str().to_owned();
 
     match pair.as_rule() {
-        Rule::expr | Rule::constraint => {
-            build_ast_from_expr(pair.into_inner().next().unwrap(), in_def)
-        }
-        Rule::definition | Rule::defcolumns => {
+        Rule::expr | Rule::constraint => rec_parse(pair.into_inner().next().unwrap()),
+        Rule::definition => {
             let args = pair
                 .into_inner()
                 .into_iter()
-                .map(|p| build_ast_from_expr(p, in_def))
+                .map(rec_parse)
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 .filter(|x| x.class != Token::Ignore)
@@ -109,7 +112,7 @@ fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
         Rule::list => {
             let args = pair
                 .into_inner()
-                .map(|p| build_ast_from_expr(p, in_def))
+                .map(rec_parse)
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 .filter(|x| x.class != Token::Ignore)
@@ -120,11 +123,43 @@ fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
                 src,
             })
         }
-        Rule::symbol | Rule::defcolumn | Rule::definition_kw | Rule::defcolumn_kw => Ok(AstNode {
+        Rule::symbol | Rule::definition_kw => Ok(AstNode {
             class: Token::Symbol(pair.as_str().to_owned()),
             lc,
             src,
         }),
+        Rule::defcolumns => {
+            let defs = pair
+                .into_inner()
+                .map(rec_parse)
+                .collect::<Result<Vec<_>>>()?;
+            Ok(AstNode {
+                class: Token::DefColumns(defs),
+                lc,
+                src,
+            })
+        }
+        Rule::defcolumn => {
+            let mut pairs = pair.into_inner();
+            let name = pairs.next().unwrap().as_str();
+            if let Some(Ok(AstNode {
+                class: Token::Range(range),
+                ..
+            })) = pairs.next().map(rec_parse)
+            {
+                Ok(AstNode {
+                    class: Token::DefArrayColumn(name.into(), range),
+                    lc,
+                    src,
+                })
+            } else {
+                Ok(AstNode {
+                    class: Token::DefColumn(name.into()),
+                    lc,
+                    src,
+                })
+            }
+        }
         Rule::integer => Ok(AstNode {
             class: Token::Value(pair.as_str().parse().unwrap()),
             lc,
@@ -142,9 +177,9 @@ fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
                 class: Token::Form {
                     args: vec![
                         for_token,
-                        build_ast_from_expr(pairs.next().unwrap(), in_def)?,
-                        build_ast_from_expr(pairs.next().unwrap(), in_def)?,
-                        build_ast_from_expr(pairs.next().unwrap(), in_def)?,
+                        rec_parse(pairs.next().unwrap())?,
+                        rec_parse(pairs.next().unwrap())?,
+                        rec_parse(pairs.next().unwrap())?,
                     ],
                 },
                 lc,
@@ -153,10 +188,26 @@ fn build_ast_from_expr(pair: Pair<Rule>, in_def: bool) -> Result<AstNode> {
         }
         Rule::interval => {
             let mut pairs = pair.into_inner();
-            let start = pairs.next().unwrap().as_str().parse::<usize>().unwrap();
-            let stop = pairs.next().unwrap().as_str().parse::<usize>().unwrap();
+            let x1 = pairs
+                .next()
+                .map(|x| x.as_str())
+                .and_then(|x| x.parse::<usize>().ok());
+            let x2 = pairs
+                .next()
+                .map(|x| x.as_str())
+                .and_then(|x| x.parse::<usize>().ok());
+            let x3 = pairs
+                .next()
+                .map(|x| x.as_str())
+                .and_then(|x| x.parse::<usize>().ok());
+            let range = match (x1, x2, x3) {
+                (Some(start), None, None) => (1..=start).collect(),
+                (Some(start), Some(stop), None) => (start..=stop).collect(),
+                (Some(start), Some(stop), Some(step)) => (start..=stop).step_by(step).collect(),
+                _ => unimplemented!(),
+            };
             Ok(AstNode {
-                class: Token::Range((start..=stop).collect()),
+                class: Token::Range(range),
                 lc,
                 src,
             })
@@ -181,7 +232,7 @@ pub fn parse(source: &str) -> Result<ParsingAst> {
         if pair.as_rule() == Rule::corset {
             for constraint in pair.into_inner() {
                 if constraint.as_rule() != Rule::EOI {
-                    ast.exprs.push(build_ast_from_expr(constraint, false)?);
+                    ast.exprs.push(rec_parse(constraint)?);
                 }
             }
         }

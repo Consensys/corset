@@ -14,7 +14,7 @@ pub enum Constraint {
     },
     Const(i32),
     Column(String),
-    ArrayColumn(String, usize, usize),
+    ArrayColumn(String, Vec<usize>),
     ArrayColumnElement(String, usize),
     List(Vec<Constraint>),
 }
@@ -45,8 +45,14 @@ impl Debug for Constraint {
             Constraint::TopLevel { name, expr } => write!(f, "{}: {:?}", name, expr),
             Constraint::Const(x) => write!(f, "{}:CONST", x),
             Constraint::Column(name) => write!(f, "{}:COLUMN", name),
-            Constraint::ArrayColumn(name, start, end) => {
-                write!(f, "{}[{}:{}]:ARRAYCOLUMN", name, start, end)
+            Constraint::ArrayColumn(name, range) => {
+                write!(
+                    f,
+                    "{}[{}:{}]:ARRAYCOLUMN",
+                    name,
+                    range.first().unwrap(),
+                    range.last().unwrap()
+                )
             }
             Constraint::ArrayColumnElement(name, i) => {
                 write!(f, "{}[{}]:COLUMN", name, i)

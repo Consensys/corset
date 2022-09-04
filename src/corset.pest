@@ -9,11 +9,10 @@ constraint = { list }
 top_level = _{ defcolumns | definition }
 
 definition = { "(" ~ definition_kw ~ expr* ~ ")"}
-defcolumns = { "(" ~ defcolumn_kw ~ defcolumn* ~ ")" }
+defcolumns = { "(" ~ "defcolumns" ~ defcolumn* ~ ")" }
 
 definition_kw = { "defconstraint" | "defunalias" | "defun" | "defconst" | "defalias" }
-defcolumn_kw = { "defcolumns" }
-defcolumn = @{ (symbol ~ ("[" ~ natural ~ (":" ~ natural)? ~ "]")?) }
+defcolumn = { symbol ~ interval? }
 
 
 
@@ -24,7 +23,7 @@ form = _{ forloop }
 forloop = { "(" ~ "for" ~ symbol ~ range ~ expr ~ ")" }
 range = _{ immediate_range | interval }
 immediate_range = { "{" ~ natural+ ~ "}" }
-interval = { "[" ~ natural ~ ":" ~ natural ~ "]" }
+interval = { "[" ~ natural ~ (":" ~ natural ~ (":" ~ natural)?)? ~ "]" }
 arg_type = { "NATURAL" | "CONSTRAINT" | "CONSTRAINTS" } // WiP functions typing
 
 integer = @{ "-"? ~ natural }

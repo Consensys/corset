@@ -3,7 +3,6 @@ use color_eyre::eyre::*;
 use convert_case::{Case, Casing};
 
 use std::io::{BufWriter, Write};
-
 const ARRAY_SEPARATOR: char = '_';
 
 fn make_go_function(name: &str, prelude: &str, content: &str, postlude: &str) -> String {
@@ -61,7 +60,9 @@ impl GoExporter {
                 x => Ok(format!("column.CONST_UINT64({})", x)),
             },
             Constraint::Column(name) => Ok(format!("CE[{}.Name()]", name)),
-            Constraint::ArrayColumnElement(name, i) => Ok(format!("CE[{}{}{}.Name()]", name, i)),
+            Constraint::ArrayColumnElement(name, i) => {
+                Ok(format!("CE[{}{}{}.Name()]", name, ARRAY_SEPARATOR, i))
+            }
             Constraint::Funcall { func, args } => self.render_funcall(func, args),
             Constraint::List(constraints) => Ok(constraints
                 .iter()
