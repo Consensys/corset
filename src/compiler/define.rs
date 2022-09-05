@@ -1,10 +1,11 @@
 use eyre::*;
-use std::collections::{HashMap, HashSet};
 use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use crate::utils::*;
 use crate::compiler::generator::*;
+use crate::compiler::parser::*;
+use crate::utils::*;
 
 lazy_static::lazy_static! {
     static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
@@ -279,6 +280,29 @@ impl SymbolTable {
     }
 }
 
-pub fn parse(table: Rc<RefCell<SymbolTable>>) -> Result<()> {
+pub enum Type {
+    Column,
+    ColumnArray(Vec<usize>),
+    Constant,
+    List,
+    Void,
+}
+
+fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
+    match &e.class {
+        Token::DefColumns(cols) => cols
+            .iter()
+            .fold(Ok(()), |ax, col| ax.and(reduce(col, ctx.clone()))),
+        Token::DefColumn(col) => ctx.borrow_mut().insert_symbol(col, Constraint::Column(col.into())),
+        Token::DefArrayColumn(col, range) => ctx.borrow_mut().insert_symbol(col, Constraint::ArrayColumn(col.into(), range.clone())),
+        _ => Ok(()),
+    }
+}
+
+pub fn parse(ast: &ParsingAst, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
+    for e in ast.exprs.iter() {
+        reduce(e, ctx.clone())?;
+    }
+
     Ok(())
 }

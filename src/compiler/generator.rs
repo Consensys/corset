@@ -538,59 +538,40 @@ fn apply(
     }
 }
 
-fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, pass: Pass) -> Result<Option<Constraint>> {
-    match (&e.class, pass) {
-        (Token::Ignore, _) => Ok(None),
-        (Token::Value(x), _) => Ok(Some(Constraint::Const(*x))),
-        (Token::Symbol(name), _) => Ok(Some(ctx.borrow_mut().resolve_symbol(name)?)),
-        (Token::TopLevelForm { args }, _) => {
+fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Constraint>> {
+    match &e.class {
+        Token::Ignore => Ok(None),
+        Token::Value(x) => Ok(Some(Constraint::Const(*x))),
+        Token::Symbol(name) => Ok(Some(ctx.borrow_mut().resolve_symbol(name)?)),
+        Token::TopLevelForm { args } => {
             if let Token::Symbol(verb) = &args[0].class {
                 let func = ctx
                     .borrow()
                     .resolve_function(verb)
                     .with_context(|| eyre!("resolving form `{}`", verb))?;
 
-                Ok(apply(&func, &args[1..], ctx, pass)?)
+                Ok(apply(&func, &args[1..], ctx)?)
             } else {
                 unimplemented!("{:?}", args)
             }
         }
-        (Token::Form { args }, Pass::Compilation) => {
+        Token::Form { args } => {
             if let Token::Symbol(verb) = &args[0].class {
                 let func = ctx
                     .borrow()
                     .resolve_function(verb)
                     .with_context(|| eyre!("resolving function `{}`", verb))?;
 
-                apply(&func, &args[1..], ctx, pass)
+                apply(&func, &args[1..], ctx)
             } else {
                 Err(eyre!("Not a function: {:?}", args[0]))
             }
         }
-        (Token::Form { .. }, Pass::Definition) => Ok(None),
-        (Token::Range(_), _) => Ok(None),
 
-        (Token::DefColumns(cols), Pass::Definition) => {
-            cols.iter()
-                .map(|c| reduce(c, ctx.clone(), pass))
-                .collect::<Result<Vec<_>>>()?;
-            Ok(None)
-        }
-        (Token::DefColumns(_), Pass::Compilation) => Ok(None),
-
-        (Token::DefColumn(name), Pass::Definition) => {
-            ctx.borrow_mut()
-                .insert_symbol(name, Constraint::Column(name.into()))?;
-            Ok(None)
-        }
-        (Token::DefColumn(_), Pass::Compilation) => Ok(None),
-
-        (Token::DefArrayColumn(name, range), Pass::Definition) => {
-            ctx.borrow_mut()
-                .insert_symbol(name, Constraint::ArrayColumn(name.into(), range.clone()))?;
-            Ok(None)
-        }
-        (Token::DefArrayColumn(..), Pass::Compilation) => Ok(None),
+        Token::Range(_) => Ok(None),
+        Token::DefColumns(_) => Ok(None),
+        Token::DefColumn(_) => Ok(None),
+        Token::DefArrayColumn(..) => Ok(None),
         x => unimplemented!("{:?}", x),
     }
     .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))
@@ -624,7 +605,7 @@ pub fn compile(sources: &[(&str, &str)]) -> Result<ConstraintsSet> {
 
     for (name, content) in sources.iter() {
         let ast = parse(content).with_context(|| eyre!("parsing `{}`", name))?;
-        define::parse(ctx.clone())
+        define::parse(&ast, ctx.clone())
             .with_context(|| eyre!("assembling definitions in `{}`", name))?;
         let _ = build_constraints(&ast, ctx.clone(), Pass::Definition);
         asts.push((name, ast));
