@@ -1,266 +1,16 @@
 use eyre::*;
 use std::cell::RefCell;
-use std::fmt::Debug;
 use std::rc::Rc;
 
-use crate::compiler::define;
-use crate::compiler::define::SymbolTable;
+use super::common::*;
+use crate::compiler::definitions;
+use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 use crate::utils::*;
 
-trait FuncVerifier<T> {
-    fn arity(&self) -> Arity;
-
-    fn validate_types(&self, args: &[T]) -> Result<()>;
-
-    fn validate_arity(&self, args: &[T]) -> Result<()> {
-        self.arity().validate(args.len())
-    }
-
-    fn validate_args(&self, args: Vec<T>) -> Result<Vec<T>> {
-        self.validate_arity(&args)
-            .and_then(|_| self.validate_types(&args))
-            .and(Ok(args))
-    }
-}
-
-enum Arity {
-    AtLeast(usize),
-    AtMost(usize),
-    Even,
-    Odd,
-    Monadic,
-    Dyadic,
-    Exactly(usize),
-}
-impl Arity {
-    fn make_error(&self, l: usize) -> String {
-        fn arg_count(x: usize) -> String {
-            format!("{} argument{}", x, if x > 1 { "s" } else { "" })
-        }
-        match self {
-            Arity::AtLeast(x) => format!("expected at least {}, but received {}", arg_count(*x), l),
-            Arity::AtMost(x) => format!("expected at most {}, but received {}", arg_count(*x), l),
-            Arity::Even => format!("expected an even numer of arguments, but received {}", l),
-            Arity::Odd => format!("expected an odd numer of arguments, but received {}", l),
-            Arity::Monadic => format!("expected {}, but received {}", arg_count(1), l),
-            Arity::Dyadic => format!("expected {}, but received {}", arg_count(2), l),
-            Arity::Exactly(x) => format!("expected {}, but received {}", arg_count(*x), l),
-        }
-    }
-
-    fn validate(&self, l: usize) -> Result<()> {
-        match self {
-            Arity::AtLeast(x) => l >= *x,
-            Arity::AtMost(x) => l <= *x,
-            Arity::Even => l % 2 == 0,
-            Arity::Odd => l % 2 == 1,
-            Arity::Monadic => l == 1,
-            Arity::Dyadic => l == 2,
-            Arity::Exactly(x) => l == *x,
-        }
-        .then(|| ())
-        .ok_or_else(|| eyre!(self.make_error(l)))
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Form {
-    Defconstraint,
-    Defun,
-    Defalias,
-    Defunalias,
-    Defconst,
-    For,
-}
-impl FuncVerifier<AstNode> for Form {
-    fn arity(&self) -> Arity {
-        match self {
-            Form::Defun => Arity::Exactly(2),
-            Form::Defalias => Arity::Even,
-            Form::Defunalias => Arity::Exactly(2),
-            Form::Defconst => Arity::Even,
-            Form::Defconstraint => Arity::Dyadic,
-            Form::For => Arity::Exactly(3),
-        }
-    }
-    fn validate_types(&self, args: &[AstNode]) -> Result<()> {
-        match self {
-            Form::Defun => {
-                if matches!(args[0].class, Token::Form { .. }) {
-                    Ok(())
-                } else {
-                    Err(eyre!("invalid DEFUN syntax; received: {:?}", args))
-                }
-            }
-            Form::Defalias | Form::Defunalias => {
-                if args.iter().all(|a| matches!(a.class, Token::Symbol(_))) {
-                    Ok(())
-                } else {
-                    Err(eyre!("DEFCOLUMNS expects only symbols"))
-                }
-            }
-            Form::Defconst => {
-                if args.chunks(2).all(|p| {
-                    matches!(p[0].class, Token::Symbol(_)) && matches!(p[1].class, Token::Value(_))
-                }) {
-                    Ok(())
-                } else {
-                    Err(eyre!("DEFCONST expects alternating symbols and values"))
-                }
-            }
-            Form::Defconstraint => {
-                if matches!(args[0].class, Token::Symbol(_))
-                    && matches!(args[1].class, Token::Form { .. })
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "DEFCONSTRAINT expects [NAME CONSTRAINT], received: {:?}",
-                        args
-                    ))
-                }
-            }
-            Form::For => {
-                if matches!(args[0].class, Token::Symbol(_))
-                    && matches!(args[1].class, Token::Range(_))
-                    && matches!(args[2].class, Token::Form { .. })
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects [SYMBOL VALUE] but received {:?}",
-                        self,
-                        args
-                    ))
-                }
-            }
-        }
-    }
-}
-
-impl FuncVerifier<Constraint> for Builtin {
-    fn arity(&self) -> Arity {
-        match self {
-            Builtin::Add => Arity::AtLeast(2),
-            Builtin::Sub => Arity::AtLeast(2),
-            Builtin::Mul => Arity::AtLeast(2),
-            Builtin::Neg => Arity::Monadic,
-            Builtin::Inv => Arity::Monadic,
-            Builtin::IfZero => Arity::Dyadic,
-            Builtin::Shift => Arity::Dyadic,
-            Builtin::Begin => Arity::AtLeast(1),
-            Builtin::BranchIfZero => Arity::Dyadic,
-            Builtin::BranchIfZeroElse => Arity::Exactly(3),
-            Builtin::BranchIfNotZero => Arity::Dyadic,
-            Builtin::BranchIfNotZeroElse => Arity::Exactly(3),
-            Builtin::Nth => Arity::Dyadic,
-        }
-    }
-    fn validate_types(&self, args: &[Constraint]) -> Result<()> {
-        match self {
-            f @ (Builtin::Add | Builtin::Sub | Builtin::Mul | Builtin::IfZero) => {
-                if args.iter().all(|a| !matches!(a, Constraint::List(_))) {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects scalar arguments but received a list",
-                        f,
-                    ))
-                }
-            }
-            Builtin::Neg | Builtin::Inv => {
-                if args.iter().all(|a| !matches!(a, Constraint::List(_))) {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects a scalar argument but received a list",
-                        self
-                    ))
-                }
-            }
-            Builtin::Shift => {
-                if matches!(args[0], Constraint::Column(_))
-                    && matches!(args[1], Constraint::Const(x) if x != 0)
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects a COLUMN and a non-null INTEGER but received {:?}",
-                        self,
-                        args
-                    ))
-                }
-            }
-            Builtin::Nth => {
-                if matches!(args[0], Constraint::ArrayColumn(..))
-                    && matches!(args[1], Constraint::Const(x) if x >= 0)
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects [SYMBOL CONST] but received {:?}",
-                        self,
-                        args
-                    ))
-                }
-            }
-            Builtin::BranchIfZero | Builtin::BranchIfNotZero => {
-                if !matches!(args[0], Constraint::List(_)) && matches!(args[1], Constraint::List(_))
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects scalar arguments but received a list",
-                        self
-                    ))
-                }
-            }
-            Builtin::BranchIfZeroElse | Builtin::BranchIfNotZeroElse => {
-                if !matches!(args[0], Constraint::List(_))
-                    && matches!(args[1], Constraint::List(_))
-                    && matches!(args[2], Constraint::List(_))
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects (SCALAR, LIST, LIST) but received {:?}",
-                        self,
-                        args
-                    ))
-                }
-            }
-            Builtin::Begin => Ok(()),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Function {
-    pub name: String,
-    pub class: FunctionClass,
-}
-#[derive(Debug, Clone)]
-pub enum FunctionClass {
-    UserDefined(Defined),
-    SpecialForm(Form),
-    Builtin(Builtin),
-    Alias(String),
-}
-
-#[derive(Debug, Clone)]
-pub struct Defined {
-    args: Vec<String>,
-    body: AstNode,
-}
-impl FuncVerifier<Constraint> for Defined {
-    fn arity(&self) -> Arity {
-        Arity::Exactly(self.args.len())
-    }
-
-    fn validate_types(&self, _args: &[Constraint]) -> Result<()> {
-        Ok(())
-    }
+#[derive(Debug)]
+pub struct ConstraintsSet {
+    pub constraints: Vec<Constraint>,
 }
 
 // Compared to a function, a form do not evaluate all of its arguments by default
@@ -274,83 +24,6 @@ fn apply_form(
         .with_context(|| eyre!("evaluating call to {:?}", f))?;
 
     match f {
-        // Form::Defconst => {
-        //     for p in args.chunks(2) {
-        //         if let (Token::Symbol(name), Token::Value(x)) = (&p[0].class, &p[1].class) {
-        //             ctx.borrow_mut().insert_constant(name, *x)?
-        //         }
-        //     }
-
-        //     Ok(None)
-        // }
-
-        // Form::Defalias => {
-        //     for p in args.chunks(2) {
-        //         if let (Token::Symbol(from), Token::Symbol(to)) = (&p[0].class, &p[1].class) {
-        //             ctx.borrow_mut().insert_alias(from, to)?
-        //         }
-        //     }
-
-        //     Ok(None)
-        // }
-
-        // Form::Defunalias => {
-        //     for p in args.chunks(2) {
-        //         if let (Token::Symbol(from), Token::Symbol(to)) = (&p[0].class, &p[1].class) {
-        //             ctx.borrow_mut().insert_funalias(from, to)?
-        //         }
-        //     }
-
-        //     Ok(None)
-        // }
-
-        // Form::Defun => {
-        //     let header = &args[0];
-        //     let body = &args[1];
-
-        //     if let Token::Form {
-        //         args: ref inner_args,
-        //     } = header.class
-        //     {
-        //         if let Token::Symbol(fname) = &inner_args[0].class {
-        //             let arg_names = inner_args
-        //                 .iter()
-        //                 .map(|a| {
-        //                     if let Token::Symbol(ref n) = a.class {
-        //                         Ok(n.to_owned())
-        //                     } else {
-        //                         Err(eyre!("{:?} is not a valid argument", a))
-        //                     }
-        //                 })
-        //                 .collect::<Result<Vec<_>>>()
-        //                 .with_context(|| format!("parsing function {}", fname))?;
-
-        //             ctx.borrow_mut().insert_func({
-        //                 Function {
-        //                     name: arg_names[0].to_owned(),
-        //                     class: FunctionClass::UserDefined(Defined {
-        //                         args: arg_names[1..].to_vec(),
-        //                         body: body.to_owned(),
-        //                     }),
-        //                 }
-        //             })
-        //         } else {
-        //             unreachable!()
-        //         }
-        //     } else {
-        //         unreachable!()
-        //     }?;
-        //     Ok(None)
-        // }
-
-        // Form::Defconstraint => {
-        //     ctx.borrow_mut().insert_constraint(&args[0].src)?;
-        //     Ok(Some(Constraint::TopLevel {
-        //         name: args[0].src.to_string(),
-        //         expr: Box::new(reduce(&args[1], ctx)?.unwrap()),
-        //     }))
-        // }
-
         // TODO in compilation
         Form::For => {
             if let (Token::Symbol(i_name), Token::Range(is), body) =
@@ -372,7 +45,6 @@ fn apply_form(
                 unreachable!()
             }
         }
-        _ => Ok(None),
     }
 }
 
@@ -535,20 +207,10 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Constrain
         Token::Ignore => Ok(None),
         Token::Value(x) => Ok(Some(Constraint::Const(*x))),
         Token::Symbol(name) => Ok(Some(ctx.borrow_mut().resolve_symbol(name)?)),
-        Token::TopLevelForm(args) => {
-            if let Token::Symbol(verb) = &args[0].class {
-                let func = ctx
-                    .borrow()
-                    .resolve_function(verb)
-                    .with_context(|| eyre!("resolving form `{}`", verb))?;
-
-                Ok(apply(&func, &args[1..], ctx)?)
-            } else {
-                unimplemented!("{:?}", args)
-            }
-        }
         Token::Form(args) => {
-            if let Token::Symbol(verb) = &args[0].class {
+            if args.is_empty() {
+                Ok(Some(Constraint::List(vec![])))
+            } else if let Token::Symbol(verb) = &args[0].class {
                 let func = ctx
                     .borrow()
                     .resolve_function(verb)
@@ -559,21 +221,25 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Constrain
                 Err(eyre!("Not a function: {:?}", args[0]))
             }
         }
+        Token::DefConstraint(name, expr) => Ok(Some(Constraint::TopLevel {
+            name: name.into(),
+            expr: Box::new(reduce(expr, ctx)?.unwrap()), // the parser ensures that the body is never empty
+        })),
 
         Token::Range(_) => Ok(None),
         Token::DefColumns(_) => Ok(None),
         Token::DefColumn(_) => Ok(None),
         Token::DefArrayColumn(..) => Ok(None),
-        x => unimplemented!("{:?}", x),
+        Token::DefAliases(_) => Ok(None),
+        Token::DefAlias(..) => Ok(None),
+        Token::DefunAlias(..) => Ok(None),
+        Token::DefConst(..) => Ok(None),
+        Token::Defun(..) => Ok(None),
     }
     .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))
 }
 
-fn build_constraints(
-    ast: &ParsingAst,
-    ctx: Rc<RefCell<SymbolTable>>,
-    pass: Pass,
-) -> Result<Vec<Constraint>> {
+pub fn pass(ast: &ParsingAst, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Constraint>> {
     let mut r = vec![];
 
     for exp in ast.exprs.iter().cloned() {
@@ -584,34 +250,4 @@ fn build_constraints(
         }
     }
     Ok(r)
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Pass {
-    Definition,
-    Compilation,
-}
-pub fn compile(sources: &[(&str, &str)]) -> Result<ConstraintsSet> {
-    let mut asts = vec![];
-    let ctx = Rc::new(RefCell::new(SymbolTable::new_root()));
-
-    for (name, content) in sources.iter() {
-        let ast = parse(content).with_context(|| eyre!("parsing `{}`", name))?;
-        define::parse(&ast, ctx.clone())
-            .with_context(|| eyre!("assembling definitions in `{}`", name))?;
-        let _ = build_constraints(&ast, ctx.clone(), Pass::Definition);
-        asts.push((name, ast));
-    }
-
-    let constraints = asts
-        .into_iter()
-        .map(|(name, ast)| {
-            build_constraints(&ast, ctx.clone(), Pass::Compilation)
-                .with_context(|| eyre!("compiling constraints in `{}`", name))
-        })
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
-        .flatten()
-        .collect();
-    Ok(ConstraintsSet { constraints })
 }

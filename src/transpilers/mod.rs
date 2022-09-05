@@ -1,4 +1,4 @@
-use crate::utils::ConstraintsSet;
+use crate::compiler::ConstraintsSet;
 use eyre::*;
 use std::io::BufWriter;
 

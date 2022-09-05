@@ -1,3 +1,4 @@
+use crate::compiler::ConstraintsSet;
 use crate::utils::*;
 use color_eyre::eyre::*;
 use convert_case::{Case, Casing};

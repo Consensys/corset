@@ -1,3 +1,12 @@
+(defunalias sub -)
+(defunalias eq -)
+(defunalias = -)
+
+(defunalias and *)
+(defunalias mul *)
+
+(defunalias add +)
+
 ;; Boolean functions
 (defun (not e0) (- 1 e0))
 (defun (neq a b) (not (eq a b)))

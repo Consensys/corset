@@ -3,135 +3,9 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use crate::compiler::generator::*;
+use super::common::*;
 use crate::compiler::parser::*;
 use crate::utils::*;
-
-lazy_static::lazy_static! {
-    static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
-        "defconstraint" => Function {
-            name: "defconstring".into(),
-            class: FunctionClass::SpecialForm(Form::Defconstraint),
-        },
-
-        "defun" => Function {
-            name: "defun".into(),
-            class: FunctionClass::SpecialForm(Form::Defun),
-        },
-
-        "defunalias" => Function {
-            name: "defunalias".into(),
-            class: FunctionClass::SpecialForm(Form::Defunalias),
-        },
-
-        "defalias" => Function {
-            name: "defalias".into(),
-            class: FunctionClass::SpecialForm(Form::Defalias),
-        },
-
-        "defconst" => Function {
-            name: "defconst".into(),
-            class: FunctionClass::SpecialForm(Form::Defconst),
-        },
-
-        "nth" => Function {
-            name: "nth".into(),
-            class: FunctionClass::Builtin(Builtin::Nth),
-        },
-
-        "for" => Function {
-            name: "for".into(),
-            class: FunctionClass::SpecialForm(Form::For),
-        },
-
-
-        // monadic
-        "inv" => Function{
-            name: "inv".into(),
-            class: FunctionClass::Builtin(Builtin::Inv)
-        },
-        "neg" => Function{
-            name: "neg".into(),
-            class: FunctionClass::Builtin(Builtin::Neg)
-        },
-
-        // Dyadic
-        "if-zero" => Function{
-            name: "if-zero".into(),
-            class: FunctionClass::Builtin(Builtin::IfZero),
-        },
-
-        "shift" => Function{
-            name: "shift".into(),
-            class: FunctionClass::Builtin(Builtin::Shift),
-        },
-
-
-        // polyadic
-        "add" => Function{
-            name: "add".into(),
-            class: FunctionClass::Builtin(Builtin::Add)
-        },
-        "+" => Function {
-            name: "+".into(),
-            class: FunctionClass::Alias("add".into())
-        },
-
-
-        "mul" => Function{
-            name: "mul".into(),
-            class: FunctionClass::Builtin(Builtin::Mul)
-        },
-        "*" => Function {
-            name: "*".into(),
-            class: FunctionClass::Alias("mul".into())
-        },
-        "and" => Function {
-            name: "and".into(),
-            class: FunctionClass::Alias("mul".into())
-        },
-
-        "sub" => Function{
-            name: "mul".into(),
-            class: FunctionClass::Builtin(Builtin::Sub,)
-        },
-        "-" => Function {
-            name: "sub".into(),
-            class: FunctionClass::Alias("sub".into())
-        },
-        "eq" => Function {
-            name: "sub".into(),
-            class: FunctionClass::Alias("sub".into())
-        },
-        "=" => Function {
-            name: "sub".into(),
-            class: FunctionClass::Alias("sub".into())
-        },
-
-        "begin" => Function{name: "begin".into(), class: FunctionClass::Builtin(Builtin::Begin)},
-
-        // Special form for now, see later if implementing map...
-        "branch-if-zero" => Function {
-            name:"branch-if-zero".into(),
-            class: FunctionClass::Builtin(Builtin::BranchIfZero)
-        },
-
-        "branch-if-zero-else" => Function {
-            name:"branch-if-zero-else".into(),
-            class: FunctionClass::Builtin(Builtin::BranchIfZeroElse)
-        },
-
-        "branch-if-not-zero" => Function {
-            name:"branch-if-not-zero".into(),
-            class: FunctionClass::Builtin(Builtin::BranchIfNotZero)
-        },
-
-        "branch-if-not-zero-else" => Function {
-            name:"branch-if-not-zero-else".into(),
-            class: FunctionClass::Builtin(Builtin::BranchIfNotZeroElse)
-        },
-    };
-}
 
 #[derive(Debug)]
 pub enum Symbol {
@@ -192,9 +66,9 @@ impl SymbolTable {
             ax.insert(name.into());
             match self.funcs.get(name) {
                 Some(Function {
-                    class: FunctionClass::Alias(ref name),
+                    class: FunctionClass::Alias(ref to),
                     ..
-                }) => self._resolve_function(name, ax),
+                }) => self._resolve_function(to, ax),
                 Some(f) => Ok(f.to_owned()),
                 None => self
                     .parent
@@ -290,16 +164,43 @@ pub enum Type {
 
 fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
     match &e.class {
+        Token::Value(_) | Token::Ignore | Token::Symbol(_) | Token::Form(_) | Token::Range(_) => {
+            Ok(())
+        }
+
+        Token::DefConstraint(name, _) => ctx.borrow_mut().insert_constraint(name),
+        Token::DefConst(name, x) => ctx.borrow_mut().insert_constant(name, *x as i32),
         Token::DefColumns(cols) => cols
             .iter()
             .fold(Ok(()), |ax, col| ax.and(reduce(col, ctx.clone()))),
-        Token::DefColumn(col) => ctx.borrow_mut().insert_symbol(col, Constraint::Column(col.into())),
-        Token::DefArrayColumn(col, range) => ctx.borrow_mut().insert_symbol(col, Constraint::ArrayColumn(col.into(), range.clone())),
-        _ => Ok(()),
+        Token::DefColumn(col) => ctx
+            .borrow_mut()
+            .insert_symbol(col, Constraint::Column(col.into())),
+        Token::DefArrayColumn(col, range) => ctx
+            .borrow_mut()
+            .insert_symbol(col, Constraint::ArrayColumn(col.into(), range.clone())),
+        Token::DefAliases(aliases) => aliases
+            .iter()
+            .fold(Ok(()), |ax, alias| ax.and(reduce(alias, ctx.clone()))),
+        Token::Defun(name, args, body) => ctx.borrow_mut().insert_func(Function {
+            name: name.into(),
+            class: FunctionClass::UserDefined(Defined {
+                args: args.to_owned(),
+                body: *body.clone(),
+            }),
+        }),
+        Token::DefAlias(from, to) => ctx
+            .borrow_mut()
+            .insert_alias(from, to)
+            .with_context(|| eyre!("defining {} -> {}", from, to)),
+        Token::DefunAlias(from, to) => ctx
+            .borrow_mut()
+            .insert_funalias(from, to)
+            .with_context(|| eyre!("defining {} -> {}", from, to)),
     }
 }
 
-pub fn parse(ast: &ParsingAst, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
+pub fn pass(ast: &ParsingAst, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
     for e in ast.exprs.iter() {
         reduce(e, ctx.clone())?;
     }

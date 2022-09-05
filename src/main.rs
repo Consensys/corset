@@ -68,7 +68,7 @@ fn main() -> Result<()> {
         }
     }
 
-    let constraints = utils::ConstraintsSet::from_sources(inputs.as_slice())?;
+    let constraints = compiler::make(inputs.as_slice())?;
 
     let go_exporter = transpilers::go::GoExporter {
         settings: args.clone(),

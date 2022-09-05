@@ -36,7 +36,6 @@ pub enum Token {
     Value(i32),
     Symbol(String),
     Form(Vec<AstNode>),
-    TopLevelForm(Vec<AstNode>),
     Range(Vec<usize>),
 
     DefConst(String, usize),
@@ -72,7 +71,6 @@ impl Debug for Token {
             Token::Value(x) => write!(f, "{}:IMMEDIATE", x),
             Token::Symbol(ref name) => write!(f, "{}:SYMBOL", name),
             Token::Form(ref args) => write!(f, "({})", format_list(args)),
-            Token::TopLevelForm(ref args) => write!(f, "{}", format_list(args)),
             Token::Range(ref args) => write!(f, "{:?}", args),
 
             Token::DefConst(name, value) => write!(f, "{}:CONST({})", name, value),
@@ -91,7 +89,7 @@ impl Debug for Token {
 }
 
 impl AstNode {
-    fn from(args: Vec<AstNode>, src: String, lc: LinCol) -> Result<Self> {
+    fn from(args: Vec<AstNode>, src: &str, lc: LinCol) -> Result<Self> {
         let tokens = args
             .iter()
             .filter(|x| x.class != Token::Ignore)
@@ -102,26 +100,32 @@ impl AstNode {
                 match (tokens.get(1), tokens.get(2)) {
                     (Some(Token::Symbol(name)), Some(Token::Value(x))) => Ok(AstNode {
                         class: Token::DefConst(name.into(), *x as usize),
-                        src,
+                        src: src.into(),
                         lc,
                     }),
                     _ => Err(eyre!(
-                        "DEFCONST expects (SYMBOL, VALUE); received {:?}",
+                        "DEFCONST expects (SYMBOL VALUE); received {:?}",
                         &tokens[1..]
                     )),
                 }
             }
 
             Some(Token::Symbol(defkw)) if defkw == "defun" => {
-                match (&tokens.get(1), tokens.get(2), tokens.get(3)) {
-                    (Some(Token::Symbol(name)), Some(Token::Form(fargs)), Some(_))
-                        if fargs.iter().all(|x| matches!(x.class, Token::Symbol(_))) =>
+                match (&tokens.get(1), tokens.get(2)) {
+                    (Some(Token::Form(fargs)), Some(_))
+                        if !fargs.is_empty()
+                            && fargs.iter().all(|x| matches!(x.class, Token::Symbol(_))) =>
                     {
                         Ok(AstNode {
                             class: Token::Defun(
-                                name.into(),
+                                if let Token::Symbol(ref name) = fargs[0].class {
+                                    name.to_string()
+                                } else {
+                                    unreachable!()
+                                },
                                 fargs
-                                    .into_iter()
+                                    .iter()
+                                    .skip(1)
                                     .map(|a| {
                                         if let Token::Symbol(ref aa) = a.class {
                                             aa.to_owned()
@@ -130,14 +134,14 @@ impl AstNode {
                                         }
                                     })
                                     .collect::<Vec<_>>(),
-                                Box::new(args[3].clone()),
+                                Box::new(args[2].clone()),
                             ),
-                            src,
+                            src: src.into(),
                             lc,
                         })
                     }
                     _ => Err(eyre!(
-                        "DEFUN expects (SYMBOL (SYMBOL*), FORM); received {:?}",
+                        "DEFUN expects ((SYMBOL SYMBOL*) FORM); received {:?}",
                         &tokens[1..]
                     )),
                 }
@@ -147,11 +151,11 @@ impl AstNode {
                 match (tokens.get(1), tokens.get(2)) {
                     (Some(Token::Symbol(name)), Some(_)) => Ok(AstNode {
                         class: Token::DefConstraint(name.into(), Box::new(args[2].clone())),
-                        src,
+                        src: src.into(),
                         lc,
                     }),
                     _ => Err(eyre!(
-                        "DEFCONSTRAINT expects (SYMBOL, *); received {:?}",
+                        "DEFCONSTRAINT expects (SYMBOL *); received {:?}",
                         &tokens[1..]
                     )),
                 }
@@ -160,29 +164,27 @@ impl AstNode {
             Some(Token::Symbol(defkw)) if defkw == "defalias" => {
                 if tokens.len() % 2 != 1 {
                     Err(eyre!("DEFALIAS expects an even number of arguments"))
-                } else {
-                    if tokens.iter().skip(1).all(|x| matches!(x, Token::Symbol(_))) {
-                        let mut defs = vec![];
-                        for pair in tokens[1..].chunks(2) {
-                            if let (Token::Symbol(from), Token::Symbol(to)) = (&pair[0], &pair[1]) {
-                                defs.push(AstNode {
-                                    class: Token::DefAlias(from.into(), to.into()),
-                                    src: src.clone(),
-                                    lc,
-                                })
-                            }
+                } else if tokens.iter().skip(1).all(|x| matches!(x, Token::Symbol(_))) {
+                    let mut defs = vec![];
+                    for pair in tokens[1..].chunks(2) {
+                        if let (Token::Symbol(from), Token::Symbol(to)) = (&pair[0], &pair[1]) {
+                            defs.push(AstNode {
+                                class: Token::DefAlias(from.into(), to.into()),
+                                src: src.to_string(),
+                                lc,
+                            })
                         }
-                        Ok(AstNode {
-                            class: Token::DefAliases(defs),
-                            src,
-                            lc,
-                        })
-                    } else {
-                        Err(eyre!(
-                            "DEFALIAS expects (SYMBOL, SYMBOL)*; received {:?}",
-                            &tokens[1..]
-                        ))
                     }
+                    Ok(AstNode {
+                        class: Token::DefAliases(defs),
+                        src: src.into(),
+                        lc,
+                    })
+                } else {
+                    Err(eyre!(
+                        "DEFALIAS expects (SYMBOL SYMBOL)*; received {:?}",
+                        &tokens[1..]
+                    ))
                 }
             }
 
@@ -190,11 +192,11 @@ impl AstNode {
                 match (tokens.get(1), tokens.get(2)) {
                     (Some(Token::Symbol(from)), Some(Token::Symbol(to))) => Ok(AstNode {
                         class: Token::DefunAlias(from.into(), to.into()),
-                        src,
+                        src: src.into(),
                         lc,
                     }),
                     _ => Err(eyre!(
-                        "DEFUNALIAS expects (SYMBOL, SYMBOL); received {:?}",
+                        "DEFUNALIAS expects (SYMBOL SYMBOL); received {:?}",
                         &tokens[1..]
                     )),
                 }
@@ -218,7 +220,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
                 .map(rec_parse)
                 .collect::<Result<Vec<_>>>()?;
 
-            AstNode::from(args, src, lc)
+            Ok(AstNode::from(args, &src, lc).with_context(|| eyre!("parsing `{}`", &src))?)
         }
         Rule::list => {
             let args = pair

@@ -1,4 +1,3 @@
-use eyre::*;
 use std::fmt;
 use std::fmt::Debug;
 
@@ -63,22 +62,6 @@ impl Debug for Constraint {
     }
 }
 
-#[derive(Debug)]
-pub struct ConstraintsSet {
-    pub constraints: Vec<Constraint>,
-}
-impl ConstraintsSet {
-    pub fn from_sources<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<Self> {
-        crate::compiler::compile(
-            &sources
-                .iter()
-                .map(|(n, s)| (*n, s.as_ref()))
-                .collect::<Vec<_>>(),
-        )
-    }
-}
-
-// In opposition to a `Form`, a `Builtin` defines a function executable by the backend
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Builtin {
     Add,
