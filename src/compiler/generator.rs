@@ -268,97 +268,91 @@ fn apply_form(
     f: Form,
     args: &[AstNode],
     ctx: Rc<RefCell<SymbolTable>>,
-    pass: Pass,
 ) -> Result<Option<Constraint>> {
     let args = f
         .validate_args(args.to_vec())
         .with_context(|| eyre!("evaluating call to {:?}", f))?;
 
-    match (f, pass) {
-        (Form::Defconst, Pass::Definition) => {
-            for p in args.chunks(2) {
-                if let (Token::Symbol(name), Token::Value(x)) = (&p[0].class, &p[1].class) {
-                    ctx.borrow_mut().insert_constant(name, *x)?
-                }
-            }
+    match f {
+        // Form::Defconst => {
+        //     for p in args.chunks(2) {
+        //         if let (Token::Symbol(name), Token::Value(x)) = (&p[0].class, &p[1].class) {
+        //             ctx.borrow_mut().insert_constant(name, *x)?
+        //         }
+        //     }
 
-            Ok(None)
-        }
-        (Form::Defconst, Pass::Compilation) => Ok(None),
+        //     Ok(None)
+        // }
 
-        (Form::Defalias, Pass::Definition) => {
-            for p in args.chunks(2) {
-                if let (Token::Symbol(from), Token::Symbol(to)) = (&p[0].class, &p[1].class) {
-                    ctx.borrow_mut().insert_alias(from, to)?
-                }
-            }
+        // Form::Defalias => {
+        //     for p in args.chunks(2) {
+        //         if let (Token::Symbol(from), Token::Symbol(to)) = (&p[0].class, &p[1].class) {
+        //             ctx.borrow_mut().insert_alias(from, to)?
+        //         }
+        //     }
 
-            Ok(None)
-        }
-        (Form::Defalias, Pass::Compilation) => Ok(None),
+        //     Ok(None)
+        // }
 
-        (Form::Defunalias, Pass::Definition) => {
-            for p in args.chunks(2) {
-                if let (Token::Symbol(from), Token::Symbol(to)) = (&p[0].class, &p[1].class) {
-                    ctx.borrow_mut().insert_funalias(from, to)?
-                }
-            }
+        // Form::Defunalias => {
+        //     for p in args.chunks(2) {
+        //         if let (Token::Symbol(from), Token::Symbol(to)) = (&p[0].class, &p[1].class) {
+        //             ctx.borrow_mut().insert_funalias(from, to)?
+        //         }
+        //     }
 
-            Ok(None)
-        }
-        (Form::Defunalias, Pass::Compilation) => Ok(None),
+        //     Ok(None)
+        // }
 
-        (Form::Defun, Pass::Definition) => {
-            let header = &args[0];
-            let body = &args[1];
+        // Form::Defun => {
+        //     let header = &args[0];
+        //     let body = &args[1];
 
-            if let Token::Form {
-                args: ref inner_args,
-            } = header.class
-            {
-                if let Token::Symbol(fname) = &inner_args[0].class {
-                    let arg_names = inner_args
-                        .iter()
-                        .map(|a| {
-                            if let Token::Symbol(ref n) = a.class {
-                                Ok(n.to_owned())
-                            } else {
-                                Err(eyre!("{:?} is not a valid argument", a))
-                            }
-                        })
-                        .collect::<Result<Vec<_>>>()
-                        .with_context(|| format!("parsing function {}", fname))?;
+        //     if let Token::Form {
+        //         args: ref inner_args,
+        //     } = header.class
+        //     {
+        //         if let Token::Symbol(fname) = &inner_args[0].class {
+        //             let arg_names = inner_args
+        //                 .iter()
+        //                 .map(|a| {
+        //                     if let Token::Symbol(ref n) = a.class {
+        //                         Ok(n.to_owned())
+        //                     } else {
+        //                         Err(eyre!("{:?} is not a valid argument", a))
+        //                     }
+        //                 })
+        //                 .collect::<Result<Vec<_>>>()
+        //                 .with_context(|| format!("parsing function {}", fname))?;
 
-                    ctx.borrow_mut().insert_func({
-                        Function {
-                            name: arg_names[0].to_owned(),
-                            class: FunctionClass::UserDefined(Defined {
-                                args: arg_names[1..].to_vec(),
-                                body: body.to_owned(),
-                            }),
-                        }
-                    })
-                } else {
-                    unreachable!()
-                }
-            } else {
-                unreachable!()
-            }?;
-            Ok(None)
-        }
-        (Form::Defun, Pass::Compilation) => Ok(None),
+        //             ctx.borrow_mut().insert_func({
+        //                 Function {
+        //                     name: arg_names[0].to_owned(),
+        //                     class: FunctionClass::UserDefined(Defined {
+        //                         args: arg_names[1..].to_vec(),
+        //                         body: body.to_owned(),
+        //                     }),
+        //                 }
+        //             })
+        //         } else {
+        //             unreachable!()
+        //         }
+        //     } else {
+        //         unreachable!()
+        //     }?;
+        //     Ok(None)
+        // }
 
-        (Form::Defconstraint, Pass::Compilation) => {
-            ctx.borrow_mut().insert_constraint(&args[0].src)?;
-            Ok(Some(Constraint::TopLevel {
-                name: args[0].src.to_string(),
-                expr: Box::new(reduce(&args[1], ctx, pass)?.unwrap()),
-            }))
-        }
-        (Form::Defconstraint, Pass::Definition) => Ok(None),
+        // Form::Defconstraint => {
+        //     ctx.borrow_mut().insert_constraint(&args[0].src)?;
+        //     Ok(Some(Constraint::TopLevel {
+        //         name: args[0].src.to_string(),
+        //         expr: Box::new(reduce(&args[1], ctx)?.unwrap()),
+        //     }))
+        // }
 
-        (Form::For, Pass::Definition) => Ok(None),
-        (Form::For, Pass::Compilation) => {
+        // TODO in compilation
+        Form::For => {
             if let (Token::Symbol(i_name), Token::Range(is), body) =
                 (&args[0].class, &args[1].class, &args[2])
             {
@@ -369,7 +363,7 @@ fn apply_form(
                         .borrow_mut()
                         .insert_symbol(i_name, Constraint::Const(*i as i32))?;
 
-                    let r = reduce(&body.clone(), new_ctx, pass)?.unwrap();
+                    let r = reduce(&body.clone(), new_ctx)?.unwrap();
                     l.push(r);
                 }
 
@@ -378,6 +372,7 @@ fn apply_form(
                 unreachable!()
             }
         }
+        _ => Ok(None),
     }
 }
 
@@ -385,14 +380,13 @@ fn apply(
     f: &Function,
     args: &[AstNode],
     ctx: Rc<RefCell<SymbolTable>>,
-    pass: Pass,
 ) -> Result<Option<Constraint>> {
     if let FunctionClass::SpecialForm(sf) = f.class {
-        apply_form(sf, args, ctx, pass)
-    } else if matches!(pass, Pass::Compilation) {
+        apply_form(sf, args, ctx)
+    } else {
         let mut traversed_args: Vec<Constraint> = vec![];
         for arg in args.iter() {
-            let traversed = reduce(arg, ctx.clone(), pass)?;
+            let traversed = reduce(arg, ctx.clone())?;
             if let Some(traversed) = traversed {
                 traversed_args.push(traversed);
             }
@@ -529,12 +523,10 @@ fn apply(
                         .insert_symbol(f_arg, traversed_args[i].clone())?;
                 }
 
-                reduce(body, new_ctx, pass)
+                reduce(body, new_ctx)
             }
             _ => unimplemented!("{:?}", f),
         }
-    } else {
-        Ok(None)
     }
 }
 
@@ -543,7 +535,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Constrain
         Token::Ignore => Ok(None),
         Token::Value(x) => Ok(Some(Constraint::Const(*x))),
         Token::Symbol(name) => Ok(Some(ctx.borrow_mut().resolve_symbol(name)?)),
-        Token::TopLevelForm { args } => {
+        Token::TopLevelForm(args) => {
             if let Token::Symbol(verb) = &args[0].class {
                 let func = ctx
                     .borrow()
@@ -555,7 +547,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Constrain
                 unimplemented!("{:?}", args)
             }
         }
-        Token::Form { args } => {
+        Token::Form(args) => {
             if let Token::Symbol(verb) = &args[0].class {
                 let func = ctx
                     .borrow()
@@ -585,7 +577,7 @@ fn build_constraints(
     let mut r = vec![];
 
     for exp in ast.exprs.iter().cloned() {
-        if let Some(c) = reduce(&exp, ctx.clone(), pass)
+        if let Some(c) = reduce(&exp, ctx.clone())
             .with_context(|| format!("at line {}, col.{}: \"{}\"", exp.lc.0, exp.lc.1, exp.src))?
         {
             r.push(c)

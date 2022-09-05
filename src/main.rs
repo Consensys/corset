@@ -58,10 +58,14 @@ fn main() -> Result<()> {
         inputs.push(("stdlib", include_str!("stdlib.lisp").to_owned()));
     }
     for f in args.source.iter() {
-        inputs.push((
-            f.as_str(),
-            std::fs::read_to_string(f).with_context(|| eyre!("reading `{}`", f))?,
-        ));
+        if std::path::Path::new(&f).is_file() {
+            inputs.push((
+                f.as_str(),
+                std::fs::read_to_string(f).with_context(|| eyre!("reading `{}`", f))?,
+            ));
+        } else {
+            inputs.push(("Immediate expression", f.into()));
+        }
     }
 
     let constraints = utils::ConstraintsSet::from_sources(inputs.as_slice())?;
