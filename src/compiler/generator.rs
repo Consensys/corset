@@ -3,7 +3,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::common::*;
-use crate::compiler::definitions;
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 use crate::utils::*;
@@ -239,7 +238,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Constrain
     .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))
 }
 
-pub fn pass(ast: &ParsingAst, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Constraint>> {
+pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Constraint>> {
     let mut r = vec![];
 
     for exp in ast.exprs.iter().cloned() {

@@ -200,7 +200,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
     }
 }
 
-pub fn pass(ast: &ParsingAst, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
+pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
     for e in ast.exprs.iter() {
         reduce(e, ctx.clone())?;
     }

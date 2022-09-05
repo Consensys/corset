@@ -3,14 +3,16 @@ use std::{cell::RefCell, rc::Rc};
 
 use definitions::SymbolTable;
 
+pub use super::utils::Constraint;
 pub use generator::ConstraintsSet;
+pub use parser::{Ast, AstNode};
 
 mod common;
 mod definitions;
 mod generator;
 mod parser;
 
-pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<ConstraintsSet> {
+pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, ConstraintsSet)> {
     let mut asts = vec![];
     let ctx = Rc::new(RefCell::new(SymbolTable::new_root()));
 
@@ -22,7 +24,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<ConstraintsSet> {
     }
 
     let constraints = asts
-        .into_iter()
+        .iter()
         .map(|(name, ast)| {
             generator::pass(&ast, ctx.clone())
                 .with_context(|| eyre!("compiling constraints in `{}`", name))
@@ -31,5 +33,9 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<ConstraintsSet> {
         .into_iter()
         .flatten()
         .collect();
-    Ok(ConstraintsSet { constraints })
+
+    Ok((
+        asts.into_iter().map(|x| x.1).collect(),
+        ConstraintsSet { constraints },
+    ))
 }

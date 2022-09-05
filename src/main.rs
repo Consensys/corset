@@ -68,7 +68,7 @@ fn main() -> Result<()> {
         }
     }
 
-    let constraints = compiler::make(inputs.as_slice())?;
+    let (ast, constraints) = compiler::make(inputs.as_slice())?;
 
     let go_exporter = transpilers::go::GoExporter {
         settings: args.clone(),
@@ -91,21 +91,23 @@ fn main() -> Result<()> {
         } else {
             (false, BufWriter::new(Box::new(stdout.lock())))
         };
-    go_exporter.render(&constraints, out)?;
-    if out_to_file {
-        print!("Running gofmt... ");
-        let output = std::process::Command::new("gofmt")
-            .args(["-w", args.out_file.as_ref().unwrap()])
-            .output()
-            .expect("failed to execute process");
-        if output.status.success() {
-            println!("done.");
-        } else {
-            println!("failed:");
-            println!("STDOUT:\n{}", std::str::from_utf8(&output.stdout).unwrap());
-            println!("STDERR:\n{}", std::str::from_utf8(&output.stderr).unwrap());
-        }
-    }
+    transpilers::latex::LatexExporter.render(&ast, out)?;
+
+    // go_exporter.render(&constraints.constraints, out)?;
+    // if out_to_file {
+    //     print!("Running gofmt... ");
+    //     let output = std::process::Command::new("gofmt")
+    //         .args(["-w", args.out_file.as_ref().unwrap()])
+    //         .output()
+    //         .expect("failed to execute process");
+    //     if output.status.success() {
+    //         println!("done.");
+    //     } else {
+    //         println!("failed:");
+    //         println!("STDOUT:\n{}", std::str::from_utf8(&output.stdout).unwrap());
+    //         println!("STDERR:\n{}", std::str::from_utf8(&output.stderr).unwrap());
+    //     }
+    // }
 
     Ok(())
 }

@@ -1,4 +1,3 @@
-use crate::compiler::ConstraintsSet;
 use crate::utils::*;
 use color_eyre::eyre::*;
 use convert_case::{Case, Casing};
@@ -109,18 +108,13 @@ impl GoExporter {
     }
 }
 
-impl crate::transpilers::Transpiler for GoExporter {
-    fn render<'a>(
-        &self,
-        cs: &ConstraintsSet,
-        mut out: BufWriter<Box<dyn Write + 'a>>,
-    ) -> Result<()> {
-        if cs.constraints.is_empty() {
+impl crate::transpilers::Transpiler<Constraint> for GoExporter {
+    fn render<'a>(&self, cs: &[Constraint], mut out: BufWriter<Box<dyn Write + 'a>>) -> Result<()> {
+        if cs.is_empty() {
             return Ok(());
         }
 
         let constraints = cs
-            .constraints
             .iter()
             .map(|c| {
                 if let Constraint::TopLevel { name, expr } = c {
@@ -150,8 +144,7 @@ impl crate::transpilers::Transpiler for GoExporter {
         let main_function = make_go_function(
             &self.settings.fname.to_case(Case::Pascal),
             "",
-            &cs.constraints
-                .iter()
+            &cs.iter()
                 .map(|c| {
                     if let Constraint::TopLevel { name, .. } = c {
                         format!("r = append(r, {}()...)", name.to_case(Case::Camel))

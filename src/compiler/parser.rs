@@ -8,7 +8,7 @@ use std::fmt::Debug;
 struct CorsetParser;
 
 #[derive(Debug)]
-pub struct ParsingAst {
+pub struct Ast {
     pub exprs: Vec<AstNode>,
 }
 
@@ -336,8 +336,8 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
     }
 }
 
-pub fn parse(source: &str) -> Result<ParsingAst> {
-    let mut ast = ParsingAst { exprs: vec![] };
+pub fn parse(source: &str) -> Result<Ast> {
+    let mut ast = Ast { exprs: vec![] };
 
     for pair in CorsetParser::parse(Rule::corset, source)? {
         if pair.as_rule() == Rule::corset {
