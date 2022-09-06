@@ -109,7 +109,7 @@ impl GoExporter {
 }
 
 impl crate::transpilers::Transpiler<Constraint> for GoExporter {
-    fn render<'a>(&self, cs: &[Constraint], mut out: BufWriter<Box<dyn Write + 'a>>) -> Result<()> {
+    fn render<'a>(&mut self, cs: &[Constraint], mut out: BufWriter<Box<dyn Write + 'a>>) -> Result<()> {
         if cs.is_empty() {
             return Ok(());
         }
