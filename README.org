@@ -7,6 +7,26 @@ The only dependency to run Corset is [[https://www.rust-lang.org/][the Rust comp
 * Usage
 Corset is a simple Lisp dialect, compiling expressions to a representation compatible with a polynomial cryptographic proof system featuring the following operations: ~Add~, ~Mul~, ~Sub~, ~Neg~, and ~Inv~.
 
+** Command Line Interface
+#+begin_src
+USAGE:
+    corset [OPTIONS] [SOURCE]... <SUBCOMMAND>
+
+ARGS:
+    <SOURCE>...    Either a file or a string containing the Corset code to process
+
+OPTIONS:
+    -h, --help              Print help information
+        --no-stdlib
+    -o, --out <OUT_FILE>    If set, write the result to this file
+    -V, --version           Print version information
+
+SUBCOMMANDS:
+    go       Produce a Go-based constraint system
+    help     Print this message or the help of the given subcommand(s)
+    latex    Produce a LaTeX file describing the constraints=
+#+end_src
+
 ** General Concept
 A program takes the form of a list of lisp-like expression written in the Corset dialect of lisp, that are then parsed as a list of constraint lisp and compiled as a succession of constraints expressed as composition of the aforementioned base functions.
 
