@@ -24,7 +24,8 @@ return
 
 #[derive(Debug)]
 pub(crate) struct GoExporter {
-    pub settings: crate::Args,
+    pub fname: String,
+    pub package: String,
 }
 impl GoExporter {
     fn make_chain(&self, xs: &[Constraint], operand: &str, surround: bool) -> Result<String> {
@@ -145,7 +146,7 @@ impl crate::transpilers::Transpiler<Constraint> for GoExporter {
         // .replace(",,", ",");
 
         let main_function = make_go_function(
-            &self.settings.fname.to_case(Case::Pascal),
+            &self.fname.to_case(Case::Pascal),
             "",
             &cs.iter()
                 .map(|c| {
@@ -169,7 +170,7 @@ import "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"
 
 {}
 "#,
-            self.settings.package, constraints, main_function,
+            self.package, constraints, main_function,
         );
         writeln!(out, "{}", r).with_context(|| eyre!("rendering result"))
     }
