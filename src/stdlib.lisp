@@ -8,6 +8,7 @@
 (defunalias add +)
 
 ;; Boolean functions
+(defun (is-zero e0) (- 1 (* e0 (inv e0))))
 (defun (not e0) (- 1 e0))
 (defun (neq a b) (not (eq a b)))
 (defun (or e0 e1) (not (and (not e0) (not e1))))

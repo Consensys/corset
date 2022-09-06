@@ -5,7 +5,7 @@ Corset is a Lisp-based DSL designed to modelize constraint systems in the contex
 * Installation
 The only dependency to run Corset is [[https://www.rust-lang.org/][the Rust compiler]]. Once it is available, Corset can be installed with ~cargo install --git https://github.com/ConsenSys/corset~; or, within a local copy of the repo: ~cargo install --path .~
 * Usage
-Corset is a simple Lisp dialect, compiling expressions to a representation compatible with a polynomial cryptographic proof system featuring the following operations: ~Add~, ~Mul~, ~Sub~, ~IsZero~, ~Neg~, and ~Inv~.
+Corset is a simple Lisp dialect, compiling expressions to a representation compatible with a polynomial cryptographic proof system featuring the following operations: ~Add~, ~Mul~, ~Sub~, ~Neg~, and ~Inv~.
 
 ** General Concept
 A program takes the form of a list of lisp-like expression written in the Corset dialect of lisp, that are then parsed as a list of constraint lisp and compiled as a succession of constraints expressed as composition of the aforementioned base functions.

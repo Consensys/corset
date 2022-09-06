@@ -87,6 +87,8 @@ impl GoExporter {
             Builtin::Add => self.make_chain(args, "Add", true),
             Builtin::Mul => self.make_chain(args, "Mul", false),
             Builtin::Sub => self.make_chain(args, "Sub", true),
+            Builtin::Inv => Ok(format!("({}).Inv()", self.render_node(&args[0])?)),
+            Builtin::Neg => Ok(format!("({}).Neg()", self.render_node(&args[0])?)),
             Builtin::IfZero => Ok(format!(
                 "({}).IfZeroThen({})",
                 self.render_node(&args[0])?,
