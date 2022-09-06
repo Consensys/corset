@@ -26,6 +26,7 @@ return
 pub(crate) struct GoExporter {
     pub fname: String,
     pub package: String,
+    pub ce: String,
 }
 impl GoExporter {
     fn make_chain(&self, xs: &[Constraint], operand: &str, surround: bool) -> Result<String> {
@@ -61,9 +62,9 @@ impl GoExporter {
                 0..=2 | 127 | 256 => Ok(format!("column.CONST_{}()", x)),
                 x => Ok(format!("column.CONST_UINT64({})", x)),
             },
-            Constraint::Column(name) => Ok(format!("CE[{}.Name()]", name)),
+            Constraint::Column(name) => Ok(format!("{}[{}.Name()]", self.ce, name)),
             Constraint::ArrayColumnElement(name, i) => {
-                Ok(format!("CE[{}{}{}.Name()]", name, ARRAY_SEPARATOR, i))
+                Ok(format!("{}[{}{}{}.Name()]", self.ce, name, ARRAY_SEPARATOR, i))
             }
             Constraint::Funcall { func, args } => self.render_funcall(func, args),
             Constraint::List(constraints) => Ok(constraints

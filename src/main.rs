@@ -36,6 +36,7 @@ pub struct Args {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Produce a Go-based constraint system
     Go {
         #[clap(long = "assignment", default_value = "CE")]
         columns_assignment: String,
@@ -54,6 +55,7 @@ enum Commands {
         )]
         package: String,
     },
+    /// Produce a LaTeX file describing the constraints
     Latex {},
 }
 
@@ -104,6 +106,7 @@ fn main() -> Result<()> {
             let mut go_exporter = transpilers::go::GoExporter {
                 fname: fname.clone(),
                 package: package.clone(),
+                ce: columns_assignment.into(),
             };
             go_exporter.render(&constraints.constraints, out)?;
             if out_to_file {
