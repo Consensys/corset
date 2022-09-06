@@ -22,7 +22,8 @@ pub struct Args {
     #[clap(
         short = 'o',
         long = "out",
-        help = "If set, write the result to this file"
+        help = "If set, write the result to this file",
+        global = true
     )]
     out_file: Option<String>,
 
@@ -100,7 +101,7 @@ fn main() -> Result<()> {
             package,
             columns_assignment,
         } => {
-            let go_exporter = transpilers::go::GoExporter {
+            let mut go_exporter = transpilers::go::GoExporter {
                 fname: fname.clone(),
                 package: package.clone(),
             };
@@ -121,7 +122,8 @@ fn main() -> Result<()> {
             }
         }
         Commands::Latex {} => {
-            transpilers::latex::LatexExporter.render(&ast, out)?;
+            let mut latex_exporter = transpilers::latex::LatexExporter::default();
+            latex_exporter.render(&ast, out)?
         }
     }
 
