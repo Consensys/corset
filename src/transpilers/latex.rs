@@ -17,6 +17,10 @@ fn sanitize(s: &str) -> String {
     s.replace("_", "\\_")
 }
 
+fn wrap_env(body: String, env: &str) -> String {
+    format!("\\begin{{{}}}\n{}\n\\end{{{}}}\n", env, body, env)
+}
+
 fn dollarize(s: String, in_math: bool) -> String {
     if !in_math {
         format!("\\[{}\\]", s)
@@ -26,7 +30,7 @@ fn dollarize(s: String, in_math: bool) -> String {
 }
 fn textize(s: String, in_math: bool) -> String {
     if in_math {
-       format!("\\text{{{}}}", s)
+        format!("\\text{{{}}}", s)
     } else {
         s
     }
@@ -80,50 +84,82 @@ impl LatexExporter {
                 unreachable!()
             };
             match fname.as_str() {
-                "nth" => Ok(dollarize(format!(
-                    "{}^{{{}}}",
-                    self.render_node(&args[1], true)?,
-                    self.render_node(&args[2], true)?,
-                ), in_maths)),
-                "=" | "eq" => Ok(dollarize(format!(
-                    "{} = {}",
-                    self.render_node(&args[1], true)?,
-                    self.render_node(&args[2], true)?,
-                ), in_maths)),
-                "*" => Ok(dollarize(format!(
-                    "{} \\times {}",
-                    self.render_parenthesized(&args[1], true)?,
-                    self.render_parenthesized(&args[2], true)?,
-                ), in_maths)),
-                "-" => Ok(dollarize(format!(
-                    "{} - {}",
-                    self.render_parenthesized(&args[1], true)?,
-                    self.render_parenthesized(&args[2], true)?,
-                ), in_maths)),
-                "+" => Ok(dollarize(format!(
-                    "{} + {}",
-                    self.render_parenthesized(&args[1], true)?,
-                    self.render_parenthesized(&args[2], true)?,
-                ), in_maths)),
-                "bin-if-one" => Ok(dollarize(format!(
-                    "{} = 1 \\Leftrightarrow {}",
-                    self.render_node(&args[1], true)?,
-                    self.render_node(&args[2], true)?
-                ), in_maths)),
+                "nth" => Ok(dollarize(
+                    format!(
+                        "{}^{{{}}}",
+                        self.render_node(&args[1], true)?,
+                        self.render_node(&args[2], true)?,
+                    ),
+                    in_maths,
+                )),
+                "=" | "eq" => Ok(dollarize(
+                    format!(
+                        "{} = {}",
+                        self.render_node(&args[1], true)?,
+                        self.render_node(&args[2], true)?,
+                    ),
+                    in_maths,
+                )),
+                "*" => Ok(dollarize(
+                    format!(
+                        "{} \\times {}",
+                        self.render_parenthesized(&args[1], true)?,
+                        self.render_parenthesized(&args[2], true)?,
+                    ),
+                    in_maths,
+                )),
+                "-" => Ok(dollarize(
+                    format!(
+                        "{} - {}",
+                        self.render_parenthesized(&args[1], true)?,
+                        self.render_parenthesized(&args[2], true)?,
+                    ),
+                    in_maths,
+                )),
+                "+" => Ok(dollarize(
+                    format!(
+                        "{} + {}",
+                        self.render_parenthesized(&args[1], true)?,
+                        self.render_parenthesized(&args[2], true)?,
+                    ),
+                    in_maths,
+                )),
+                "bin-if-one" => Ok(dollarize(
+                    format!(
+                        "{} = 1 \\Leftrightarrow {}",
+                        self.render_node(&args[1], true)?,
+                        self.render_node(&args[2], true)?
+                    ),
+                    in_maths,
+                )),
                 "if-zero" => Ok(format!(
                     "{} = 0 \\Leftrightarrow {}",
                     self.render_node(&args[1], in_maths)?,
                     self.render_node(&args[2], in_maths)?
                 )),
-                x => Ok(dollarize(format!(
-                    "{}({})",
-                    self.render_node(&args[0], true)?,
-                    &args[1..]
-                        .iter()
-                        .map(|a| self.render_node(a, true))
-                        .collect::<Result<Vec<_>>>()?
-                        .join(", ")
-                ), in_maths)),
+                "begin" => Ok(dollarize(
+                    format!(
+                        "\\begin{{cases}}{}\\end{{cases}}",
+                        &args[1..]
+                            .iter()
+                            .map(|n| self.render_node(n, true))
+                            .collect::<Result<Vec<_>>>()?
+                            .join("\\\\")
+                    ),
+                    in_maths,
+                )),
+                x => Ok(dollarize(
+                    format!(
+                        "{}({})",
+                        self.render_node(&args[0], true)?,
+                        &args[1..]
+                            .iter()
+                            .map(|a| self.render_node(a, true))
+                            .collect::<Result<Vec<_>>>()?
+                            .join(", ")
+                    ),
+                    in_maths,
+                )),
             }
         }
     }
@@ -131,21 +167,34 @@ impl LatexExporter {
         match &n.class {
             Token::Value(x) => Ok(x.to_string()),
             Token::Symbol(name) => Ok(textize(sanitize(name), in_maths)),
-            Token::DefConst(name, x) => {
-                Ok(format!("\\text{{{}}} \\triangleq {}", sanitize(name), x))
-            }
+            Token::DefConst(name, x) => Ok(dollarize(
+                format!("\\text{{{}}} \\triangleq {}", sanitize(name), x),
+                in_maths,
+            )),
 
-            Token::DefAliases(cols) => Ok(format!(
-                "\\begin{{aliases}}Let \\[\\begin{{cases}} {} \\end{{cases}}\\]\\end{{aliases}}",
-                cols.iter()
+            Token::DefAliases(cols) => {
+                let body = cols
+                    .iter()
                     .map(|col| self.render_node(col, true))
                     .collect::<Result<Vec<_>>>()?
-                    .join("\\\\")
-            )),
-            Token::DefAlias(from, to) => Ok(format!(
-                "\\text{{{}}} \\triangleq \\text{{{}}}",
-                sanitize(from),
-                sanitize(to)
+                    .join("\\\\");
+
+                Ok(format!(
+                    "\\begin{{aliases}}Let \\[{}\\]\\end{{aliases}}",
+                    if cols.len() > 1 {
+                        wrap_env(body, "cases")
+                    } else {
+                        body
+                    }
+                ))
+            }
+            Token::DefAlias(from, to) => Ok(dollarize(
+                format!(
+                    "\\text{{{}}} \\triangleq \\text{{{}}}",
+                    sanitize(from),
+                    sanitize(to)
+                ),
+                in_maths,
             )),
 
             Token::DefunAlias(from, to) => {
@@ -153,13 +202,21 @@ impl LatexExporter {
                 Ok(String::new())
             }
 
-            Token::DefColumns(cols) => Ok(format!(
-                "\\begin{{defcols}}Let \\[\\begin{{cases}} {} \\end{{cases}}\\]\\end{{defcols}}",
-                cols.iter()
+            Token::DefColumns(cols) => {
+                let body = cols
+                    .iter()
                     .map(|col| self.render_node(col, true))
                     .collect::<Result<Vec<_>>>()?
-                    .join("\\\\")
-            )),
+                    .join("\\\\");
+                Ok(format!(
+                    "\\begin{{defcols}}Let \\[{}\\]\\end{{defcols}}",
+                    if cols.len() > 1 {
+                        wrap_env(body, "cases")
+                    } else {
+                        body
+                    }
+                ))
+            }
             Token::DefColumn(name) => Ok(format!("\\text{{{}}}", sanitize(name))),
             Token::DefArrayColumn(name, range) => Ok(format!("{}{:?}", name, range)),
 
