@@ -19,7 +19,7 @@ fn sanitize(s: &str) -> String {
 
 fn dollarize(s: String, in_math: bool) -> String {
     if !in_math {
-        format!("${}$", s)
+        format!("\\[{}\\]", s)
     } else {
         s
     }
@@ -32,14 +32,22 @@ fn textize(s: String, in_math: bool) -> String {
     }
 }
 fn equize(s: String, in_math: bool) -> String {
-    if in_math {
-        format!("\\[{}\\]", s)
+    if !in_math {
+        format!("${}$", s)
     } else {
         s
     }
 }
 
 impl LatexExporter {
+    fn render_parenthesized(&mut self, e: &AstNode, in_maths: bool) -> Result<String> {
+        if matches!(e.class, Token::Symbol(_) | Token::Value(_)) {
+            self.render_node(e, in_maths)
+        } else {
+            Ok(format!("({})", self.render_node(e, in_maths)?))
+        }
+    }
+
     fn _flatten(&mut self, ax: &mut Vec<AstNode>, n: &AstNode) {
         ax.push(n.clone());
         match &n.class {
@@ -84,21 +92,26 @@ impl LatexExporter {
                 ), in_maths)),
                 "*" => Ok(dollarize(format!(
                     "{} \\times {}",
-                    self.render_node(&args[1], true)?,
-                    self.render_node(&args[2], true)?,
+                    self.render_parenthesized(&args[1], true)?,
+                    self.render_parenthesized(&args[2], true)?,
                 ), in_maths)),
                 "-" => Ok(dollarize(format!(
                     "{} - {}",
-                    self.render_node(&args[1], true)?,
-                    self.render_node(&args[2], true)?,
+                    self.render_parenthesized(&args[1], true)?,
+                    self.render_parenthesized(&args[2], true)?,
                 ), in_maths)),
-                "bin-if-one" => Ok(format!(
-                    "IF {} = 1, THEN {} ENDIF",
-                    self.render_node(&args[1], false)?,
-                    self.render_node(&args[2], false)?
-                )),
+                "+" => Ok(dollarize(format!(
+                    "{} + {}",
+                    self.render_parenthesized(&args[1], true)?,
+                    self.render_parenthesized(&args[2], true)?,
+                ), in_maths)),
+                "bin-if-one" => Ok(dollarize(format!(
+                    "{} = 1 \\Leftrightarrow {}",
+                    self.render_node(&args[1], true)?,
+                    self.render_node(&args[2], true)?
+                ), in_maths)),
                 "if-zero" => Ok(format!(
-                    "IF {} = 0, THEN {} ENDIF",
+                    "{} = 0 \\Leftrightarrow {}",
                     self.render_node(&args[1], in_maths)?,
                     self.render_node(&args[2], in_maths)?
                 )),
@@ -186,6 +199,7 @@ impl crate::transpilers::Transpiler<Ast> for LatexExporter {
 \usepackage{{amsmath}}
 \usepackage{{theorem}}
 \usepackage{{algorithmic}}
+\usepackage{{breqn}}
 
 \theorembodyfont{{\rm}}
 \newtheorem{{constraint}}{{Constraint}}
@@ -195,17 +209,8 @@ impl crate::transpilers::Transpiler<Ast> for LatexExporter {
 \begin{{document}}
 {}
 
-{}
 \end{{document}}
 "#,
-            s.borrow()
-                .columns
-                .iter()
-                .map(|cols| {
-                    format!("\\begin{{itemize}}\n{}\n\\end{{itemize}}", cols.join("\n"))
-                })
-                .collect::<Vec<_>>()
-                .join("\n"),
             r
         );
 
