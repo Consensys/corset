@@ -1,8 +1,8 @@
 use eyre::*;
 use std::collections::HashMap;
 
+use super::generator::{Builtin, Function, FunctionClass};
 use super::parser::{AstNode, Token};
-use crate::utils::*;
 
 lazy_static::lazy_static! {
     pub static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
@@ -139,34 +139,6 @@ pub trait FuncVerifier<T> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Function {
-    pub name: String,
-    pub class: FunctionClass,
-}
-#[derive(Debug, Clone)]
-pub enum FunctionClass {
-    UserDefined(Defined),
-    SpecialForm(Form),
-    Builtin(Builtin),
-    Alias(String),
-}
-
-#[derive(Debug, Clone)]
-pub struct Defined {
-    pub args: Vec<String>,
-    pub body: AstNode,
-}
-impl FuncVerifier<Constraint> for Defined {
-    fn arity(&self) -> Arity {
-        Arity::Exactly(self.args.len())
-    }
-
-    fn validate_types(&self, _args: &[Constraint]) -> Result<()> {
-        Ok(())
-    }
-}
-
 impl FuncVerifier<AstNode> for Form {
     fn arity(&self) -> Arity {
         match self {
@@ -189,102 +161,6 @@ impl FuncVerifier<AstNode> for Form {
                     ))
                 }
             }
-        }
-    }
-}
-
-impl FuncVerifier<Constraint> for Builtin {
-    fn arity(&self) -> Arity {
-        match self {
-            Builtin::Add => Arity::AtLeast(2),
-            Builtin::Sub => Arity::AtLeast(2),
-            Builtin::Mul => Arity::AtLeast(2),
-            Builtin::Neg => Arity::Monadic,
-            Builtin::Inv => Arity::Monadic,
-            Builtin::IfZero => Arity::Dyadic,
-            Builtin::Shift => Arity::Dyadic,
-            Builtin::Begin => Arity::AtLeast(1),
-            Builtin::BranchIfZero => Arity::Dyadic,
-            Builtin::BranchIfZeroElse => Arity::Exactly(3),
-            Builtin::BranchIfNotZero => Arity::Dyadic,
-            Builtin::BranchIfNotZeroElse => Arity::Exactly(3),
-            Builtin::Nth => Arity::Dyadic,
-        }
-    }
-    fn validate_types(&self, args: &[Constraint]) -> Result<()> {
-        match self {
-            f @ (Builtin::Add | Builtin::Sub | Builtin::Mul | Builtin::IfZero) => {
-                if args.iter().all(|a| !matches!(a, Constraint::List(_))) {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects scalar arguments but received a list",
-                        f,
-                    ))
-                }
-            }
-            Builtin::Neg | Builtin::Inv => {
-                if args.iter().all(|a| !matches!(a, Constraint::List(_))) {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects a scalar argument but received a list",
-                        self
-                    ))
-                }
-            }
-            Builtin::Shift => {
-                if matches!(args[0], Constraint::Column(_))
-                    && matches!(args[1], Constraint::Const(x) if x != 0)
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects a COLUMN and a non-null INTEGER but received {:?}",
-                        self,
-                        args
-                    ))
-                }
-            }
-            Builtin::Nth => {
-                if matches!(args[0], Constraint::ArrayColumn(..))
-                    && matches!(args[1], Constraint::Const(x) if x >= 0)
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects [SYMBOL CONST] but received {:?}",
-                        self,
-                        args
-                    ))
-                }
-            }
-            Builtin::BranchIfZero | Builtin::BranchIfNotZero => {
-                if !matches!(args[0], Constraint::List(_)) && matches!(args[1], Constraint::List(_))
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects scalar arguments but received a list",
-                        self
-                    ))
-                }
-            }
-            Builtin::BranchIfZeroElse | Builtin::BranchIfNotZeroElse => {
-                if !matches!(args[0], Constraint::List(_))
-                    && matches!(args[1], Constraint::List(_))
-                    && matches!(args[2], Constraint::List(_))
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects (SCALAR, LIST, LIST) but received {:?}",
-                        self,
-                        args
-                    ))
-                }
-            }
-            Builtin::Begin => Ok(()),
         }
     }
 }

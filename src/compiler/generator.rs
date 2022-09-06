@@ -5,7 +5,217 @@ use std::rc::Rc;
 use super::common::*;
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
-use crate::utils::*;
+use std::fmt::{Debug, Formatter};
+
+#[derive(Clone)]
+pub enum Constraint {
+    TopLevel {
+        name: String,
+        expr: Box<Constraint>,
+    },
+    Funcall {
+        func: Builtin,
+        args: Vec<Constraint>,
+    },
+    Const(i32),
+    Column(String),
+    ArrayColumn(String, Vec<usize>),
+    ArrayColumnElement(String, usize),
+    List(Vec<Constraint>),
+}
+impl Constraint {
+    pub fn flat_fold<T>(&self, f: &dyn Fn(&Constraint) -> T) -> Vec<T> {
+        let mut ax = vec![];
+        match self {
+            Constraint::List(xs) => {
+                for x in xs {
+                    ax.push(f(x));
+                }
+            }
+            x => ax.push(f(x)),
+        }
+        ax
+    }
+}
+impl Debug for Constraint {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        fn format_list(cs: &[Constraint]) -> String {
+            cs.iter()
+                .map(|c| format!("{:?}", c))
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+
+        match self {
+            Constraint::TopLevel { name, expr } => write!(f, "{}: {:?}", name, expr),
+            Constraint::Const(x) => write!(f, "{}:CONST", x),
+            Constraint::Column(name) => write!(f, "{}:COLUMN", name),
+            Constraint::ArrayColumn(name, range) => {
+                write!(
+                    f,
+                    "{}[{}:{}]:ARRAYCOLUMN",
+                    name,
+                    range.first().unwrap(),
+                    range.last().unwrap()
+                )
+            }
+            Constraint::ArrayColumnElement(name, i) => {
+                write!(f, "{}[{}]:COLUMN", name, i)
+            }
+            Constraint::List(cs) => write!(f, "'({})", format_list(cs)),
+            Self::Funcall { func, args } => write!(f, "({:?} {})", func, format_list(args)),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Builtin {
+    Add,
+    Sub,
+    Mul,
+    IfZero,
+    Shift,
+    Neg,
+    Inv,
+    Nth,
+
+    Begin,
+
+    // Don't like it :/
+    BranchIfZero,
+    BranchIfZeroElse,
+    BranchIfNotZero,
+    BranchIfNotZeroElse,
+    // BranchBinIfOne,
+    // BranchBinIfZero,
+
+    // BranchBinIfOneElse,
+    // BranchBinIfZeroElse,
+}
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub name: String,
+    pub class: FunctionClass,
+}
+#[derive(Debug, Clone)]
+pub enum FunctionClass {
+    UserDefined(Defined),
+    SpecialForm(Form),
+    Builtin(Builtin),
+    Alias(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct Defined {
+    pub args: Vec<String>,
+    pub body: AstNode,
+}
+impl FuncVerifier<Constraint> for Defined {
+    fn arity(&self) -> Arity {
+        Arity::Exactly(self.args.len())
+    }
+
+    fn validate_types(&self, _args: &[Constraint]) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl FuncVerifier<Constraint> for Builtin {
+    fn arity(&self) -> Arity {
+        match self {
+            Builtin::Add => Arity::AtLeast(2),
+            Builtin::Sub => Arity::AtLeast(2),
+            Builtin::Mul => Arity::AtLeast(2),
+            Builtin::Neg => Arity::Monadic,
+            Builtin::Inv => Arity::Monadic,
+            Builtin::IfZero => Arity::Dyadic,
+            Builtin::Shift => Arity::Dyadic,
+            Builtin::Begin => Arity::AtLeast(1),
+            Builtin::BranchIfZero => Arity::Dyadic,
+            Builtin::BranchIfZeroElse => Arity::Exactly(3),
+            Builtin::BranchIfNotZero => Arity::Dyadic,
+            Builtin::BranchIfNotZeroElse => Arity::Exactly(3),
+            Builtin::Nth => Arity::Dyadic,
+        }
+    }
+    fn validate_types(&self, args: &[Constraint]) -> Result<()> {
+        match self {
+            f @ (Builtin::Add | Builtin::Sub | Builtin::Mul | Builtin::IfZero) => {
+                if args.iter().all(|a| !matches!(a, Constraint::List(_))) {
+                    Ok(())
+                } else {
+                    Err(eyre!(
+                        "`{:?}` expects scalar arguments but received a list",
+                        f,
+                    ))
+                }
+            }
+            Builtin::Neg | Builtin::Inv => {
+                if args.iter().all(|a| !matches!(a, Constraint::List(_))) {
+                    Ok(())
+                } else {
+                    Err(eyre!(
+                        "`{:?}` expects a scalar argument but received a list",
+                        self
+                    ))
+                }
+            }
+            Builtin::Shift => {
+                if matches!(args[0], Constraint::Column(_))
+                    && matches!(args[1], Constraint::Const(x) if x != 0)
+                {
+                    Ok(())
+                } else {
+                    Err(eyre!(
+                        "`{:?}` expects a COLUMN and a non-null INTEGER but received {:?}",
+                        self,
+                        args
+                    ))
+                }
+            }
+            Builtin::Nth => {
+                if matches!(args[0], Constraint::ArrayColumn(..))
+                    && matches!(args[1], Constraint::Const(x) if x >= 0)
+                {
+                    Ok(())
+                } else {
+                    Err(eyre!(
+                        "`{:?}` expects [SYMBOL CONST] but received {:?}",
+                        self,
+                        args
+                    ))
+                }
+            }
+            Builtin::BranchIfZero | Builtin::BranchIfNotZero => {
+                if !matches!(args[0], Constraint::List(_)) && matches!(args[1], Constraint::List(_))
+                {
+                    Ok(())
+                } else {
+                    Err(eyre!(
+                        "`{:?}` expects scalar arguments but received a list",
+                        self
+                    ))
+                }
+            }
+            Builtin::BranchIfZeroElse | Builtin::BranchIfNotZeroElse => {
+                if !matches!(args[0], Constraint::List(_))
+                    && matches!(args[1], Constraint::List(_))
+                    && matches!(args[2], Constraint::List(_))
+                {
+                    Ok(())
+                } else {
+                    Err(eyre!(
+                        "`{:?}` expects (SCALAR, LIST, LIST) but received {:?}",
+                        self,
+                        args
+                    ))
+                }
+            }
+            Builtin::Begin => Ok(()),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct ConstraintsSet {

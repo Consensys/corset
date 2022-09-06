@@ -8,7 +8,6 @@ use std::io::BufWriter;
 
 mod compiler;
 mod transpilers;
-mod utils;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(version)]

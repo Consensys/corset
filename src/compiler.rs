@@ -3,8 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use definitions::SymbolTable;
 
-pub use super::utils::Constraint;
-pub use generator::ConstraintsSet;
+pub use generator::{Builtin, Constraint, ConstraintsSet};
 pub use parser::{Ast, AstNode, Token};
 
 mod common;

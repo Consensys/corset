@@ -3,9 +3,9 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use super::common::*;
+use super::common::BUILTINS;
+use super::generator::{Constraint, Defined, Function, FunctionClass};
 use crate::compiler::parser::*;
-use crate::utils::*;
 
 #[derive(Debug)]
 pub enum Symbol {
