@@ -4,13 +4,13 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use super::common::BUILTINS;
-use super::generator::{Constraint, Defined, Function, FunctionClass};
+use super::generator::{Defined, Expression, Function, FunctionClass};
 use crate::compiler::parser::*;
 
 #[derive(Debug)]
 pub enum Symbol {
     Alias(String),
-    Final(Constraint),
+    Final(Expression),
 }
 #[derive(Debug)]
 pub struct SymbolTable {
@@ -41,7 +41,7 @@ impl SymbolTable {
         }))
     }
 
-    fn _resolve_symbol(&self, name: &str, ax: &mut HashSet<String>) -> Result<Constraint> {
+    fn _resolve_symbol(&self, name: &str, ax: &mut HashSet<String>) -> Result<Expression> {
         if ax.contains(name) {
             Err(eyre!("Circular definitions found for {}", name))
         } else {
@@ -87,7 +87,7 @@ impl SymbolTable {
             .ok_or_else(|| eyre!("Constraint `{}` already defined", name))
     }
 
-    pub fn insert_symbol(&mut self, symbol: &str, constraint: Constraint) -> Result<()> {
+    pub fn insert_symbol(&mut self, symbol: &str, constraint: Expression) -> Result<()> {
         if self.symbols.contains_key(symbol) {
             Err(anyhow!("column `{}` already exists", symbol))
         } else {
@@ -135,7 +135,7 @@ impl SymbolTable {
         }
     }
 
-    pub fn resolve_symbol(&self, name: &str) -> Result<Constraint> {
+    pub fn resolve_symbol(&self, name: &str) -> Result<Expression> {
         self._resolve_symbol(name, &mut HashSet::new())
     }
 
@@ -148,7 +148,7 @@ impl SymbolTable {
             Err(anyhow!("`{}` already exists", name))
         } else {
             self.symbols
-                .insert(name.into(), Symbol::Final(Constraint::Const(value)));
+                .insert(name.into(), Symbol::Final(Expression::Const(value)));
             Ok(())
         }
     }
@@ -175,10 +175,10 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
             .fold(Ok(()), |ax, col| ax.and(reduce(col, ctx.clone()))),
         Token::DefColumn(col) => ctx
             .borrow_mut()
-            .insert_symbol(col, Constraint::Column(col.into())),
+            .insert_symbol(col, Expression::Column(col.into())),
         Token::DefArrayColumn(col, range) => ctx
             .borrow_mut()
-            .insert_symbol(col, Constraint::ArrayColumn(col.into(), range.clone())),
+            .insert_symbol(col, Expression::ArrayColumn(col.into(), range.clone())),
         Token::DefAliases(aliases) => aliases
             .iter()
             .fold(Ok(()), |ax, alias| ax.and(reduce(alias, ctx.clone()))),

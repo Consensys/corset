@@ -24,7 +24,7 @@ forloop = { "(" ~ "for" ~ symbol ~ range ~ expr ~ ")" }
 range = _{ immediate_range | interval }
 immediate_range = { "{" ~ natural+ ~ "}" }
 interval = { "[" ~ natural ~ (":" ~ natural ~ (":" ~ natural)?)? ~ "]" }
-arg_type = { "NATURAL" | "CONSTRAINT" | "CONSTRAINTS" } // WiP functions typing
+arg_type = { "NATURAL" | "CONSTRAINT" | "CONSTRAINTS"} // WiP functions typing
 
 integer = @{ "-"? ~ natural }
 natural = @{ ASCII_DIGIT+ }

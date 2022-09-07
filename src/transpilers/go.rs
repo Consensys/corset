@@ -29,7 +29,7 @@ pub(crate) struct GoExporter {
     pub ce: String,
 }
 impl GoExporter {
-    fn make_chain(&self, xs: &[Constraint], operand: &str, surround: bool) -> Result<String> {
+    fn make_chain(&self, xs: &[Expression], operand: &str, surround: bool) -> Result<String> {
         let head = self.render_node(&xs[0])?;
         let tail = &xs[1..];
         if xs.len() > 2 {
@@ -54,20 +54,21 @@ impl GoExporter {
         }
     }
 
-    pub fn render_node(&self, node: &Constraint) -> Result<String> {
+    pub fn render_node(&self, node: &Expression) -> Result<String> {
         let r = match node {
-            Constraint::ArrayColumn(..) => unreachable!(),
-            Constraint::TopLevel { .. } => unreachable!(),
-            Constraint::Const(x) => match x {
+            Expression::ArrayColumn(..) => unreachable!(),
+            Expression::TopLevel { .. } => unreachable!(),
+            Expression::Const(x) => match x {
                 0..=2 | 127 | 256 => Ok(format!("column.CONST_{}()", x)),
                 x => Ok(format!("column.CONST_UINT64({})", x)),
             },
-            Constraint::Column(name) => Ok(format!("{}[{}.Name()]", self.ce, name)),
-            Constraint::ArrayColumnElement(name, i) => {
-                Ok(format!("{}[{}{}{}.Name()]", self.ce, name, ARRAY_SEPARATOR, i))
-            }
-            Constraint::Funcall { func, args } => self.render_funcall(func, args),
-            Constraint::List(constraints) => Ok(constraints
+            Expression::Column(name) => Ok(format!("{}[{}.Name()]", self.ce, name)),
+            Expression::ArrayColumnElement(name, i) => Ok(format!(
+                "{}[{}{}{}.Name()]",
+                self.ce, name, ARRAY_SEPARATOR, i
+            )),
+            Expression::Funcall { func, args } => self.render_funcall(func, args),
+            Expression::List(constraints) => Ok(constraints
                 .iter()
                 .map(|x| self.render_node(x))
                 .map(|x| {
@@ -84,7 +85,7 @@ impl GoExporter {
 
         Ok(r)
     }
-    pub fn render_funcall(&self, func: &Builtin, args: &[Constraint]) -> Result<String> {
+    pub fn render_funcall(&self, func: &Builtin, args: &[Expression]) -> Result<String> {
         let r = match func {
             Builtin::Add => self.make_chain(args, "Add", true),
             Builtin::Mul => self.make_chain(args, "Mul", false),
@@ -99,7 +100,7 @@ impl GoExporter {
             Builtin::Shift => Ok(format!(
                 "({}).Shift({})",
                 self.render_node(&args[0])?,
-                if let Constraint::Const(x) = &args[1] {
+                if let Expression::Const(x) = &args[1] {
                     x
                 } else {
                     unreachable!()
@@ -113,10 +114,10 @@ impl GoExporter {
     }
 }
 
-impl crate::transpilers::Transpiler<Constraint> for GoExporter {
+impl crate::transpilers::Transpiler<Expression> for GoExporter {
     fn render<'a>(
         &mut self,
-        cs: &[Constraint],
+        cs: &[Expression],
         mut out: BufWriter<Box<dyn Write + 'a>>,
     ) -> Result<()> {
         if cs.is_empty() {
@@ -126,7 +127,7 @@ impl crate::transpilers::Transpiler<Constraint> for GoExporter {
         let constraints = cs
             .iter()
             .map(|c| {
-                if let Constraint::TopLevel { name, expr } = c {
+                if let Expression::TopLevel { name, expr } = c {
                     self.render_node(expr)
                         .map(|mut r| {
                             if let Some(true) = r.chars().last().map(|c| c != ',') {
@@ -155,7 +156,7 @@ impl crate::transpilers::Transpiler<Constraint> for GoExporter {
             "",
             &cs.iter()
                 .map(|c| {
-                    if let Constraint::TopLevel { name, .. } = c {
+                    if let Expression::TopLevel { name, .. } = c {
                         format!("r = append(r, {}()...)", name.to_case(Case::Camel))
                     } else {
                         unreachable!()

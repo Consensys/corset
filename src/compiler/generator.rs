@@ -8,26 +8,26 @@ use crate::compiler::parser::*;
 use std::fmt::{Debug, Formatter};
 
 #[derive(Clone)]
-pub enum Constraint {
+pub enum Expression {
     TopLevel {
         name: String,
-        expr: Box<Constraint>,
+        expr: Box<Expression>,
     },
     Funcall {
         func: Builtin,
-        args: Vec<Constraint>,
+        args: Vec<Expression>,
     },
     Const(i32),
     Column(String),
     ArrayColumn(String, Vec<usize>),
     ArrayColumnElement(String, usize),
-    List(Vec<Constraint>),
+    List(Vec<Expression>),
 }
-impl Constraint {
-    pub fn flat_fold<T>(&self, f: &dyn Fn(&Constraint) -> T) -> Vec<T> {
+impl Expression {
+    pub fn flat_fold<T>(&self, f: &dyn Fn(&Expression) -> T) -> Vec<T> {
         let mut ax = vec![];
         match self {
-            Constraint::List(xs) => {
+            Expression::List(xs) => {
                 for x in xs {
                     ax.push(f(x));
                 }
@@ -37,9 +37,9 @@ impl Constraint {
         ax
     }
 }
-impl Debug for Constraint {
+impl Debug for Expression {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        fn format_list(cs: &[Constraint]) -> String {
+        fn format_list(cs: &[Expression]) -> String {
             cs.iter()
                 .map(|c| format!("{:?}", c))
                 .collect::<Vec<_>>()
@@ -47,10 +47,10 @@ impl Debug for Constraint {
         }
 
         match self {
-            Constraint::TopLevel { name, expr } => write!(f, "{}: {:?}", name, expr),
-            Constraint::Const(x) => write!(f, "{}:CONST", x),
-            Constraint::Column(name) => write!(f, "{}:COLUMN", name),
-            Constraint::ArrayColumn(name, range) => {
+            Expression::TopLevel { name, expr } => write!(f, "{}: {:?}", name, expr),
+            Expression::Const(x) => write!(f, "{}:CONST", x),
+            Expression::Column(name) => write!(f, "{}:COLUMN", name),
+            Expression::ArrayColumn(name, range) => {
                 write!(
                     f,
                     "{}[{}:{}]:ARRAYCOLUMN",
@@ -59,10 +59,10 @@ impl Debug for Constraint {
                     range.last().unwrap()
                 )
             }
-            Constraint::ArrayColumnElement(name, i) => {
+            Expression::ArrayColumnElement(name, i) => {
                 write!(f, "{}[{}]:COLUMN", name, i)
             }
-            Constraint::List(cs) => write!(f, "'({})", format_list(cs)),
+            Expression::List(cs) => write!(f, "'({})", format_list(cs)),
             Self::Funcall { func, args } => write!(f, "({:?} {})", func, format_list(args)),
         }
     }
@@ -111,17 +111,17 @@ pub struct Defined {
     pub args: Vec<String>,
     pub body: AstNode,
 }
-impl FuncVerifier<Constraint> for Defined {
+impl FuncVerifier<Expression> for Defined {
     fn arity(&self) -> Arity {
         Arity::Exactly(self.args.len())
     }
 
-    fn validate_types(&self, _args: &[Constraint]) -> Result<()> {
+    fn validate_types(&self, _args: &[Expression]) -> Result<()> {
         Ok(())
     }
 }
 
-impl FuncVerifier<Constraint> for Builtin {
+impl FuncVerifier<Expression> for Builtin {
     fn arity(&self) -> Arity {
         match self {
             Builtin::Add => Arity::AtLeast(2),
@@ -139,10 +139,10 @@ impl FuncVerifier<Constraint> for Builtin {
             Builtin::Nth => Arity::Dyadic,
         }
     }
-    fn validate_types(&self, args: &[Constraint]) -> Result<()> {
+    fn validate_types(&self, args: &[Expression]) -> Result<()> {
         match self {
             f @ (Builtin::Add | Builtin::Sub | Builtin::Mul | Builtin::IfZero) => {
-                if args.iter().all(|a| !matches!(a, Constraint::List(_))) {
+                if args.iter().all(|a| !matches!(a, Expression::List(_))) {
                     Ok(())
                 } else {
                     Err(eyre!(
@@ -152,7 +152,7 @@ impl FuncVerifier<Constraint> for Builtin {
                 }
             }
             Builtin::Neg | Builtin::Inv => {
-                if args.iter().all(|a| !matches!(a, Constraint::List(_))) {
+                if args.iter().all(|a| !matches!(a, Expression::List(_))) {
                     Ok(())
                 } else {
                     Err(eyre!(
@@ -162,8 +162,8 @@ impl FuncVerifier<Constraint> for Builtin {
                 }
             }
             Builtin::Shift => {
-                if matches!(args[0], Constraint::Column(_))
-                    && matches!(args[1], Constraint::Const(x) if x != 0)
+                if matches!(args[0], Expression::Column(_))
+                    && matches!(args[1], Expression::Const(x) if x != 0)
                 {
                     Ok(())
                 } else {
@@ -175,8 +175,8 @@ impl FuncVerifier<Constraint> for Builtin {
                 }
             }
             Builtin::Nth => {
-                if matches!(args[0], Constraint::ArrayColumn(..))
-                    && matches!(args[1], Constraint::Const(x) if x >= 0)
+                if matches!(args[0], Expression::ArrayColumn(..))
+                    && matches!(args[1], Expression::Const(x) if x >= 0)
                 {
                     Ok(())
                 } else {
@@ -188,7 +188,7 @@ impl FuncVerifier<Constraint> for Builtin {
                 }
             }
             Builtin::BranchIfZero | Builtin::BranchIfNotZero => {
-                if !matches!(args[0], Constraint::List(_)) && matches!(args[1], Constraint::List(_))
+                if !matches!(args[0], Expression::List(_)) && matches!(args[1], Expression::List(_))
                 {
                     Ok(())
                 } else {
@@ -199,9 +199,9 @@ impl FuncVerifier<Constraint> for Builtin {
                 }
             }
             Builtin::BranchIfZeroElse | Builtin::BranchIfNotZeroElse => {
-                if !matches!(args[0], Constraint::List(_))
-                    && matches!(args[1], Constraint::List(_))
-                    && matches!(args[2], Constraint::List(_))
+                if !matches!(args[0], Expression::List(_))
+                    && matches!(args[1], Expression::List(_))
+                    && matches!(args[2], Expression::List(_))
                 {
                     Ok(())
                 } else {
@@ -219,7 +219,7 @@ impl FuncVerifier<Constraint> for Builtin {
 
 #[derive(Debug)]
 pub struct ConstraintsSet {
-    pub constraints: Vec<Constraint>,
+    pub constraints: Vec<Expression>,
 }
 
 // Compared to a function, a form do not evaluate all of its arguments by default
@@ -227,7 +227,7 @@ fn apply_form(
     f: Form,
     args: &[AstNode],
     ctx: Rc<RefCell<SymbolTable>>,
-) -> Result<Option<Constraint>> {
+) -> Result<Option<Expression>> {
     let args = f
         .validate_args(args.to_vec())
         .with_context(|| eyre!("evaluating call to {:?}", f))?;
@@ -243,13 +243,13 @@ fn apply_form(
                     let new_ctx = SymbolTable::derived(ctx.clone());
                     new_ctx
                         .borrow_mut()
-                        .insert_symbol(i_name, Constraint::Const(*i as i32))?;
+                        .insert_symbol(i_name, Expression::Const(*i as i32))?;
 
                     let r = reduce(&body.clone(), new_ctx)?.unwrap();
                     l.push(r);
                 }
 
-                Ok(Some(Constraint::List(l)))
+                Ok(Some(Expression::List(l)))
             } else {
                 unreachable!()
             }
@@ -261,11 +261,11 @@ fn apply(
     f: &Function,
     args: &[AstNode],
     ctx: Rc<RefCell<SymbolTable>>,
-) -> Result<Option<Constraint>> {
+) -> Result<Option<Expression>> {
     if let FunctionClass::SpecialForm(sf) = f.class {
         apply_form(sf, args, ctx)
     } else {
-        let mut traversed_args: Vec<Constraint> = vec![];
+        let mut traversed_args: Vec<Expression> = vec![];
         for arg in args.iter() {
             let traversed = reduce(arg, ctx.clone())?;
             if let Some(traversed) = traversed {
@@ -279,13 +279,13 @@ fn apply(
                     .validate_args(traversed_args)
                     .with_context(|| eyre!("validating call to `{}`", f.name))?;
                 match b {
-                    Builtin::Begin => Ok(Some(Constraint::List(traversed_args))),
+                    Builtin::Begin => Ok(Some(Expression::List(traversed_args))),
                     Builtin::BranchIfZero => {
                         let cond = traversed_args[0].clone();
-                        if let Constraint::List(then) = &traversed_args[1] {
-                            Ok(Some(Constraint::List(
+                        if let Expression::List(then) = &traversed_args[1] {
+                            Ok(Some(Expression::List(
                                 then.iter()
-                                    .map(|a| Constraint::Funcall {
+                                    .map(|a| Expression::Funcall {
                                         func: Builtin::IfZero,
                                         args: vec![cond.clone(), a.clone()],
                                     })
@@ -297,22 +297,22 @@ fn apply(
                     }
                     Builtin::BranchIfZeroElse => {
                         let cond = traversed_args[0].clone();
-                        if let (Constraint::List(tthen), Constraint::List(eelse)) =
+                        if let (Expression::List(tthen), Expression::List(eelse)) =
                             (&traversed_args[1], &traversed_args[2])
                         {
-                            Ok(Some(Constraint::List(
+                            Ok(Some(Expression::List(
                                 tthen
                                     .iter()
                                     .cloned()
-                                    .flat_map(|c: Constraint| {
-                                        c.flat_fold(&|x| Constraint::Funcall {
+                                    .flat_map(|c: Expression| {
+                                        c.flat_fold(&|x| Expression::Funcall {
                                             func: Builtin::IfZero,
                                             args: vec![cond.clone(), x.clone()],
                                         })
                                     })
                                     .into_iter()
-                                    .chain(eelse.iter().cloned().flat_map(|c: Constraint| {
-                                        c.flat_fold(&|x| Constraint::Funcall {
+                                    .chain(eelse.iter().cloned().flat_map(|c: Expression| {
+                                        c.flat_fold(&|x| Expression::Funcall {
                                             func: Builtin::Mul,
                                             args: vec![cond.clone(), x.clone()],
                                         })
@@ -325,10 +325,10 @@ fn apply(
                     }
                     Builtin::BranchIfNotZero => {
                         let cond = traversed_args[0].clone();
-                        if let Constraint::List(then) = &traversed_args[1] {
-                            Ok(Some(Constraint::List(
+                        if let Expression::List(then) = &traversed_args[1] {
+                            Ok(Some(Expression::List(
                                 then.iter()
-                                    .map(|a| Constraint::Funcall {
+                                    .map(|a| Expression::Funcall {
                                         func: Builtin::Mul,
                                         args: vec![cond.clone(), a.clone()],
                                     })
@@ -340,22 +340,22 @@ fn apply(
                     }
                     Builtin::BranchIfNotZeroElse => {
                         let cond = traversed_args[0].clone();
-                        if let (Constraint::List(tthen), Constraint::List(eelse)) =
+                        if let (Expression::List(tthen), Expression::List(eelse)) =
                             (&traversed_args[1], &traversed_args[2])
                         {
-                            Ok(Some(Constraint::List(
+                            Ok(Some(Expression::List(
                                 tthen
                                     .iter()
                                     .cloned()
-                                    .flat_map(|c: Constraint| {
-                                        c.flat_fold(&|x| Constraint::Funcall {
+                                    .flat_map(|c: Expression| {
+                                        c.flat_fold(&|x| Expression::Funcall {
                                             func: Builtin::Mul,
                                             args: vec![cond.clone(), x.clone()],
                                         })
                                     })
                                     .into_iter()
-                                    .chain(eelse.iter().cloned().flat_map(|c: Constraint| {
-                                        c.flat_fold(&|x| Constraint::Funcall {
+                                    .chain(eelse.iter().cloned().flat_map(|c: Expression| {
+                                        c.flat_fold(&|x| Expression::Funcall {
                                             func: Builtin::IfZero,
                                             args: vec![cond.clone(), x.clone()],
                                         })
@@ -367,14 +367,14 @@ fn apply(
                         }
                     }
                     Builtin::Nth => {
-                        if let (Constraint::ArrayColumn(cname, ..), Constraint::Const(x)) =
+                        if let (Expression::ArrayColumn(cname, ..), Expression::Const(x)) =
                             (&traversed_args[0], &traversed_args[1])
                         {
                             let x = *x as usize;
                             match &ctx.borrow().resolve_symbol(cname)? {
-                                array @ Constraint::ArrayColumn(name, range) => {
+                                array @ Expression::ArrayColumn(name, range) => {
                                     if range.contains(&x) {
-                                        Ok(Some(Constraint::ArrayColumnElement(name.to_owned(), x)))
+                                        Ok(Some(Expression::ArrayColumnElement(name.to_owned(), x)))
                                     } else {
                                         Err(eyre!("tried to access `{:?}` at index {}", array, x))
                                     }
@@ -386,7 +386,7 @@ fn apply(
                         }
                     }
 
-                    b => Ok(Some(Constraint::Funcall {
+                    b => Ok(Some(Expression::Funcall {
                         func: *b,
                         args: traversed_args,
                     })),
@@ -411,14 +411,14 @@ fn apply(
     }
 }
 
-fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Constraint>> {
+fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Expression>> {
     match &e.class {
         Token::Ignore => Ok(None),
-        Token::Value(x) => Ok(Some(Constraint::Const(*x))),
+        Token::Value(x) => Ok(Some(Expression::Const(*x))),
         Token::Symbol(name) => Ok(Some(ctx.borrow_mut().resolve_symbol(name)?)),
         Token::Form(args) => {
             if args.is_empty() {
-                Ok(Some(Constraint::List(vec![])))
+                Ok(Some(Expression::List(vec![])))
             } else if let Token::Symbol(verb) = &args[0].class {
                 let func = ctx
                     .borrow()
@@ -430,7 +430,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Constrain
                 Err(eyre!("Not a function: {:?}", args[0]))
             }
         }
-        Token::DefConstraint(name, expr) => Ok(Some(Constraint::TopLevel {
+        Token::DefConstraint(name, expr) => Ok(Some(Expression::TopLevel {
             name: name.into(),
             expr: Box::new(reduce(expr, ctx)?.unwrap()), // the parser ensures that the body is never empty
         })),
@@ -448,7 +448,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Constrain
     .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))
 }
 
-pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Constraint>> {
+pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Expression>> {
     let mut r = vec![];
 
     for exp in ast.exprs.iter().cloned() {
