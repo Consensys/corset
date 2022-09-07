@@ -4,7 +4,7 @@
   Z H)
 (defcolumns I)
 
-(defconstraint something-stupid (eq (+ G I H) (+ X Y (fds Y H))))
+(defconstraint something-stupid (1 3 4 23) (eq (+ G I H) (+ X Y (fds Y H))))
 
 (defun (sdf E R) (+ E R))
 

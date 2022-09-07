@@ -6,9 +6,9 @@ use crate::compiler::*;
 use std::io::{BufWriter, Write};
 const ARRAY_SEPARATOR: char = '_';
 
-fn make_go_function(name: &str, prelude: &str, content: &str, postlude: &str) -> String {
+fn make_go_function(name: &str, prelude: &str, content: &str, postlude: &str, ret: &str) -> String {
     format!(
-        r#"func {}() (r []column.Expression) {{
+        r#"func {}() (r {}) {{
 {}
 {}
 {}
@@ -16,6 +16,7 @@ return
 }}
 "#,
         name.to_case(Case::Camel),
+        ret,
         prelude,
         content,
         postlude,
@@ -57,7 +58,7 @@ impl GoExporter {
     pub fn render_node(&self, node: &Expression) -> Result<String> {
         let r = match node {
             Expression::ArrayColumn(..) => unreachable!(),
-            Expression::TopLevel { .. } => unreachable!(),
+            Expression::Constraint { .. } => unreachable!(),
             Expression::Const(x) => match x {
                 0..=2 | 127 | 256 => Ok(format!("column.CONST_{}()", x)),
                 x => Ok(format!("column.CONST_UINT64({})", x)),
@@ -127,7 +128,7 @@ impl crate::transpilers::Transpiler<Expression> for GoExporter {
         let constraints = cs
             .iter()
             .map(|c| {
-                if let Expression::TopLevel { name, expr } = c {
+                if let Expression::Constraint { name, domain, expr } = c {
                     self.render_node(expr)
                         .map(|mut r| {
                             if let Some(true) = r.chars().last().map(|c| c != ',') {
@@ -141,6 +142,7 @@ impl crate::transpilers::Transpiler<Expression> for GoExporter {
                                 "r = []column.Expression {",
                                 &r,
                                 "}",
+                                "[]column.Expression",
                             )
                         })
                 } else {
@@ -156,8 +158,22 @@ impl crate::transpilers::Transpiler<Expression> for GoExporter {
             "",
             &cs.iter()
                 .map(|c| {
-                    if let Expression::TopLevel { name, .. } = c {
-                        format!("r = append(r, {}()...)", name.to_case(Case::Camel))
+                    if let Expression::Constraint { name, domain, .. } = c {
+                        match domain {
+                            None => {
+                                format!(
+                                    "r = append(r, constraint.NewGlobalConstraintList({}()...)...)",
+                                    name.to_case(Case::Camel)
+                                )
+                            }
+                            Some(domain) => {
+                                format!(
+                                    "r = append(r, constraint.NewLocalConstraintList([]int{{{}}}, {}()...)...)",
+                                    domain.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", "),
+                                    name.to_case(Case::Camel)
+                                )
+                            }
+                        }
                     } else {
                         unreachable!()
                     }
@@ -165,12 +181,17 @@ impl crate::transpilers::Transpiler<Expression> for GoExporter {
                 .collect::<Vec<_>>()
                 .join("\n"),
             "",
+            "module.Constraints"
         );
 
         let r = format!(
             r#"package {}
 
-import "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"
+import (
+    "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"
+    "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/constraint"
+    "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/module"
+)
 
 {}
 
@@ -178,6 +199,6 @@ import "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"
 "#,
             self.package, constraints, main_function,
         );
-        writeln!(out, "{}", r).with_context(|| eyre!("rendering result"))
+        writeln!(out, "{}", r).with_context(|| eyre!("rendering to Go"))
     }
 }

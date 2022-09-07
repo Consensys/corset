@@ -1,6 +1,6 @@
 (defcolumns A B C)
 
-(defconstraint Something-else (branch-if-zero-else A
+(defconstraint Something-else () (branch-if-zero-else A
                      (begin
                       (= 1 1))
                      (begin

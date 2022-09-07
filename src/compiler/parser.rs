@@ -42,7 +42,7 @@ pub enum Token {
     DefColumns(Vec<AstNode>),
     DefColumn(String),
     DefArrayColumn(String, Vec<usize>),
-    DefConstraint(String, Box<AstNode>),
+    DefConstraint(String, Option<Vec<isize>>, Box<AstNode>),
     Defun(String, Vec<String>, Box<AstNode>),
     DefAliases(Vec<AstNode>),
     DefAlias(String, String),
@@ -77,7 +77,7 @@ impl Debug for Token {
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
             Token::DefColumn(name) => write!(f, "DECLARATION {}", name),
             Token::DefArrayColumn(name, range) => write!(f, "DECLARATION {}{:?}", name, range),
-            Token::DefConstraint(name, _) => write!(f, "{:?}:CONSTRAINT", name),
+            Token::DefConstraint(name, ..) => write!(f, "{:?}:CONSTRAINT", name),
             Token::Defun(name, args, content) => {
                 write!(f, "{}:({:?}) -> {:?}", name, args, content)
             }
@@ -148,12 +148,49 @@ impl AstNode {
             }
 
             Some(Token::Symbol(defkw)) if defkw == "defconstraint" => {
-                match (tokens.get(1), tokens.get(2)) {
-                    (Some(Token::Symbol(name)), Some(_)) => Ok(AstNode {
-                        class: Token::DefConstraint(name.into(), Box::new(args[2].clone())),
-                        src: src.into(),
-                        lc,
-                    }),
+                match (tokens.get(1), tokens.get(2), tokens.get(3)) {
+                    (Some(Token::Symbol(name)), Some(Token::Form(domain)), Some(_))
+                        if domain.is_empty()
+                            || domain.iter().all(|d| {
+                                matches!(
+                                    d,
+                                    AstNode {
+                                        class: Token::Value(_),
+                                        ..
+                                    }
+                                )
+                            }) =>
+                    {
+                        let domain = if domain.is_empty() {
+                            None
+                        } else {
+                            Some(
+                                domain
+                                    .iter()
+                                    .map(|d| {
+                                        if let AstNode {
+                                            class: Token::Value(x),
+                                            ..
+                                        } = d
+                                        {
+                                            *x as isize
+                                        } else {
+                                            unreachable!()
+                                        }
+                                    })
+                                    .collect::<Vec<_>>(),
+                            )
+                        };
+                        Ok(AstNode {
+                            class: Token::DefConstraint(
+                                name.into(),
+                                domain,
+                                Box::new(args[3].clone()),
+                            ),
+                            src: src.into(),
+                            lc,
+                        })
+                    }
                     _ => Err(eyre!(
                         "DEFCONSTRAINT expects (SYMBOL *); received {:?}",
                         &tokens[1..]

@@ -168,7 +168,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
             Ok(())
         }
 
-        Token::DefConstraint(name, _) => ctx.borrow_mut().insert_constraint(name),
+        Token::DefConstraint(name, ..) => ctx.borrow_mut().insert_constraint(name),
         Token::DefConst(name, x) => ctx.borrow_mut().insert_constant(name, *x as i32),
         Token::DefColumns(cols) => cols
             .iter()

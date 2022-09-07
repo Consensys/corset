@@ -65,7 +65,7 @@ impl LatexExporter {
                 self.columns.push(vec![]);
                 xs.iter().for_each(|x| self._flatten(ax, x))
             }
-            Token::DefConstraint(_, x) => self._flatten(ax, x),
+            Token::DefConstraint(_, _, x) => self._flatten(ax, x),
             _ => (),
         }
     }
@@ -220,9 +220,17 @@ impl LatexExporter {
             Token::DefColumn(name) => Ok(format!("\\text{{{}}}", sanitize(name))),
             Token::DefArrayColumn(name, range) => Ok(format!("{}{:?}", name, range)),
 
-            Token::DefConstraint(name, body) => Ok(format!(
-                "\n\\begin{{constraint}}[{}]\n{}\n\\end{{constraint}}\n",
+            Token::DefConstraint(name, domain, body) => Ok(format!(
+                "\n\\begin{{constraint}}[{} ({})]\n{}\n\\end{{constraint}}\n",
                 name.to_case(Case::Title),
+                domain
+                    .as_ref()
+                    .map(|d| d
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", "))
+                    .unwrap_or("".into()),
                 self.render_node(body, false)?,
             )),
             Token::Form(args) => self.render_form(args, in_maths),

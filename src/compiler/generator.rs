@@ -9,8 +9,9 @@ use std::fmt::{Debug, Formatter};
 
 #[derive(Clone)]
 pub enum Expression {
-    TopLevel {
+    Constraint {
         name: String,
+        domain: Option<Vec<isize>>,
         expr: Box<Expression>,
     },
     Funcall {
@@ -36,6 +37,12 @@ impl Expression {
         }
         ax
     }
+    pub fn len(&self) -> usize {
+        match self {
+            Expression::List(exps) => exps.len(),
+            _ => 1,
+        }
+    }
 }
 impl Debug for Expression {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
@@ -47,7 +54,7 @@ impl Debug for Expression {
         }
 
         match self {
-            Expression::TopLevel { name, expr } => write!(f, "{}: {:?}", name, expr),
+            Expression::Constraint { name, expr, .. } => write!(f, "{}: {:?}", name, expr),
             Expression::Const(x) => write!(f, "{}:CONST", x),
             Expression::Column(name) => write!(f, "{}:COLUMN", name),
             Expression::ArrayColumn(name, range) => {
@@ -430,8 +437,9 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Expressio
                 Err(eyre!("Not a function: {:?}", args[0]))
             }
         }
-        Token::DefConstraint(name, expr) => Ok(Some(Expression::TopLevel {
+        Token::DefConstraint(name, domain, expr) => Ok(Some(Expression::Constraint {
             name: name.into(),
+            domain: domain.to_owned(),
             expr: Box::new(reduce(expr, ctx)?.unwrap()), // the parser ensures that the body is never empty
         })),
 

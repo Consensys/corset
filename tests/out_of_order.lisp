@@ -1,4 +1,4 @@
-(defconstraint test (aaa A U))
+(defconstraint test () (aaa A U))
 
 (defun (aaa X Y) (+ X Y A B))
 

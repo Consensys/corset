@@ -2,4 +2,4 @@
 
 (defun (plusB A) (+ A B))
 
-(defconstraint shadow (plusB C))
+(defconstraint shadow () (plusB C))

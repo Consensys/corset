@@ -53,7 +53,7 @@ Column arrays are typically used to group semantically similar columns, /e.g./ h
 
   ;; Columns can be scalar...
   (defcolumns VALUE)
-  (defconstraint pipo (eq VALUE 3))
+  (defconstraint () pipo (eq VALUE 3))
 
   ;; ...or array-like
   (defcolumns VALUES[5])
@@ -66,11 +66,11 @@ Column arrays are typically used to group semantically similar columns, /e.g./ h
     EXAMPLE4{1 6 8})  ;; EXAMPLE4 is defined over {1, 6, 8}
 
   ;; Array columns are indexed using the (nth) function
-  (defconstraint foo
+  (defconstraint foo ()
     (eq (nth EXAMPLE1 2) (nth EXAMPLE4 6)))
 
   ;; Array accesses are checked at compile time
-  (defconstraint will-fail
+  (defconstraint will-fail ()
     (nth EXAMPLE4 2)) ;; 2 ∉ {1, 6, 8}
 #+end_src
 *** Functions
@@ -84,7 +84,7 @@ Functions can be defined to factorize common cosntraint operations. This is done
            (eq Y Z)))
 
   ;; A == B == C[2]
-  (defconstraint alpha
+  (defconstraint alpha ()
     (eq3 A B (nth C 2)))
 
 
@@ -94,14 +94,14 @@ Functions can be defined to factorize common cosntraint operations. This is done
        (some-other-constraint U V i)))
 
   ;; Factorize big constraints
-  (defconstraint beta
+  (defconstraint () beta
     (begin
      (large-operation A (nth C 1))
      (large-operation A (nth C 3))
      (large-operation A (nth C 2))))
 
   ;; Functions can be combined with for
-  (defconstraint beta-prime
+  (defconstraint () beta-prime
     (for i [3]
          (large-operation A (nth C i))))
 #+end_src
@@ -128,16 +128,19 @@ Functions aliases, defined using the ~defunalias~ function, works the same way a
 
   (defunalias minus sub)
   ;; minus now behaves just like sub
-  (defconstraint always-true
+  (defconstraint () always-true
     (eq (sub A B) (minus A B)))
 #+end_src
 *** Constraints
-Constraints are the parts of a Corset program that will be compiled and featured in the final product, and represent an epxression of the defined columns that should alway evaluate to 0. Their definition follow the syntax ~(defconstraint NAME EXPRESSION)~.
+Constraints are the parts of a Corset program that will be compiled and featured in the final product, and represent an epxression of the defined columns that should alway evaluate to 0. Their definition follow the syntax ~(defconstraint DOMAIN NAME EXPRESSION)~.
+
+The ~DOMAIN~ is a list of evaluation points where ~EXPRESSION~ must hold true. If it is empty, then ~EXPRESSION~ must hold for its whole definition domain.
 
 Here is a simple example, establishing that columns ~A~ and ~B~ must always be equal:
 #+begin_src lisp
   (defcolumns A B)
-  (defconstraint A-equals-B (= A B))
+  (defconstraint A-equals-B () (= A B))
+  (defconstraint A-equals-B-somewhere (1 3 5) (= A B))
 #+end_src
 
 
@@ -149,13 +152,13 @@ The ~nth~ function is used to access the element of a column array.
 #+begin_src lisp
   (defcolumns A B[1:3])
 
-  (defconstraint foo
+  (defconstraint foo (1 2)
     (eq A (nth B 2)))
 
   ;; Creates a function accessin the i-th element of B
   (defun (nth-B i) (nth B i))
 
-  (defconstraint bar
+  (defconstraint bar ()
     (eq A (nth-B 2)))
 #+end_src
 **** ~begin~
@@ -164,7 +167,7 @@ The ~begin~ forms define a list of conditions that should all be verified. They 
   (defcolumns A B C)
 
 
-  (defconstraint foo
+  (defconstraint foo ()
     (begin  ;; the two following constraints must be verfiied
      (eq A B)
      (eq A C)))
@@ -174,7 +177,7 @@ The ~begin~ forms define a list of conditions that should all be verified. They 
        (did-change X)
        (did-change Y)))
 
-  (defconstraint bar
+  (defconstraint bar ()
     (two-change A B))
 #+end_src
 **** ~for~
@@ -185,7 +188,7 @@ The ~for~ forms generate similar constraints, parametrized by the specified iter
 
   ;; Range syntax is identical to the one used in DEFCOLUMNS
   ;; ∀i, A[i] = i
-  (defconstraint alpha
+  (defconstraint alpha ()
     (for i [4] (eq (nth A i) i)))
 
 
@@ -193,12 +196,12 @@ The ~for~ forms generate similar constraints, parametrized by the specified iter
       (eq (nth X i) (nth Y i)))
 
   ;; A[2] = C[2] && A[4] = C[4]
-  (defconstraint beta
+  (defconstraint beta ()
     (for i {2 4} (same-at-i A C i)))
 
   ;; For forms can be nested
   ;; A[1, 3] ⨯ C[2, 4] = constant
-  (defconstraint gamma
+  (defconstraint gamma ()
     (for i [1:4:2]
          (for j {2 4}
               (eq (nth A i) (nth C j)))))
@@ -279,24 +282,24 @@ To automatically compile Corset constraints, the ~~go generate~ feature can be l
   (defalias SEX STACK_EXCEPTION)
 
   ;; Implements HU = (2*SUX - 1)*(DELTA - HEIGHT) - SUX
-  (defconstraint height-under
+  (defconstraint height-under ()
     (= HU
        (- (* (- (* 2 STACK_UNDERFLOW_EXCEPTION) 1)
              (- DELTA HEIGHT))
           STACK_UNDERFLOW_EXCEPTION)))
 
   ;; SUX and SOX are mutually exclusive
-  (defconstraint sux-xor-sox
+  (defconstraint sux-xor-sox ()
     (bin-if-one STACK_UNDERFLOW_EXCEPTION STACK_OVERFLOW_EXCEPTION))
 
   ;; (SUX == 0) ==> HO = (2*SOX - 1)*(HEIGHT_UNDER + ALPHA - 1024) - SOX
-  (defconstraint sux-0
+  (defconstraint sux-0 ()
     (vanishes
      (if-zero SUX (= HO (- (* (- (* 2 SOX) 1)
                               (- (+ HU ALPHA) 1024))
                            SOX)))))
 
   ;; If SUX or SOX is set, then SEX is set; and they are mutually exclusive
-  (defconstraint ifSuxOrSoxThenSex
+  (defconstraint ifSuxOrSoxThenSex ()
     (= SEX (+ SOX SUX)))
 #+end_src
