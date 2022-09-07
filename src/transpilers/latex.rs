@@ -14,7 +14,7 @@ pub struct LatexExporter {
 }
 
 fn sanitize(s: &str) -> String {
-    s.replace("_", "\\_")
+    s.replace('_', "\\_")
 }
 
 fn wrap_env(body: String, env: &str) -> String {
@@ -66,7 +66,7 @@ impl LatexExporter {
                 xs.iter().for_each(|x| self._flatten(ax, x))
             }
             Token::DefConstraint(_, x) => self._flatten(ax, x),
-            _ => return,
+            _ => (),
         }
     }
     fn flatten(&mut self, n: &AstNode) -> Vec<AstNode> {
@@ -76,7 +76,7 @@ impl LatexExporter {
     }
     fn render_form(&mut self, args: &[AstNode], in_maths: bool) -> Result<String> {
         if args.is_empty() {
-            return Ok("()".into());
+            Ok("()".into())
         } else {
             let fname = if let Token::Symbol(name) = &args[0].class {
                 name
@@ -225,7 +225,7 @@ impl LatexExporter {
                 name.to_case(Case::Title),
                 self.render_node(body, false)?,
             )),
-            Token::Form(args) => self.render_form(&args, in_maths),
+            Token::Form(args) => self.render_form(args, in_maths),
             Token::Defun(..) => Ok(String::new()),
             x => unimplemented!("{:?}", x),
         }

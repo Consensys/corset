@@ -25,7 +25,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
     let constraints = asts
         .iter()
         .map(|(name, ast)| {
-            generator::pass(&ast, ctx.clone())
+            generator::pass(ast, ctx.clone())
                 .with_context(|| eyre!("compiling constraints in `{}`", name))
         })
         .collect::<Result<Vec<_>>>()?
