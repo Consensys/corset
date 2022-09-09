@@ -220,27 +220,18 @@ The boolean operators work under the assumption that their operands are binary.
   - ~(is-binary x)~
 *** Branching Forms
 Corset features several branching operations. Although they ought to be simplified in coming revisions of Corset, they are still quite clumsy.
-**** Monadic Branching Forms
-Composite branching forms reproduce the classical ~if COND then A (else B)~ scheme, albeit allowing ~A~ and ~B~ to only feature a single constraint.
+**** Branching Forms
+Branching forms reproduce the classical ~if COND then A [else B]~ scheme. If ~A~ or ~B~ contain several several sub-statements, then they must be wrapped in a ~begin~ form.
 ***** Binary Forms
-The behavior of these forms is only guaranteed if their ~cond~ is binary.
+The behavior of these forms is only guaranteed if ~COND~ is binary.
   - ~(bin-if-zero COND A)~
   - ~(bin-if-one COND A)~
   - ~(bin-if-zero-else COND A B)~
   - ~(bin-if-one-else COND A B)~
 ***** Generic Forms
 The behavior of these forms is defined in any case, but they are less performant than their ~-binary~ counterpart.
-  - ~(if-zero-else COND A)~
-  - ~(if-not-zero-else COND A B)~
-  - ~(if-zero-else COND A)~
-  - ~(if-zero COND A)~
-**** Composite Branching Forms
-Composite branching forms allow for one or more constraints to be nested in each of their branches. It should be noted that these constraints, even in alone, shall be nested in ~begin~ forms.
-***** Generic Forms
-  - ~(branch-if-zero COND (begin A...))~
-  - ~(branch-if-zero-else COND (begin A...) (begin B...))~
-  - ~(branch-if-not-zero COND (begin A...))~
-  - ~(branch-if-not-zero-else COND (begin A...) (begin B...))~
+  - ~(if-zero COND A [B])~
+  - ~(if-not-zero COND A [B])~
 
 *** Chronological Operations
 Chronological operations define constraints on the temporal evolution of a column.

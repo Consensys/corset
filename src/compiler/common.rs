@@ -55,25 +55,14 @@ lazy_static::lazy_static! {
 
         "begin" => Function{name: "begin".into(), class: FunctionClass::Builtin(Builtin::Begin)},
 
-        // Special form for now, see later if implementing map...
-        "branch-if-zero" => Function {
-            name:"branch-if-zero".into(),
+        "if-zero" => Function {
+            name: "if-zero".into(),
             class: FunctionClass::Builtin(Builtin::BranchIfZero)
         },
 
-        "branch-if-zero-else" => Function {
-            name:"branch-if-zero-else".into(),
-            class: FunctionClass::Builtin(Builtin::BranchIfZeroElse)
-        },
-
-        "branch-if-not-zero" => Function {
-            name:"branch-if-not-zero".into(),
+        "if-not-zero" => Function {
+            name: "if-not-zero".into(),
             class: FunctionClass::Builtin(Builtin::BranchIfNotZero)
-        },
-
-        "branch-if-not-zero-else" => Function {
-            name:"branch-if-not-zero-else".into(),
-            class: FunctionClass::Builtin(Builtin::BranchIfNotZeroElse)
         },
     };
 }
