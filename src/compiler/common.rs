@@ -92,6 +92,7 @@ pub enum Arity {
     Monadic,
     Dyadic,
     Exactly(usize),
+    Between(usize, usize),
 }
 impl Arity {
     fn make_error(&self, l: usize) -> String {
@@ -106,6 +107,12 @@ impl Arity {
             Arity::Monadic => format!("expected {}, but received {}", arg_count(1), l),
             Arity::Dyadic => format!("expected {}, but received {}", arg_count(2), l),
             Arity::Exactly(x) => format!("expected {}, but received {}", arg_count(*x), l),
+            Arity::Between(x, y) => format!(
+                "expected between {} and {}, but received {}",
+                arg_count(*x),
+                arg_count(*y),
+                l
+            ),
         }
     }
 
@@ -118,6 +125,7 @@ impl Arity {
             Arity::Monadic => l == 1,
             Arity::Dyadic => l == 2,
             Arity::Exactly(x) => l == *x,
+            Arity::Between(x, y) => l >= *x && l <= *y,
         }
         .then(|| ())
         .ok_or_else(|| eyre!(self.make_error(l)))
