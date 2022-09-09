@@ -1,8 +1,10 @@
 use eyre::*;
-use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
+use std::{cell::RefCell, collections::HashSet};
 
 use super::common::*;
+use crate::column::Column;
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 use std::fmt::{Debug, Formatter};
@@ -224,8 +226,9 @@ impl FuncVerifier<Expression> for Builtin {
     }
 }
 
-#[derive(Debug)]
+#[derive(Default)]
 pub struct ConstraintsSet {
+    pub columns: HashMap<String, Box<dyn Column<i32>>>,
     pub constraints: Vec<Expression>,
 }
 

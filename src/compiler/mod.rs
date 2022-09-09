@@ -22,7 +22,8 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         asts.push((name, ast));
     }
 
-    let constraints = asts
+    let mut r = ConstraintsSet::default();
+    r.constraints = asts
         .iter()
         .map(|(name, ast)| {
             generator::pass(ast, ctx.clone())
@@ -33,8 +34,5 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         .flatten()
         .collect();
 
-    Ok((
-        asts.into_iter().map(|x| x.1).collect(),
-        ConstraintsSet { constraints },
-    ))
+    Ok((asts.into_iter().map(|x| x.1).collect(), r))
 }

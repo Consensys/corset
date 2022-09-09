@@ -6,6 +6,7 @@ use color_eyre::eyre::*;
 use std::fs::File;
 use std::io::BufWriter;
 
+mod column;
 mod compiler;
 mod transpilers;
 
