@@ -28,11 +28,6 @@ lazy_static::lazy_static! {
         },
 
         // Dyadic
-        "if-zero" => Function{
-            name: "if-zero".into(),
-            class: FunctionClass::Builtin(Builtin::IfZero),
-        },
-
         "shift" => Function{
             name: "shift".into(),
             class: FunctionClass::Builtin(Builtin::Shift),
@@ -55,14 +50,22 @@ lazy_static::lazy_static! {
 
         "begin" => Function{name: "begin".into(), class: FunctionClass::Builtin(Builtin::Begin)},
 
-        "if-zero" => Function {
-            name: "if-zero".into(),
-            class: FunctionClass::Builtin(Builtin::BranchIfZero)
+        "bin-if-zero" => Function {
+            name: "bin-if-zero".into(),
+            class: FunctionClass::Builtin(Builtin::BinIfZero)
+        },
+        "bin-if-not-zero" => Function {
+            name: "bin-if-not-zero".into(),
+            class: FunctionClass::Builtin(Builtin::BinIfNotZero)
         },
 
+        "if-zero" => Function {
+            name: "if-zero".into(),
+            class: FunctionClass::Builtin(Builtin::IfZero)
+        },
         "if-not-zero" => Function {
             name: "if-not-zero".into(),
-            class: FunctionClass::Builtin(Builtin::BranchIfNotZero)
+            class: FunctionClass::Builtin(Builtin::IfNotZero)
         },
     };
 }

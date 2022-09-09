@@ -224,10 +224,8 @@ Corset features several branching operations. Although they ought to be simplifi
 Branching forms reproduce the classical ~if COND then A [else B]~ scheme. If ~A~ or ~B~ contain several several sub-statements, then they must be wrapped in a ~begin~ form.
 ***** Binary Forms
 The behavior of these forms is only guaranteed if ~COND~ is binary.
-  - ~(bin-if-zero COND A)~
-  - ~(bin-if-one COND A)~
-  - ~(bin-if-zero-else COND A B)~
-  - ~(bin-if-one-else COND A B)~
+  - ~(bin-if-zero COND A [B])~
+  - ~(bin-if-not-zero COND A [B])~
 ***** Generic Forms
 The behavior of these forms is defined in any case, but they are less performant than their ~-binary~ counterpart.
   - ~(if-zero COND A [B])~
@@ -235,12 +233,12 @@ The behavior of these forms is defined in any case, but they are less performant
 
 *** Chronological Operations
 Chronological operations define constraints on the temporal evolution of a column.
-  - ~(did-change x)~ ensures that $X_{i-1} \neq X_i$
+  - ~(did-change x)~ ensures that $X_{i-1} \neq X_{i}$
   - ~(didnt-change x)~ (or ~remains-constant~) ensures that $X_{i-1} = X$
   - ~(will-eq x y)~ ensures that $X_{i+1} = Y$
   - ~(was-eq x y)~ ensures that $X_{i-1} = Y$
-  - ~(inc x k)~ ensures that $X_{i+1} = X_i + k$
-  - ~(dec x k)~ ensures that $X_{i+1} = X_i - k$
+  - ~(inc x k)~ ensures that $X_{i+1} = X_{i} + k$
+  - ~(dec x k)~ ensures that $X_{i+1} = X_{i} - k$
 
 ** Interfacing Corset
 *** With Go

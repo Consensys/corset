@@ -82,7 +82,6 @@ pub enum Builtin {
     Add,
     Sub,
     Mul,
-    IfZero,
     Shift,
     Neg,
     Inv,
@@ -90,9 +89,10 @@ pub enum Builtin {
 
     Begin,
 
-    // Don't like it :/
-    BranchIfZero,
-    BranchIfNotZero,
+    IfZero,
+    IfNotZero,
+    BinIfZero,
+    BinIfNotZero,
 }
 
 #[derive(Debug, Clone)]
@@ -131,17 +131,18 @@ impl FuncVerifier<Expression> for Builtin {
             Builtin::Mul => Arity::AtLeast(2),
             Builtin::Neg => Arity::Monadic,
             Builtin::Inv => Arity::Monadic,
-            Builtin::IfZero => Arity::Dyadic,
             Builtin::Shift => Arity::Dyadic,
             Builtin::Begin => Arity::AtLeast(1),
-            Builtin::BranchIfZero => Arity::Between(2, 3),
-            Builtin::BranchIfNotZero => Arity::Between(2, 3),
+            Builtin::IfZero => Arity::Between(2, 3),
+            Builtin::IfNotZero => Arity::Between(2, 3),
+            Builtin::BinIfZero => Arity::Between(2, 3),
+            Builtin::BinIfNotZero => Arity::Between(2, 3),
             Builtin::Nth => Arity::Dyadic,
         }
     }
     fn validate_types(&self, args: &[Expression]) -> Result<()> {
         match self {
-            f @ (Builtin::Add | Builtin::Sub | Builtin::Mul | Builtin::IfZero) => {
+            f @ (Builtin::Add | Builtin::Sub | Builtin::Mul) => {
                 if args.iter().all(|a| !matches!(a, Expression::List(_))) {
                     Ok(())
                 } else {
@@ -187,7 +188,7 @@ impl FuncVerifier<Expression> for Builtin {
                     ))
                 }
             }
-            Builtin::BranchIfZero | Builtin::BranchIfNotZero => {
+            Builtin::IfZero | Builtin::IfNotZero | Builtin::BinIfZero | Builtin::BinIfNotZero => {
                 if !matches!(args[0], Expression::List(_)) {
                     Ok(())
                 } else {
@@ -263,13 +264,57 @@ fn apply(
                     .with_context(|| eyre!("validating call to `{}`", f.name))?;
                 match b {
                     Builtin::Begin => Ok(Some(Expression::List(traversed_args))),
-                    b @ (Builtin::BranchIfZero | Builtin::BranchIfNotZero) => {
+                    b @ (Builtin::BinIfZero | Builtin::BinIfNotZero) => {
+                        let cond_zero = traversed_args[0].clone();
+                        let cond_one = Expression::Funcall {
+                            func: Builtin::Sub,
+                            args: vec![Expression::Const(1), cond_zero.clone()],
+                        };
+
+                        let conds = match b {
+                            Builtin::BinIfZero => [cond_one, cond_zero],
+                            Builtin::BinIfNotZero => [cond_zero, cond_one],
+                            _ => unreachable!(),
+                        };
+
+                        // Order the then/else blocks
+                        let then_else = vec![traversed_args.get(1), traversed_args.get(2)]
+                            .into_iter()
+                            // Only keep the non-empty branches
+                            .filter_map(|ex| ex)
+                            // Ensure branches are wrapped in in lists
+                            .map(|ex| match ex {
+                                Expression::List(_) => ex.clone(),
+                                ex => Expression::List(vec![ex.clone()]),
+                            })
+                            .enumerate()
+                            // Map the corresponding then/else operations on the branches
+                            .map(|(i, exs)| {
+                                if let Expression::List(exs) = exs {
+                                    exs.into_iter()
+                                        .map(|ex: Expression| {
+                                            ex.flat_fold(&|ex| Expression::Funcall {
+                                                func: Builtin::Mul,
+                                                args: vec![conds[i].clone(), ex.clone()],
+                                            })
+                                        })
+                                        .collect::<Vec<_>>()
+                                } else {
+                                    unreachable!()
+                                }
+                            })
+                            .flatten()
+                            .flatten()
+                            .collect::<Vec<_>>();
+                        Ok(Some(Expression::List(then_else)))
+                    }
+                    b @ (Builtin::IfZero | Builtin::IfNotZero) => {
                         let cond = traversed_args[0].clone();
 
                         // Order the then/else blocks
                         let (op_then, op_else) = match b {
-                            Builtin::BranchIfZero => (Builtin::IfZero, Builtin::Mul),
-                            Builtin::BranchIfNotZero => (Builtin::Mul, Builtin::IfZero),
+                            Builtin::IfZero => (Builtin::IfZero, Builtin::Mul),
+                            Builtin::IfNotZero => (Builtin::Mul, Builtin::IfZero),
                             _ => unreachable!(),
                         };
                         let then_else = vec![
