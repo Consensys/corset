@@ -202,7 +202,7 @@ impl FuncVerifier<Expression> for Builtin {
 
 #[derive(Default)]
 pub struct ConstraintsSet {
-    pub columns: HashMap<String, Box<dyn Column<i32>>>,
+    pub columns: HashMap<String, Column>,
     pub constraints: Vec<Expression>,
 }
 
@@ -366,7 +366,7 @@ fn apply(
                             (&traversed_args[0], &traversed_args[1])
                         {
                             let x = *x as usize;
-                            match &ctx.borrow().resolve_symbol(cname)? {
+                            match &ctx.borrow_mut().resolve_symbol(cname)? {
                                 array @ Expression::ArrayColumn(name, range) => {
                                     if range.contains(&x) {
                                         Ok(Some(Expression::ArrayColumnElement(name.to_owned(), x)))

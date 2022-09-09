@@ -1,10 +1,14 @@
 use eyre::*;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use definitions::SymbolTable;
 
 pub use generator::{Builtin, ConstraintsSet, Expression};
 pub use parser::{Ast, AstNode, Token};
+
+use crate::column::Column;
+
+use self::definitions::Symbol;
 
 mod common;
 mod definitions;
@@ -33,6 +37,25 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         .into_iter()
         .flatten()
         .collect();
+    r.columns = ctx
+        .borrow()
+        .symbols()
+        .filter_map(|s| match s {
+            Symbol::Alias(_) => None,
+            Symbol::Final(symbol, used) => {
+                if !*used {
+                    eprintln!("WARN unused: {:?}", symbol);
+                    None
+                } else {
+                    match symbol {
+                        Expression::Column(name) => Some((name.to_owned(), Column::Empty)),
+                        Expression::ArrayColumn(name, _) => Some((name.to_owned(), Column::Empty)),
+                        _ => None,
+                    }
+                }
+            }
+        })
+        .collect::<HashMap<_, _>>();
 
     Ok((asts.into_iter().map(|x| x.1).collect(), r))
 }

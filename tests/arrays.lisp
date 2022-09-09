@@ -1,4 +1,4 @@
-(defcolumns A B[3] C[5:8] D[8:32:5])
+(defcolumns A B[3] C[5:8] D[8:32:5] Q[5])
 (defalias qq D)
 
 (defconstraint asdf () (eq (nth B 3) (nth C 8)))

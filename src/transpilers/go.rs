@@ -94,7 +94,7 @@ impl GoExporter {
             Builtin::Inv => Ok(format!("({}).Inv()", self.render_node(&args[0])?)),
             Builtin::Neg => Ok(format!("({}).Neg()", self.render_node(&args[0])?)),
             Builtin::IfZero => Ok(format!(
-                "({}).IfZeroThen({})",
+                "({}).IfZero({})",
                 self.render_node(&args[0])?,
                 self.render_node(&args[1])?
             )),

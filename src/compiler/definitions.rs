@@ -7,10 +7,10 @@ use super::common::BUILTINS;
 use super::generator::{Defined, Expression, Function, FunctionClass};
 use crate::compiler::parser::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Symbol {
     Alias(String),
-    Final(Expression),
+    Final(Expression, bool),
 }
 #[derive(Debug)]
 pub struct SymbolTable {
@@ -41,20 +41,32 @@ impl SymbolTable {
         }))
     }
 
-    fn _resolve_symbol(&self, name: &str, ax: &mut HashSet<String>) -> Result<Expression> {
+    pub fn symbols(&self) -> impl Iterator<Item = &Symbol> {
+        self.symbols.iter().map(|(k, v)| v)
+    }
+
+    fn _resolve_symbol(&mut self, name: &str, ax: &mut HashSet<String>) -> Result<Expression> {
         if ax.contains(name) {
             Err(eyre!("Circular definitions found for {}", name))
         } else {
             ax.insert(name.into());
-            match self.symbols.get(name) {
-                Some(Symbol::Alias(name)) => self._resolve_symbol(name, ax),
-                Some(Symbol::Final(constraint)) => Ok(constraint.clone()),
-                None => self
-                    .parent
-                    .as_ref()
-                    .map_or(Err(eyre!("Column `{}` unknown", name)), |parent| {
-                        parent.borrow().resolve_symbol(name)
-                    }),
+            // Ugly, but required for borrowing reasons
+            if let Some(Symbol::Alias(name)) = self.symbols.get(name).cloned() {
+                self._resolve_symbol(&name, ax)
+            } else {
+                match self.symbols.get_mut(name) {
+                    Some(Symbol::Final(constraint, visited)) => {
+                        *visited = true;
+                        Ok(constraint.clone())
+                    }
+                    None => self
+                        .parent
+                        .as_ref()
+                        .map_or(Err(eyre!("Column `{}` unknown", name)), |parent| {
+                            parent.borrow_mut().resolve_symbol(name)
+                        }),
+                    _ => unimplemented!(),
+                }
             }
         }
     }
@@ -92,7 +104,7 @@ impl SymbolTable {
             Err(anyhow!("column `{}` already exists", symbol))
         } else {
             self.symbols
-                .insert(symbol.into(), Symbol::Final(constraint));
+                .insert(symbol.into(), Symbol::Final(constraint, false));
             Ok(())
         }
     }
@@ -116,7 +128,7 @@ impl SymbolTable {
     }
 
     pub fn insert_funalias(&mut self, from: &str, to: &str) -> Result<()> {
-        if self.symbols.contains_key(from) {
+        if self.funcs.contains_key(from) {
             Err(anyhow!(
                 "`{}` already exists: {} -> {:?}",
                 from,
@@ -135,7 +147,7 @@ impl SymbolTable {
         }
     }
 
-    pub fn resolve_symbol(&self, name: &str) -> Result<Expression> {
+    pub fn resolve_symbol(&mut self, name: &str) -> Result<Expression> {
         self._resolve_symbol(name, &mut HashSet::new())
     }
 
@@ -148,7 +160,7 @@ impl SymbolTable {
             Err(anyhow!("`{}` already exists", name))
         } else {
             self.symbols
-                .insert(name.into(), Symbol::Final(Expression::Const(value)));
+                .insert(name.into(), Symbol::Final(Expression::Const(value), false));
             Ok(())
         }
     }

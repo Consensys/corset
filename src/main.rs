@@ -8,6 +8,7 @@ use std::io::BufWriter;
 
 mod column;
 mod compiler;
+mod expander;
 mod transpilers;
 
 #[derive(Parser)]

@@ -1,4 +1,5 @@
-(defcolumns A B C)
+(defcolumns A B C D)
+(defconst T 4)
 
 (defconstraint foo-0 () (bin-if-zero A B (begin C 4)))
 (defconstraint foo-1 () (if-zero A B C))
