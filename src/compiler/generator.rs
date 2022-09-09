@@ -1,7 +1,7 @@
 use eyre::*;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::{cell::RefCell, collections::HashSet};
 
 use super::common::*;
 use crate::column::Column;
@@ -202,7 +202,7 @@ impl FuncVerifier<Expression> for Builtin {
 
 #[derive(Default)]
 pub struct ConstraintsSet {
-    pub columns: HashMap<String, Column>,
+    pub columns: HashMap<String, Column<u32>>,
     pub constraints: Vec<Expression>,
 }
 
@@ -262,32 +262,70 @@ fn apply(
                 let traversed_args = b
                     .validate_args(traversed_args)
                     .with_context(|| eyre!("validating call to `{}`", f.name))?;
+                let cond = traversed_args[0].clone();
                 match b {
                     Builtin::Begin => Ok(Some(Expression::List(traversed_args))),
-                    b @ (Builtin::BinIfZero | Builtin::BinIfNotZero) => {
-                        let cond_zero = traversed_args[0].clone();
-                        let cond_one = Expression::Funcall {
-                            func: Builtin::Sub,
-                            args: vec![Expression::Const(1), cond_zero.clone()],
-                        };
 
-                        let conds = match b {
-                            Builtin::BinIfZero => [cond_one, cond_zero],
-                            Builtin::BinIfNotZero => [cond_zero, cond_one],
-                            _ => unreachable!(),
+                    b @ (Builtin::BinIfZero
+                    | Builtin::BinIfNotZero
+                    | Builtin::IfZero
+                    | Builtin::IfNotZero) => {
+                        let conds = {
+                            let cond_not_zero = cond.clone();
+                            if matches!(b, Builtin::BinIfZero | Builtin::BinIfNotZero) {
+                                let cond_zero = Expression::Funcall {
+                                    func: Builtin::Sub,
+                                    args: vec![Expression::Const(1), cond_not_zero.clone()],
+                                };
+                                match b {
+                                    Builtin::BinIfZero => [cond_zero, cond_not_zero],
+                                    Builtin::BinIfNotZero => [cond_not_zero, cond_zero],
+                                    _ => unreachable!(),
+                                }
+                            } else if matches!(b, Builtin::IfZero | Builtin::IfNotZero) {
+                                // 1 - x.INV(x)
+                                let cond_zero = Expression::Funcall {
+                                    func: Builtin::Sub,
+                                    args: vec![
+                                        Expression::Const(1),
+                                        Expression::Funcall {
+                                            func: Builtin::Mul,
+                                            args: vec![
+                                                cond.clone(),
+                                                Expression::Funcall {
+                                                    func: Builtin::Inv,
+                                                    args: vec![cond.clone()],
+                                                },
+                                            ],
+                                        },
+                                    ],
+                                };
+                                match b {
+                                    Builtin::IfZero => [cond_zero, cond_not_zero],
+                                    Builtin::IfNotZero => [cond_not_zero, cond_zero],
+                                    _ => unreachable!(),
+                                }
+                            } else {
+                                unreachable!()
+                            }
                         };
 
                         // Order the then/else blocks
                         let then_else = vec![traversed_args.get(1), traversed_args.get(2)]
                             .into_iter()
-                            // Only keep the non-empty branches
-                            .filter_map(|ex| ex)
-                            // Ensure branches are wrapped in in lists
-                            .map(|ex| match ex {
-                                Expression::List(_) => ex.clone(),
-                                ex => Expression::List(vec![ex.clone()]),
-                            })
                             .enumerate()
+                            // Only keep the non-empty branches
+                            .filter_map(|(i, ex)| ex.map(|ex| (i, ex)))
+                            // Ensure branches are wrapped in in lists
+                            .map(|(i, ex)| {
+                                (
+                                    i,
+                                    match ex {
+                                        Expression::List(_) => ex.clone(),
+                                        ex => Expression::List(vec![ex.clone()]),
+                                    },
+                                )
+                            })
                             // Map the corresponding then/else operations on the branches
                             .map(|(i, exs)| {
                                 if let Expression::List(exs) = exs {
@@ -306,58 +344,6 @@ fn apply(
                             .flatten()
                             .flatten()
                             .collect::<Vec<_>>();
-                        Ok(Some(Expression::List(then_else)))
-                    }
-                    b @ (Builtin::IfZero | Builtin::IfNotZero) => {
-                        let cond = traversed_args[0].clone();
-
-                        // Order the then/else blocks
-                        let (op_then, op_else) = match b {
-                            Builtin::IfZero => (Builtin::IfZero, Builtin::Mul),
-                            Builtin::IfNotZero => (Builtin::Mul, Builtin::IfZero),
-                            _ => unreachable!(),
-                        };
-                        let then_else = vec![
-                            (op_then, traversed_args.get(1)),
-                            (op_else, traversed_args.get(2)),
-                        ]
-                        .into_iter()
-                        // Only keep the non-empty branches
-                        .filter_map(|(func, ex)| {
-                            if let Some(ex) = ex {
-                                Some((func, ex))
-                            } else {
-                                None
-                            }
-                        })
-                        // Ensure branches are wrapped in in lists
-                        .map(|(func, ex)| {
-                            (
-                                func,
-                                match ex {
-                                    Expression::List(_) => ex.clone(),
-                                    ex => Expression::List(vec![ex.clone()]),
-                                },
-                            )
-                        })
-                        // Map the correspondin then/else operation on the branches
-                        .map(|(func, exs)| {
-                            if let Expression::List(exs) = exs {
-                                exs.into_iter()
-                                    .map(|ex: Expression| {
-                                        ex.flat_fold(&|ex| Expression::Funcall {
-                                            func,
-                                            args: vec![cond.clone(), ex.clone()],
-                                        })
-                                    })
-                                    .collect::<Vec<_>>()
-                            } else {
-                                unreachable!()
-                            }
-                        })
-                        .flatten()
-                        .flatten()
-                        .collect::<Vec<_>>();
                         Ok(Some(Expression::List(then_else)))
                     }
 
