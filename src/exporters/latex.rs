@@ -240,7 +240,7 @@ impl LatexExporter {
     }
 }
 
-impl crate::transpilers::Transpiler<Ast> for LatexExporter {
+impl crate::exporters::Exporter<Ast> for LatexExporter {
     fn render<'a>(&mut self, asts: &[Ast], mut out: BufWriter<Box<dyn Write + 'a>>) -> Result<()> {
         let s = Rc::new(RefCell::new(self));
         let r = asts

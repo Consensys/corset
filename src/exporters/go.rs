@@ -110,7 +110,7 @@ impl GoExporter {
     }
 }
 
-impl crate::transpilers::Transpiler<Expression> for GoExporter {
+impl crate::exporters::Exporter<Expression> for GoExporter {
     fn render<'a>(
         &mut self,
         cs: &[Expression],

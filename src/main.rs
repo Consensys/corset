@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate pest_derive;
-use crate::transpilers::Transpiler;
+use crate::exporters::Exporter;
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
 use std::fs::File;
@@ -9,7 +9,7 @@ use std::io::BufWriter;
 mod column;
 mod compiler;
 mod expander;
-mod transpilers;
+mod exporters;
 
 #[derive(Parser)]
 #[clap(author, version)]
@@ -105,7 +105,7 @@ fn main() -> Result<()> {
             package,
             columns_assignment,
         } => {
-            let mut go_exporter = transpilers::go::GoExporter {
+            let mut go_exporter = exporters::go::GoExporter {
                 fname: fname.clone(),
                 package: package.clone(),
                 ce: columns_assignment.into(),
@@ -127,7 +127,7 @@ fn main() -> Result<()> {
             }
         }
         Commands::Latex {} => {
-            let mut latex_exporter = transpilers::latex::LatexExporter::default();
+            let mut latex_exporter = exporters::latex::LatexExporter::default();
             latex_exporter.render(&ast, out)?
         }
     }
