@@ -6,7 +6,7 @@ use definitions::SymbolTable;
 pub use generator::{Builtin, ConstraintsSet, Expression};
 pub use parser::{Ast, AstNode, Token};
 
-use crate::column::Column;
+use crate::{column::Column, expander::expand};
 
 use self::definitions::Symbol;
 
@@ -48,14 +48,21 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                     None
                 } else {
                     match symbol {
-                        Expression::Column(name) => Some((name.to_owned(), Column::Empty)),
-                        Expression::ArrayColumn(name, _) => Some((name.to_owned(), Column::Empty)),
+                        Expression::Column(name) => Some((name.to_owned(), Column::Atomic(vec![]))),
+                        Expression::ArrayColumn(name, range) => Some((
+                            name.to_owned(),
+                            Column::Array {
+                                range: range.clone(),
+                                content: Default::default(),
+                            },
+                        )),
                         _ => None,
                     }
                 }
             }
         })
         .collect::<HashMap<_, _>>();
+    expand(&mut r)?;
 
     Ok((asts.into_iter().map(|x| x.1).collect(), r))
 }

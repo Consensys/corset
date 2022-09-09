@@ -63,7 +63,7 @@ impl GoExporter {
                 0..=2 | 127 | 256 => Ok(format!("column.CONST_{}()", x)),
                 x => Ok(format!("column.CONST_UINT64({})", x)),
             },
-            Expression::Column(name) => Ok(format!("{}[{}.Name()]", self.ce, name)),
+            Expression::Column(name) => Ok(format!("{}[\"{}\"]", self.ce, name)),
             Expression::ArrayColumnElement(name, i) => Ok(format!(
                 "{}[{}{}{}.Name()]",
                 self.ce, name, ARRAY_SEPARATOR, i
@@ -93,11 +93,6 @@ impl GoExporter {
             Builtin::Sub => self.make_chain(args, "Sub", true),
             Builtin::Inv => Ok(format!("({}).Inv()", self.render_node(&args[0])?)),
             Builtin::Neg => Ok(format!("({}).Neg()", self.render_node(&args[0])?)),
-            Builtin::IfZero => Ok(format!(
-                "({}).IfZero({})",
-                self.render_node(&args[0])?,
-                self.render_node(&args[1])?
-            )),
             Builtin::Shift => Ok(format!(
                 "({}).Shift({})",
                 self.render_node(&args[0])?,

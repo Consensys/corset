@@ -200,7 +200,7 @@ impl FuncVerifier<Expression> for Builtin {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ConstraintsSet {
     pub columns: HashMap<String, Column<u32>>,
     pub constraints: Vec<Expression>,

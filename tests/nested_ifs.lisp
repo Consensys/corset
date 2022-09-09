@@ -5,10 +5,10 @@
 (defconstraint foo-1 () (if-zero A B C))
 
 (defconstraint Something-else ()
-  (if-zero A
+  (if-zero (- A 3)
            (= 1 1)
            (begin
-            (if-not-zero B
+            (if-not-zero (+ B T)
                          4
                          (+ 2 3))
             (eq B C))))
