@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::{
     column::Column,
-    compiler::{Builtin, ConstraintsSet, Expression},
+    compiler::{Builtin, Constraint, ConstraintsSet, Expression},
 };
 use eyre::*;
 
@@ -52,7 +52,7 @@ fn rec_expand(
     new_cs: &mut Vec<Expression>,
 ) -> Result<()> {
     match e {
-        Expression::Constraint { expr: e, .. } => rec_expand(e, cols, new_cs),
+        // Expression::Constraint { expr: e, .. } => rec_expand(e, cols, new_cs),
         Expression::List(es) => {
             for e in es.iter_mut() {
                 rec_expand(e, cols, new_cs)?;
@@ -83,9 +83,11 @@ pub fn expand(cs: &mut ConstraintsSet) -> Result<()> {
 
     let mut new_cs = vec![];
     for c in cs.constraints.iter_mut() {
-        rec_expand(c, &mut cs.columns, &mut new_cs)?;
+        if let Constraint::Vanishes { expr: e, .. } = c {
+            rec_expand(e, &mut cs.columns, &mut new_cs)?;
+        }
     }
-    cs.constraints.push(Expression::Constraint {
+    cs.constraints.push(Constraint::Vanishes {
         name: "INV_CONSTRAINTS".into(),
         domain: None,
         expr: Expression::List(new_cs).into(),

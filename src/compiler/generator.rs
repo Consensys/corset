@@ -9,13 +9,21 @@ use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 use std::fmt::{Debug, Formatter};
 
-#[derive(Clone)]
-pub enum Expression {
-    Constraint {
+#[derive(Debug)]
+pub enum Constraint {
+    Vanishes {
         name: String,
         domain: Option<Vec<isize>>,
         expr: Box<Expression>,
     },
+    Plookup(Vec<Expression>, Vec<Expression>),
+}
+
+#[derive(Clone)]
+pub enum Expression {
+    // Constraint {
+    //     name: String,
+    // },
     Funcall {
         func: Builtin,
         args: Vec<Expression>,
@@ -56,7 +64,6 @@ impl Debug for Expression {
         }
 
         match self {
-            Expression::Constraint { name, expr, .. } => write!(f, "{}: {:?}", name, expr),
             Expression::Const(x) => write!(f, "{}:CONST", x),
             Expression::Column(name) => write!(f, "{}:COLUMN", name),
             Expression::ArrayColumn(name, range) => {
@@ -203,7 +210,7 @@ impl FuncVerifier<Expression> for Builtin {
 #[derive(Default, Debug)]
 pub struct ConstraintsSet {
     pub columns: HashMap<String, Column<u32>>,
-    pub constraints: Vec<Expression>,
+    pub constraints: Vec<Constraint>,
 }
 
 // Compared to a function, a form do not evaluate all of its arguments by default
@@ -411,12 +418,8 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Expressio
                 Err(eyre!("Not a function: {:?}", args[0]))
             }
         }
-        Token::DefConstraint(name, domain, expr) => Ok(Some(Expression::Constraint {
-            name: name.into(),
-            domain: domain.to_owned(),
-            expr: Box::new(reduce(expr, ctx)?.unwrap()), // the parser ensures that the body is never empty
-        })),
 
+        Token::DefConstraint(name, domain, expr) => Ok(None),
         Token::Range(_) => Ok(None),
         Token::DefColumns(_) => Ok(None),
         Token::DefColumn(_) => Ok(None),
@@ -426,15 +429,49 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Expressio
         Token::DefunAlias(..) => Ok(None),
         Token::DefConst(..) => Ok(None),
         Token::Defun(..) => Ok(None),
+        Token::DefPlookup(..) => Ok(None),
     }
     .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))
 }
 
-pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Expression>> {
+fn reduce_toplevel(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Constraint>> {
+    match &e.class {
+        Token::Ignore => Ok(None),
+        Token::DefConstraint(name, domain, expr) => Ok(Some(Constraint::Vanishes {
+            name: name.into(),
+            domain: domain.to_owned(),
+            expr: Box::new(reduce(expr, ctx)?.unwrap()), // the parser ensures that the body is never empty
+        })),
+        Token::DefPlookup(parent, child) => {
+            let parents = parent
+                .iter()
+                .map(|e| reduce(e, ctx.clone()))
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .map(|e| e.unwrap())
+                .collect::<Vec<_>>();
+            let children = child
+                .iter()
+                .map(|e| reduce(e, ctx.clone()))
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .map(|e| e.unwrap())
+                .collect::<Vec<_>>();
+            Ok(Some(Constraint::Plookup(parents, children)))
+        }
+
+        _ => {
+            eprintln!("Unexpected top-level form: {:?}", e);
+            Ok(None)
+        }
+    }
+}
+
+pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Constraint>> {
     let mut r = vec![];
 
     for exp in ast.exprs.iter().cloned() {
-        if let Some(c) = reduce(&exp, ctx.clone())
+        if let Some(c) = reduce_toplevel(&exp, ctx.clone())
             .with_context(|| format!("at line {}, col.{}: \"{}\"", exp.lc.0, exp.lc.1, exp.src))?
         {
             r.push(c)

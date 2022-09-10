@@ -176,9 +176,12 @@ pub enum Type {
 
 fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
     match &e.class {
-        Token::Value(_) | Token::Ignore | Token::Symbol(_) | Token::Form(_) | Token::Range(_) => {
-            Ok(())
-        }
+        Token::Value(_)
+        | Token::Ignore
+        | Token::Symbol(_)
+        | Token::Form(_)
+        | Token::Range(_)
+        | Token::DefPlookup(..) => Ok(()),
 
         Token::DefConstraint(name, ..) => ctx.borrow_mut().insert_constraint(name),
         Token::DefConst(name, x) => ctx.borrow_mut().insert_constant(name, *x as i32),

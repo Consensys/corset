@@ -58,7 +58,6 @@ impl GoExporter {
     pub fn render_node(&self, node: &Expression) -> Result<String> {
         let r = match node {
             Expression::ArrayColumn(..) => unreachable!(),
-            Expression::Constraint { .. } => unreachable!(),
             Expression::Const(x) => match x {
                 0..=2 | 127 | 256 => Ok(format!("column.CONST_{}()", x)),
                 x => Ok(format!("column.CONST_UINT64({})", x)),
@@ -110,10 +109,10 @@ impl GoExporter {
     }
 }
 
-impl crate::exporters::Exporter<Expression> for GoExporter {
+impl crate::exporters::Exporter<Constraint> for GoExporter {
     fn render<'a>(
         &mut self,
-        cs: &[Expression],
+        cs: &[Constraint],
         mut out: BufWriter<Box<dyn Write + 'a>>,
     ) -> Result<()> {
         if cs.is_empty() {
@@ -122,55 +121,55 @@ impl crate::exporters::Exporter<Expression> for GoExporter {
 
         let constraints = cs
             .iter()
-            .map(|c| {
-                if let Expression::Constraint { name, domain, expr } = c {
-                    self.render_node(expr)
-                        .map(|mut r| {
-                            if let Some(true) = r.chars().last().map(|c| c != ',') {
-                                r.push(',');
-                            }
-                            r
-                        })
-                        .map(|r| {
-                            make_go_function(
-                                &name.to_case(Case::Snake),
-                                "r = []column.Expression {",
-                                &r,
-                                "}",
-                                "[]column.Expression",
-                            )
-                        })
-                } else {
-                    unreachable!()
-                }
+            .map(|c| match c {
+                Constraint::Vanishes { name, domain, expr } => self
+                    .render_node(expr)
+                    .map(|mut r| {
+                        if let Some(true) = r.chars().last().map(|c| c != ',') {
+                            r.push(',');
+                        }
+                        r
+                    })
+                    .map(|r| {
+                        make_go_function(
+                            &name.to_case(Case::Snake),
+                            "r = []column.Expression {",
+                            &r,
+                            "}",
+                            "[]column.Expression",
+                        )
+                    }),
+                x => Ok(format!("{:?}", x)),
             })
             .collect::<Result<Vec<_>>>()?
             .join("\n");
-        // .replace(",,", ",");
 
         let main_function = make_go_function(
             &self.fname.to_case(Case::Pascal),
             "",
             &cs.iter()
                 .map(|c| {
-                    if let Expression::Constraint { name, domain, .. } = c {
-                        match domain {
-                            None => {
-                                format!(
-                                    "r = append(r, constraint.NewGlobalConstraintList({}()...)...)",
-                                    name.to_case(Case::Camel)
-                                )
+                    match c {
+                        Constraint::Vanishes { name, domain, .. } => {
+                            match domain {
+                                None => {
+                                    format!(
+                                        "r = append(r, constraint.NewGlobalConstraintList({}()...)...)",
+                                        name.to_case(Case::Camel)
+                                    )
+                                }
+                                Some(domain) => {
+                                    format!(
+                                        "r = append(r, constraint.NewLocalConstraintList([]int{{{}}}, {}()...)...)",
+                                        domain.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", "),
+                                        name.to_case(Case::Camel)
+                                    )
+                                }
                             }
-                            Some(domain) => {
-                                format!(
-                                    "r = append(r, constraint.NewLocalConstraintList([]int{{{}}}, {}()...)...)",
-                                    domain.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", "),
-                                    name.to_case(Case::Camel)
-                                )
-                            }
+                        },
+                        Constraint::Plookup(parents, children)  => {
+                            format!("// New Plookup\n// Parents:\n// {:?}\n// Children:\n// {:?}", parents, children)
                         }
-                    } else {
-                        unreachable!()
                     }
                 })
                 .collect::<Vec<_>>()

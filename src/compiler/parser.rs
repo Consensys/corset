@@ -47,6 +47,7 @@ pub enum Token {
     DefAliases(Vec<AstNode>),
     DefAlias(String, String),
     DefunAlias(String, String),
+    DefPlookup(Vec<AstNode>, Vec<AstNode>),
 }
 impl Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -84,6 +85,7 @@ impl Debug for Token {
             Token::DefAliases(cols) => write!(f, "ALIASES {:?}", cols),
             Token::DefAlias(from, to) => write!(f, "{} -> {}", from, to),
             Token::DefunAlias(from, to) => write!(f, "{} -> {}", from, to),
+            Token::DefPlookup(parent, child) => write!(f, "{:?} ⊂ {:?}", parent, child),
         }
     }
 }
@@ -234,6 +236,20 @@ impl AstNode {
                     }),
                     _ => Err(eyre!(
                         "DEFUNALIAS expects (SYMBOL SYMBOL); received {:?}",
+                        &tokens[1..]
+                    )),
+                }
+            }
+
+            Some(Token::Symbol(defkw)) if defkw == "defplookup" => {
+                match (tokens.get(1), tokens.get(2)) {
+                    (Some(Token::Form(parent)), Some(Token::Form(child))) => Ok(AstNode {
+                        class: Token::DefPlookup(parent.to_owned(), child.to_owned()),
+                        src: src.into(),
+                        lc,
+                    }),
+                    _ => Err(eyre!(
+                        "DEFPLOOKUP expects (PARENT:LIST CHILD:LIST); received {:?}",
                         &tokens[1..]
                     )),
                 }
