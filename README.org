@@ -51,6 +51,9 @@ Column arrays are typically used to group semantically similar columns, /e.g./ h
     GAMMA DELTA EPSILON
     X Y Z)
 
+  ;; Columns may have a stype
+  (defcolumns A B:BOOLEAN C:NATURAL)
+
   ;; Columns can be scalar...
   (defcolumns VALUE)
   (defconstraint () pipo (eq VALUE 3))
@@ -292,3 +295,10 @@ To automatically compile Corset constraints, the ~~go generate~ feature can be l
   (defconstraint ifSuxOrSoxThenSex ()
     (= SEX (+ SOX SUX)))
 #+end_src
+
+* Changelog
+** 1.1.0
+- Automated generation of volatile columns and  their associated constraints when required for inverse computation and expression-based plookups
+- Implement a basic type system (boolean & natural)
+- All ~if~ variants are automatically determined
+- Basic plookups definition is implemented
