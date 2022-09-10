@@ -2,7 +2,7 @@ use convert_case::{Case, Casing};
 
 use crate::{
     column::Column,
-    compiler::{Builtin, Columns, Constraint, ConstraintsSet, Expression},
+    compiler::{Builtin, Columns, Constraint, ConstraintsSet, Expression, Type},
 };
 use eyre::*;
 
@@ -16,7 +16,10 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) 
                 args: vec![
                     Expression::Funcall {
                         func: Builtin::Mul,
-                        args: vec![x_expr.clone(), Expression::Column(inv_x_col.into())],
+                        args: vec![
+                            x_expr.clone(),
+                            Expression::Column(inv_x_col.into(), Type::Numeric),
+                        ],
                     },
                     Expression::Const(1),
                 ],
@@ -26,13 +29,16 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) 
     cs.push(Expression::Funcall {
         func: Builtin::Mul,
         args: vec![
-            Expression::Column(inv_x_col.into()),
+            Expression::Column(inv_x_col.into(), Type::Numeric),
             Expression::Funcall {
                 func: Builtin::Sub,
                 args: vec![
                     Expression::Funcall {
                         func: Builtin::Mul,
-                        args: vec![x_expr.clone(), Expression::Column(inv_x_col.into())],
+                        args: vec![
+                            x_expr.clone(),
+                            Expression::Column(inv_x_col.into(), Type::Numeric),
+                        ],
                     },
                     Expression::Const(1),
                 ],
@@ -44,7 +50,10 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) 
 fn validate_plookup(cs: &mut Vec<Expression>, x_expr: &Expression, x_col: &str) {
     cs.push(Expression::Funcall {
         func: Builtin::Sub,
-        args: vec![x_expr.clone(), Expression::Column(x_col.into())],
+        args: vec![
+            x_expr.clone(),
+            Expression::Column(x_col.into(), Type::Numeric),
+        ],
     })
 }
 
@@ -60,18 +69,17 @@ fn expand_expr(e: &mut Expression, cols: &mut Columns, new_cs: &mut Vec<Expressi
             }
             Ok(())
         }
-        Expression::Funcall { func, args } => {
+        Expression::Funcall { func, args, .. } => {
             for e in args.iter_mut() {
                 expand_expr(e, cols, new_cs)?;
             }
             if matches!(func, Builtin::Inv) {
                 let inverted = &mut args[0];
-                println!("Found an INV: {:?}", inverted);
                 let inv_colname = expression_to_name(inverted, "INV");
                 let inv_column = Column::Composite::<u32>(inverted.clone());
                 cols.insert(inv_colname.clone(), inv_column);
                 validate_inv(new_cs, inverted, &inv_colname);
-                *e = Expression::Column(inv_colname)
+                *e = Expression::Column(inv_colname, Type::Numeric)
             }
             Ok(())
         }
@@ -81,7 +89,7 @@ fn expand_expr(e: &mut Expression, cols: &mut Columns, new_cs: &mut Vec<Expressi
 
 fn expand_plookup(e: &Expression, cols: &mut Columns, new_cs: &mut Vec<Expression>) -> Result<()> {
     match e {
-        Expression::Column(_) => Ok(()),
+        Expression::Column(..) => Ok(()),
         e => {
             let plookup_column = Column::Composite::<u32>(e.clone());
             let plookup_colname = expression_to_name(e, "PLKP");
@@ -122,6 +130,5 @@ pub fn expand(cs: &mut ConstraintsSet) -> Result<()> {
         });
     }
 
-    dbg!(&cs);
     Ok(())
 }

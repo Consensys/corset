@@ -1,14 +1,12 @@
+use self::definitions::Symbol;
+use crate::{column::Column, expander::expand};
+use definitions::SymbolTable;
 use eyre::*;
 use std::{cell::RefCell, rc::Rc};
 
-use definitions::SymbolTable;
-
+pub use common::Type;
 pub use generator::{Builtin, Columns, Constraint, ConstraintsSet, Expression};
 pub use parser::{Ast, AstNode, Token};
-
-use crate::{column::Column, expander::expand};
-
-use self::definitions::Symbol;
 
 mod common;
 mod definitions;
@@ -48,14 +46,15 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                         None
                     } else {
                         match symbol {
-                            Expression::Column(name) => {
-                                Some((name.to_owned(), Column::Atomic(vec![])))
+                            Expression::Column(name, t) => {
+                                Some((name.to_owned(), Column::Atomic(vec![], *t)))
                             }
-                            Expression::ArrayColumn(name, range) => Some((
+                            Expression::ArrayColumn(name, range, t) => Some((
                                 name.to_owned(),
                                 Column::Array {
                                     range: range.clone(),
                                     content: Default::default(),
+                                    t: *t,
                                 },
                             )),
                             _ => None,

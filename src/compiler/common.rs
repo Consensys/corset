@@ -1,4 +1,5 @@
 use eyre::*;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use super::generator::{Builtin, Function, FunctionClass};
@@ -49,15 +50,6 @@ lazy_static::lazy_static! {
         },
 
         "begin" => Function{name: "begin".into(), class: FunctionClass::Builtin(Builtin::Begin)},
-
-        "bin-if-zero" => Function {
-            name: "bin-if-zero".into(),
-            class: FunctionClass::Builtin(Builtin::BinIfZero)
-        },
-        "bin-if-not-zero" => Function {
-            name: "bin-if-not-zero".into(),
-            class: FunctionClass::Builtin(Builtin::BinIfNotZero)
-        },
 
         "if-zero" => Function {
             name: "if-zero".into(),
@@ -161,6 +153,34 @@ impl FuncVerifier<AstNode> for Form {
                     ))
                 }
             }
+        }
+    }
+}
+
+/// The type of a column in the IR
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Type {
+    Numeric,
+    Boolean,
+    Void,
+}
+
+impl std::cmp::Ord for Type {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Type::Numeric, Type::Boolean) => Ordering::Greater,
+            (Type::Boolean, Type::Numeric) => Ordering::Less,
+            _ => Ordering::Equal,
+        }
+    }
+}
+
+impl std::cmp::PartialOrd for Type {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Type::Numeric, Type::Boolean) => Some(Ordering::Greater),
+            (Type::Boolean, Type::Numeric) => Some(Ordering::Less),
+            _ => Some(Ordering::Equal),
         }
     }
 }

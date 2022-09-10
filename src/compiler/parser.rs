@@ -3,6 +3,8 @@ use pest::{iterators::Pair, Parser};
 use std::fmt;
 use std::fmt::Debug;
 
+use super::common::Type;
+
 #[derive(Parser)]
 #[grammar = "corset.pest"]
 struct CorsetParser;
@@ -37,11 +39,12 @@ pub enum Token {
     Symbol(String),
     Form(Vec<AstNode>),
     Range(Vec<usize>),
+    Type(Type),
 
     DefConst(String, usize),
     DefColumns(Vec<AstNode>),
-    DefColumn(String),
-    DefArrayColumn(String, Vec<usize>),
+    DefColumn(String, Type),
+    DefArrayColumn(String, Vec<usize>, Type),
     DefConstraint(String, Option<Vec<isize>>, Box<AstNode>),
     Defun(String, Vec<String>, Box<AstNode>),
     DefAliases(Vec<AstNode>),
@@ -63,7 +66,7 @@ impl Debug for Token {
                     .map(|c| format!("{:?}", c))
                     .collect::<Vec<_>>()
                     .join(" ")
-                    + " ..."
+                    + " [...]"
             }
         }
 
@@ -73,11 +76,14 @@ impl Debug for Token {
             Token::Symbol(ref name) => write!(f, "{}:SYMBOL", name),
             Token::Form(ref args) => write!(f, "({})", format_list(args)),
             Token::Range(ref args) => write!(f, "{:?}", args),
+            Token::Type(t) => write!(f, "{:?}", t),
 
             Token::DefConst(name, value) => write!(f, "{}:CONST({})", name, value),
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
-            Token::DefColumn(name) => write!(f, "DECLARATION {}", name),
-            Token::DefArrayColumn(name, range) => write!(f, "DECLARATION {}{:?}", name, range),
+            Token::DefColumn(name, t) => write!(f, "DECLARATION {}:{:?}", name, t),
+            Token::DefArrayColumn(name, range, t) => {
+                write!(f, "DECLARATION {}{:?}{{{:?}}}", name, range, t)
+            }
             Token::DefConstraint(name, ..) => write!(f, "{:?}:CONSTRAINT", name),
             Token::Defun(name, args, content) => {
                 write!(f, "{}:({:?}) -> {:?}", name, args, content)
@@ -308,19 +314,34 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
         Rule::defcolumn => {
             let mut pairs = pair.into_inner();
             let name = pairs.next().unwrap().as_str();
+
+            let annotations = (0..=1)
+                .filter_map(|_| pairs.next().map(rec_parse))
+                .collect::<Vec<_>>();
+            // TYPE annotation is always the first if it exists
+            let t = if let Some(Ok(AstNode {
+                class: Token::Type(x),
+                ..
+            })) = annotations.last()
+            {
+                *x
+            } else {
+                Type::Numeric
+            };
+            // RANGE annotation is always the last if it exists
             if let Some(Ok(AstNode {
                 class: Token::Range(range),
                 ..
-            })) = pairs.next().map(rec_parse)
+            })) = annotations.first()
             {
                 Ok(AstNode {
-                    class: Token::DefArrayColumn(name.into(), range),
+                    class: Token::DefArrayColumn(name.into(), range.clone(), t),
                     lc,
                     src,
                 })
             } else {
                 Ok(AstNode {
-                    class: Token::DefColumn(name.into()),
+                    class: Token::DefColumn(name.into(), t),
                     lc,
                     src,
                 })
@@ -384,6 +405,15 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             ),
             lc,
             src,
+        }),
+        Rule::typ => Ok(AstNode {
+            class: Token::Type(match pair.as_str() {
+                "NATURAL" => Type::Numeric,
+                "BOOLEAN" => Type::Boolean,
+                _ => unreachable!(),
+            }),
+            src,
+            lc,
         }),
         x => unimplemented!("{:?}", x),
     }

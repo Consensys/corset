@@ -12,7 +12,8 @@ definition = { "(" ~ definition_kw ~ expr* ~ ")"}
 definition_kw = { "defconstraint" | "defunalias" | "defun" | "defconst" | "defalias" | "defplookup"}
 
 defcolumns = { "(" ~ "defcolumns" ~ defcolumn* ~ ")" }
-defcolumn = { symbol ~ range? }
+defcolumn = { symbol ~ range? ~ typing? }
+typing = _{ ":" ~ typ }
 
 
 
@@ -24,7 +25,7 @@ forloop = { "(" ~ "for" ~ symbol ~ range ~ expr ~ ")" }
 range = _{ immediate_range | interval }
 immediate_range = { "{" ~ natural+ ~ "}" }
 interval = { "[" ~ natural ~ (":" ~ natural ~ (":" ~ natural)?)? ~ "]" }
-arg_type = { "NATURAL" | "CONSTRAINT" | "CONSTRAINTS"} // WiP functions typing
+typ = { "NATURAL" | "BOOLEAN" }
 
 integer = @{ "-"? ~ natural }
 natural = @{ ASCII_DIGIT+ }

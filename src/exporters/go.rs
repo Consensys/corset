@@ -62,8 +62,8 @@ impl GoExporter {
                 0..=2 | 127 | 256 => Ok(format!("column.CONST_{}()", x)),
                 x => Ok(format!("column.CONST_UINT64({})", x)),
             },
-            Expression::Column(name) => Ok(format!("{}[\"{}\"]", self.ce, name)),
-            Expression::ArrayColumnElement(name, i) => Ok(format!(
+            Expression::Column(name, _) => Ok(format!("{}[\"{}\"]", self.ce, name)),
+            Expression::ArrayColumnElement(name, i, _) => Ok(format!(
                 "{}[{}{}{}.Name()]",
                 self.ce, name, ARRAY_SEPARATOR, i
             )),
