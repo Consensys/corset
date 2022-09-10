@@ -207,9 +207,10 @@ impl FuncVerifier<Expression> for Builtin {
     }
 }
 
+pub type Columns = HashMap<String, Column<u32>>;
 #[derive(Default, Debug)]
 pub struct ConstraintsSet {
-    pub columns: HashMap<String, Column<u32>>,
+    pub columns: Columns,
     pub constraints: Vec<Constraint>,
 }
 
@@ -457,6 +458,10 @@ fn reduce_toplevel(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<
                 .map(|e| e.unwrap())
                 .collect::<Vec<_>>();
             Ok(Some(Constraint::Plookup(parents, children)))
+        }
+
+        Token::Value(_) | Token::Symbol(_) | Token::Form(_) | Token::Range(_) => {
+            Err(eyre!("Unexpected top-level form: {:?}", e))
         }
 
         _ => {

@@ -1,9 +1,9 @@
 use eyre::*;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use definitions::SymbolTable;
 
-pub use generator::{Builtin, Constraint, ConstraintsSet, Expression};
+pub use generator::{Builtin, Columns, Constraint, ConstraintsSet, Expression};
 pub use parser::{Ast, AstNode, Token};
 
 use crate::{column::Column, expander::expand};
@@ -63,7 +63,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                     }
                 }
             })
-            .collect::<HashMap<_, _>>(),
+            .collect::<Columns>(),
     };
     expand(&mut r)?;
 
