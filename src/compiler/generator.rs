@@ -301,7 +301,7 @@ fn apply(
                                                 cond.clone(),
                                                 Expression::Funcall {
                                                     func: Builtin::Inv,
-                                                    args: vec![cond.clone()],
+                                                    args: vec![cond],
                                                 },
                                             ],
                                         },
@@ -334,7 +334,7 @@ fn apply(
                                 )
                             })
                             // Map the corresponding then/else operations on the branches
-                            .map(|(i, exs)| {
+                            .flat_map(|(i, exs)| {
                                 if let Expression::List(exs) = exs {
                                     exs.into_iter()
                                         .map(|ex: Expression| {
@@ -348,7 +348,6 @@ fn apply(
                                     unreachable!()
                                 }
                             })
-                            .flatten()
                             .flatten()
                             .collect::<Vec<_>>();
                         Ok(Some(Expression::List(then_else)))
@@ -419,7 +418,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Expressio
             }
         }
 
-        Token::DefConstraint(name, domain, expr) => Ok(None),
+        Token::DefConstraint(..) => Ok(None),
         Token::Range(_) => Ok(None),
         Token::DefColumns(_) => Ok(None),
         Token::DefColumn(_) => Ok(None),

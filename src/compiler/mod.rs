@@ -26,42 +26,45 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         asts.push((name, ast));
     }
 
-    let mut r = ConstraintsSet::default();
-    r.constraints = asts
-        .iter()
-        .map(|(name, ast)| {
-            generator::pass(ast, ctx.clone())
-                .with_context(|| eyre!("compiling constraints in `{}`", name))
-        })
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
-        .flatten()
-        .collect();
-    r.columns = ctx
-        .borrow()
-        .symbols()
-        .filter_map(|s| match s {
-            Symbol::Alias(_) => None,
-            Symbol::Final(symbol, used) => {
-                if !*used {
-                    eprintln!("WARN unused: {:?}", symbol);
-                    None
-                } else {
-                    match symbol {
-                        Expression::Column(name) => Some((name.to_owned(), Column::Atomic(vec![]))),
-                        Expression::ArrayColumn(name, range) => Some((
-                            name.to_owned(),
-                            Column::Array {
-                                range: range.clone(),
-                                content: Default::default(),
-                            },
-                        )),
-                        _ => None,
+    let mut r = ConstraintsSet {
+        constraints: asts
+            .iter()
+            .map(|(name, ast)| {
+                generator::pass(ast, ctx.clone())
+                    .with_context(|| eyre!("compiling constraints in `{}`", name))
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect(),
+        columns: ctx
+            .borrow()
+            .symbols()
+            .filter_map(|s| match s {
+                Symbol::Alias(_) => None,
+                Symbol::Final(symbol, used) => {
+                    if !*used {
+                        eprintln!("WARN unused: {:?}", symbol);
+                        None
+                    } else {
+                        match symbol {
+                            Expression::Column(name) => {
+                                Some((name.to_owned(), Column::Atomic(vec![])))
+                            }
+                            Expression::ArrayColumn(name, range) => Some((
+                                name.to_owned(),
+                                Column::Array {
+                                    range: range.clone(),
+                                    content: Default::default(),
+                                },
+                            )),
+                            _ => None,
+                        }
                     }
                 }
-            }
-        })
-        .collect::<HashMap<_, _>>();
+            })
+            .collect::<HashMap<_, _>>(),
+    };
     expand(&mut r)?;
 
     Ok((asts.into_iter().map(|x| x.1).collect(), r))

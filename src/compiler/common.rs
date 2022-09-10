@@ -78,9 +78,9 @@ pub enum Form {
 
 pub enum Arity {
     AtLeast(usize),
-    AtMost(usize),
-    Even,
-    Odd,
+    // AtMost(usize),
+    // Even,
+    // Odd,
     Monadic,
     Dyadic,
     Exactly(usize),
@@ -93,9 +93,9 @@ impl Arity {
         }
         match self {
             Arity::AtLeast(x) => format!("expected at least {}, but received {}", arg_count(*x), l),
-            Arity::AtMost(x) => format!("expected at most {}, but received {}", arg_count(*x), l),
-            Arity::Even => format!("expected an even numer of arguments, but received {}", l),
-            Arity::Odd => format!("expected an odd numer of arguments, but received {}", l),
+            // Arity::AtMost(x) => format!("expected at most {}, but received {}", arg_count(*x), l),
+            // Arity::Even => format!("expected an even numer of arguments, but received {}", l),
+            // Arity::Odd => format!("expected an odd numer of arguments, but received {}", l),
             Arity::Monadic => format!("expected {}, but received {}", arg_count(1), l),
             Arity::Dyadic => format!("expected {}, but received {}", arg_count(2), l),
             Arity::Exactly(x) => format!("expected {}, but received {}", arg_count(*x), l),
@@ -111,9 +111,9 @@ impl Arity {
     fn validate(&self, l: usize) -> Result<()> {
         match self {
             Arity::AtLeast(x) => l >= *x,
-            Arity::AtMost(x) => l <= *x,
-            Arity::Even => l % 2 == 0,
-            Arity::Odd => l % 2 == 1,
+            // Arity::AtMost(x) => l <= *x,
+            // Arity::Even => l % 2 == 0,
+            // Arity::Odd => l % 2 == 1,
             Arity::Monadic => l == 1,
             Arity::Dyadic => l == 2,
             Arity::Exactly(x) => l == *x,

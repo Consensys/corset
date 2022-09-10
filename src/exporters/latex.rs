@@ -9,9 +9,7 @@ use std::{
 };
 
 #[derive(Default)]
-pub struct LatexExporter {
-    columns: Vec<Vec<String>>,
-}
+pub struct LatexExporter {}
 
 fn sanitize(s: &str) -> String {
     s.replace('_', "\\_")
@@ -35,13 +33,6 @@ fn textize(s: String, in_math: bool) -> String {
         s
     }
 }
-fn equize(s: String, in_math: bool) -> String {
-    if !in_math {
-        format!("${}$", s)
-    } else {
-        s
-    }
-}
 
 impl LatexExporter {
     fn render_parenthesized(&mut self, e: &AstNode, in_maths: bool) -> Result<String> {
@@ -55,24 +46,11 @@ impl LatexExporter {
     fn _flatten(&mut self, ax: &mut Vec<AstNode>, n: &AstNode) {
         ax.push(n.clone());
         match &n.class {
-            Token::DefColumn(name) => self
-                .columns
-                .last_mut()
-                .unwrap()
-                .push(format!("\\text{{{}}}", name)),
             Token::Form(xs) => xs.iter().for_each(|x| self._flatten(ax, x)),
-            Token::DefColumns(xs) => {
-                self.columns.push(vec![]);
-                xs.iter().for_each(|x| self._flatten(ax, x))
-            }
+            Token::DefColumns(xs) => xs.iter().for_each(|x| self._flatten(ax, x)),
             Token::DefConstraint(_, _, x) => self._flatten(ax, x),
             _ => (),
         }
-    }
-    fn flatten(&mut self, n: &AstNode) -> Vec<AstNode> {
-        let mut ax = vec![];
-        self._flatten(&mut ax, n);
-        ax
     }
     fn render_form(&mut self, args: &[AstNode], in_maths: bool) -> Result<String> {
         if args.is_empty() {
@@ -148,7 +126,7 @@ impl LatexExporter {
                     ),
                     in_maths,
                 )),
-                x => Ok(dollarize(
+                _ => Ok(dollarize(
                     format!(
                         "{}({})",
                         self.render_node(&args[0], true)?,
@@ -198,8 +176,8 @@ impl LatexExporter {
             )),
 
             Token::DefunAlias(from, to) => {
-                // Ok(format!("$\\text{{{}}} \\triangleq \\text{{{}}}$", from, to))
-                Ok(String::new())
+                Ok(format!("$\\text{{{}}} \\triangleq \\text{{{}}}$", from, to))
+                // Ok(String::new())
             }
 
             Token::DefColumns(cols) => {
@@ -230,7 +208,7 @@ impl LatexExporter {
                         .map(|x| x.to_string())
                         .collect::<Vec<_>>()
                         .join(", "))
-                    .unwrap_or("".into()),
+                    .unwrap_or_else(|| "".into()),
                 self.render_node(body, false)?,
             )),
             Token::Form(args) => self.render_form(args, in_maths),

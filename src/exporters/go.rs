@@ -122,7 +122,11 @@ impl crate::exporters::Exporter<Constraint> for GoExporter {
         let constraints = cs
             .iter()
             .map(|c| match c {
-                Constraint::Vanishes { name, domain, expr } => self
+                Constraint::Vanishes {
+                    name,
+                    domain: _,
+                    expr,
+                } => self
                     .render_node(expr)
                     .map(|mut r| {
                         if let Some(true) = r.chars().last().map(|c| c != ',') {

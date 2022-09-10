@@ -42,7 +42,7 @@ impl SymbolTable {
     }
 
     pub fn symbols(&self) -> impl Iterator<Item = &Symbol> {
-        self.symbols.iter().map(|(k, v)| v)
+        self.symbols.values()
     }
 
     fn _resolve_symbol(&mut self, name: &str, ax: &mut HashSet<String>) -> Result<Expression> {
