@@ -194,7 +194,6 @@ impl SymbolTable {
 fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
     match &e.class {
         Token::Value(_)
-        | Token::Ignore
         | Token::Symbol(_)
         | Token::Form(_)
         | Token::Range(_)

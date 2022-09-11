@@ -34,7 +34,6 @@ impl Debug for AstNode {
 
 #[derive(PartialEq, Clone)]
 pub enum Token {
-    Ignore,
     Value(i32),
     Symbol(String),
     Form(Vec<AstNode>),
@@ -71,7 +70,6 @@ impl Debug for Token {
         }
 
         match self {
-            Token::Ignore => write!(f, "IGNORED VALUE"),
             Token::Value(x) => write!(f, "{}:IMMEDIATE", x),
             Token::Symbol(ref name) => write!(f, "{}:SYMBOL", name),
             Token::Form(ref args) => write!(f, "({})", format_list(args)),
@@ -98,11 +96,7 @@ impl Debug for Token {
 
 impl AstNode {
     fn from(args: Vec<AstNode>, src: &str, lc: LinCol) -> Result<Self> {
-        let tokens = args
-            .iter()
-            .filter(|x| x.class != Token::Ignore)
-            .map(|x| x.class.clone())
-            .collect::<Vec<_>>();
+        let tokens = args.iter().map(|x| x.class.clone()).collect::<Vec<_>>();
         match tokens.get(0) {
             Some(Token::Symbol(defkw)) if defkw == "defconst" => {
                 match (tokens.get(1), tokens.get(2)) {
@@ -200,7 +194,7 @@ impl AstNode {
                         })
                     }
                     _ => Err(eyre!(
-                        "DEFCONSTRAINT expects (SYMBOL *); received {:?}",
+                        "DEFCONSTRAINT expects (NAME DOMAIN (EXP)); received {:?}",
                         &tokens[1..]
                     )),
                 }
@@ -287,7 +281,6 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
                 .map(rec_parse)
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
-                .filter(|x| x.class != Token::Ignore)
                 .collect::<Vec<_>>();
             Ok(AstNode {
                 class: Token::Form(args),

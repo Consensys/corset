@@ -421,7 +421,7 @@ fn apply(
 
 fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<(Expression, Type)>> {
     match &e.class {
-        Token::Ignore | Token::Type(_) | Token::Range(_) => Ok(None),
+        Token::Type(_) | Token::Range(_) => Ok(None),
         Token::Value(x) => Ok(Some((
             Expression::Const(*x),
             if *x >= 0 && *x <= 1 {
@@ -462,7 +462,6 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<(Expressi
 
 fn reduce_toplevel(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Constraint>> {
     match &e.class {
-        Token::Ignore => Ok(None),
         Token::DefConstraint(name, domain, expr) => Ok(Some(Constraint::Vanishes {
             name: name.into(),
             domain: domain.to_owned(),
