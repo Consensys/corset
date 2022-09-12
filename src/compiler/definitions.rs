@@ -115,7 +115,7 @@ impl SymbolTable {
                     Type::Numeric
                 }
             }
-            _ => unreachable!(),
+            _ => Type::Numeric, // TODO FIXME
         };
         if self.symbols.contains_key(symbol) {
             Err(anyhow!("column `{}` already exists", symbol))
