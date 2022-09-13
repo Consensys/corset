@@ -1,7 +1,7 @@
 use convert_case::{Case, Casing};
 
 use crate::{
-    column::{Column, ColumnSet},
+    column::ColumnSet,
     compiler::{Builtin, Constraint, ConstraintsSet, Expression, Kind, Type},
 };
 use eyre::*;
@@ -105,7 +105,7 @@ fn expand_expr<T: Copy + Ord>(
             if matches!(func, Builtin::Inv) {
                 let inverted = &mut args[0];
                 let inv_colname = expression_to_name(inverted, "INV");
-                validate_inv(new_cs, &inverted, &inv_colname);
+                validate_inv(new_cs, inverted, &inv_colname);
                 cols.insert_composite(&inv_colname, inverted, true)?;
                 *e = Expression::Column(
                     inv_colname,

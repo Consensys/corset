@@ -126,7 +126,7 @@ impl AstNode {
                             return Err(eyre!(
                                 "expected RANGE, found `{}`",
                                 n.map(|n| format!("{:?}", n.unwrap().class))
-                                    .unwrap_or("nothing".to_string())
+                                    .unwrap_or_else(|| "nothing".to_string())
                             ));
                         }
                     }
@@ -144,7 +144,7 @@ impl AstNode {
                             return Err(eyre!(
                                 ":SORTED expects SYMBOL, found `{}`",
                                 n.map(|n| format!("{:?}", n.unwrap().class))
-                                    .unwrap_or("nothing".to_string())
+                                    .unwrap_or_else(|| "nothing".to_string())
                             ));
                         }
                     }
@@ -160,7 +160,7 @@ impl AstNode {
                             return Err(eyre!(
                                 ":COMP expects FORM, found `{}`",
                                 n.map(|n| format!("{:?}", n.unwrap().class))
-                                    .unwrap_or("nothing".to_string())
+                                    .unwrap_or_else(|| "nothing".to_string())
                             ));
                         }
                     }
@@ -191,7 +191,7 @@ impl AstNode {
                             return Err(eyre!(
                                 ":INTERLEAVED expects LIST, found `{}`",
                                 n.map(|n| format!("{:?}", n.unwrap().class))
-                                    .unwrap_or("nothing".to_string())
+                                    .unwrap_or_else(|| "nothing".to_string())
                             ));
                         }
                     }

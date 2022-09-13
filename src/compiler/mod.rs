@@ -1,5 +1,5 @@
 use self::definitions::Symbol;
-use crate::{column::Column, expander::expand};
+use crate::column::Column;
 use definitions::SymbolTable;
 use eyre::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};

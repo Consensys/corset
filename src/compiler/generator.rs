@@ -1,10 +1,9 @@
 use eyre::*;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use super::common::*;
-use crate::column::{Column, ColumnSet};
+use crate::column::ColumnSet;
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 use std::fmt::{Debug, Formatter};

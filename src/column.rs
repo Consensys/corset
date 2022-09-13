@@ -24,7 +24,7 @@ impl<T: std::cmp::Ord + std::marker::Copy> ColumnSet<T> {
         if self.cols.contains_key(&name) && !allow_dup {
             Err(eyre!("`{}` already exists", name))
         } else {
-            self.cols.insert(name.into(), Column::composite(e));
+            self.cols.insert(name, Column::composite(e));
             Ok(())
         }
     }
