@@ -1,5 +1,5 @@
 use eyre::*;
-use num_bigint::{BigInt, ToBigInt};
+use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
