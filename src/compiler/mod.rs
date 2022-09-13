@@ -43,22 +43,20 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                 Symbol::Final(symbol, used) => {
                     if !*used {
                         eprintln!("WARN unused: {:?}", symbol);
-                        None
-                    } else {
-                        match symbol {
-                            Expression::Column(name, t, k) => match k {
-                                Kind::Atomic => Some((name.to_owned(), Column::Atomic(vec![], *t))),
-                                x => todo!("{:?}", x),
+                    }
+                    match symbol {
+                        Expression::Column(name, t, k) => match k {
+                            Kind::Atomic => Some((name.to_owned(), Column::Atomic(vec![], *t))),
+                            x => todo!("{:?}", x),
+                        },
+                        Expression::ArrayColumn(name, range, t) => Some((
+                            name.to_owned(),
+                            Column::Array {
+                                range: range.clone(),
+                                content: Default::default(),
                             },
-                            Expression::ArrayColumn(name, range, t) => Some((
-                                name.to_owned(),
-                                Column::Array {
-                                    range: range.clone(),
-                                    content: Default::default(),
-                                },
-                            )),
-                            _ => None,
-                        }
+                        )),
+                        _ => None,
                     }
                 }
             })
