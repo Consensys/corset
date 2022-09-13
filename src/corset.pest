@@ -32,5 +32,5 @@ typing = @{ "NATURAL" | "BOOLEAN" }
 
 integer = @{ "-"? ~ natural }
 natural = @{ ASCII_DIGIT+ }
-symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" | ":" | "," )+  }
+symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" | "," )+  }
 keyword = @{ ":" ~ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" )+  }
