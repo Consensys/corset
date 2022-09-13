@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate pest_derive;
-use crate::exporters::Exporter;
+// use crate::exporters::Exporter;
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
 use std::fs::File;
@@ -64,6 +64,8 @@ enum Commands {
             help = "In which package the function will be generated"
         )]
         package: String,
+        #[clap(short = 'C', long = "columns", help = "Where to write the columns")]
+        columnsfile: Option<String>,
     },
     /// Produce a LaTeX file describing the constraints
     Latex {},
@@ -124,13 +126,15 @@ fn main() -> Result<()> {
             fname,
             package,
             columns_assignment,
+            columnsfile,
         } => {
             let mut go_exporter = exporters::go::GoExporter {
                 fname: fname.clone(),
                 package: package.clone(),
                 ce: columns_assignment.into(),
+                columnsfile: columnsfile.clone(),
             };
-            go_exporter.render(&constraints.constraints, out)?;
+            go_exporter.render(&constraints, out)?;
             if out_to_file {
                 print!("Running gofmt... ");
                 let output = std::process::Command::new("gofmt")

@@ -1,4 +1,4 @@
-(defcolumns A[1:3] B C ACC[1:2])
+(defcolumns (A:ARRAY[1:3]) B C (ACC :ARRAY [1:2]))
 
 (defconstraint test () (eq (nth A 3) B))
 

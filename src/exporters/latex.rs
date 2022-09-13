@@ -218,10 +218,12 @@ impl LatexExporter {
             x => unimplemented!("{:?}", x),
         }
     }
-}
 
-impl crate::exporters::Exporter<Ast> for LatexExporter {
-    fn render<'a>(&mut self, asts: &[Ast], mut out: BufWriter<Box<dyn Write + 'a>>) -> Result<()> {
+    pub fn render<'a>(
+        &mut self,
+        asts: &[Ast],
+        mut out: BufWriter<Box<dyn Write + 'a>>,
+    ) -> Result<()> {
         let s = Rc::new(RefCell::new(self));
         let r = asts
             .iter()

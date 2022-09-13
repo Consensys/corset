@@ -1,4 +1,4 @@
-(defcolumns A B[1:10])
+(defcolumns A (B :ARRAY [1:10]))
 
 (defconstraint test1 () (for i {1 2 3} (eq A (nth B i))))
 

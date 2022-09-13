@@ -1,4 +1,4 @@
-(defcolumns A B:BOOLEAN C D:BOOLEAN)
+(defcolumns A (B :BOOLEAN) C (D :BOOLEAN))
 (defconst T 4)
 
 (defconstraint foo-0 () (if-zero A B (begin C 4)))

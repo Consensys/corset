@@ -28,6 +28,7 @@ pub(crate) struct GoExporter {
     pub fname: String,
     pub package: String,
     pub ce: String,
+    pub columnsfile: Option<String>,
 }
 impl GoExporter {
     fn make_chain(&self, xs: &[Expression], operand: &str, surround: bool) -> Result<String> {
@@ -107,19 +108,18 @@ impl GoExporter {
         }?;
         Ok(r)
     }
-}
 
-impl crate::exporters::Exporter<Constraint> for GoExporter {
-    fn render<'a>(
+    pub fn render<'a>(
         &mut self,
-        cs: &[Constraint],
+        cs: &ConstraintsSet,
         mut out: BufWriter<Box<dyn Write + 'a>>,
     ) -> Result<()> {
-        if cs.is_empty() {
+        if cs.constraints.is_empty() {
             return Ok(());
         }
 
         let constraints = cs
+            .constraints
             .iter()
             .map(|c| match c {
                 Constraint::Vanishes {
@@ -151,7 +151,8 @@ impl crate::exporters::Exporter<Constraint> for GoExporter {
         let main_function = make_go_function(
             &self.fname.to_case(Case::Pascal),
             "",
-            &cs.iter()
+            &cs.constraints
+                .iter()
                 .map(|c| {
                     match c {
                         Constraint::Vanishes { name, domain, .. } => {
