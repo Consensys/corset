@@ -1,6 +1,5 @@
 #[macro_use]
 extern crate pest_derive;
-// use crate::exporters::Exporter;
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
 use std::fs::File;
@@ -21,14 +20,6 @@ pub struct Args {
     )]
     source: Vec<String>,
 
-    #[clap(
-        short = 'o',
-        long = "out",
-        help = "If set, write the result to this file",
-        global = true
-    )]
-    out_file: Option<String>,
-
     #[clap(long = "no-stdlib")]
     no_stdlib: bool,
 
@@ -42,6 +33,27 @@ pub struct Args {
 
     #[clap(subcommand)]
     command: Commands,
+
+    #[clap(
+        short = 'o',
+        long = "constraints-file",
+        help = "where to render the constraints",
+        global = true
+    )]
+    constraints_filename: Option<String>,
+    #[clap(
+        short = 'C',
+        long = "columns",
+        help = "whether to render columns definition",
+        global = true
+    )]
+    render_columns: bool,
+    #[clap(
+        long = "columns-file",
+        help = "where to render the columns",
+        global = true
+    )]
+    columns_filename: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -64,12 +76,6 @@ enum Commands {
             help = "In which package the function will be generated"
         )]
         package: String,
-        #[clap(
-            short = 'C',
-            long = "columns",
-            help = "whether to render columns definition"
-        )]
-        render_columns: bool,
     },
     /// Produce a LaTeX file describing the constraints
     Latex {},
@@ -78,7 +84,7 @@ enum Commands {
             short = 'T',
             long = "trace",
             required = true,
-            help = "the trace to comopute & verify"
+            help = "the trace to compute & verify"
         )]
         tracefile: String,
     },
@@ -107,59 +113,34 @@ fn main() -> Result<()> {
     if args.expand {
         expander::expand(&mut constraints)?;
     }
-    let stdout = std::io::stdout();
-    let (out_to_file, out): (bool, BufWriter<Box<dyn std::io::Write>>) =
-        if let Some(out_filename) = args.out_file.as_ref() {
-            println!("Generating {}", out_filename);
-            (
-                true,
-                BufWriter::with_capacity(
-                    30_000_000,
-                    Box::new(
-                        File::create(out_filename)
-                            .with_context(|| eyre!("creating `{}`", out_filename))?,
-                    ),
-                ),
-            )
-        } else {
-            (false, BufWriter::new(Box::new(stdout.lock())))
-        };
 
     match &args.command {
         Commands::Go {
-            fname,
             package,
             columns_assignment,
-            render_columns,
+            fname,
         } => {
             let mut go_exporter = exporters::go::GoExporter {
-                fname: fname.clone(),
+                constraints_filename: args.constraints_filename,
                 package: package.clone(),
                 ce: columns_assignment.into(),
-                render_columns: *render_columns,
+                render_columns: args.render_columns,
+                columns_filename: args.columns_filename,
+                fname: fname.to_owned(),
             };
-            go_exporter.render(&constraints, out)?;
-            if out_to_file {
-                print!("Running gofmt... ");
-                let output = std::process::Command::new("gofmt")
-                    .args(["-w", args.out_file.as_ref().unwrap()])
-                    .output()
-                    .expect("failed to execute process");
-                if output.status.success() {
-                    println!("done.");
-                } else {
-                    println!("failed:");
-                    println!("STDOUT:\n{}", std::str::from_utf8(&output.stdout).unwrap());
-                    println!("STDERR:\n{}", std::str::from_utf8(&output.stderr).unwrap());
-                }
-            }
+            go_exporter.render(&constraints)?;
         }
         Commands::Latex {} => {
-            let mut latex_exporter = exporters::latex::LatexExporter::default();
-            latex_exporter.render(&ast, out)?
+            let mut latex_exporter = exporters::latex::LatexExporter {
+                constraints_filename: args.constraints_filename,
+                columns_filename: args.columns_filename,
+                render_columns: args.render_columns,
+            };
+            latex_exporter.render(&ast)?
         }
         Commands::Compute { tracefile } => {
             todo!()
+            // let v: Value = serde_json::from_str()?;
         }
     }
 

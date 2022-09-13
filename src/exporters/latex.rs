@@ -2,14 +2,14 @@ use crate::compiler::{Ast, AstNode, Token};
 use color_eyre::eyre::*;
 use convert_case::{Case, Casing};
 
-use std::{
-    cell::RefCell,
-    io::{BufWriter, Write},
-    rc::Rc,
-};
+use std::{cell::RefCell, io::Write, rc::Rc};
 
 #[derive(Default)]
-pub struct LatexExporter {}
+pub struct LatexExporter {
+    pub constraints_filename: Option<String>,
+    pub columns_filename: Option<String>,
+    pub render_columns: bool,
+}
 
 fn sanitize(s: &str) -> String {
     s.replace('_', "\\_")
@@ -219,11 +219,7 @@ impl LatexExporter {
         }
     }
 
-    pub fn render<'a>(
-        &mut self,
-        asts: &[Ast],
-        mut out: BufWriter<Box<dyn Write + 'a>>,
-    ) -> Result<()> {
+    pub fn render(&mut self, asts: &[Ast]) -> Result<()> {
         let s = Rc::new(RefCell::new(self));
         let r = asts
             .iter()
@@ -261,6 +257,15 @@ impl LatexExporter {
             r
         );
 
-        writeln!(out, "{}", body.replace("\n\n", "\n")).with_context(|| eyre!("rendering result"))
+        let filename = s.borrow().constraints_filename.clone();
+        if let Some(filename) = filename.as_ref() {
+            std::fs::File::create(filename)
+                .with_context(|| format!("while creating `{}`", filename))?
+                .write_all(body.as_bytes())
+                .with_context(|| format!("while writing to `{}`", filename))
+        } else {
+            println!("{}", body);
+            Ok(())
+        }
     }
 }

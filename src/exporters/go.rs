@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use color_eyre::eyre::*;
 use convert_case::{Case, Casing};
 
@@ -6,7 +8,6 @@ use crate::{
     compiler::*,
 };
 
-use std::io::{BufWriter, Write};
 const ARRAY_SEPARATOR: char = '_';
 
 fn make_go_function(name: &str, prelude: &str, content: &str, postlude: &str, ret: &str) -> String {
@@ -26,11 +27,29 @@ return
     )
 }
 
+fn gofmt(filename: &str) {
+    print!("Running gofmt on {}... ", filename);
+    let output = std::process::Command::new("gofmt")
+        .args(["-w", filename])
+        .output()
+        .expect("failed to execute gofmt");
+    if output.status.success() {
+        println!("done.");
+    } else {
+        println!("failed:");
+        println!("STDOUT:\n{}", std::str::from_utf8(&output.stdout).unwrap());
+        println!("STDERR:\n{}", std::str::from_utf8(&output.stderr).unwrap());
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct GoExporter {
     pub fname: String,
     pub package: String,
     pub ce: String,
+
+    pub constraints_filename: Option<String>,
+    pub columns_filename: Option<String>,
     pub render_columns: bool,
 }
 impl GoExporter {
@@ -110,11 +129,20 @@ impl GoExporter {
     }
 
     fn render_columns<T>(&self, cols: &ColumnSet<T>) -> String {
-        let mut r = String::from(
+        let mut r = String::from(format!(
             r#"
+package {}
+
+import (
+    "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"
+    "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/module"
+)
+
 const (
 "#,
-        );
+            self.package,
+        ));
+
         for (name, col) in cols.cols.iter() {
             match col {
                 Column::Atomic(_, _) => {
@@ -123,8 +151,8 @@ const (
                 Column::Array { range, content } => {
                     for i in range {
                         r.push_str(&format!(
-                            "{}_{} column.Column = \"{}_{}\"\n",
-                            name, i, name, i
+                            "{}{}{} column.Column = \"{}{}{}\"\n",
+                            name, ARRAY_SEPARATOR, i, name, ARRAY_SEPARATOR, i
                         ))
                     }
                 }
@@ -158,17 +186,13 @@ const (
                 .join("\n")
         ));
         r.push_str(&format!(
-            "\nvar {} = module.BuildColumExpressions(AllColumns)\n",
+            "\nvar {} = module.BuildColumnExpressions(AllColumns)\n",
             self.ce
         ));
         r
     }
 
-    pub fn render<'a>(
-        &mut self,
-        cs: &ConstraintsSet,
-        mut out: BufWriter<Box<dyn Write + 'a>>,
-    ) -> Result<()> {
+    pub fn render(&mut self, cs: &ConstraintsSet) -> Result<()> {
         let columns = if self.render_columns {
             self.render_columns(&cs.columns)
         } else {
@@ -251,11 +275,31 @@ import (
 {}
 
 {}
-
-{}
 "#,
-            self.package, columns, constraints, main_function,
+            self.package, constraints, main_function,
         );
-        writeln!(out, "{}", r).with_context(|| eyre!("rendering to Go"))
+
+        if let Some(ref filename) = self.columns_filename {
+            if self.render_columns {
+                std::fs::File::create(filename)
+                    .with_context(|| format!("while creating `{}`", filename))?
+                    .write_all(columns.as_bytes())
+                    .with_context(|| format!("while writing to `{}`", filename))?;
+                gofmt(filename);
+            }
+        } else {
+            println!("{}", columns);
+        };
+
+        if let Some(filename) = self.constraints_filename.as_ref() {
+            std::fs::File::create(filename)
+                .with_context(|| format!("while creating `{}`", filename))?
+                .write_all(r.as_bytes())
+                .with_context(|| format!("while writing to `{}`", filename))?;
+            gofmt(filename);
+        } else {
+            println!("{}", r);
+        }
+        Ok(())
     }
 }
