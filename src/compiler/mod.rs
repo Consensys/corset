@@ -13,6 +13,8 @@ mod definitions;
 mod generator;
 mod parser;
 
+const MAIN_MODULE: &str = "MAIN";
+
 pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, ConstraintsSet)> {
     let mut asts = vec![];
     let ctx = Rc::new(RefCell::new(SymbolTable::new_root()));
@@ -38,10 +40,10 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         columns: ctx
             .borrow()
             .symbols()
-            .filter_map(|s| match s {
+            .filter_map(|s| match &s.1 .0 {
                 Symbol::Alias(_) => None,
                 Symbol::Final(symbol, used) => {
-                    if !*used {
+                    if !used {
                         eprintln!("WARN unused: {:?}", symbol);
                     }
                     match symbol {
@@ -49,7 +51,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                             Kind::Atomic => Some((name.to_owned(), Column::Atomic(vec![], *t))),
                             x => todo!("{:?}", x),
                         },
-                        Expression::ArrayColumn(name, range, t) => Some((
+                        Expression::ArrayColumn(name, range, _t) => Some((
                             name.to_owned(),
                             Column::Array {
                                 range: range.clone(),

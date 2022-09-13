@@ -82,10 +82,17 @@ impl GoExporter {
         let r = match node {
             Expression::ArrayColumn(..) => unreachable!(),
             Expression::Const(x) => Ok(format!("column.CONST_UINT64({})", x)),
-            Expression::Column(name, _, _) => Ok(format!("{}[\"{}\"]", self.ce, name)),
+            Expression::Column(name, _, _) => Ok(format!(
+                "{}[\"{}\"]",
+                self.ce,
+                name.to_case(Case::UpperSnake)
+            )),
             Expression::ArrayColumnElement(name, i, _) => Ok(format!(
                 "{}[{}{}{}.Name()]",
-                self.ce, name, ARRAY_SEPARATOR, i
+                self.ce,
+                name.to_case(Case::UpperSnake),
+                ARRAY_SEPARATOR,
+                i
             )),
             Expression::Funcall { func, args } => self.render_funcall(func, args),
             Expression::List(constraints) => Ok(constraints
@@ -145,14 +152,21 @@ const (
 
         for (name, col) in cols.cols.iter() {
             match col {
-                Column::Atomic(_, _) => {
-                    r.push_str(&format!("{} column.Column = \"{}\"\n", name, name))
-                }
+                Column::Atomic(_, _) => r.push_str(&format!(
+                    "{} column.Column = \"{}\"\n",
+                    name.to_case(Case::ScreamingSnake),
+                    name.to_case(Case::ScreamingSnake)
+                )),
                 Column::Array { range, content } => {
                     for i in range {
                         r.push_str(&format!(
                             "{}{}{} column.Column = \"{}{}{}\"\n",
-                            name, ARRAY_SEPARATOR, i, name, ARRAY_SEPARATOR, i
+                            name.to_case(Case::ScreamingSnake),
+                            ARRAY_SEPARATOR,
+                            i,
+                            name.to_case(Case::ScreamingSnake),
+                            ARRAY_SEPARATOR,
+                            i
                         ))
                     }
                 }
@@ -166,12 +180,14 @@ const (
                 Column::Atomic(..) => {}
                 Column::Array { .. } => {}
                 Column::Composite { value, exp } => todo!(),
-                Column::Sorted { from, .. } => {
-                    r.push_str(&format!("var {} = column.NewSorted({})\n", name, from))
-                }
+                Column::Sorted { from, .. } => r.push_str(&format!(
+                    "var {} = column.NewSorted({})\n",
+                    name.to_case(Case::ScreamingSnake),
+                    from
+                )),
                 Column::Interleaved { from, .. } => r.push_str(&format!(
                     "var {} = column.Interleaved{{{}}}\n",
-                    name,
+                    name.to_case(Case::ScreamingSnake),
                     from.join(", ")
                 )),
             }
@@ -181,7 +197,7 @@ const (
             "var AllColumns = column.BuildColumnList(\n{}\n)\n",
             cols.cols
                 .keys()
-                .map(|k| format!("{}.Name(),", k))
+                .map(|k| format!("{}.Name(),", k.to_case(Case::ScreamingSnake)))
                 .collect::<Vec<_>>()
                 .join("\n")
         ));
@@ -264,7 +280,8 @@ const (
         );
 
         let r = format!(
-            r#"package {}
+            r#"
+package {}
 
 import (
     "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"

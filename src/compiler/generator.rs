@@ -235,6 +235,7 @@ fn apply_form(
     f: Form,
     args: &[AstNode],
     ctx: Rc<RefCell<SymbolTable>>,
+    module: &mut String,
 ) -> Result<Option<(Expression, Type)>> {
     let args = f
         .validate_args(args.to_vec())
@@ -249,11 +250,13 @@ fn apply_form(
                 let mut t = Type::Boolean;
                 for i in is {
                     let new_ctx = SymbolTable::derived(ctx.clone());
-                    new_ctx
-                        .borrow_mut()
-                        .insert_symbol(i_name, Expression::Const(BigInt::from(*i)))?;
+                    new_ctx.borrow_mut().insert_symbol(
+                        &module,
+                        i_name,
+                        Expression::Const(BigInt::from(*i)),
+                    )?;
 
-                    let (r, to) = reduce(&body.clone(), new_ctx)?.unwrap();
+                    let (r, to) = reduce(&body.clone(), new_ctx, module)?.unwrap();
                     l.push(r);
                     t = t.max(to)
                 }
@@ -270,14 +273,15 @@ fn apply(
     f: &Function,
     args: &[AstNode],
     ctx: Rc<RefCell<SymbolTable>>,
+    module: &mut String,
 ) -> Result<Option<(Expression, Type)>> {
     if let FunctionClass::SpecialForm(sf) = f.class {
-        apply_form(sf, args, ctx)
+        apply_form(sf, args, ctx, module)
     } else {
         let mut traversed_args = vec![];
         let mut traversed_args_t = vec![];
         for arg in args.iter() {
-            let traversed = reduce(arg, ctx.clone())?;
+            let traversed = reduce(arg, ctx.clone(), module)?;
             if let Some((traversed, t)) = traversed {
                 traversed_args.push(traversed);
                 traversed_args_t.push(t);
@@ -380,7 +384,7 @@ fn apply(
                             (&traversed_args[0], &traversed_args[1])
                         {
                             let x = x.to_usize().unwrap();
-                            match &ctx.borrow_mut().resolve_symbol(cname)? {
+                            match &ctx.borrow_mut().resolve_symbol(module, cname)? {
                                 array @ (Expression::ArrayColumn(name, range, t), _) => {
                                     if range.contains(&x) {
                                         Ok(Some((
@@ -416,17 +420,21 @@ fn apply(
                 for (i, f_arg) in f_args.iter().enumerate() {
                     new_ctx
                         .borrow_mut()
-                        .insert_symbol(f_arg, traversed_args[i].clone())?;
+                        .insert_symbol(module, f_arg, traversed_args[i].clone())?;
                 }
 
-                reduce(body, new_ctx)
+                reduce(body, new_ctx, module)
             }
             _ => unimplemented!("{:?}", f),
         }
     }
 }
 
-fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<(Expression, Type)>> {
+fn reduce(
+    e: &AstNode,
+    ctx: Rc<RefCell<SymbolTable>>,
+    module: &mut String,
+) -> Result<Option<(Expression, Type)>> {
     match &e.class {
         Token::Type(_) | Token::Range(_) => Ok(None),
         Token::Value(x) => Ok(Some((
@@ -437,7 +445,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<(Expressi
                 Type::Numeric
             },
         ))),
-        Token::Symbol(name) => Ok(Some(ctx.borrow_mut().resolve_symbol(name)?)),
+        Token::Symbol(name) => Ok(Some(ctx.borrow_mut().resolve_symbol(&module, name)?)),
         Token::Form(args) => {
             if args.is_empty() {
                 Ok(Some((Expression::List(vec![]), Type::Void)))
@@ -447,18 +455,16 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<(Expressi
                     .resolve_function(verb)
                     .with_context(|| eyre!("resolving function `{}`", verb))?;
 
-                apply(&func, &args[1..], ctx)
+                apply(&func, &args[1..], ctx, module)
             } else {
                 Err(eyre!("Not a function: {:?}", args[0]))
             }
         }
 
-        Token::DefConstraint(..) => Ok(None),
-        Token::DefColumns(_) => Ok(None),
         Token::DefColumn(name, _, k) => match k {
             Kind::Composite(e) => {
-                let e = reduce(e, ctx.clone())?.unwrap();
-                ctx.borrow_mut().edit_symbol(name, &|x| {
+                let e = reduce(e, ctx.clone(), module)?.unwrap();
+                ctx.borrow_mut().edit_symbol(module, name, &|x| {
                     if let Expression::Column(_, _, kind) = x {
                         *kind = Kind::Composite(Box::new(e.0.clone()))
                     }
@@ -467,35 +473,42 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<(Expressi
             }
             _ => Ok(None),
         },
-        Token::DefArrayColumn(..) => Ok(None),
-        Token::DefAliases(_) => Ok(None),
-        Token::DefAlias(..) => Ok(None),
-        Token::DefunAlias(..) => Ok(None),
-        Token::DefConst(..) => Ok(None),
-        Token::Defun(..) => Ok(None),
-        Token::DefPlookup(..) => Ok(None),
+        Token::DefColumns(_)
+        | Token::DefConstraint(..)
+        | Token::DefArrayColumn(..)
+        | Token::DefModule(_)
+        | Token::DefAliases(_)
+        | Token::DefAlias(..)
+        | Token::DefunAlias(..)
+        | Token::DefConst(..)
+        | Token::Defun(..)
+        | Token::DefPlookup(..) => unreachable!(),
     }
     .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))
 }
 
-fn reduce_toplevel(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<Constraint>> {
+fn reduce_toplevel(
+    e: &AstNode,
+    ctx: Rc<RefCell<SymbolTable>>,
+    module: &mut String,
+) -> Result<Option<Constraint>> {
     match &e.class {
         Token::DefConstraint(name, domain, expr) => Ok(Some(Constraint::Vanishes {
             name: name.into(),
             domain: domain.to_owned(),
-            expr: Box::new(reduce(expr, ctx)?.unwrap().0), // the parser ensures that the body is never empty
+            expr: Box::new(reduce(expr, ctx, module)?.unwrap().0), // the parser ensures that the body is never empty
         })),
         Token::DefPlookup(parent, child) => {
             let parents = parent
                 .iter()
-                .map(|e| reduce(e, ctx.clone()))
+                .map(|e| reduce(e, ctx.clone(), module))
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 .map(|e| e.unwrap().0)
                 .collect::<Vec<_>>();
             let children = child
                 .iter()
-                .map(|e| reduce(e, ctx.clone()))
+                .map(|e| reduce(e, ctx.clone(), module))
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 .map(|e| e.unwrap().0)
@@ -504,8 +517,12 @@ fn reduce_toplevel(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<
         }
         Token::DefColumns(columns) => {
             for c in columns {
-                reduce(c, ctx.clone())?;
+                reduce(c, ctx.clone(), module)?;
             }
+            Ok(None)
+        }
+        Token::DefModule(name) => {
+            *module = String::from(name);
             Ok(None)
         }
 
@@ -520,8 +537,9 @@ fn reduce_toplevel(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<
 pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Constraint>> {
     let mut r = vec![];
 
+    let mut module = String::from(super::MAIN_MODULE);
     for exp in ast.exprs.iter().cloned() {
-        if let Some(c) = reduce_toplevel(&exp, ctx.clone())
+        if let Some(c) = reduce_toplevel(&exp, ctx.clone(), &mut module)
             .with_context(|| format!("at line {}, col.{}: \"{}\"", exp.lc.0, exp.lc.1, exp.src))?
         {
             r.push(c)

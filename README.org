@@ -150,8 +150,6 @@ Here is a simple example, establishing that columns ~A~ and ~B~ must always be e
   (defconstraint A-equals-B-somewhere (1 3 5) (= A B))
 #+end_src
 
-
-
 *** Special Forms
 /Special forms/ are syntactically identical to functions, but are built in the compiler, and thus fill the role of exposing the primitives of the language in a safe and ergonomic way.
 **** ~nth~
@@ -214,6 +212,20 @@ The ~for~ forms generate similar constraints, parametrized by the specified iter
               (eq (nth A i) (nth C j)))))
 
 #+end_src
+
+*** Modules
+In order to avoid name conflicts, Corset offers an optional module system allowing the use of the same symbol name in different contexts.
+#+begin_src lisp
+  (defcolumns A B)
+  (defconstraint foo (eq A B))
+
+  (module shabang) ;; we are now in the namespace of shabang
+  (defconstraint foobar (eq A B)) ;; will fail: A & B do not exist here
+
+  (defcolumns A B) ;; A & B now exist in shabang, distinct from the previously declared A & B
+  (defconstraint foobar (eq A B)) ;; will now work
+#+end_src
+
 ** The Standard library
 Unless specified otherwise (by using the ~--no-stdlib~ flag when invoking the Corset compiler), Corset provides a set of base functions.
 *** Boolean Operators

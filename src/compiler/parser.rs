@@ -50,6 +50,7 @@ pub enum Token {
     Range(Vec<usize>),
     Type(Type),
 
+    DefModule(String),
     DefConst(String, usize),
     DefColumns(Vec<AstNode>),
     DefColumn(String, Type, Kind<AstNode>),
@@ -86,6 +87,7 @@ impl Debug for Token {
             Token::Range(ref args) => write!(f, "{:?}", args),
             Token::Type(t) => write!(f, "{:?}", t),
 
+            Token::DefModule(name) => write!(f, "MODULE {}", name),
             Token::DefConst(name, value) => write!(f, "{}:CONST({})", name, value),
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
             Token::DefColumn(name, t, kind) => write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind),
@@ -504,6 +506,11 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             }),
             src,
             lc,
+        }),
+        Rule::defmodule => Ok(AstNode {
+            class: Token::DefModule(pair.into_inner().next().unwrap().as_str().to_owned()),
+            lc,
+            src,
         }),
         x => unimplemented!("{:?}", x),
     }
