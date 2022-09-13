@@ -24,7 +24,7 @@ pub enum Expression {
         func: Builtin,
         args: Vec<Expression>,
     },
-    Const(i32),
+    Const(i128),
     Column(String, Type, Kind<Expression>),
     ArrayColumn(String, Vec<usize>, Type),
     ArrayColumnElement(String, usize, Type),
@@ -248,7 +248,7 @@ fn apply_form(
                     let new_ctx = SymbolTable::derived(ctx.clone());
                     new_ctx
                         .borrow_mut()
-                        .insert_symbol(i_name, Expression::Const(*i as i32))?;
+                        .insert_symbol(i_name, Expression::Const(*i as i128))?;
 
                     let (r, to) = reduce(&body.clone(), new_ctx)?.unwrap();
                     l.push(r);

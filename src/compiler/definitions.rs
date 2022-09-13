@@ -208,7 +208,7 @@ impl SymbolTable {
         self._resolve_function(name, &mut HashSet::new())
     }
 
-    pub fn insert_constant(&mut self, name: &str, value: i32) -> Result<()> {
+    pub fn insert_constant(&mut self, name: &str, value: i128) -> Result<()> {
         let t = if value == 0 || value == 1 {
             Type::Boolean
         } else {
@@ -236,7 +236,9 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
         | Token::DefPlookup(..) => Ok(()),
 
         Token::DefConstraint(name, ..) => ctx.borrow_mut().insert_constraint(name),
-        Token::DefConst(name, x) => ctx.borrow_mut().insert_constant(name, *x as i32),
+        Token::DefConst(name, x) => ctx
+            .borrow_mut()
+            .insert_constant(name, (*x).try_into().unwrap()),
         Token::DefColumns(cols) => cols
             .iter()
             .fold(Ok(()), |ax, col| ax.and(reduce(col, ctx.clone()))),

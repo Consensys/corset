@@ -42,7 +42,7 @@ pub enum Kind<T> {
 
 #[derive(PartialEq, Clone)]
 pub enum Token {
-    Value(i32),
+    Value(i128),
     Symbol(String),
     Form(Vec<AstNode>),
     Range(Vec<usize>),
