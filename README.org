@@ -243,6 +243,15 @@ Chronological operations define constraints on the temporal evolution of a colum
   - ~(inc x k)~ ensures that $X_{i+1} = X_{i} + k$
   - ~(dec x k)~ ensures that $X_{i+1} = X_{i} - k$
 
+*** PLookups
+PLookup constraints are defined using the ~defplookup~ form, which takes two lists of columns or column expressions that must be included one in the other. For instance:
+#+begin_src lisp
+(defcolumns A B C P Q R)
+
+(defplookup (A C) (Q R))
+(defplookup (A B) ((* 2 Q) (+ Q R)))
+#+end_src
+
 ** Interfacing Corset
 *** With Go
 By default, the Go exporter of Corset will produce a function per constraint, and an additional public function, whose name is specified with the ~-F/--function-name~ switch, concatenating all the other ones.
