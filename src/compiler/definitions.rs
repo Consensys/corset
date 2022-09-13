@@ -131,10 +131,13 @@ impl SymbolTable {
     }
 
     pub fn insert_constraint(&mut self, name: &str) -> Result<()> {
-        self.constraints
-            .insert(name.into())
-            .then(|| ())
-            .ok_or_else(|| eyre!("Constraint `{}` already defined", name))
+        if self.constraints.contains(name) {
+            eprintln!("WARN redefining constraint `{}`", name);
+        }
+        self.constraints.insert(name.into());
+        Ok(())
+        // .then(|| ())
+        // .ok_or_else(|| eyre!("Constraint `{}` already defined", name))
     }
 
     pub fn insert_symbol(&mut self, symbol: &str, e: Expression) -> Result<()> {
