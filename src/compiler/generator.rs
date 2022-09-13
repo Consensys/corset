@@ -1,12 +1,15 @@
 use eyre::*;
+use num_bigint::{BigInt, ToBigInt};
+use num_traits::cast::ToPrimitive;
+use num_traits::{One, Zero};
 use std::cell::RefCell;
+use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
 use super::common::*;
 use crate::column::ColumnSet;
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
-use std::fmt::{Debug, Formatter};
 
 #[derive(Debug)]
 pub enum Constraint {
@@ -24,7 +27,7 @@ pub enum Expression {
         func: Builtin,
         args: Vec<Expression>,
     },
-    Const(i128),
+    Const(BigInt),
     Column(String, Type, Kind<Expression>),
     ArrayColumn(String, Vec<usize>, Type),
     ArrayColumnElement(String, usize, Type),
@@ -185,7 +188,7 @@ impl FuncVerifier<Expression> for Builtin {
             }
             Builtin::Shift => {
                 if matches!(args[0], Expression::Column(_, _, _))
-                    && matches!(args[1], Expression::Const(x) if x != 0)
+                    && matches!(&args[1], Expression::Const(x) if !Zero::is_zero(x))
                 {
                     Ok(())
                 } else {
@@ -198,7 +201,7 @@ impl FuncVerifier<Expression> for Builtin {
             }
             Builtin::Nth => {
                 if matches!(args[0], Expression::ArrayColumn(..))
-                    && matches!(args[1], Expression::Const(x) if x >= 0)
+                    && matches!(&args[1], Expression::Const(x) if x.sign() != num_bigint::Sign::Minus)
                 {
                     Ok(())
                 } else {
@@ -248,7 +251,7 @@ fn apply_form(
                     let new_ctx = SymbolTable::derived(ctx.clone());
                     new_ctx
                         .borrow_mut()
-                        .insert_symbol(i_name, Expression::Const(*i as i128))?;
+                        .insert_symbol(i_name, Expression::Const(BigInt::from(*i)))?;
 
                     let (r, to) = reduce(&body.clone(), new_ctx)?.unwrap();
                     l.push(r);
@@ -300,14 +303,17 @@ fn apply(
                             let cond_zero = if matches!(traversed_args_t[0], Type::Boolean) {
                                 Expression::Funcall {
                                     func: Builtin::Sub,
-                                    args: vec![Expression::Const(1), cond_not_zero.clone()],
+                                    args: vec![
+                                        Expression::Const(One::one()),
+                                        cond_not_zero.clone(),
+                                    ],
                                 }
                             } else {
                                 // ...otherwise, cond_zero = 1 - x.INV(x)
                                 Expression::Funcall {
                                     func: Builtin::Sub,
                                     args: vec![
-                                        Expression::Const(1),
+                                        Expression::Const(One::one()),
                                         Expression::Funcall {
                                             func: Builtin::Mul,
                                             args: vec![
@@ -373,7 +379,7 @@ fn apply(
                         if let (Expression::ArrayColumn(cname, ..), Expression::Const(x)) =
                             (&traversed_args[0], &traversed_args[1])
                         {
-                            let x = *x as usize;
+                            let x = x.to_usize().unwrap();
                             match &ctx.borrow_mut().resolve_symbol(cname)? {
                                 array @ (Expression::ArrayColumn(name, range, t), _) => {
                                     if range.contains(&x) {
@@ -424,8 +430,8 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<(Expressi
     match &e.class {
         Token::Type(_) | Token::Range(_) => Ok(None),
         Token::Value(x) => Ok(Some((
-            Expression::Const(*x),
-            if *x >= 0 && *x <= 1 {
+            Expression::Const(x.clone()),
+            if *x >= Zero::zero() && *x <= One::one() {
                 Type::Boolean
             } else {
                 Type::Numeric

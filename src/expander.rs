@@ -1,4 +1,6 @@
 use convert_case::{Case, Casing};
+use num_bigint::BigInt;
+use num_traits::One;
 
 use crate::{
     column::ColumnSet,
@@ -28,7 +30,7 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) 
                             ),
                         ],
                     },
-                    Expression::Const(1),
+                    Expression::Const(One::one()),
                 ],
             },
         ],
@@ -61,7 +63,7 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) 
                             ),
                         ],
                     },
-                    Expression::Const(1),
+                    Expression::Const(One::one()),
                 ],
             },
         ],

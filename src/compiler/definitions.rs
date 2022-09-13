@@ -1,4 +1,6 @@
 use eyre::*;
+use num_bigint::{BigInt, ToBigInt};
+use num_traits::{One, Zero};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -139,8 +141,8 @@ impl SymbolTable {
         let t = match e {
             Expression::Column(_, t, _) => t,
             Expression::ArrayColumn(_, _, t) => t,
-            Expression::Const(x) => {
-                if x == 0 || x == 1 {
+            Expression::Const(ref x) => {
+                if Zero::is_zero(x) || One::is_one(x) {
                     Type::Boolean
                 } else {
                     Type::Numeric
@@ -208,8 +210,8 @@ impl SymbolTable {
         self._resolve_function(name, &mut HashSet::new())
     }
 
-    pub fn insert_constant(&mut self, name: &str, value: i128) -> Result<()> {
-        let t = if value == 0 || value == 1 {
+    pub fn insert_constant(&mut self, name: &str, value: BigInt) -> Result<()> {
+        let t = if Zero::is_zero(&value) || One::is_one(&value) {
             Type::Boolean
         } else {
             Type::Numeric

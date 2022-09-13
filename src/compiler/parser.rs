@@ -1,4 +1,6 @@
 use color_eyre::eyre::*;
+use num_bigint::BigInt;
+use num_traits::ToPrimitive;
 use pest::{iterators::Pair, Parser};
 use std::fmt;
 use std::fmt::Debug;
@@ -42,7 +44,7 @@ pub enum Kind<T> {
 
 #[derive(PartialEq, Clone)]
 pub enum Token {
-    Value(i128),
+    Value(BigInt),
     Symbol(String),
     Form(Vec<AstNode>),
     Range(Vec<usize>),
@@ -227,7 +229,7 @@ impl AstNode {
             Some(Token::Symbol(defkw)) if defkw == "defconst" => {
                 match (tokens.get(1), tokens.get(2)) {
                     (Some(Token::Symbol(name)), Some(Token::Value(x))) => Ok(AstNode {
-                        class: Token::DefConst(name.into(), *x as usize),
+                        class: Token::DefConst(name.into(), x.to_usize().unwrap()),
                         src: src.into(),
                         lc,
                     }),
@@ -301,7 +303,7 @@ impl AstNode {
                                             ..
                                         } = d
                                         {
-                                            *x as isize
+                                            x.to_isize().unwrap()
                                         } else {
                                             unreachable!()
                                         }
