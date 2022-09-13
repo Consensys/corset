@@ -195,7 +195,9 @@ impl LatexExporter {
                     }
                 ))
             }
-            Token::DefColumn(name, t) => Ok(format!("\\text{{{}{{{:?}}}}}", sanitize(name), t)),
+            Token::DefColumn(name, t, kind) => {
+                Ok(format!("\\text{{{}{{{:?}}}}}", sanitize(name), t))
+            } // TODO
             Token::DefArrayColumn(name, range, t) => Ok(format!("{}{:?}{{{:?}}}", name, range, t)),
 
             Token::DefConstraint(name, domain, body) => Ok(format!(

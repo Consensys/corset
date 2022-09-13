@@ -67,6 +67,15 @@ enum Commands {
     },
     /// Produce a LaTeX file describing the constraints
     Latex {},
+    Compute {
+        #[clap(
+            short = 'T',
+            long = "trace",
+            required = true,
+            help = "the trace to comopute & verify"
+        )]
+        tracefile: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -140,6 +149,9 @@ fn main() -> Result<()> {
         Commands::Latex {} => {
             let mut latex_exporter = exporters::latex::LatexExporter::default();
             latex_exporter.render(&ast, out)?
+        }
+        Commands::Compute { tracefile } => {
+            todo!()
         }
     }
 

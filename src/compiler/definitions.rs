@@ -76,6 +76,37 @@ impl SymbolTable {
         }
     }
 
+    fn _edit_symbol(
+        &mut self,
+        name: &str,
+        f: &dyn Fn(&mut Expression),
+        ax: &mut HashSet<String>,
+    ) -> Result<()> {
+        if ax.contains(name) {
+            Err(eyre!("Circular definitions found for {}", name))
+        } else {
+            ax.insert(name.into());
+            // Ugly, but required for borrowing reasons
+            if let Some((Symbol::Alias(name), _)) = self.symbols.get(name).cloned() {
+                self._edit_symbol(&name, f, ax)
+            } else {
+                match self.symbols.get_mut(name) {
+                    Some((Symbol::Final(constraint, _), _)) => {
+                        f(constraint);
+                        Ok(())
+                    }
+                    None => self
+                        .parent
+                        .as_ref()
+                        .map_or(Err(eyre!("Column `{}` unknown", name)), |parent| {
+                            parent.borrow_mut().edit_symbol(name, f)
+                        }),
+                    _ => unimplemented!(),
+                }
+            }
+        }
+    }
+
     fn _resolve_function(&self, name: &str, ax: &mut HashSet<String>) -> Result<Function> {
         if ax.contains(name) {
             Err(eyre!("Circular definitions found for {}", name))
@@ -106,7 +137,7 @@ impl SymbolTable {
 
     pub fn insert_symbol(&mut self, symbol: &str, e: Expression) -> Result<()> {
         let t = match e {
-            Expression::Column(_, t) => t,
+            Expression::Column(_, t, _) => t,
             Expression::ArrayColumn(_, _, t) => t,
             Expression::Const(x) => {
                 if x == 0 || x == 1 {
@@ -169,6 +200,10 @@ impl SymbolTable {
         self._resolve_symbol(name, &mut HashSet::new())
     }
 
+    pub fn edit_symbol(&mut self, name: &str, f: &dyn Fn(&mut Expression)) -> Result<()> {
+        self._edit_symbol(name, f, &mut HashSet::new())
+    }
+
     pub fn resolve_function(&self, name: &str) -> Result<Function> {
         self._resolve_function(name, &mut HashSet::new())
     }
@@ -205,9 +240,20 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
         Token::DefColumns(cols) => cols
             .iter()
             .fold(Ok(()), |ax, col| ax.and(reduce(col, ctx.clone()))),
-        Token::DefColumn(col, t) => ctx
-            .borrow_mut()
-            .insert_symbol(col, Expression::Column(col.into(), *t)),
+        Token::DefColumn(col, t, kind) => ctx.borrow_mut().insert_symbol(
+            col,
+            Expression::Column(
+                col.into(),
+                *t,
+                // Convert Kind<AstNode> to Kind<Expression>
+                match kind {
+                    Kind::Atomic => Kind::Atomic,
+                    Kind::Composite(_) => Kind::Atomic, // The actual expression is computed by the generator
+                    Kind::Sorted(src) => Kind::Sorted(src.clone()),
+                    Kind::Interleaved(xs) => Kind::Interleaved(xs.clone()),
+                },
+            ),
+        ),
         Token::DefArrayColumn(col, range, t) => ctx
             .borrow_mut()
             .insert_symbol(col, Expression::ArrayColumn(col.into(), range.clone(), *t)),

@@ -32,6 +32,14 @@ impl Debug for AstNode {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Kind<T> {
+    Atomic,
+    Composite(Box<T>),
+    Sorted(String),
+    Interleaved(Vec<String>),
+}
+
 #[derive(PartialEq, Clone)]
 pub enum Token {
     Value(i32),
@@ -42,7 +50,7 @@ pub enum Token {
 
     DefConst(String, usize),
     DefColumns(Vec<AstNode>),
-    DefColumn(String, Type),
+    DefColumn(String, Type, Kind<AstNode>),
     DefArrayColumn(String, Vec<usize>, Type),
     DefConstraint(String, Option<Vec<isize>>, Box<AstNode>),
     Defun(String, Vec<String>, Box<AstNode>),
@@ -78,7 +86,7 @@ impl Debug for Token {
 
             Token::DefConst(name, value) => write!(f, "{}:CONST({})", name, value),
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
-            Token::DefColumn(name, t) => write!(f, "DECLARATION {}:{:?}", name, t),
+            Token::DefColumn(name, t, kind) => write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind),
             Token::DefArrayColumn(name, range, t) => {
                 write!(f, "DECLARATION {}{:?}{{{:?}}}", name, range, t)
             }
@@ -95,7 +103,125 @@ impl Debug for Token {
 }
 
 impl AstNode {
-    fn from(args: Vec<AstNode>, src: &str, lc: LinCol) -> Result<Self> {
+    fn column_from(args: Vec<Pair<Rule>>, src: String, lc: LinCol) -> Result<Self> {
+        let mut pairs = args.into_iter();
+        let name = pairs.next().unwrap().as_str();
+
+        let mut t = Type::Numeric;
+        let mut range = None;
+        let mut kind = Kind::Atomic;
+
+        while let Some(x) = pairs.next() {
+            match x.as_rule() {
+                Rule::keyword => match x.as_str() {
+                    ":ARRAY" => {
+                        let n = pairs.next().map(rec_parse);
+                        if let Some(Ok(AstNode {
+                            class: Token::Range(r),
+                            ..
+                        })) = n
+                        {
+                            range = Some(r);
+                        } else {
+                            return Err(eyre!(
+                                "expected RANGE, found `{}`",
+                                n.map(|n| format!("{:?}", n.unwrap().class))
+                                    .unwrap_or("nothing".to_string())
+                            ));
+                        }
+                    }
+                    ":NATURAL" => t = Type::Numeric,
+                    ":BOOLEAN" => t = Type::Boolean,
+                    ":SORTED" => {
+                        let n = pairs.next().map(rec_parse);
+                        if let Some(Ok(AstNode {
+                            class: Token::Symbol(name),
+                            ..
+                        })) = n
+                        {
+                            kind = Kind::Sorted(name)
+                        } else {
+                            return Err(eyre!(
+                                ":SORTED expects SYMBOL, found `{}`",
+                                n.map(|n| format!("{:?}", n.unwrap().class))
+                                    .unwrap_or("nothing".to_string())
+                            ));
+                        }
+                    }
+                    ":COMP" => {
+                        let n = pairs.next().map(rec_parse);
+                        if let Some(Ok(AstNode {
+                            class: Token::Form(_),
+                            ..
+                        })) = n
+                        {
+                            kind = Kind::Composite(Box::new(n.unwrap().unwrap()))
+                        } else {
+                            return Err(eyre!(
+                                ":COMP expects FORM, found `{}`",
+                                n.map(|n| format!("{:?}", n.unwrap().class))
+                                    .unwrap_or("nothing".to_string())
+                            ));
+                        }
+                    }
+                    ":INTERLEAVED" => {
+                        let n = pairs.next().map(rec_parse);
+                        if let Some(Ok(AstNode {
+                            class: Token::Form(args),
+                            ..
+                        })) = n
+                        {
+                            let mut cols = vec![];
+                            for a in args.iter() {
+                                if let AstNode {
+                                    class: Token::Symbol(name),
+                                    ..
+                                } = a
+                                {
+                                    cols.push(name.to_owned());
+                                } else {
+                                    return Err(eyre!(
+                                        ":INTERLEAVED expects a list of symbols; found `{:?}`",
+                                        a
+                                    ));
+                                }
+                            }
+                            kind = Kind::Interleaved(cols)
+                        } else {
+                            return Err(eyre!(
+                                ":INTERLEAVED expects LIST, found `{}`",
+                                n.map(|n| format!("{:?}", n.unwrap().class))
+                                    .unwrap_or("nothing".to_string())
+                            ));
+                        }
+                    }
+                    x => unreachable!("{:?}", x),
+                },
+                _ => {
+                    return Err(eyre!("expected :KEYWORD, found `{}`", x.as_str()));
+                }
+            }
+        }
+
+        if let Some(range) = range {
+            if kind != Kind::Atomic {
+                Err(eyre!("array columns must be atomic"))
+            } else {
+                Ok(AstNode {
+                    class: Token::DefArrayColumn(name.into(), range, t),
+                    lc,
+                    src,
+                })
+            }
+        } else {
+            Ok(AstNode {
+                class: Token::DefColumn(name.into(), t, kind),
+                lc,
+                src,
+            })
+        }
+    }
+    fn def_from(args: Vec<AstNode>, src: &str, lc: LinCol) -> Result<Self> {
         let tokens = args.iter().map(|x| x.class.clone()).collect::<Vec<_>>();
         match tokens.get(0) {
             Some(Token::Symbol(defkw)) if defkw == "defconst" => {
@@ -273,7 +399,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
                 .map(rec_parse)
                 .collect::<Result<Vec<_>>>()?;
 
-            Ok(AstNode::from(args, &src, lc).with_context(|| eyre!("parsing `{}`", &src))?)
+            Ok(AstNode::def_from(args, &src, lc).with_context(|| eyre!("parsing `{}`", &src))?)
         }
         Rule::list => {
             let args = pair
@@ -305,40 +431,9 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         Rule::defcolumn => {
-            let mut pairs = pair.into_inner();
-            let name = pairs.next().unwrap().as_str();
-
-            let annotations = (0..=1)
-                .filter_map(|_| pairs.next().map(rec_parse))
-                .collect::<Vec<_>>();
-            // TYPE annotation is always the first if it exists
-            let t = if let Some(Ok(AstNode {
-                class: Token::Type(x),
-                ..
-            })) = annotations.last()
-            {
-                *x
-            } else {
-                Type::Numeric
-            };
-            // RANGE annotation is always the last if it exists
-            if let Some(Ok(AstNode {
-                class: Token::Range(range),
-                ..
-            })) = annotations.first()
-            {
-                Ok(AstNode {
-                    class: Token::DefArrayColumn(name.into(), range.clone(), t),
-                    lc,
-                    src,
-                })
-            } else {
-                Ok(AstNode {
-                    class: Token::DefColumn(name.into(), t),
-                    lc,
-                    src,
-                })
-            }
+            let msg = pair.as_str().to_string();
+            let pairs = pair.into_inner().collect::<Vec<_>>();
+            AstNode::column_from(pairs, src, lc).with_context(|| format!("parsing `{}`", msg))
         }
         Rule::integer => Ok(AstNode {
             class: Token::Value(pair.as_str().parse().unwrap()),
@@ -399,7 +494,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             lc,
             src,
         }),
-        Rule::typ => Ok(AstNode {
+        Rule::typing => Ok(AstNode {
             class: Token::Type(match pair.as_str() {
                 "NATURAL" => Type::Numeric,
                 "BOOLEAN" => Type::Boolean,

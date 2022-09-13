@@ -11,13 +11,16 @@ top_level = _{ defcolumns | definition }
 definition = { "(" ~ definition_kw ~ expr* ~ ")"}
 definition_kw = { "defconstraint" | "defunalias" | "defun" | "defconst" | "defalias" | "defplookup"}
 
+
 defcolumns = { "(" ~ "defcolumns" ~ defcolumn* ~ ")" }
-defcolumn = { symbol ~ range? ~ typing? }
-typing = _{ ":" ~ typ }
+defcolumn = { symbol | init_list }
+computed = { ":" ~ computation ~ "[" ~ expr+ ~ "]" }
+computation = _{ "SORTED" | "INTERLEAVED" | "COMP" }
 
 
 
 list = { "(" ~ expr* ~ ")" }
+init_list = _{ "(" ~ symbol ~ (expr | keyword | range)* ~ ")" }
 expr = { integer | symbol | list | form }
 form = _{ forloop }
 
@@ -25,8 +28,9 @@ forloop = { "(" ~ "for" ~ symbol ~ range ~ expr ~ ")" }
 range = _{ immediate_range | interval }
 immediate_range = { "{" ~ natural+ ~ "}" }
 interval = { "[" ~ natural ~ (":" ~ natural ~ (":" ~ natural)?)? ~ "]" }
-typ = { "NATURAL" | "BOOLEAN" }
+typing = @{ "NATURAL" | "BOOLEAN" }
 
 integer = @{ "-"? ~ natural }
 natural = @{ ASCII_DIGIT+ }
 symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" )+  }
+keyword = @{ ":" ~ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" )+  }

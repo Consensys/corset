@@ -2,11 +2,11 @@ use self::definitions::Symbol;
 use crate::{column::Column, expander::expand};
 use definitions::SymbolTable;
 use eyre::*;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use common::Type;
-pub use generator::{Builtin, Columns, Constraint, ConstraintsSet, Expression};
-pub use parser::{Ast, AstNode, Token};
+pub use generator::{Builtin, Constraint, ConstraintsSet, Expression};
+pub use parser::{Ast, AstNode, Kind, Token};
 
 mod common;
 mod definitions;
@@ -46,15 +46,15 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                         None
                     } else {
                         match symbol {
-                            Expression::Column(name, t) => {
-                                Some((name.to_owned(), Column::Atomic(vec![], *t)))
-                            }
+                            Expression::Column(name, t, k) => match k {
+                                Kind::Atomic => Some((name.to_owned(), Column::Atomic(vec![], *t))),
+                                x => todo!("{:?}", x),
+                            },
                             Expression::ArrayColumn(name, range, t) => Some((
                                 name.to_owned(),
                                 Column::Array {
                                     range: range.clone(),
                                     content: Default::default(),
-                                    t: *t,
                                 },
                             )),
                             _ => None,
@@ -62,7 +62,8 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                     }
                 }
             })
-            .collect::<Columns>(),
+            .collect::<HashMap<_, _>>()
+            .into(),
     };
 
     Ok((asts.into_iter().map(|x| x.1).collect(), r))

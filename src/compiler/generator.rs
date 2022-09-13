@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use super::common::*;
-use crate::column::Column;
+use crate::column::{Column, ColumnSet};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 use std::fmt::{Debug, Formatter};
@@ -26,7 +26,7 @@ pub enum Expression {
         args: Vec<Expression>,
     },
     Const(i32),
-    Column(String, Type),
+    Column(String, Type, Kind<Expression>),
     ArrayColumn(String, Vec<usize>, Type),
     ArrayColumnElement(String, usize, Type),
     List(Vec<Expression>),
@@ -62,7 +62,7 @@ impl Debug for Expression {
 
         match self {
             Expression::Const(x) => write!(f, "{}:CONST", x),
-            Expression::Column(name, t) => write!(f, "{}:COLUMN{{{:?}}}", name, t),
+            Expression::Column(name, t, k) => write!(f, "{}:{{{:?}}}:{:?}", name, t, k),
             Expression::ArrayColumn(name, range, t) => {
                 write!(
                     f,
@@ -185,7 +185,7 @@ impl FuncVerifier<Expression> for Builtin {
                 }
             }
             Builtin::Shift => {
-                if matches!(args[0], Expression::Column(_, _))
+                if matches!(args[0], Expression::Column(_, _, _))
                     && matches!(args[1], Expression::Const(x) if x != 0)
                 {
                     Ok(())
@@ -222,10 +222,9 @@ impl FuncVerifier<Expression> for Builtin {
     }
 }
 
-pub type Columns = HashMap<String, Column<u32>>;
 #[derive(Default, Debug)]
 pub struct ConstraintsSet {
-    pub columns: Columns,
+    pub columns: ColumnSet<u32>,
     pub constraints: Vec<Constraint>,
 }
 
@@ -240,7 +239,6 @@ fn apply_form(
         .with_context(|| eyre!("evaluating call to {:?}", f))?;
 
     match f {
-        // TODO in compilation
         Form::For => {
             if let (Token::Symbol(i_name), Token::Range(is), body) =
                 (&args[0].class, &args[1].class, &args[2])
@@ -448,7 +446,18 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<(Expressi
 
         Token::DefConstraint(..) => Ok(None),
         Token::DefColumns(_) => Ok(None),
-        Token::DefColumn(..) => Ok(None),
+        Token::DefColumn(name, _, k) => match k {
+            Kind::Composite(e) => {
+                let e = reduce(e, ctx.clone())?.unwrap();
+                ctx.borrow_mut().edit_symbol(name, &|x| {
+                    if let Expression::Column(_, _, kind) = x {
+                        *kind = Kind::Composite(Box::new(e.0.clone()))
+                    }
+                })?;
+                Ok(None)
+            }
+            _ => Ok(None),
+        },
         Token::DefArrayColumn(..) => Ok(None),
         Token::DefAliases(_) => Ok(None),
         Token::DefAlias(..) => Ok(None),
@@ -483,6 +492,12 @@ fn reduce_toplevel(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>) -> Result<Option<
                 .map(|e| e.unwrap().0)
                 .collect::<Vec<_>>();
             Ok(Some(Constraint::Plookup(parents, children)))
+        }
+        Token::DefColumns(columns) => {
+            for c in columns {
+                reduce(c, ctx.clone())?;
+            }
+            Ok(None)
         }
 
         Token::Value(_) | Token::Symbol(_) | Token::Form(_) | Token::Range(_) => {
