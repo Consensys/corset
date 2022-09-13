@@ -1,7 +1,10 @@
 use color_eyre::eyre::*;
 use convert_case::{Case, Casing};
 
-use crate::compiler::*;
+use crate::{
+    column::{Column, ColumnSet},
+    compiler::*,
+};
 
 use std::io::{BufWriter, Write};
 const ARRAY_SEPARATOR: char = '_';
@@ -28,7 +31,7 @@ pub(crate) struct GoExporter {
     pub fname: String,
     pub package: String,
     pub ce: String,
-    pub columnsfile: Option<String>,
+    pub render_columns: bool,
 }
 impl GoExporter {
     fn make_chain(&self, xs: &[Expression], operand: &str, surround: bool) -> Result<String> {
@@ -109,15 +112,71 @@ impl GoExporter {
         Ok(r)
     }
 
+    fn render_columns<T>(&self, cols: &ColumnSet<T>) -> String {
+        let mut r = String::from(
+            r#"
+const (
+"#,
+        );
+        for (name, col) in cols.cols.iter() {
+            match col {
+                Column::Atomic(_, _) => {
+                    r.push_str(&format!("{} column.Column = \"{}\"\n", name, name))
+                }
+                Column::Array { range, content } => {
+                    for i in range {
+                        r.push_str(&format!(
+                            "{}_{} column.Column = \"{}_{}\"\n",
+                            name, i, name, i
+                        ))
+                    }
+                }
+                _ => {}
+            }
+        }
+        r += ")\n\n";
+
+        for (name, col) in cols.cols.iter() {
+            match col {
+                Column::Atomic(..) => {}
+                Column::Array { .. } => {}
+                Column::Composite { value, exp } => todo!(),
+                Column::Sorted { from, .. } => {
+                    r.push_str(&format!("var {} = column.NewSorted({})\n", name, from))
+                }
+                Column::Interleaved { from, .. } => r.push_str(&format!(
+                    "var {} = column.Interleaved{{{}}}\n",
+                    name,
+                    from.join(", ")
+                )),
+            }
+        }
+
+        r.push_str(&format!(
+            "var AllColumns = column.BuildColumnList(\n{}\n)\n",
+            cols.cols
+                .keys()
+                .map(|k| format!("{}.Name(),", k))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ));
+        r.push_str(&format!(
+            "\nvar {} = module.BuildColumExpressions(AllColumns)\n",
+            self.ce
+        ));
+        r
+    }
+
     pub fn render<'a>(
         &mut self,
         cs: &ConstraintsSet,
         mut out: BufWriter<Box<dyn Write + 'a>>,
     ) -> Result<()> {
-        if cs.constraints.is_empty() {
-            return Ok(());
-        }
-
+        let columns = if self.render_columns {
+            self.render_columns(&cs.columns)
+        } else {
+            String::new()
+        };
         let constraints = cs
             .constraints
             .iter()
@@ -195,8 +254,10 @@ import (
 {}
 
 {}
+
+{}
 "#,
-            self.package, constraints, main_function,
+            self.package, columns, constraints, main_function,
         );
         writeln!(out, "{}", r).with_context(|| eyre!("rendering to Go"))
     }

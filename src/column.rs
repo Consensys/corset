@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct ColumnSet<T> {
-    cols: HashMap<String, Column<T>>,
+    pub cols: HashMap<String, Column<T>>,
 }
 
 impl<T> std::convert::From<HashMap<String, Column<T>>> for ColumnSet<T> {

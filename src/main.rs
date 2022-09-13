@@ -64,8 +64,12 @@ enum Commands {
             help = "In which package the function will be generated"
         )]
         package: String,
-        #[clap(short = 'C', long = "columns", help = "Where to write the columns")]
-        columnsfile: Option<String>,
+        #[clap(
+            short = 'C',
+            long = "columns",
+            help = "whether to render columns definition"
+        )]
+        render_columns: bool,
     },
     /// Produce a LaTeX file describing the constraints
     Latex {},
@@ -126,13 +130,13 @@ fn main() -> Result<()> {
             fname,
             package,
             columns_assignment,
-            columnsfile,
+            render_columns,
         } => {
             let mut go_exporter = exporters::go::GoExporter {
                 fname: fname.clone(),
                 package: package.clone(),
                 ce: columns_assignment.into(),
-                columnsfile: columnsfile.clone(),
+                render_columns: *render_columns,
             };
             go_exporter.render(&constraints, out)?;
             if out_to_file {
