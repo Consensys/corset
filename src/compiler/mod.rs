@@ -24,7 +24,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         asts.push((name, ast));
     }
 
-    let mut r = ConstraintsSet {
+    let r = ConstraintsSet {
         constraints: asts
             .iter()
             .map(|(name, ast)| {
@@ -64,7 +64,6 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
             })
             .collect::<Columns>(),
     };
-    expand(&mut r)?;
 
     Ok((asts.into_iter().map(|x| x.1).collect(), r))
 }

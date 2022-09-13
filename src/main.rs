@@ -32,6 +32,14 @@ pub struct Args {
     #[clap(long = "no-stdlib")]
     no_stdlib: bool,
 
+    #[clap(
+        short = 'E',
+        long = "expand",
+        help = "if true, expand INV computations",
+        global = true
+    )]
+    expand: bool,
+
     #[clap(subcommand)]
     command: Commands,
 }
@@ -80,7 +88,10 @@ fn main() -> Result<()> {
         }
     }
 
-    let (ast, constraints) = compiler::make(inputs.as_slice())?;
+    let (ast, mut constraints) = compiler::make(inputs.as_slice())?;
+    if args.expand {
+        expander::expand(&mut constraints)?;
+    }
     let stdout = std::io::stdout();
     let (out_to_file, out): (bool, BufWriter<Box<dyn std::io::Write>>) =
         if let Some(out_filename) = args.out_file.as_ref() {

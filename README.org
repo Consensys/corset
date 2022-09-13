@@ -297,6 +297,8 @@ To automatically compile Corset constraints, the ~~go generate~ feature can be l
 #+end_src
 
 * Changelog
+** MASTER
+- Put ~inv~ and ~plookup~ expansion behind the ~-E/--expand~ flag
 ** 1.1.0
 - Automated generation of volatile columns and  their associated constraints when required for inverse computation and expression-based plookups
 - Implement a basic type system (boolean & natural)
