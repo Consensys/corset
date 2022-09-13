@@ -362,7 +362,11 @@ fn apply(
                             })
                             .flatten()
                             .collect::<Vec<_>>();
-                        Ok(Some((Expression::List(then_else), *t)))
+                        if then_else.len() == 1 {
+                            Ok(Some((then_else[0].clone(), *t)))
+                        } else {
+                            Ok(Some((Expression::List(then_else), *t)))
+                        }
                     }
 
                     Builtin::Nth => {
