@@ -183,11 +183,7 @@ const (
                     Column::Atomic(..) => {}
                     Column::Array { .. } => {}
                     Column::Composite { value, exp } => todo!(),
-                    Column::Sorted { from, .. } => r.push_str(&format!(
-                        "var {} = column.NewSorted({})\n",
-                        name.to_case(Case::ScreamingSnake),
-                        from
-                    )),
+                    Column::Sorted { from, .. } => todo!(),
                     Column::Interleaved { from, .. } => r.push_str(&format!(
                         "var {} = column.Interleaved{{{}}}\n",
                         name.to_case(Case::ScreamingSnake),

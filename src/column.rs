@@ -94,15 +94,15 @@ impl<T: std::cmp::Ord + std::marker::Copy> ColumnSet<T> {
         from: S,
         allow_dup: bool,
     ) -> Result<()> {
-        self.insert_column(
-            module.as_ref(),
-            name.as_ref(),
-            Column::sorted(from.as_ref().into()),
-            allow_dup,
-        )
+        todo!()
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum Direction {
+    Ascending,
+    Descending,
+}
 #[derive(Debug)]
 pub enum Column<T> {
     Atomic(Vec<T>, Type),
@@ -116,7 +116,8 @@ pub enum Column<T> {
     },
     Sorted {
         value: Option<Vec<T>>,
-        from: String,
+        from: Vec<(String, String)>, // Module, name
+        order: Vec<((String, String), Direction)>,
     },
     Interleaved {
         value: Option<Vec<T>>,
@@ -155,10 +156,20 @@ impl<T: std::cmp::Ord + std::marker::Copy> Column<T> {
         }
     }
 
-    pub fn sorted(c: &str) -> Self {
+    pub fn sorted<S1: AsRef<str>, S2: AsRef<str>, S3: AsRef<str>, S4: AsRef<str>>(
+        cols: &[(S1, S2)],
+        sorters: &[((S3, S4), Direction)],
+    ) -> Self {
         Column::Sorted {
             value: None,
-            from: c.into(),
+            from: cols
+                .iter()
+                .map(|(m, n)| (m.as_ref().to_string(), n.as_ref().to_string()))
+                .collect::<Vec<_>>(),
+            order: sorters
+                .iter()
+                .map(|((m, n), d)| ((m.as_ref().to_string(), n.as_ref().to_string()), *d))
+                .collect::<Vec<_>>(),
         }
     }
 
@@ -178,7 +189,7 @@ impl<T: std::cmp::Ord + std::marker::Copy> Column<T> {
                     todo!()
                 }
             }
-            Column::Sorted { value, from } => {
+            Column::Sorted { value, from, order } => {
                 if value.is_none() {
                     todo!()
                 }
