@@ -1,3 +1,4 @@
+use log::*;
 #[macro_use]
 extern crate pest_derive;
 use clap::{Parser, Subcommand};
@@ -93,6 +94,14 @@ enum Commands {
 
 fn main() -> Result<()> {
     color_eyre::install()?;
+    simplelog::TermLogger::init(
+        simplelog::LevelFilter::Trace,
+        simplelog::ConfigBuilder::new()
+            .set_time_level(simplelog::LevelFilter::Off)
+            .build(),
+        simplelog::TerminalMode::Mixed,
+        simplelog::ColorChoice::Auto,
+    )?;
     let args = Args::parse();
 
     let mut inputs = vec![];

@@ -2,6 +2,7 @@ use self::definitions::Symbol;
 use crate::column::{Column, ColumnSet};
 use definitions::SymbolTable;
 use eyre::*;
+use log::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use common::Type;
@@ -32,7 +33,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
             Symbol::Alias(_) => {}
             Symbol::Final(symbol, used) => {
                 if !used {
-                    eprintln!("WARN unused: {:?}", symbol);
+                    warn!("{:?} unused", symbol);
                 }
                 match symbol {
                     Expression::Column(module, name, t, k) => match k {

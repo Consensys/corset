@@ -1,3 +1,4 @@
+use log::*;
 use std::io::Write;
 
 use color_eyre::eyre::*;
@@ -28,17 +29,17 @@ return
 }
 
 fn gofmt(filename: &str) {
-    print!("Running gofmt on {}... ", filename);
+    info!("Running gofmt on {}... ", filename);
     let output = std::process::Command::new("gofmt")
         .args(["-w", filename])
         .output()
         .expect("failed to execute gofmt");
     if output.status.success() {
-        println!("done.");
+        info!("done.");
     } else {
-        println!("failed:");
-        println!("STDOUT:\n{}", std::str::from_utf8(&output.stdout).unwrap());
-        println!("STDERR:\n{}", std::str::from_utf8(&output.stderr).unwrap());
+        error!("failed:");
+        error!("STDOUT:\n{}", std::str::from_utf8(&output.stdout).unwrap());
+        error!("STDERR:\n{}", std::str::from_utf8(&output.stderr).unwrap());
     }
 }
 

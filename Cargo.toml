@@ -12,6 +12,8 @@ color-eyre = { version = "0.6", default-features = false }
 convert_case = "0.5"
 eyre = "0.6"
 lazy_static = "1.4"
+log = "0.4"
+simplelog = { version = "^0.11.0", features = ["paris"] }
 maplit = "1.0"
 num-bigint = "0.4"
 num-traits = "0.2"

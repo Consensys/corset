@@ -1,4 +1,5 @@
 use eyre::*;
+use log::*;
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use std::cell::RefCell;
@@ -155,7 +156,7 @@ impl SymbolTable {
             .or_default()
             .contains(name)
         {
-            eprintln!("WARN redefining constraint `{}`", name);
+            warn!("redefining constraint `{}`", name);
         }
         self.constraints
             .entry(module.into())
@@ -329,7 +330,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                 ));
             }
             if sorters.is_empty() {
-                eprintln!("WARN empty sorter for `{:?}`", e.src);
+                warn!("empty sorter found in `{}`", e.src.as_str());
             }
             for pair in tos.iter().zip(froms.iter()) {
                 match pair {
