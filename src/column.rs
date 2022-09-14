@@ -87,6 +87,26 @@ impl<T: std::cmp::Ord + std::marker::Copy> ColumnSet<T> {
         )
     }
 
+    pub fn insert_interleaved<S1: AsRef<str>, S2: AsRef<str>, S3: AsRef<str>>(
+        &mut self,
+        module: S1,
+        name: S2,
+        cols: &[S3],
+        allow_dup: bool,
+    ) -> Result<()> {
+        self.insert_column(
+            module.as_ref(),
+            name.as_ref(),
+            Column::Interleaved {
+                value: None,
+                from: cols
+                    .iter()
+                    .map(|n| n.as_ref().to_owned())
+                    .collect::<Vec<_>>(),
+            },
+            allow_dup,
+        )
+    }
     pub fn insert_sorted<S: AsRef<str>>(
         &mut self,
         module: S,

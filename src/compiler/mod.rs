@@ -37,7 +37,11 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                 match symbol {
                     Expression::Column(module, name, t, k) => match k {
                         Kind::Atomic => columns.insert_atomic(module, name, *t, true)?,
-                        x => todo!("{:?}", x),
+                        Kind::Interleaved(cols) => {
+                            columns.insert_interleaved(module, name, cols, true)?
+                        }
+                        Kind::Composite(_) => todo!(),
+                        Kind::Sorted(_) => todo!(),
                     },
                     Expression::ArrayColumn(module, name, range, t) => {
                         columns.insert_array(module, name, *t, range, true)?

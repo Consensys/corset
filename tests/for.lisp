@@ -7,3 +7,5 @@
 (defconstraint test3 () (for i [1:5]
                           (for j {2 4 6}
                                (for k {1 5} (eq (nth B i) (nth B j))))))
+
+(defconstraint test4 () (for i [5] (shift (nth B i) 1)))

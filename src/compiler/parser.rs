@@ -5,6 +5,8 @@ use pest::{iterators::Pair, Parser};
 use std::fmt;
 use std::fmt::Debug;
 
+use crate::column::Direction;
+
 use super::common::Type;
 
 #[derive(Parser)]
@@ -46,6 +48,7 @@ pub enum Kind<T> {
 pub enum Token {
     Value(BigInt),
     Symbol(String),
+    Keyword(String),
     List(Vec<AstNode>),
     Range(Vec<usize>),
     Type(Type),
@@ -54,6 +57,7 @@ pub enum Token {
     DefConst(String, usize),
     DefColumns(Vec<AstNode>),
     DefColumn(String, Type, Kind<AstNode>),
+    DefPermutation(Vec<AstNode>, Vec<AstNode>, Vec<AstNode>),
     DefArrayColumn(String, Vec<usize>, Type),
     DefConstraint(String, Option<Vec<isize>>, Box<AstNode>),
     Defun(String, Vec<String>, Box<AstNode>),
@@ -83,6 +87,7 @@ impl Debug for Token {
         match self {
             Token::Value(x) => write!(f, "{}:IMMEDIATE", x),
             Token::Symbol(ref name) => write!(f, "{}:SYMBOL", name),
+            Token::Keyword(ref name) => write!(f, "{}", name),
             Token::List(ref args) => write!(f, "({})", format_list(args)),
             Token::Range(ref args) => write!(f, "{:?}", args),
             Token::Type(t) => write!(f, "{:?}", t),
@@ -91,6 +96,7 @@ impl Debug for Token {
             Token::DefConst(name, value) => write!(f, "{}:CONST({})", name, value),
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
             Token::DefColumn(name, t, kind) => write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind),
+            Token::DefPermutation(to, from, _) => write!(f, "{:?}:SORTED{:?}", to, from),
             Token::DefArrayColumn(name, range, t) => {
                 write!(f, "DECLARATION {}{:?}{{{:?}}}", name, range, t)
             }
@@ -137,17 +143,64 @@ impl AstNode {
                     ":NATURAL" => t = Type::Numeric,
                     ":BOOLEAN" => t = Type::Boolean,
                     ":SORTED" => {
-                        let n = pairs.next().map(rec_parse);
+                        let mut cols = vec![];
+                        let cols_tokens = pairs.next().map(rec_parse);
                         if let Some(Ok(AstNode {
-                            class: Token::Symbol(name),
+                            class: Token::List(xs),
                             ..
-                        })) = n
+                        })) = cols_tokens
                         {
-                            kind = Kind::Sorted(name)
+                            for x in xs.iter() {
+                                if let AstNode {
+                                    class: Token::Symbol(name),
+                                    ..
+                                } = x
+                                {
+                                    cols.push(name.to_owned());
+                                } else {
+                                    return Err(eyre!(
+                                        ":SORTED expects a list of symbols; found `{:?}`",
+                                        x
+                                    ));
+                                }
+                            }
                         } else {
                             return Err(eyre!(
-                                ":SORTED expects SYMBOL, found `{}`",
-                                n.map(|n| format!("{:?}", n.unwrap().class))
+                                ":SORTED expects ((NAMES...) :SORTED (COLS...) (CRITERIONS...)), found `{}`",
+                                cols_tokens
+                                    .map(|n| format!("{:?}", n.unwrap().class))
+                                    .unwrap_or_else(|| "nothing".to_string())
+                            ));
+                        }
+
+                        let mut criterions = vec![];
+                        let criterions_tokens = pairs.next().map(rec_parse);
+                        if let Some(Ok(AstNode {
+                            class: Token::List(xs),
+                            ..
+                        })) = criterions_tokens
+                        {
+                            for x in xs.iter() {
+                                match x {
+                                    AstNode {
+                                        class: Token::Symbol(name),
+                                        ..
+                                    } => {
+                                        criterions.push((name.to_owned(), Direction::Ascending));
+                                    }
+                                    _ => {
+                                        return Err(eyre!(
+                                        ":SORTED expects a list of symbols or (:ASC|:DESC); found `{:?}`",
+                                        x
+                                    ));
+                                    }
+                                };
+                            }
+                        } else {
+                            return Err(eyre!(
+                                ":SORTED expects ((COLS...) (CRITERIONS...)), found `{}`",
+                                criterions_tokens
+                                    .map(|n| format!("{:?}", n.unwrap().class))
                                     .unwrap_or_else(|| "nothing".to_string())
                             ));
                         }
@@ -163,37 +216,6 @@ impl AstNode {
                         } else {
                             return Err(eyre!(
                                 ":COMP expects FORM, found `{}`",
-                                n.map(|n| format!("{:?}", n.unwrap().class))
-                                    .unwrap_or_else(|| "nothing".to_string())
-                            ));
-                        }
-                    }
-                    ":INTERLEAVED" => {
-                        let n = pairs.next().map(rec_parse);
-                        if let Some(Ok(AstNode {
-                            class: Token::List(args),
-                            ..
-                        })) = n
-                        {
-                            let mut cols = vec![];
-                            for a in args.iter() {
-                                if let AstNode {
-                                    class: Token::Symbol(name),
-                                    ..
-                                } = a
-                                {
-                                    cols.push(name.to_owned());
-                                } else {
-                                    return Err(eyre!(
-                                        ":INTERLEAVED expects a list of symbols; found `{:?}`",
-                                        a
-                                    ));
-                                }
-                            }
-                            kind = Kind::Interleaved(cols)
-                        } else {
-                            return Err(eyre!(
-                                ":INTERLEAVED expects LIST, found `{}`",
                                 n.map(|n| format!("{:?}", n.unwrap().class))
                                     .unwrap_or_else(|| "nothing".to_string())
                             ));
@@ -385,6 +407,28 @@ impl AstNode {
                 }
             }
 
+            Some(Token::Symbol(defkw)) if defkw == "defpermutation" => {
+                match (tokens.get(1), tokens.get(2), tokens.get(3)) {
+                    (
+                        Some(Token::List(to)),
+                        Some(Token::List(from)),
+                        Some(Token::List(sorters)),
+                    ) => Ok(AstNode {
+                        class: Token::DefPermutation(
+                            to.to_owned(),
+                            from.to_owned(),
+                            sorters.to_owned(),
+                        ),
+                        src: src.into(),
+                        lc,
+                    }),
+                    _ => Err(eyre!(
+                        "DEFPERMUTATION expects (TO:LIST FROM:LIST SORTERS:LIST); received {:?}",
+                        &tokens[1..]
+                    )),
+                }
+            }
+
             x => unimplemented!("{:?}", x),
         }
     }
@@ -511,6 +555,11 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             class: Token::DefModule(pair.into_inner().next().unwrap().as_str().to_owned()),
             lc,
             src,
+        }),
+        Rule::keyword => Ok(AstNode {
+            class: Token::Keyword(pair.as_str().to_owned()),
+            src,
+            lc,
         }),
         x => unimplemented!("{:?}", x),
     }

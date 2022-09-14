@@ -441,7 +441,7 @@ fn reduce(
     module: &mut String,
 ) -> Result<Option<(Expression, Type)>> {
     match &e.class {
-        Token::Type(_) | Token::Range(_) => Ok(None),
+        Token::Keyword(_) | Token::Type(_) | Token::Range(_) => Ok(None),
         Token::Value(x) => Ok(Some((
             Expression::Const(x.clone()),
             if *x >= Zero::zero() && *x <= One::one() {
@@ -487,6 +487,7 @@ fn reduce(
         | Token::DefunAlias(..)
         | Token::DefConst(..)
         | Token::Defun(..)
+        | Token::DefPermutation(..)
         | Token::DefPlookup(..) => Ok(None),
     }
     .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))

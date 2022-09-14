@@ -279,6 +279,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
     match &e.class {
         Token::Value(_)
         | Token::Symbol(_)
+        | Token::Keyword(_)
         | Token::List(_)
         | Token::Range(_)
         | Token::Type(_)
@@ -319,6 +320,51 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
             col,
             Expression::ArrayColumn(module.clone(), col.clone(), range.clone(), *t),
         ),
+        Token::DefPermutation(tos, froms, sorters) => {
+            if tos.len() != froms.len() {
+                return Err(eyre!(
+                    "cardinality mismatch in permutation declaration: {:?} vs. {:?}",
+                    tos,
+                    froms
+                ));
+            }
+            if sorters.is_empty() {
+                eprintln!("WARN empty sorter for `{:?}`", e.src);
+            }
+            for pair in tos.iter().zip(froms.iter()) {
+                match pair {
+                    (
+                        AstNode {
+                            class: Token::Symbol(to),
+                            ..
+                        },
+                        AstNode {
+                            class: Token::Symbol(from),
+                            ..
+                        },
+                    ) => {
+                        ctx.borrow_mut()
+                            .resolve_symbol(module, from)
+                            .with_context(|| "while defining permutation")?;
+                        ctx.borrow_mut().insert_symbol(
+                            module,
+                            to,
+                            Expression::Column(
+                                module.to_owned(),
+                                to.to_owned(),
+                                Type::Numeric,
+                                Kind::Atomic,
+                            ),
+                        )?;
+                    }
+                    _ => {
+                        return Err(eyre!("expected symbol, found `{:?}, {:?}`", pair.0, pair.1))
+                            .with_context(|| "while defining permutation")
+                    }
+                }
+            }
+            Ok(())
+        }
         Token::DefAliases(aliases) => aliases.iter().fold(Ok(()), |ax, alias| {
             ax.and(reduce(alias, ctx.clone(), module))
         }),

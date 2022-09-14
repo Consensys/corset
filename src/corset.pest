@@ -9,7 +9,7 @@ constraint = { list }
 top_level = _{ defcolumns | definition | defmodule }
 
 definition = { "(" ~ definition_kw ~ expr* ~ ")"}
-definition_kw = { "defconstraint" | "defunalias" | "defun" | "defconst" | "defalias" | "defplookup" }
+definition_kw = { "defconstraint" | "defunalias" | "defun" | "defconst" | "defalias" | "defplookup" | "defpermutation" }
 defmodule = {"(module" ~ symbol ~ ")"}
 
 
