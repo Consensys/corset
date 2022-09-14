@@ -29,3 +29,10 @@
 (defunalias equals sub)
 (defun (will-eq e0 e1) (eq (shift e0 1) e1))
 (defun (was-eq e0 e1) (eq (shift e0 -1) e1))
+
+
+;; Helpers
+(defun (vanishes e0) e0)
+(defun (is-not-zero e0) (if-zero e0 1 0))
+(defun (if-eq e0 e1 e2) (if-zero (eq e0 e1) e2))
+(defun (if-eq-else e0 e1 e2 e3) (if-zero (eq e0 e1) e2 e3))
