@@ -383,7 +383,7 @@ fn apply(
                     }
 
                     Builtin::Nth => {
-                        if let (Expression::ArrayColumn(cname, ..), Expression::Const(x)) =
+                        if let (Expression::ArrayColumn(module, cname, ..), Expression::Const(x)) =
                             (&traversed_args[0], &traversed_args[1])
                         {
                             let x = x.to_usize().unwrap();
