@@ -449,7 +449,7 @@ fn reduce(
             },
         ))),
         Token::Symbol(name) => Ok(Some(ctx.borrow_mut().resolve_symbol(&module, name)?)),
-        Token::Form(args) => {
+        Token::List(args) => {
             if args.is_empty() {
                 Ok(Some((Expression::List(vec![]), Type::Void)))
             } else if let Token::Symbol(verb) = &args[0].class {
@@ -485,7 +485,7 @@ fn reduce(
         | Token::DefunAlias(..)
         | Token::DefConst(..)
         | Token::Defun(..)
-        | Token::DefPlookup(..) => unreachable!(),
+        | Token::DefPlookup(..) => Ok(None),
     }
     .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))
 }
@@ -529,7 +529,7 @@ fn reduce_toplevel(
             Ok(None)
         }
 
-        Token::Value(_) | Token::Symbol(_) | Token::Form(_) | Token::Range(_) => {
+        Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
             Err(eyre!("Unexpected top-level form: {:?}", e))
         }
 

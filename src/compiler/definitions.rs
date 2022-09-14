@@ -279,7 +279,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
     match &e.class {
         Token::Value(_)
         | Token::Symbol(_)
-        | Token::Form(_)
+        | Token::List(_)
         | Token::Range(_)
         | Token::Type(_)
         | Token::DefPlookup(..) => Ok(()),

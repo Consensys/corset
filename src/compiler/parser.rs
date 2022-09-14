@@ -46,7 +46,7 @@ pub enum Kind<T> {
 pub enum Token {
     Value(BigInt),
     Symbol(String),
-    Form(Vec<AstNode>),
+    List(Vec<AstNode>),
     Range(Vec<usize>),
     Type(Type),
 
@@ -83,7 +83,7 @@ impl Debug for Token {
         match self {
             Token::Value(x) => write!(f, "{}:IMMEDIATE", x),
             Token::Symbol(ref name) => write!(f, "{}:SYMBOL", name),
-            Token::Form(ref args) => write!(f, "({})", format_list(args)),
+            Token::List(ref args) => write!(f, "({})", format_list(args)),
             Token::Range(ref args) => write!(f, "{:?}", args),
             Token::Type(t) => write!(f, "{:?}", t),
 
@@ -155,7 +155,7 @@ impl AstNode {
                     ":COMP" => {
                         let n = pairs.next().map(rec_parse);
                         if let Some(Ok(AstNode {
-                            class: Token::Form(_),
+                            class: Token::List(_),
                             ..
                         })) = n
                         {
@@ -171,7 +171,7 @@ impl AstNode {
                     ":INTERLEAVED" => {
                         let n = pairs.next().map(rec_parse);
                         if let Some(Ok(AstNode {
-                            class: Token::Form(args),
+                            class: Token::List(args),
                             ..
                         })) = n
                         {
@@ -244,7 +244,7 @@ impl AstNode {
 
             Some(Token::Symbol(defkw)) if defkw == "defun" => {
                 match (&tokens.get(1), tokens.get(2)) {
-                    (Some(Token::Form(fargs)), Some(_))
+                    (Some(Token::List(fargs)), Some(_))
                         if !fargs.is_empty()
                             && fargs.iter().all(|x| matches!(x.class, Token::Symbol(_))) =>
                     {
@@ -281,7 +281,7 @@ impl AstNode {
 
             Some(Token::Symbol(defkw)) if defkw == "defconstraint" => {
                 match (tokens.get(1), tokens.get(2), tokens.get(3)) {
-                    (Some(Token::Symbol(name)), Some(Token::Form(domain)), Some(_))
+                    (Some(Token::Symbol(name)), Some(Token::List(domain)), Some(_))
                         if domain.is_empty()
                             || domain.iter().all(|d| {
                                 matches!(
@@ -373,7 +373,7 @@ impl AstNode {
 
             Some(Token::Symbol(defkw)) if defkw == "defplookup" => {
                 match (tokens.get(1), tokens.get(2)) {
-                    (Some(Token::Form(parent)), Some(Token::Form(child))) => Ok(AstNode {
+                    (Some(Token::List(parent)), Some(Token::List(child))) => Ok(AstNode {
                         class: Token::DefPlookup(parent.to_owned(), child.to_owned()),
                         src: src.into(),
                         lc,
@@ -413,7 +413,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
                 .into_iter()
                 .collect::<Vec<_>>();
             Ok(AstNode {
-                class: Token::Form(args),
+                class: Token::List(args),
                 lc,
                 src,
             })
@@ -453,7 +453,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             };
 
             Ok(AstNode {
-                class: Token::Form(vec![
+                class: Token::List(vec![
                     for_token,
                     rec_parse(pairs.next().unwrap())?,
                     rec_parse(pairs.next().unwrap())?,

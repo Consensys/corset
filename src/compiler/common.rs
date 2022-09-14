@@ -142,7 +142,7 @@ impl FuncVerifier<AstNode> for Form {
             Form::For => {
                 if matches!(args[0].class, Token::Symbol(_))
                     && matches!(args[1].class, Token::Range(_))
-                    && matches!(args[2].class, Token::Form { .. })
+                    && matches!(args[2].class, Token::List { .. })
                 {
                     Ok(())
                 } else {

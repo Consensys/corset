@@ -46,7 +46,7 @@ impl LatexExporter {
     fn _flatten(&mut self, ax: &mut Vec<AstNode>, n: &AstNode) {
         ax.push(n.clone());
         match &n.class {
-            Token::Form(xs) => xs.iter().for_each(|x| self._flatten(ax, x)),
+            Token::List(xs) => xs.iter().for_each(|x| self._flatten(ax, x)),
             Token::DefColumns(xs) => xs.iter().for_each(|x| self._flatten(ax, x)),
             Token::DefConstraint(_, _, x) => self._flatten(ax, x),
             _ => (),
@@ -213,7 +213,7 @@ impl LatexExporter {
                     .unwrap_or_else(|| "".into()),
                 self.render_node(body, false)?,
             )),
-            Token::Form(args) => self.render_form(args, in_maths),
+            Token::List(args) => self.render_form(args, in_maths),
             Token::Defun(..) => Ok(String::new()),
             x => unimplemented!("{:?}", x),
         }
