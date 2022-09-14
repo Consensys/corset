@@ -1,9 +1,9 @@
 use self::definitions::Symbol;
-use crate::column::{Column, ColumnSet};
+use crate::column::ColumnSet;
 use definitions::SymbolTable;
 use eyre::*;
 use log::*;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 pub use common::Type;
 pub use generator::{Builtin, Constraint, ConstraintsSet, Expression};
@@ -42,7 +42,6 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                             columns.insert_interleaved(module, name, cols, true)?
                         }
                         Kind::Composite(_) => todo!(),
-                        Kind::Sorted(_) => todo!(),
                     },
                     Expression::ArrayColumn(module, name, range, t) => {
                         columns.insert_array(module, name, *t, range, true)?

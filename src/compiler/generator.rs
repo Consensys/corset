@@ -256,7 +256,7 @@ fn apply_form(
                 for i in is {
                     let new_ctx = SymbolTable::derived(ctx.clone());
                     new_ctx.borrow_mut().insert_symbol(
-                        &module,
+                        module,
                         i_name,
                         Expression::Const(BigInt::from(*i)),
                     )?;
@@ -450,7 +450,7 @@ fn reduce(
                 Type::Numeric
             },
         ))),
-        Token::Symbol(name) => Ok(Some(ctx.borrow_mut().resolve_symbol(&module, name)?)),
+        Token::Symbol(name) => Ok(Some(ctx.borrow_mut().resolve_symbol(module, name)?)),
         Token::List(args) => {
             if args.is_empty() {
                 Ok(Some((Expression::List(vec![]), Type::Void)))

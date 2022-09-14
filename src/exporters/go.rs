@@ -137,7 +137,7 @@ impl GoExporter {
     }
 
     fn render_columns<T>(&self, cols: &ColumnSet<T>) -> String {
-        let mut r = String::from(format!(
+        let mut r = format!(
             r#"
 package {}
 
@@ -149,7 +149,7 @@ import (
 const (
 "#,
             self.package,
-        ));
+        );
 
         for (_module, m) in cols.cols.iter() {
             for (name, col) in m.iter() {
@@ -184,7 +184,6 @@ const (
                     Column::Atomic(..) => {}
                     Column::Array { .. } => {}
                     Column::Composite { value, exp } => todo!(),
-                    Column::Sorted { from, .. } => todo!(),
                     Column::Interleaved { from, .. } => r.push_str(&format!(
                         "var {} = column.Interleaved{{{}}}\n",
                         name.to_case(Case::ScreamingSnake),

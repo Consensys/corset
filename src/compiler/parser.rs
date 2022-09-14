@@ -5,8 +5,6 @@ use pest::{iterators::Pair, Parser};
 use std::fmt;
 use std::fmt::Debug;
 
-use crate::column::Direction;
-
 use super::common::Type;
 
 #[derive(Parser)]
@@ -40,7 +38,6 @@ impl Debug for AstNode {
 pub enum Kind<T> {
     Atomic,
     Composite(Box<T>),
-    Sorted(String),
     Interleaved(Vec<String>),
 }
 

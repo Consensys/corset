@@ -1,11 +1,8 @@
-use log::*;
 #[macro_use]
 extern crate pest_derive;
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
 use serde_json::Value;
-use std::fs::File;
-use std::io::BufWriter;
 
 mod column;
 mod compiler;
@@ -172,10 +169,10 @@ fn find_traces(v: &Value, path: String, ax: &mut Vec<(String, Value)>) {
                 }
             }
         }
-        Value::Null => return,
-        Value::Bool(_) => return,
-        Value::Number(_) => return,
-        Value::String(_) => return,
+        Value::Null => (),
+        Value::Bool(_) => (),
+        Value::Number(_) => (),
+        Value::String(_) => (),
         Value::Array(xs) => {
             for x in xs {
                 find_traces(x, path.clone(), ax)

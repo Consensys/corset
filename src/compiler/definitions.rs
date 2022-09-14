@@ -295,7 +295,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
         }
         Token::DefConst(name, x) => {
             ctx.borrow_mut()
-                .insert_constant(&module, name, (*x).try_into().unwrap())
+                .insert_constant(module, name, BigInt::from(*x))
         }
         Token::DefColumns(cols) => cols
             .iter()
@@ -311,7 +311,6 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                 match kind {
                     Kind::Atomic => Kind::Atomic,
                     Kind::Composite(_) => Kind::Atomic, // The actual expression is computed by the generator
-                    Kind::Sorted(src) => Kind::Sorted(src.clone()),
                     Kind::Interleaved(xs) => Kind::Interleaved(xs.clone()),
                 },
             ),

@@ -107,15 +107,6 @@ impl<T: std::cmp::Ord + std::marker::Copy> ColumnSet<T> {
             allow_dup,
         )
     }
-    pub fn insert_sorted<S: AsRef<str>>(
-        &mut self,
-        module: S,
-        name: S,
-        from: S,
-        allow_dup: bool,
-    ) -> Result<()> {
-        todo!()
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -134,11 +125,6 @@ pub enum Column<T> {
         value: Option<Vec<T>>,
         exp: Expression,
     },
-    Sorted {
-        value: Option<Vec<T>>,
-        from: Vec<(String, String)>, // Module, name
-        order: Vec<((String, String), Direction)>,
-    },
     Interleaved {
         value: Option<Vec<T>>,
         from: Vec<String>,
@@ -151,7 +137,6 @@ impl<T: std::cmp::Ord + std::marker::Copy> Column<T> {
             Column::Atomic(v, _) => v.len(),
             Column::Array { content, .. } => content.first().unwrap().len(),
             Column::Composite { value, .. } => value.as_ref().unwrap().len(),
-            Column::Sorted { value, .. } => value.as_ref().unwrap().len(),
             Column::Interleaved { value, .. } => value.as_ref().unwrap().len(),
         }
     }
@@ -160,7 +145,6 @@ impl<T: std::cmp::Ord + std::marker::Copy> Column<T> {
             Column::Atomic(v, _) => v.get(i),
             Column::Array { .. } => None,
             Column::Composite { value, .. } => value.as_ref().and_then(|v| v.get(i)),
-            Column::Sorted { value, .. } => value.as_ref().and_then(|v| v.get(i)),
             Column::Interleaved { value, .. } => value.as_ref().and_then(|v| v.get(i)),
         }
     }
@@ -176,23 +160,6 @@ impl<T: std::cmp::Ord + std::marker::Copy> Column<T> {
         }
     }
 
-    pub fn sorted<S1: AsRef<str>, S2: AsRef<str>, S3: AsRef<str>, S4: AsRef<str>>(
-        cols: &[(S1, S2)],
-        sorters: &[((S3, S4), Direction)],
-    ) -> Self {
-        Column::Sorted {
-            value: None,
-            from: cols
-                .iter()
-                .map(|(m, n)| (m.as_ref().to_string(), n.as_ref().to_string()))
-                .collect::<Vec<_>>(),
-            order: sorters
-                .iter()
-                .map(|((m, n), d)| ((m.as_ref().to_string(), n.as_ref().to_string()), *d))
-                .collect::<Vec<_>>(),
-        }
-    }
-
     pub fn interleaved<S: AsRef<str>>(c: &[S]) -> Self {
         Column::Interleaved {
             value: None,
@@ -205,11 +172,6 @@ impl<T: std::cmp::Ord + std::marker::Copy> Column<T> {
             Column::Atomic(..) => {}
             Column::Array { .. } => {}
             Column::Composite { exp, value } => {
-                if value.is_none() {
-                    todo!()
-                }
-            }
-            Column::Sorted { value, from, order } => {
                 if value.is_none() {
                     todo!()
                 }
