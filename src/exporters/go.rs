@@ -82,10 +82,9 @@ impl GoExporter {
         let r = match node {
             Expression::ArrayColumn(..) => unreachable!(),
             Expression::Const(x) => Ok(format!("column.CONST_STRING(\"{}\")", x)),
-            Expression::Column(module, name, _, _) => Ok(format!(
-                "{}[\"{}_{}\"]",
+            Expression::Column(_module, name, _, _) => Ok(format!(
+                "{}[\"{}\"]",
                 self.ce,
-                module,
                 name.to_case(Case::UpperSnake)
             )),
             Expression::ArrayColumnElement(name, i, _) => Ok(format!(
@@ -151,13 +150,12 @@ const (
             self.package,
         ));
 
-        for (module, m) in cols.cols.iter() {
+        for (_module, m) in cols.cols.iter() {
             for (name, col) in m.iter() {
                 match col {
                     Column::Atomic(_, _) => r.push_str(&format!(
-                        "{} column.Column = \"{}_{}\"\n",
+                        "{} column.Column = \"{}\"\n",
                         name.to_case(Case::ScreamingSnake),
-                        module,
                         name.to_case(Case::ScreamingSnake)
                     )),
                     Column::Array { range, content } => {
@@ -179,7 +177,7 @@ const (
         }
         r += ")\n\n";
 
-        for (module, m) in cols.cols.iter() {
+        for (_module, m) in cols.cols.iter() {
             for (name, col) in m.iter() {
                 match col {
                     Column::Atomic(..) => {}
