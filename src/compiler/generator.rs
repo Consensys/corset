@@ -190,8 +190,10 @@ impl FuncVerifier<Expression> for Builtin {
                 }
             }
             Builtin::Shift => {
-                if matches!(args[0], Expression::Column(..))
-                    && matches!(&args[1], Expression::Const(x) if !Zero::is_zero(x))
+                if matches!(
+                    &args[0],
+                    Expression::Column(..) | Expression::ArrayColumnElement(..)
+                ) && matches!(&args[1], Expression::Const(x) if !Zero::is_zero(x))
                 {
                     Ok(())
                 } else {
