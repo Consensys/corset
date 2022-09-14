@@ -1,5 +1,5 @@
 use self::definitions::Symbol;
-use crate::column::Column;
+use crate::column::{Column, ColumnSet};
 use definitions::SymbolTable;
 use eyre::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -26,6 +26,28 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         asts.push((name, ast));
     }
 
+    let mut columns: ColumnSet<u32> = Default::default();
+    for s in ctx.borrow().symbols() {
+        match &s.1 .0 {
+            Symbol::Alias(_) => {}
+            Symbol::Final(symbol, used) => {
+                if !used {
+                    eprintln!("WARN unused: {:?}", symbol);
+                }
+                match symbol {
+                    Expression::Column(module, name, t, k) => match k {
+                        Kind::Atomic => columns.insert_atomic(module, name, *t, true)?,
+                        x => todo!("{:?}", x),
+                    },
+                    Expression::ArrayColumn(module, name, range, t) => {
+                        columns.insert_array(module, name, *t, range, true)?
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     let r = ConstraintsSet {
         constraints: asts
             .iter()
@@ -37,33 +59,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
             .into_iter()
             .flatten()
             .collect(),
-        columns: ctx
-            .borrow()
-            .symbols()
-            .filter_map(|s| match &s.1 .0 {
-                Symbol::Alias(_) => None,
-                Symbol::Final(symbol, used) => {
-                    if !used {
-                        eprintln!("WARN unused: {:?}", symbol);
-                    }
-                    match symbol {
-                        Expression::Column(name, t, k) => match k {
-                            Kind::Atomic => Some((name.to_owned(), Column::Atomic(vec![], *t))),
-                            x => todo!("{:?}", x),
-                        },
-                        Expression::ArrayColumn(name, range, _t) => Some((
-                            name.to_owned(),
-                            Column::Array {
-                                range: range.clone(),
-                                content: Default::default(),
-                            },
-                        )),
-                        _ => None,
-                    }
-                }
-            })
-            .collect::<HashMap<_, _>>()
-            .into(),
+        columns,
     };
 
     Ok((asts.into_iter().map(|x| x.1).collect(), r))

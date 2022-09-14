@@ -82,9 +82,10 @@ impl GoExporter {
         let r = match node {
             Expression::ArrayColumn(..) => unreachable!(),
             Expression::Const(x) => Ok(format!("column.CONST_STRING(\"{}\")", x)),
-            Expression::Column(name, _, _) => Ok(format!(
-                "{}[\"{}\"]",
+            Expression::Column(module, name, _, _) => Ok(format!(
+                "{}[\"{}_{}\"]",
                 self.ce,
+                module,
                 name.to_case(Case::UpperSnake)
             )),
             Expression::ArrayColumnElement(name, i, _) => Ok(format!(
@@ -150,46 +151,51 @@ const (
             self.package,
         ));
 
-        for (name, col) in cols.cols.iter() {
-            match col {
-                Column::Atomic(_, _) => r.push_str(&format!(
-                    "{} column.Column = \"{}\"\n",
-                    name.to_case(Case::ScreamingSnake),
-                    name.to_case(Case::ScreamingSnake)
-                )),
-                Column::Array { range, content } => {
-                    for i in range {
-                        r.push_str(&format!(
-                            "{}{}{} column.Column = \"{}{}{}\"\n",
-                            name.to_case(Case::ScreamingSnake),
-                            ARRAY_SEPARATOR,
-                            i,
-                            name.to_case(Case::ScreamingSnake),
-                            ARRAY_SEPARATOR,
-                            i
-                        ))
+        for (module, m) in cols.cols.iter() {
+            for (name, col) in m.iter() {
+                match col {
+                    Column::Atomic(_, _) => r.push_str(&format!(
+                        "{} column.Column = \"{}_{}\"\n",
+                        name.to_case(Case::ScreamingSnake),
+                        module,
+                        name.to_case(Case::ScreamingSnake)
+                    )),
+                    Column::Array { range, content } => {
+                        for i in range {
+                            r.push_str(&format!(
+                                "{}{}{} column.Column = \"{}{}{}\"\n",
+                                name.to_case(Case::ScreamingSnake),
+                                ARRAY_SEPARATOR,
+                                i,
+                                name.to_case(Case::ScreamingSnake),
+                                ARRAY_SEPARATOR,
+                                i
+                            ))
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
         r += ")\n\n";
 
-        for (name, col) in cols.cols.iter() {
-            match col {
-                Column::Atomic(..) => {}
-                Column::Array { .. } => {}
-                Column::Composite { value, exp } => todo!(),
-                Column::Sorted { from, .. } => r.push_str(&format!(
-                    "var {} = column.NewSorted({})\n",
-                    name.to_case(Case::ScreamingSnake),
-                    from
-                )),
-                Column::Interleaved { from, .. } => r.push_str(&format!(
-                    "var {} = column.Interleaved{{{}}}\n",
-                    name.to_case(Case::ScreamingSnake),
-                    from.join(", ")
-                )),
+        for (module, m) in cols.cols.iter() {
+            for (name, col) in m.iter() {
+                match col {
+                    Column::Atomic(..) => {}
+                    Column::Array { .. } => {}
+                    Column::Composite { value, exp } => todo!(),
+                    Column::Sorted { from, .. } => r.push_str(&format!(
+                        "var {} = column.NewSorted({})\n",
+                        name.to_case(Case::ScreamingSnake),
+                        from
+                    )),
+                    Column::Interleaved { from, .. } => r.push_str(&format!(
+                        "var {} = column.Interleaved{{{}}}\n",
+                        name.to_case(Case::ScreamingSnake),
+                        from.join(", ")
+                    )),
+                }
             }
         }
 

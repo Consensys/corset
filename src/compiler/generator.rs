@@ -28,8 +28,8 @@ pub enum Expression {
         args: Vec<Expression>,
     },
     Const(BigInt),
-    Column(String, Type, Kind<Expression>),
-    ArrayColumn(String, Vec<usize>, Type),
+    Column(String, String, Type, Kind<Expression>), // Module Name Type Kind
+    ArrayColumn(String, String, Vec<usize>, Type),
     ArrayColumnElement(String, usize, Type),
     List(Vec<Expression>),
 }
@@ -64,11 +64,14 @@ impl Debug for Expression {
 
         match self {
             Expression::Const(x) => write!(f, "{}:CONST", x),
-            Expression::Column(name, t, k) => write!(f, "{}:{{{:?}}}:{:?}", name, t, k),
-            Expression::ArrayColumn(name, range, t) => {
+            Expression::Column(module, name, t, k) => {
+                write!(f, "{}/{}:{{{:?}}}:{:?}", module, name, t, k)
+            }
+            Expression::ArrayColumn(module, name, range, t) => {
                 write!(
                     f,
-                    "{}[{}:{}]:ARRAYCOLUMN{{{:?}}}",
+                    "{}/{}[{}:{}]:ARRAYCOLUMN{{{:?}}}",
+                    module,
                     name,
                     range.first().unwrap(),
                     range.last().unwrap(),
@@ -187,7 +190,7 @@ impl FuncVerifier<Expression> for Builtin {
                 }
             }
             Builtin::Shift => {
-                if matches!(args[0], Expression::Column(_, _, _))
+                if matches!(args[0], Expression::Column(..))
                     && matches!(&args[1], Expression::Const(x) if !Zero::is_zero(x))
                 {
                     Ok(())
@@ -385,7 +388,7 @@ fn apply(
                         {
                             let x = x.to_usize().unwrap();
                             match &ctx.borrow_mut().resolve_symbol(module, cname)? {
-                                array @ (Expression::ArrayColumn(name, range, t), _) => {
+                                array @ (Expression::ArrayColumn(module, name, range, t), _) => {
                                     if range.contains(&x) {
                                         Ok(Some((
                                             Expression::ArrayColumnElement(name.to_owned(), x, *t),
@@ -465,7 +468,7 @@ fn reduce(
             Kind::Composite(e) => {
                 let e = reduce(e, ctx.clone(), module)?.unwrap();
                 ctx.borrow_mut().edit_symbol(module, name, &|x| {
-                    if let Expression::Column(_, _, kind) = x {
+                    if let Expression::Column(_, _, _, kind) = x {
                         *kind = Kind::Composite(Box::new(e.0.clone()))
                     }
                 })?;

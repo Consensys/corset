@@ -168,8 +168,8 @@ impl SymbolTable {
 
     pub fn insert_symbol(&mut self, module: &str, symbol: &str, e: Expression) -> Result<()> {
         let t = match e {
-            Expression::Column(_, t, _) => t,
-            Expression::ArrayColumn(_, _, t) => t,
+            Expression::Column(_, _, t, _) => t,
+            Expression::ArrayColumn(_, _, _, t) => t,
             Expression::Const(ref x) => {
                 if Zero::is_zero(x) || One::is_one(x) {
                     Type::Boolean
@@ -302,7 +302,8 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
             module,
             col,
             Expression::Column(
-                format!("{}-{}", module, col),
+                module.to_owned(),
+                col.to_owned(),
                 *t,
                 // Convert Kind<AstNode> to Kind<Expression>
                 match kind {
@@ -316,7 +317,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
         Token::DefArrayColumn(col, range, t) => ctx.borrow_mut().insert_symbol(
             module,
             col,
-            Expression::ArrayColumn(format!("{}-{}", module, col), range.clone(), *t),
+            Expression::ArrayColumn(module.clone(), col.clone(), range.clone(), *t),
         ),
         Token::DefAliases(aliases) => aliases.iter().fold(Ok(()), |ax, alias| {
             ax.and(reduce(alias, ctx.clone(), module))
