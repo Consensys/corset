@@ -142,69 +142,6 @@ impl AstNode {
                     }
                     ":NATURAL" => t = Type::Numeric,
                     ":BOOLEAN" => t = Type::Boolean,
-                    ":SORTED" => {
-                        let mut cols = vec![];
-                        let cols_tokens = pairs.next().map(rec_parse);
-                        if let Some(Ok(AstNode {
-                            class: Token::List(xs),
-                            ..
-                        })) = cols_tokens
-                        {
-                            for x in xs.iter() {
-                                if let AstNode {
-                                    class: Token::Symbol(name),
-                                    ..
-                                } = x
-                                {
-                                    cols.push(name.to_owned());
-                                } else {
-                                    return Err(eyre!(
-                                        ":SORTED expects a list of symbols; found `{:?}`",
-                                        x
-                                    ));
-                                }
-                            }
-                        } else {
-                            return Err(eyre!(
-                                ":SORTED expects ((NAMES...) :SORTED (COLS...) (CRITERIONS...)), found `{}`",
-                                cols_tokens
-                                    .map(|n| format!("{:?}", n.unwrap().class))
-                                    .unwrap_or_else(|| "nothing".to_string())
-                            ));
-                        }
-
-                        let mut criterions = vec![];
-                        let criterions_tokens = pairs.next().map(rec_parse);
-                        if let Some(Ok(AstNode {
-                            class: Token::List(xs),
-                            ..
-                        })) = criterions_tokens
-                        {
-                            for x in xs.iter() {
-                                match x {
-                                    AstNode {
-                                        class: Token::Symbol(name),
-                                        ..
-                                    } => {
-                                        criterions.push((name.to_owned(), Direction::Ascending));
-                                    }
-                                    _ => {
-                                        return Err(eyre!(
-                                        ":SORTED expects a list of symbols or (:ASC|:DESC); found `{:?}`",
-                                        x
-                                    ));
-                                    }
-                                };
-                            }
-                        } else {
-                            return Err(eyre!(
-                                ":SORTED expects ((COLS...) (CRITERIONS...)), found `{}`",
-                                criterions_tokens
-                                    .map(|n| format!("{:?}", n.unwrap().class))
-                                    .unwrap_or_else(|| "nothing".to_string())
-                            ));
-                        }
-                    }
                     ":COMP" => {
                         let n = pairs.next().map(rec_parse);
                         if let Some(Ok(AstNode {

@@ -16,7 +16,7 @@ defmodule = {"(module" ~ symbol ~ ")"}
 defcolumns = { "(" ~ "defcolumns" ~ defcolumn* ~ ")" }
 defcolumn = { symbol | init_list }
 computed = { ":" ~ computation ~ "[" ~ expr+ ~ "]" }
-computation = _{ "SORTED" | "INTERLEAVED" | "COMP" }
+computation = _{ "INTERLEAVED" | "COMP" }
 
 
 
