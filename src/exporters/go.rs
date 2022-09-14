@@ -202,7 +202,8 @@ const (
         r.push_str(&format!(
             "var AllColumns = column.BuildColumnList(\n{}\n)\n",
             cols.cols
-                .keys()
+                .values()
+                .flat_map(|module| module.keys())
                 .map(|k| format!("{}.Name(),", k.to_case(Case::ScreamingSnake)))
                 .collect::<Vec<_>>()
                 .join("\n")
