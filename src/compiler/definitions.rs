@@ -45,10 +45,10 @@ impl SymbolTable {
         }))
     }
 
-    pub fn symbols(&self) -> impl Iterator<Item = (&String, &(Symbol, Type))> {
+    pub fn symbols(&self) -> impl Iterator<Item = (&String, &String, &(Symbol, Type))> {
         self.symbols
             .iter()
-            .flat_map(|(k, m)| m.values().map(move |s| (k, s)))
+            .flat_map(|(module, m)| m.iter().map(move |(name, symbol)| (module, name, symbol)))
     }
 
     fn _resolve_symbol(
@@ -293,9 +293,12 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
             *module = String::from(name);
             Ok(())
         }
-        Token::DefConst(name, x) => {
-            ctx.borrow_mut()
-                .insert_constant(module, name, BigInt::from(*x))
+        Token::DefConsts(cs) => {
+            for (name, value) in cs.iter() {
+                ctx.borrow_mut()
+                    .insert_constant(module, name, value.to_owned())?;
+            }
+            Ok(())
         }
         Token::DefColumns(cols) => cols
             .iter()

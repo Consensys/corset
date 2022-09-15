@@ -3,6 +3,7 @@ use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
 use num_traits::{One, Zero};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
@@ -233,6 +234,7 @@ impl FuncVerifier<Expression> for Builtin {
 pub struct ConstraintsSet {
     pub columns: ColumnSet<u32>,
     pub constraints: Vec<Constraint>,
+    pub constants: HashMap<String, i64>,
 }
 
 // Compared to a function, a form do not evaluate all of its arguments by default
@@ -485,7 +487,7 @@ fn reduce(
         | Token::DefAliases(_)
         | Token::DefAlias(..)
         | Token::DefunAlias(..)
-        | Token::DefConst(..)
+        | Token::DefConsts(..)
         | Token::Defun(..)
         | Token::DefPermutation(..)
         | Token::DefPlookup(..) => Ok(None),

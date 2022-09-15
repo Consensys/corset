@@ -145,10 +145,13 @@ impl LatexExporter {
         match &n.class {
             Token::Value(x) => Ok(x.to_string()),
             Token::Symbol(name) => Ok(textize(sanitize(name), in_maths)),
-            Token::DefConst(name, x) => Ok(dollarize(
-                format!("\\text{{{}}} \\triangleq {}", sanitize(name), x),
-                in_maths,
-            )),
+            Token::DefConsts(cs) => Ok(cs.iter().fold(String::new(), |mut ax, c| {
+                ax.push_str(&dollarize(
+                    format!("\\text{{{}}} \\triangleq {}\n", sanitize(&c.0), c.1),
+                    in_maths,
+                ));
+                ax
+            })),
 
             Token::DefAliases(cols) => {
                 let body = cols

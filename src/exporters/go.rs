@@ -1,5 +1,5 @@
 use log::*;
-use std::io::Write;
+use std::{collections::HashMap, io::Write};
 
 use color_eyre::eyre::*;
 use convert_case::{Case, Casing};
@@ -134,6 +134,17 @@ impl GoExporter {
             }
         }?;
         Ok(r)
+    }
+
+    fn render_consts(&self, consts: &HashMap<String, i64>) -> String {
+        consts.iter().fold(String::new(), |mut ax, (name, value)| {
+            ax.push_str(&format!(
+                "const {} = {}\n",
+                name.to_case(Case::ScreamingSnake),
+                value
+            ));
+            ax
+        })
     }
 
     fn render_columns<T>(&self, cols: &ColumnSet<T>) -> String {
@@ -311,8 +322,13 @@ import (
 {}
 
 {}
+
+{}
 "#,
-            self.package, constraints, main_function,
+            self.package,
+            self.render_consts(&cs.constants),
+            constraints,
+            main_function,
         );
 
         if let Some(ref filename) = self.columns_filename {

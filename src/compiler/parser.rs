@@ -51,7 +51,7 @@ pub enum Token {
     Type(Type),
 
     DefModule(String),
-    DefConst(String, usize),
+    DefConsts(Vec<(String, BigInt)>),
     DefColumns(Vec<AstNode>),
     DefColumn(String, Type, Kind<AstNode>),
     DefPermutation(Vec<AstNode>, Vec<AstNode>, Vec<AstNode>),
@@ -90,7 +90,16 @@ impl Debug for Token {
             Token::Type(t) => write!(f, "{:?}", t),
 
             Token::DefModule(name) => write!(f, "MODULE {}", name),
-            Token::DefConst(name, value) => write!(f, "{}:CONST({})", name, value),
+            Token::DefConsts(v) => {
+                write!(
+                    f,
+                    "{}",
+                    v.iter().fold(String::new(), |mut ax, c| {
+                        ax.push_str(&format!("{}:CONST({})", c.0, c.1));
+                        ax
+                    })
+                )
+            }
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
             Token::DefColumn(name, t, kind) => write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind),
             Token::DefPermutation(to, from, _) => write!(f, "{:?}:SORTED{:?}", to, from),
@@ -185,16 +194,27 @@ impl AstNode {
         let tokens = args.iter().map(|x| x.class.clone()).collect::<Vec<_>>();
         match tokens.get(0) {
             Some(Token::Symbol(defkw)) if defkw == "defconst" => {
-                match (tokens.get(1), tokens.get(2)) {
-                    (Some(Token::Symbol(name)), Some(Token::Value(x))) => Ok(AstNode {
-                        class: Token::DefConst(name.into(), x.to_usize().unwrap()),
-                        src: src.into(),
+                if tokens.len() % 2 != 1 {
+                    return Err(eyre!("DEFCONST expects an even number of arguments"));
+                } else {
+                    Ok(AstNode {
+                        class: Token::DefConsts(
+                            tokens[1..]
+                                .chunks(2)
+                                .map(|w| match (&w[0], &w[1]) {
+                                    (Token::Symbol(name), Token::Value(x)) => {
+                                        Ok((name.to_owned(), x.to_owned()))
+                                    }
+                                    _ => Err(eyre!(
+                                        "DEFCONST expects (SYMBOL VALUE); received {:?}",
+                                        &tokens[1..]
+                                    )),
+                                })
+                                .collect::<Result<Vec<_>>>()?,
+                        ),
                         lc,
-                    }),
-                    _ => Err(eyre!(
-                        "DEFCONST expects (SYMBOL VALUE); received {:?}",
-                        &tokens[1..]
-                    )),
+                        src: src.to_string(),
+                    })
                 }
             }
 

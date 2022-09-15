@@ -3,7 +3,7 @@ use crate::column::ColumnSet;
 use definitions::SymbolTable;
 use eyre::*;
 use log::*;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use common::Type;
 pub use generator::{Builtin, Constraint, ConstraintsSet, Expression};
@@ -28,8 +28,9 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
     }
 
     let mut columns: ColumnSet<u32> = Default::default();
-    for s in ctx.borrow().symbols() {
-        match &s.1 .0 {
+    let mut constants: HashMap<String, i64> = Default::default();
+    for s in dbg!(ctx.borrow()).symbols() {
+        match &s.2 .0 {
             Symbol::Alias(_) => {}
             Symbol::Final(symbol, used) => {
                 if !used {
@@ -45,6 +46,9 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                     },
                     Expression::ArrayColumn(module, name, range, t) => {
                         columns.insert_array(module, name, *t, range, true)?
+                    }
+                    Expression::Const(x) => {
+                        constants.insert(s.1.to_owned(), x.try_into().unwrap());
                     }
                     _ => {}
                 }
@@ -64,6 +68,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
             .flatten()
             .collect(),
         columns,
+        constants,
     };
 
     Ok((asts.into_iter().map(|x| x.1).collect(), r))
