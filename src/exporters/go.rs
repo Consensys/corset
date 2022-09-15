@@ -211,13 +211,13 @@ const (
                 .flat_map(|module| module.iter())
                 .map(|(name, col)| match col {
                     Column::Atomic(_, _) =>
-                        format!("{}.Name()", name.to_case(Case::ScreamingSnake)),
+                        format!("{}.Name(),", name.to_case(Case::ScreamingSnake)),
                     Column::Array { range, .. } => {
                         range
                             .iter()
                             .map(|i| {
                                 format!(
-                                    "{}{}{}.Name()",
+                                    "{}{}{}.Name(),",
                                     name.to_case(Case::ScreamingSnake),
                                     ARRAY_SEPARATOR,
                                     i,
