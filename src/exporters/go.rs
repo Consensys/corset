@@ -197,8 +197,26 @@ const (
             "var AllColumns = column.BuildColumnList(\n{}\n)\n",
             cols.cols
                 .values()
-                .flat_map(|module| module.keys())
-                .map(|k| format!("{}.Name(),", k.to_case(Case::ScreamingSnake)))
+                .flat_map(|module| module.iter())
+                .map(|(name, col)| match col {
+                    Column::Atomic(_, _) =>
+                        format!("{}.Name()", name.to_case(Case::ScreamingSnake)),
+                    Column::Array { range, .. } => {
+                        range
+                            .iter()
+                            .map(|i| {
+                                format!(
+                                    "{}{}{}.Name()",
+                                    name.to_case(Case::ScreamingSnake),
+                                    ARRAY_SEPARATOR,
+                                    i,
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    }
+                    _ => "".into(),
+                })
                 .collect::<Vec<_>>()
                 .join("\n")
         ));
