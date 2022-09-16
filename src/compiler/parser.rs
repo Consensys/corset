@@ -1,4 +1,5 @@
 use color_eyre::eyre::*;
+use log::*;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use pest::{iterators::Pair, Parser};
@@ -159,6 +160,22 @@ impl AstNode {
                         } else {
                             return Err(eyre!(
                                 ":COMP expects FORM, found `{}`",
+                                n.map(|n| format!("{:?}", n.unwrap().class))
+                                    .unwrap_or_else(|| "nothing".to_string())
+                            ));
+                        }
+                    }
+                    ":SORTED" => {
+                        let n = pairs.next().map(rec_parse);
+                        if let Some(Ok(AstNode {
+                            class: Token::Symbol(parent),
+                            ..
+                        })) = n
+                        {
+                            warn!(":SORTED not yet implemented")
+                        } else {
+                            return Err(eyre!(
+                                ":SORTED expects SYMBOL, found `{}`",
                                 n.map(|n| format!("{:?}", n.unwrap().class))
                                     .unwrap_or_else(|| "nothing".to_string())
                             ));
