@@ -1,4 +1,5 @@
 use eyre::*;
+use log::*;
 use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
 use num_traits::{One, Zero};
@@ -98,9 +99,10 @@ pub enum Builtin {
     Shift,
     Neg,
     Inv,
-    Nth,
 
+    Nth,
     Begin,
+    InRange,
 
     IfZero,
     IfNotZero,
@@ -121,6 +123,7 @@ impl Builtin {
             }
             Builtin::Begin => *argtype.iter().max().unwrap(),
             Builtin::Shift | Builtin::Nth => argtype[0],
+            Builtin::InRange => Type::Void,
         }
     }
 }
@@ -166,6 +169,7 @@ impl FuncVerifier<Expression> for Builtin {
             Builtin::IfZero => Arity::Between(2, 3),
             Builtin::IfNotZero => Arity::Between(2, 3),
             Builtin::Nth => Arity::Dyadic,
+            Builtin::InRange => Arity::Dyadic,
         }
     }
     fn validate_types(&self, args: &[Expression]) -> Result<()> {
@@ -226,6 +230,21 @@ impl FuncVerifier<Expression> for Builtin {
                 }
             }
             Builtin::Begin => Ok(()),
+            Builtin::InRange => {
+                if matches!(
+                    args[0],
+                    Expression::Column(..) | Expression::ArrayColumnElement(..)
+                ) && matches!(args[1], Expression::Const(_))
+                {
+                    Ok(())
+                } else {
+                    Err(eyre!(
+                        "`{:?}` expects a column and a number but received {:?}",
+                        self,
+                        args
+                    ))
+                }
+            }
         }
     }
 }
@@ -409,7 +428,17 @@ fn apply(
                         }
                     }
 
-                    b => Ok(Some((
+                    Builtin::InRange => {
+                        warn!("INRANGE constraints not yet implemented");
+                        Ok(None)
+                    }
+
+                    b @ (Builtin::Add
+                    | Builtin::Sub
+                    | Builtin::Mul
+                    | Builtin::Neg
+                    | Builtin::Inv
+                    | Builtin::Shift) => Ok(Some((
                         Expression::Funcall {
                             func: *b,
                             args: traversed_args,
