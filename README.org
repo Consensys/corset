@@ -185,6 +185,7 @@ The ~begin~ forms define a list of conditions that should all be verified. They 
   (defconstraint bar ()
     (two-change A B))
 #+end_src
+It should be noted that ~begin~ will automatically flatten its argument; /i.e./ if one of its argument is already a ~begin~ form, then its element will be added piecewise to the outer ~begin~ instead of forming a list containing another list.
 **** ~for~
 The ~for~ forms generate similar constraints, parametrized by the specified iteration variable, ranging over the provided range.
 #+begin_src lisp

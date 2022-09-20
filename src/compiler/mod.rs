@@ -29,7 +29,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
 
     let mut columns: ColumnSet<u32> = Default::default();
     let mut constants: HashMap<String, i64> = Default::default();
-    for s in dbg!(ctx.borrow()).symbols() {
+    for s in ctx.borrow().symbols() {
         match &s.2 .0 {
             Symbol::Alias(_) => {}
             Symbol::Final(symbol, used) => {

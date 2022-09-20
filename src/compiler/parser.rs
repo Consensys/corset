@@ -64,17 +64,18 @@ pub enum Token {
     DefunAlias(String, String),
     DefPlookup(Vec<AstNode>, Vec<AstNode>),
 }
+const LIST_DISPLAY_THRESHOLD: usize = 4;
 impl Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fn format_list(cs: &[AstNode]) -> String {
-            if cs.len() <= 2 {
+            if cs.len() <= LIST_DISPLAY_THRESHOLD {
                 cs.iter()
                     .map(|c| format!("{:?}", c))
                     .collect::<Vec<_>>()
                     .join(" ")
             } else {
                 cs.iter()
-                    .take(2)
+                    .take(LIST_DISPLAY_THRESHOLD)
                     .map(|c| format!("{:?}", c))
                     .collect::<Vec<_>>()
                     .join(" ")

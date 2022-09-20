@@ -322,7 +322,19 @@ fn apply(
                 let cond = traversed_args[0].clone();
                 match b {
                     Builtin::Begin => Ok(Some((
-                        Expression::List(traversed_args),
+                        Expression::List(traversed_args.into_iter().fold(
+                            vec![],
+                            |mut ax, e| match e {
+                                Expression::List(mut es) => {
+                                    ax.append(&mut es);
+                                    ax
+                                }
+                                _ => {
+                                    ax.push(e);
+                                    ax
+                                }
+                            },
+                        )),
                         *traversed_args_t.iter().max().unwrap(),
                     ))),
 
