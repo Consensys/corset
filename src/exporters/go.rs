@@ -1,8 +1,8 @@
 use log::*;
 use std::{collections::HashMap, io::Write};
 
-use color_eyre::eyre::*;
 use convert_case::{Case, Casing};
+use eyre::*;
 
 use crate::{
     column::{Column, ColumnSet},
@@ -26,21 +26,6 @@ return
         content,
         postlude,
     )
-}
-
-fn gofmt(filename: &str) {
-    info!("Running gofmt on {}... ", filename);
-    let output = std::process::Command::new("gofmt")
-        .args(["-w", filename])
-        .output()
-        .expect("failed to execute gofmt");
-    if output.status.success() {
-        info!("done.");
-    } else {
-        error!("failed:");
-        error!("STDOUT:\n{}", std::str::from_utf8(&output.stdout).unwrap());
-        error!("STDERR:\n{}", std::str::from_utf8(&output.stderr).unwrap());
-    }
 }
 
 #[derive(Debug)]
@@ -337,7 +322,7 @@ import (
                     .with_context(|| format!("while creating `{}`", filename))?
                     .write_all(columns.as_bytes())
                     .with_context(|| format!("while writing to `{}`", filename))?;
-                gofmt(filename);
+                super::gofmt(filename);
             }
         } else {
             println!("{}", columns);
@@ -348,7 +333,7 @@ import (
                 .with_context(|| format!("while creating `{}`", filename))?
                 .write_all(r.as_bytes())
                 .with_context(|| format!("while writing to `{}`", filename))?;
-            gofmt(filename);
+            super::gofmt(filename);
         } else {
             println!("{}", r);
         }

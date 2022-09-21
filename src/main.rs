@@ -96,7 +96,7 @@ fn main() -> Result<()> {
         simplelog::ConfigBuilder::new()
             .set_time_level(simplelog::LevelFilter::Off)
             .build(),
-        simplelog::TerminalMode::Mixed,
+        simplelog::TerminalMode::Stderr,
         simplelog::ColorChoice::Auto,
     )?;
     let args = Args::parse();
@@ -127,7 +127,7 @@ fn main() -> Result<()> {
             columns_assignment,
             fname,
         } => {
-            let mut go_exporter = exporters::go::GoExporter {
+            let mut go_exporter = exporters::GoExporter {
                 constraints_filename: args.constraints_filename,
                 package: package.clone(),
                 ce: columns_assignment.into(),
@@ -138,7 +138,7 @@ fn main() -> Result<()> {
             go_exporter.render(&constraints)?;
         }
         Commands::Latex {} => {
-            let mut latex_exporter = exporters::latex::LatexExporter {
+            let mut latex_exporter = exporters::LatexExporter {
                 constraints_filename: args.constraints_filename,
                 columns_filename: args.columns_filename,
                 render_columns: args.render_columns,
