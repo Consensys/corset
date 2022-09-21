@@ -17,22 +17,18 @@ struct ComputeResult {
 }
 
 fn parse_column(xs: &[Value], t: Type) -> Result<Vec<BigInt>> {
-    dbg!(xs)
-        .iter()
-        .map(|x| {
-            match x {
-                Value::Number(n) => BigInt::from_str(&n.to_string())
-                    .with_context(|| format!("while parsing `{:?}`", x)),
-                Value::Null => todo!(),
-                Value::Bool(_) => todo!(),
-                Value::String(s) => {
-                    BigInt::from_str(s).with_context(|| format!("while parsing `{:?}`", x))
-                }
-                Value::Array(_) => todo!(),
-                Value::Object(_) => todo!(),
+    xs.iter()
+        .map(|x| match x {
+            Value::Number(n) => {
+                BigInt::from_str(&n.to_string()).with_context(|| format!("while parsing `{:?}`", x))
             }
-            // let x = BigInt::from_str(&dbg!(x.to_string())).unwrap();
-            // Ok(x)
+            Value::Null => todo!(),
+            Value::Bool(_) => todo!(),
+            Value::String(s) => {
+                BigInt::from_str(s).with_context(|| format!("while parsing `{:?}`", x))
+            }
+            Value::Array(_) => todo!(),
+            Value::Object(_) => todo!(),
         })
         .collect()
 }
@@ -140,7 +136,9 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
         &std::fs::read_to_string(tracefile)
             .with_context(|| format!("while reading `{}`", tracefile))?,
     )?;
+
     fill_traces(&v, vec![], &mut cs.columns)?;
+    cs.compute()?;
 
     let mut r = ComputeResult::default();
     for (module, columns) in cs.columns.cols.iter_mut() {
@@ -148,19 +146,24 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
             match col {
                 Column::Atomic(content, _) => {
                     r.columns.insert(
-                        format!("{}{}{}", module, "__", colname), // TODO module separator
+                        format!("{}{}{}", module, "___", colname), // TODO module separator
                         content.to_owned(),
                     );
                 }
                 Column::Array { content, .. } => {
                     for (i, col) in content.iter() {
                         r.columns.insert(
-                            format!("{}{}{}{}{}", module, "__", colname, "_", i), // TODO module separator
+                            format!("{}{}{}{}{}", module, "___", colname, "_", i), // TODO module separator
                             col.clone(),
                         );
                     }
                 }
-                Column::Composite { value, exp } => todo!(),
+                Column::Composite { value, exp } => {
+                    r.columns.insert(
+                        format!("{}{}{}", module, "___", colname), // TODO module separator
+                        value.as_ref().unwrap().to_owned(),
+                    );
+                }
                 Column::Interleaved { value, from } => todo!(),
             }
         }

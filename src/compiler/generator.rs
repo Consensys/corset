@@ -9,7 +9,7 @@ use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
 use super::common::*;
-use crate::column::ColumnSet;
+use crate::column::{Column, ColumnSet};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 
@@ -36,6 +36,108 @@ pub enum Expression {
     List(Vec<Expression>),
 }
 impl Expression {
+    pub fn eval(
+        &self,
+        i: usize,
+        f: &mut dyn FnMut(&str, &str, usize, usize) -> Option<BigInt>,
+    ) -> Option<BigInt> {
+        match self {
+            Expression::Funcall { func, args } => match func {
+                Builtin::Add => args.iter().map(|x| x.eval(i, f)).sum(),
+                Builtin::Sub => {
+                    let mut xs = args.iter().map(|x| x.eval(i, f));
+                    let ax = xs.next().unwrap();
+                    xs.fold(ax, |ax, x| {
+                        if ax.is_some() && x.is_some() {
+                            Some(ax.unwrap() - x.unwrap())
+                        } else {
+                            x
+                        }
+                    })
+                }
+                Builtin::Mul => {
+                    args.iter()
+                        .map(|x| x.eval(i, f))
+                        .fold(Some(One::one()), |ax, x| {
+                            if ax.is_some() && x.is_some() {
+                                Some(ax.unwrap() * x.unwrap())
+                            } else {
+                                x
+                            }
+                        })
+                }
+                Builtin::Shift => {
+                    if let Expression::Const(ii) = &args[1] {
+                        args[0].eval(i + ii.to_usize().unwrap(), f)
+                    } else {
+                        unreachable!()
+                    }
+                }
+                Builtin::Neg => args[0].eval(i, f).map(|x| -x),
+                Builtin::Inv => todo!(),
+                Builtin::Nth => {
+                    if let (
+                        Expression::ArrayColumn(module, name, domain, _),
+                        Expression::Const(j),
+                    ) = (&args[0], &args[1])
+                    {
+                        let j = j.to_usize().unwrap();
+                        if !domain.contains(&j) {
+                            panic!("ASDFFDSA");
+                        }
+                        f(module, name, i, j)
+                    } else {
+                        unreachable!()
+                    }
+                }
+                Builtin::Begin => unreachable!(),
+                Builtin::InRange => unreachable!(),
+                Builtin::IfZero => unreachable!(),
+                Builtin::IfNotZero => unreachable!(),
+            },
+            Expression::Const(x) => Some(x.to_owned()),
+            Expression::Column(module, name, ..) => f(module, name, i, 0),
+            Expression::ArrayColumnElement(module, name, idx, _) => f(module, name, i, *idx),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn leaves(&self) -> Vec<Expression> {
+        fn _flatten(e: &Expression, ax: &mut Vec<Expression>) {
+            match e {
+                Expression::Funcall { func, args } => {
+                    for a in args {
+                        _flatten(a, ax);
+                    }
+                }
+                Expression::Const(_) => ax.push(e.clone()),
+                Expression::Column(_, _, _, _) => ax.push(e.clone()),
+                Expression::ArrayColumn(_, _, _, _) => {}
+                Expression::ArrayColumnElement(_, _, _, _) => ax.push(e.clone()),
+                Expression::List(args) => {
+                    for a in args {
+                        _flatten(a, ax);
+                    }
+                }
+            }
+        }
+
+        let mut r = vec![];
+        _flatten(self, &mut r);
+        r
+    }
+    // pub fn fold<T: Clone>(&self, ax: T, f: &dyn Fn(T, &Expression) -> T) -> T {
+    //     match self {
+    //         Expression::List(xs) => {
+    //             let mut ax = ax.clone();
+    //             for x in xs {
+    //                 ax = x.fold(ax, f);
+    //             }
+    //             ax
+    //         }
+    //         x => f(ax, x.fold(ax, f)),
+    //     }
+    // }
     pub fn flat_fold<T>(&self, f: &dyn Fn(&Expression) -> T) -> Vec<T> {
         let mut ax = vec![];
         match self {
@@ -47,12 +149,6 @@ impl Expression {
             x => ax.push(f(x)),
         }
         ax
-    }
-    pub fn len(&self) -> usize {
-        match self {
-            Expression::List(exps) => exps.len(),
-            _ => 1,
-        }
     }
 }
 impl Debug for Expression {
@@ -254,6 +350,103 @@ pub struct ConstraintsSet {
     pub columns: ColumnSet<BigInt>,
     pub constraints: Vec<Constraint>,
     pub constants: HashMap<String, i64>,
+}
+impl ConstraintsSet {
+    fn compute_column(&mut self, module: &str, name: &str) -> Result<()> {
+        let col = self.columns.cols.get(module).unwrap().get(name).unwrap();
+        let (exp, context) = match col {
+            Column::Composite { value, exp } => {
+                let cols_in_expr = exp
+                    .leaves()
+                    .into_iter()
+                    .filter(|e| {
+                        matches!(
+                            e,
+                            Expression::ArrayColumnElement(..) | Expression::Column(..)
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                (exp.clone(), cols_in_expr)
+            }
+            Column::Interleaved { value, from } => todo!(),
+            x => return Ok(()),
+        };
+        let length = context
+            .iter()
+            .map(|e| match e {
+                Expression::Column(module, name, ..) => {
+                    let col = self.columns.cols.get(module).unwrap().get(name).unwrap();
+                    if let Some(l) = col.len() {
+                        l
+                    } else {
+                        self.compute_column(module, name);
+                        self.columns
+                            .cols
+                            .get(module)
+                            .unwrap()
+                            .get(name)
+                            .unwrap()
+                            .len()
+                            .unwrap()
+                    }
+                }
+                Expression::ArrayColumnElement(_, _, _, _) => self
+                    .columns
+                    .cols
+                    .get(module)
+                    .unwrap()
+                    .get(name)
+                    .unwrap()
+                    .len()
+                    .unwrap(),
+                _ => unreachable!(),
+            })
+            .max()
+            .unwrap();
+
+        let values = (0..length)
+            .map(|i| {
+                exp.eval(i, &mut |module, name, i, idx| {
+                    let col = self.columns.cols.get(module).unwrap().get(name).unwrap();
+                    if col.is_computed() {
+                        col.get(i, idx).cloned()
+                    } else {
+                        self.compute_column(module, name);
+                        self.columns
+                            .get(module, name)
+                            .and_then(|col| col.get(i, idx))
+                            .cloned()
+                    }
+                })
+            })
+            .map(|x| x.unwrap_or(Zero::zero()))
+            .collect::<Vec<_>>();
+
+        self.columns
+            .get_mut(module, name)
+            .unwrap()
+            .set_values(values);
+
+        Ok(())
+    }
+
+    pub fn compute(&mut self) -> Result<()> {
+        let handles = self
+            .columns
+            .cols
+            .iter()
+            .flat_map(|(module, cols)| {
+                cols.keys()
+                    .map(|colname| (module.to_owned(), colname.to_owned()))
+            })
+            .collect::<Vec<_>>();
+
+        for (module, colname) in handles.iter() {
+            self.compute_column(module, colname)?;
+        }
+
+        Ok(())
+    }
 }
 
 // Compared to a function, a form do not evaluate all of its arguments by default

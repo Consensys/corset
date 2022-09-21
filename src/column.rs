@@ -6,6 +6,17 @@ use std::collections::HashMap;
 pub struct ColumnSet<T> {
     pub cols: HashMap<String, HashMap<String, Column<T>>>, // Module -> Name -> Column
 }
+impl<T> ColumnSet<T> {
+    pub fn get(&self, module: &str, name: &str) -> Option<&Column<T>> {
+        self.cols.get(module).and_then(|module| module.get(name))
+    }
+
+    pub fn get_mut(&mut self, module: &str, name: &str) -> Option<&mut Column<T>> {
+        self.cols
+            .get_mut(module)
+            .and_then(|module| module.get_mut(name))
+    }
+}
 
 impl<T> std::convert::From<HashMap<String, HashMap<String, Column<T>>>> for ColumnSet<T> {
     fn from(x: HashMap<String, HashMap<String, Column<T>>>) -> Self {
@@ -132,23 +143,31 @@ pub enum Column<T> {
 }
 
 impl<T: std::cmp::Ord + Clone> Column<T> {
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> Option<usize> {
         match self {
-            Column::Atomic(v, _) => v.len(),
-            Column::Array { content, .. } => content.iter().next().unwrap().1.len(),
-            Column::Composite { value, .. } => value.as_ref().unwrap().len(),
-            Column::Interleaved { value, .. } => value.as_ref().unwrap().len(),
+            Column::Atomic(v, _) => Some(v.len()),
+            Column::Array { content, .. } => Some(content.iter().next().unwrap().1.len()),
+            Column::Composite { value, .. } => value.as_ref().map(|v| v.len()),
+            Column::Interleaved { value, .. } => value.as_ref().map(|v| v.len()),
         }
     }
-    pub fn get(&self, i: usize) -> Option<&T> {
+    pub fn get(&self, i: usize, idx: usize) -> Option<&T> {
         match self {
             Column::Atomic(v, _) => v.get(i),
-            Column::Array { .. } => None,
+            Column::Array { content, .. } => content.get(&idx).and_then(|v| v.get(i)),
             Column::Composite { value, .. } => value.as_ref().and_then(|v| v.get(i)),
             Column::Interleaved { value, .. } => value.as_ref().and_then(|v| v.get(i)),
         }
     }
 
+    pub fn is_computed(&self) -> bool {
+        match self {
+            Column::Atomic(..) => true,
+            Column::Array { .. } => true,
+            Column::Composite { value, .. } => value.is_some(),
+            Column::Interleaved { value, .. } => value.is_some(),
+        }
+    }
     pub fn atomic(v: Vec<T>, t: Type) -> Self {
         Column::Atomic(v, t)
     }
@@ -164,6 +183,15 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
         Column::Interleaved {
             value: None,
             from: c.iter().map(|x| x.as_ref().to_string()).collect(),
+        }
+    }
+
+    pub fn set_values(&mut self, values: Vec<T>) {
+        match self {
+            Column::Atomic(_, _) => panic!("DASF"),
+            Column::Array { range, content } => panic!("ASDF"),
+            Column::Composite { ref mut value, exp } => *value = Some(values),
+            Column::Interleaved { value, from } => *value = Some(values),
         }
     }
 
