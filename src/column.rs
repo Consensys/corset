@@ -119,7 +119,7 @@ pub enum Column<T> {
     Atomic(Vec<T>, Type),
     Array {
         range: Vec<usize>,
-        content: Vec<Vec<T>>,
+        content: HashMap<usize, Vec<T>>,
     },
     Composite {
         value: Option<Vec<T>>,
@@ -135,7 +135,7 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
     pub fn len(&self) -> usize {
         match self {
             Column::Atomic(v, _) => v.len(),
-            Column::Array { content, .. } => content.first().unwrap().len(),
+            Column::Array { content, .. } => content.iter().next().unwrap().1.len(),
             Column::Composite { value, .. } => value.as_ref().unwrap().len(),
             Column::Interleaved { value, .. } => value.as_ref().unwrap().len(),
         }

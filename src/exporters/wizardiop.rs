@@ -11,7 +11,7 @@ use crate::{
 };
 
 const ARRAY_SEPARATOR: char = '_';
-const MODULE_SEPARATOR: &str = "__";
+const MODULE_SEPARATOR: &str = "___";
 
 pub(crate) struct WizardIOP {
     pub out_filename: Option<String>,
