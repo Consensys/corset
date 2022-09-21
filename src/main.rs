@@ -76,6 +76,16 @@ enum Commands {
         )]
         package: String,
     },
+    /// Produce a WizardIOP constraint system
+    WizardIOP {
+        #[clap(
+            short = 'P',
+            long = "package",
+            required = true,
+            help = "In which package the function will be generated"
+        )]
+        package: String,
+    },
     /// Produce a LaTeX file describing the constraints
     Latex {},
     Compute {
@@ -136,6 +146,13 @@ fn main() -> Result<()> {
                 fname: fname.to_owned(),
             };
             go_exporter.render(&constraints)?;
+        }
+        Commands::WizardIOP { package } => {
+            let mut wiop_exporter = exporters::WizardIOP {
+                out_filename: args.constraints_filename,
+                package: package.clone(),
+            };
+            wiop_exporter.render(&constraints)?;
         }
         Commands::Latex {} => {
             let mut latex_exporter = exporters::LatexExporter {

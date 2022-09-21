@@ -4,9 +4,11 @@ use crate::column::Column;
 
 mod go;
 mod latex;
+mod wizardiop;
 
 pub use go::*;
 pub use latex::*;
+pub use wizardiop::*;
 
 fn gofmt(filename: &str) {
     info!("Running gofmt on {}... ", filename);
