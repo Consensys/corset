@@ -3,7 +3,7 @@ use log::*;
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::{collections::HashMap, io::Write, str::FromStr};
 
 use crate::{
@@ -172,7 +172,7 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
         .into_iter()
         .map(|(k, v)| (k, v.iter().map(|x| x.to_string()).collect::<Vec<_>>()))
         .collect();
-    let r = serde_json::to_string(&stringified)?;
+    let r = json!({ "columns": stringified }).to_string();
 
     if let Some(outfilename) = outfile.as_ref() {
         std::fs::File::create(outfilename)
