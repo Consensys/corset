@@ -13,7 +13,7 @@ impl<T> std::convert::From<HashMap<String, HashMap<String, Column<T>>>> for Colu
     }
 }
 
-impl<T: std::cmp::Ord + std::marker::Copy> ColumnSet<T> {
+impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
     fn insert_column(
         &mut self,
         module: &str,
@@ -131,7 +131,7 @@ pub enum Column<T> {
     },
 }
 
-impl<T: std::cmp::Ord + std::marker::Copy> Column<T> {
+impl<T: std::cmp::Ord + Clone> Column<T> {
     pub fn len(&self) -> usize {
         match self {
             Column::Atomic(v, _) => v.len(),
@@ -167,19 +167,22 @@ impl<T: std::cmp::Ord + std::marker::Copy> Column<T> {
         }
     }
 
-    fn compute(&mut self) {
+    pub fn values(&mut self) -> &[T] {
         match self {
-            Column::Atomic(..) => {}
-            Column::Array { .. } => {}
+            Column::Atomic(values, _) => values,
+            Column::Array { .. } => todo!(),
             Column::Composite { exp, value } => {
                 if value.is_none() {
                     todo!()
+                } else {
+                    value.as_ref().unwrap()
                 }
             }
             Column::Interleaved { value, from } => {
                 if value.is_none() {
                     *value = Some(vec![]);
                 }
+                value.as_ref().unwrap()
             }
         }
     }

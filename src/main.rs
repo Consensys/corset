@@ -6,6 +6,7 @@ use serde_json::Value;
 
 mod column;
 mod compiler;
+mod compute;
 mod expander;
 mod exporters;
 
@@ -146,37 +147,9 @@ fn main() -> Result<()> {
             latex_exporter.render(&ast)?
         }
         Commands::Compute { tracefile } => {
-            let v: Value = serde_json::from_str(
-                &std::fs::read_to_string(tracefile)
-                    .with_context(|| format!("while reading `{}`", tracefile))?,
-            )?;
-            let mut traces = vec![];
-            find_traces(&v, "ROOT".into(), &mut traces);
+            compute::compute(tracefile, &mut constraints);
         }
     }
 
     Ok(())
-}
-
-fn find_traces(v: &Value, path: String, ax: &mut Vec<(String, Value)>) {
-    match v {
-        Value::Object(map) => {
-            for (k, v) in map.iter() {
-                if k == "Trace" {
-                    ax.push((path.clone(), v.clone()))
-                } else {
-                    find_traces(v, k.into(), ax)
-                }
-            }
-        }
-        Value::Null => (),
-        Value::Bool(_) => (),
-        Value::Number(_) => (),
-        Value::String(_) => (),
-        Value::Array(xs) => {
-            for x in xs {
-                find_traces(x, path.clone(), ax)
-            }
-        }
-    }
 }

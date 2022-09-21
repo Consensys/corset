@@ -91,7 +91,7 @@ fn expression_to_name(e: &Expression, prefix: &str) -> String {
     format!("%%{}_{:?}%%", prefix, e).to_case(Case::ScreamingSnake)
 }
 
-fn expand_expr<T: Copy + Ord>(
+fn expand_expr<T: Clone + Ord>(
     e: &mut Expression,
     cols: &mut ColumnSet<T>,
     new_cs: &mut Vec<Expression>,
@@ -125,7 +125,7 @@ fn expand_expr<T: Copy + Ord>(
     }
 }
 
-fn expand_plookup<T: Ord + Copy>(
+fn expand_plookup<T: Ord + Clone>(
     e: &Expression,
     cols: &mut ColumnSet<T>,
     new_cs: &mut Vec<Expression>,

@@ -251,7 +251,7 @@ impl FuncVerifier<Expression> for Builtin {
 
 #[derive(Default, Debug)]
 pub struct ConstraintsSet {
-    pub columns: ColumnSet<u32>,
+    pub columns: ColumnSet<BigInt>,
     pub constraints: Vec<Constraint>,
     pub constants: HashMap<String, i64>,
 }

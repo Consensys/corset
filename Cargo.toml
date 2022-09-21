@@ -15,10 +15,10 @@ lazy_static = "1.4"
 log = "0.4"
 simplelog = { version = "^0.11.0", features = ["paris"] }
 maplit = "1.0"
-num-bigint = "0.4"
+num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
 pest = "2.3"
 pest_derive = "2.0"
 regex = "1.6"
-serde = "1"
-serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["arbitrary_precision"] }

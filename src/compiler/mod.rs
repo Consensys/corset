@@ -3,6 +3,7 @@ use crate::column::ColumnSet;
 use definitions::SymbolTable;
 use eyre::*;
 use log::*;
+use num_bigint::BigInt;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use common::Type;
@@ -27,7 +28,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         asts.push((name, ast));
     }
 
-    let mut columns: ColumnSet<u32> = Default::default();
+    let mut columns: ColumnSet<BigInt> = Default::default();
     let mut constants: HashMap<String, i64> = Default::default();
     for s in ctx.borrow().symbols() {
         match &s.2 .0 {
