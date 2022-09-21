@@ -97,6 +97,9 @@ enum Commands {
             help = "the trace to compute & verify"
         )]
         tracefile: String,
+
+        #[clap(short = '0', long = "out", help = "where to write the computed trace")]
+        outfile: Option<String>,
     },
 }
 
@@ -163,8 +166,8 @@ fn main() -> Result<()> {
             };
             latex_exporter.render(&ast)?
         }
-        Commands::Compute { tracefile } => {
-            compute::compute(tracefile, &mut constraints);
+        Commands::Compute { tracefile, outfile } => {
+            compute::compute(tracefile, &mut constraints, outfile.clone());
         }
     }
 

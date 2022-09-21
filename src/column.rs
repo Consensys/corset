@@ -167,22 +167,19 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
         }
     }
 
-    pub fn values(&mut self) -> &[T] {
+    pub fn compute(&mut self) {
         match self {
-            Column::Atomic(values, _) => values,
-            Column::Array { .. } => todo!(),
+            Column::Atomic(values, _) => (),
+            Column::Array { .. } => (),
             Column::Composite { exp, value } => {
                 if value.is_none() {
                     todo!()
-                } else {
-                    value.as_ref().unwrap()
                 }
             }
             Column::Interleaved { value, from } => {
                 if value.is_none() {
                     *value = Some(vec![]);
                 }
-                value.as_ref().unwrap()
             }
         }
     }
