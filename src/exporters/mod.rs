@@ -20,7 +20,19 @@ fn gofmt(filename: &str) {
         info!("done.");
     } else {
         error!("failed:");
-        error!("STDOUT:\n{}", std::str::from_utf8(&output.stdout).unwrap());
-        error!("STDERR:\n{}", std::str::from_utf8(&output.stderr).unwrap());
+        eprintln!("{}", std::str::from_utf8(&output.stdout).unwrap());
+        eprintln!("{}", std::str::from_utf8(&output.stderr).unwrap());
     }
+}
+
+fn goize(s: &str) -> String {
+    s.replace('(', "_")
+        .replace(')', "_")
+        .replace('{', "_")
+        .replace('}', "_")
+        .replace('[', "_")
+        .replace(']', "_")
+        .replace('/', "_")
+        .replace(':', "_")
+        .replace('%', "_")
 }

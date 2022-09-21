@@ -65,23 +65,23 @@ impl Debug for Expression {
         }
 
         match self {
-            Expression::Const(x) => write!(f, "{}:CONST", x),
+            Expression::Const(x) => write!(f, "{}", x),
             Expression::Column(module, name, t, k) => {
-                write!(f, "{}/{}:{{{:?}}}:{:?}", module, name, t, k)
+                write!(f, "{}/{}:{:?}", module, name, t)
             }
             Expression::ArrayColumn(module, name, range, t) => {
                 write!(
                     f,
-                    "{}/{}[{}:{}]:ARRAYCOLUMN{{{:?}}}",
+                    "{}/{}:{:?}[{}:{}]",
                     module,
                     name,
+                    t,
                     range.first().unwrap(),
                     range.last().unwrap(),
-                    t
                 )
             }
             Expression::ArrayColumnElement(module, name, i, t) => {
-                write!(f, "{}[{}]:COLUMN{{{:?}}}", name, i, t)
+                write!(f, "{}/{}[{}]", module, name, i)
             }
             Expression::List(cs) => write!(f, "'({})", format_list(cs)),
             Self::Funcall { func, args } => {

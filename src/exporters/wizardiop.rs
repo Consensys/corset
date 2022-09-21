@@ -10,8 +10,135 @@ use crate::{
     compiler::*,
 };
 
+use super::goize;
+
 const ARRAY_SEPARATOR: char = '_';
 const MODULE_SEPARATOR: &str = "___";
+
+fn shift(e: &Expression, i: isize) -> Expression {
+    match e {
+        Expression::Funcall { func, args } => match func {
+            Builtin::Shift => {
+                if let Expression::Const(j) = &args[1] {
+                    Expression::Funcall {
+                        func: Builtin::Shift,
+                        args: vec![args[0].clone(), Expression::Const(BigInt::from(i) + j)],
+                    }
+                } else {
+                    unreachable!()
+                }
+            }
+            _ => Expression::Funcall {
+                func: *func,
+                args: args.iter().map(|a| shift(a, i)).collect(),
+            },
+        },
+        Expression::Const(_) => e.clone(),
+        Expression::Column(..) | Expression::ArrayColumnElement(..) => Expression::Funcall {
+            func: Builtin::Shift,
+            args: vec![e.clone(), Expression::Const(BigInt::from(i))],
+        },
+        Expression::List(xs) => Expression::List(xs.iter().map(|x| shift(x, i)).collect()),
+        Expression::ArrayColumn(_, _, _, _) => unreachable!(),
+    }
+}
+
+fn make_chain(xs: &[Expression], operand: &str, surround: bool) -> String {
+    let head = render_expression(&xs[0]);
+    let tail = &xs[1..];
+    if xs.len() > 2 {
+        let tail = tail
+            .iter()
+            .map(|x| format!("{}({})", operand, render_expression(x)))
+            .collect::<Vec<_>>()
+            .join(".");
+        let chain = format!("{}.{}", head, tail);
+        if surround {
+            format!("({})", chain)
+        } else {
+            chain
+        }
+    } else {
+        format!("{}.{}({})", head, operand, render_expression(&xs[1]))
+    }
+}
+
+fn render_expression(e: &Expression) -> String {
+    match e {
+        Expression::ArrayColumn(..) => unreachable!(),
+        Expression::Const(x) => format!("symbolic.NewConstant(\"{}\")", x),
+        Expression::Column(module, name, _, _) => {
+            format!(
+                "{}{}{}.AsVariable()",
+                goize(&module),
+                MODULE_SEPARATOR,
+                goize(&name.to_case(Case::ScreamingSnake))
+            )
+        }
+        Expression::ArrayColumnElement(module, name, i, _) => format!(
+            "{}{}{}{}{}.AsVariable()",
+            goize(&module),
+            MODULE_SEPARATOR,
+            goize(&name.to_case(Case::ScreamingSnake)),
+            ARRAY_SEPARATOR,
+            i,
+        ),
+        Expression::Funcall { func, args } => render_funcall(func, args),
+        Expression::List(constraints) => constraints
+            .iter()
+            .map(|x| render_expression(x))
+            .map(|mut x| {
+                if let Some(true) = x.chars().last().map(|c| c != ',') {
+                    x.push(',');
+                }
+                x
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+    }
+}
+
+fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
+    match func {
+        Builtin::Add => make_chain(args, "Add", true),
+        Builtin::Mul => make_chain(args, "Mul", false),
+        Builtin::Sub => make_chain(args, "Sub", true),
+        Builtin::Neg => format!("({}).Neg()", render_expression(&args[0])),
+        Builtin::Shift => {
+            let leaf = match &args[0] {
+                Expression::Column(module, name, ..) => {
+                    format!(
+                        "{}{}{}",
+                        goize(&module),
+                        MODULE_SEPARATOR,
+                        goize(&name.to_case(Case::ScreamingSnake))
+                    )
+                }
+                Expression::ArrayColumnElement(module, name, idx, ..) => format!(
+                    "{}{}{}{}{}",
+                    goize(&module),
+                    MODULE_SEPARATOR,
+                    goize(&name.to_case(Case::ScreamingSnake)),
+                    ARRAY_SEPARATOR,
+                    idx
+                ),
+                _ => unreachable!(),
+            };
+            format!(
+                "({}).Shift({}).AsVariable()",
+                leaf,
+                if let Expression::Const(x) = &args[1] {
+                    x
+                } else {
+                    unreachable!()
+                }
+            )
+        }
+        x => {
+            unimplemented!("{:?}", x)
+        }
+    }
+}
 
 pub(crate) struct WizardIOP {
     pub out_filename: Option<String>,
@@ -19,83 +146,34 @@ pub(crate) struct WizardIOP {
 }
 
 impl WizardIOP {
-    fn shift(e: &Expression, i: isize) -> Expression {
-        match e {
-            Expression::Funcall { func, args } => match func {
-                Builtin::Shift => {
-                    if let Expression::Const(j) = &args[1] {
-                        Expression::Funcall {
-                            func: Builtin::Shift,
-                            args: vec![args[0].clone(), Expression::Const(BigInt::from(i) + j)],
-                        }
-                    } else {
-                        unreachable!()
-                    }
-                }
-                _ => Expression::Funcall {
-                    func: *func,
-                    args: args.iter().map(|a| Self::shift(a, i)).collect(),
-                },
-            },
-            Expression::Const(_) => e.clone(),
-            Expression::Column(..) | Expression::ArrayColumnElement(..) => Expression::Funcall {
-                func: Builtin::Shift,
-                args: vec![e.clone(), Expression::Const(BigInt::from(i))],
-            },
-            Expression::List(xs) => {
-                Expression::List(xs.iter().map(|x| Self::shift(x, i)).collect())
-            }
-            Expression::ArrayColumn(_, _, _, _) => unreachable!(),
-        }
-    }
-
-    fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
-        todo!()
-    }
-
-    fn render_expression(e: &Expression) -> String {
-        match e {
-            Expression::ArrayColumn(..) => unreachable!(),
-            Expression::Const(x) => x.to_string(), // TODO
-            Expression::Column(module, name, _, _) => {
-                format!(
-                    "{}{}{}",
-                    module.to_case(Case::ScreamingSnake),
-                    MODULE_SEPARATOR,
-                    name.to_case(Case::Snake)
-                )
-            }
-            Expression::ArrayColumnElement(module, name, i, _) => format!(
-                "{}{}{}{}{}",
-                module,
-                MODULE_SEPARATOR,
-                name.to_case(Case::ScreamingSnake),
-                ARRAY_SEPARATOR,
-                i,
-            ),
-            Expression::Funcall { func, args } => Self::render_funcall(func, args),
-            Expression::List(constraints) => constraints
+    fn render_constraint(name: &str, domain: Option<Vec<isize>>, expr: &Expression) -> String {
+        match expr {
+            Expression::List(xs) => xs
                 .iter()
-                .map(|x| Self::render_expression(x))
-                .map(|mut x| {
-                    if let Some(true) = x.chars().last().map(|c| c != ',') {
-                        x.push(',');
-                    }
-                    x
+                .enumerate()
+                .map(|(i, x)| {
+                    Self::render_constraint(&format!("{}_{}", name, i), domain.clone(), x)
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
-        }
-    }
-
-    fn render_constraint(
-        name: &str,
-        constraint: &Expression,
-        domain: Option<Vec<isize>>,
-    ) -> String {
-        match constraint {
-            Expression::List(_) => todo!(),
-            _ => todo!(),
+            _ => match domain {
+                None => format!(
+                    "build.GlobalConstraint(\"{}\", {})",
+                    name.to_case(Case::ScreamingSnake),
+                    render_expression(expr)
+                ),
+                Some(domain) => domain
+                    .iter()
+                    .map(|x| {
+                        format!(
+                            "build.LocalConstraint(\"{}\", {})",
+                            name.to_case(Case::ScreamingSnake),
+                            render_expression(&shift(expr, *x))
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            },
         }
     }
 
@@ -103,26 +181,9 @@ impl WizardIOP {
         constraints
             .iter()
             .filter_map(|constraint| match constraint {
-                Constraint::Vanishes { name, domain, expr } => match domain {
-                    None => Some(format!(
-                        "build.GlobalConstraint(\"{}\", {})",
-                        name.to_case(Case::ScreamingSnake),
-                        Self::render_expression(expr)
-                    )),
-                    Some(domain) => Some(
-                        domain
-                            .iter()
-                            .map(|x| {
-                                format!(
-                                    "build.LocalConstraint(\"{}\", {})",
-                                    name.to_case(Case::ScreamingSnake),
-                                    Self::render_expression(&Self::shift(expr, *x))
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n"),
-                    ),
-                },
+                Constraint::Vanishes { name, domain, expr } => {
+                    Some(Self::render_constraint(name, domain.clone(), expr))
+                }
                 _ => None,
             })
             .collect::<Vec<String>>()
@@ -148,30 +209,41 @@ impl WizardIOP {
         for (module, m) in cols.cols.iter() {
             for (name, col) in m.iter() {
                 match col {
-                    Column::Atomic(content, _) => r.push_str(&format!(
-                        "{}{}{} := build.RegisterCommit(\"{}\", TODO)\n",
-                        module,
+                    Column::Atomic(..) => r.push_str(&format!(
+                        "{}{}{} := build.RegisterCommit(\"{}{}{}\", 2048)\n",
+                        goize(&module),
                         MODULE_SEPARATOR,
-                        name.to_case(Case::ScreamingSnake),
-                        name.to_case(Case::ScreamingSnake)
+                        goize(&name.to_case(Case::ScreamingSnake)),
+                        goize(&module),
+                        MODULE_SEPARATOR,
+                        goize(&name.to_case(Case::ScreamingSnake))
                     )),
-                    Column::Array { range, content } => {
+                    Column::Array { range, .. } => {
                         for i in range {
                             r.push_str(&format!(
-                                "{}{}{}{}{} := build.RegisterCommit(\"{}{}{}{}{}\", TODO)\n",
-                                module,
+                                "{}{}{}{}{} := build.RegisterCommit(\"{}{}{}{}{}\", 2048)\n",
+                                goize(&module),
                                 MODULE_SEPARATOR,
-                                name.to_case(Case::ScreamingSnake),
+                                goize(&name.to_case(Case::ScreamingSnake)),
                                 ARRAY_SEPARATOR,
                                 i,
-                                module,
+                                goize(&module),
                                 MODULE_SEPARATOR,
-                                name.to_case(Case::ScreamingSnake),
+                                goize(&name.to_case(Case::ScreamingSnake)),
                                 ARRAY_SEPARATOR,
                                 i
                             ))
                         }
                     }
+                    Column::Composite { .. } => r.push_str(&format!(
+                        "{}{}{} := build.RegisterCommit(\"{}{}{}\", 2048)\n",
+                        goize(&module),
+                        MODULE_SEPARATOR,
+                        goize(&name.to_case(Case::ScreamingSnake)),
+                        goize(&module),
+                        MODULE_SEPARATOR,
+                        goize(&name.to_case(Case::ScreamingSnake))
+                    )),
                     _ => {}
                 }
             }
@@ -183,7 +255,7 @@ impl WizardIOP {
     pub fn render(&mut self, cs: &ConstraintsSet) -> Result<()> {
         let consts = Self::render_constants(&cs.constants);
         let columns = Self::render_columns(&cs.columns);
-        let constraints = "";
+        let constraints = Self::render_constraints(&cs.constraints);
         let plookups = "";
 
         let r = format!(

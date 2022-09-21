@@ -7,6 +7,8 @@ use crate::{
 };
 use eyre::*;
 
+const RESERVED_MODULE: &str = "%RESERVED%";
+
 fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) {
     cs.push(Expression::Funcall {
         func: Builtin::Mul,
@@ -20,7 +22,7 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) 
                         args: vec![
                             x_expr.clone(),
                             Expression::Column(
-                                "%%PRIVATE%%".to_owned(),
+                                RESERVED_MODULE.to_owned(),
                                 inv_x_col.into(),
                                 Type::Numeric,
                                 Kind::Composite(Box::new(Expression::Funcall {
@@ -39,7 +41,7 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) 
         func: Builtin::Mul,
         args: vec![
             Expression::Column(
-                "%%PRIVATE%%".to_owned(),
+                RESERVED_MODULE.to_owned(),
                 inv_x_col.into(),
                 Type::Numeric,
                 Kind::Composite(Box::new(Expression::Funcall {
@@ -55,7 +57,7 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) 
                         args: vec![
                             x_expr.clone(),
                             Expression::Column(
-                                "%%PRIVATE%%".to_owned(),
+                                RESERVED_MODULE.to_owned(),
                                 inv_x_col.into(),
                                 Type::Numeric,
                                 Kind::Composite(Box::new(Expression::Funcall {
@@ -78,7 +80,7 @@ fn validate_plookup(cs: &mut Vec<Expression>, x_expr: &Expression, x_col: &str) 
         args: vec![
             x_expr.clone(),
             Expression::Column(
-                "%%PRIVATE%%".to_owned(),
+                RESERVED_MODULE.to_owned(),
                 x_col.into(),
                 Type::Numeric,
                 Kind::Composite(Box::new(x_expr.clone())),
@@ -88,7 +90,7 @@ fn validate_plookup(cs: &mut Vec<Expression>, x_expr: &Expression, x_col: &str) 
 }
 
 fn expression_to_name(e: &Expression, prefix: &str) -> String {
-    format!("%%{}_{:?}%%", prefix, e).to_case(Case::ScreamingSnake)
+    format!("%{}_{:?}%", prefix, e).to_case(Case::ScreamingSnake)
 }
 
 fn expand_expr<T: Clone + Ord>(
@@ -111,9 +113,9 @@ fn expand_expr<T: Clone + Ord>(
                 let inverted = &mut args[0];
                 let inv_colname = expression_to_name(inverted, "INV");
                 validate_inv(new_cs, inverted, &inv_colname);
-                cols.insert_composite("%%PRIV%%", &inv_colname, inverted, true)?;
+                cols.insert_composite(RESERVED_MODULE, &inv_colname, inverted, true)?;
                 *e = Expression::Column(
-                    "%%PRIVATE%%".to_owned(),
+                    RESERVED_MODULE.to_owned(),
                     inv_colname,
                     Type::Numeric,
                     Kind::Composite(Box::new(inverted.clone())),
@@ -135,7 +137,7 @@ fn expand_plookup<T: Ord + Clone>(
         e => {
             let plookup_colname = expression_to_name(e, "PLKP");
             validate_plookup(new_cs, e, &plookup_colname);
-            cols.insert_composite("%%PRIV%%", &plookup_colname, e, true)?;
+            cols.insert_composite(RESERVED_MODULE, &plookup_colname, e, true)?;
             Ok(())
         }
     }
