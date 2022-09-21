@@ -1,39 +1,39 @@
 use eyre::*;
 use log::*;
-use num_bigint::BigInt;
-use num_traits::{One, Zero};
+use pairing_ce::bn256::Fr;
+use pairing_ce::ff::{Field, PrimeField};
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::{collections::HashMap, io::Write, str::FromStr};
+use std::{collections::HashMap, io::Write};
 
 use crate::{
     column::{Column, ColumnSet},
     compiler::{ConstraintsSet, Type},
 };
 
+type F = Fr;
+
 #[derive(Default, Serialize, Debug)]
 struct ComputeResult {
-    columns: HashMap<String, Vec<BigInt>>,
+    columns: HashMap<String, Vec<F>>,
 }
 
-fn parse_column(xs: &[Value], t: Type) -> Result<Vec<BigInt>> {
+fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
     xs.iter()
         .map(|x| match x {
             Value::Number(n) => {
-                BigInt::from_str(&n.to_string()).with_context(|| format!("while parsing `{:?}`", x))
+                Fr::from_str(&n.to_string()).with_context(|| format!("while parsing `{:?}`", x))
             }
             Value::Null => todo!(),
             Value::Bool(_) => todo!(),
-            Value::String(s) => {
-                BigInt::from_str(s).with_context(|| format!("while parsing `{:?}`", x))
-            }
+            Value::String(s) => Fr::from_str(s).with_context(|| format!("while parsing `{:?}`", x)),
             Value::Array(_) => todo!(),
             Value::Object(_) => todo!(),
         })
         .collect()
 }
 
-fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<BigInt>) -> Result<()> {
+fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Result<()> {
     // info!("Browsing {:?}", path);
     // let colname_regex = Regex::new(r"(.*)_([0-9]+)?").unwrap();
     match v {
@@ -127,7 +127,7 @@ fn pad(r: &mut ComputeResult) -> Result<()> {
     let pad_to = max_len.next_power_of_two();
     r.columns
         .values_mut()
-        .for_each(|xs| xs.resize(pad_to, Zero::zero()));
+        .for_each(|xs| xs.resize(pad_to, Fr::zero()));
     Ok(())
 }
 
@@ -173,7 +173,14 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
     let stringified: HashMap<String, Vec<String>> = r
         .columns
         .into_iter()
-        .map(|(k, v)| (k, v.iter().map(|x| x.to_string()).collect::<Vec<_>>()))
+        .map(|(k, v)| {
+            (
+                crate::exporters::goize(&k),
+                v.iter()
+                    .map(|x| format!("{:?}", x.into_repr()))
+                    .collect::<Vec<_>>(),
+            )
+        })
         .collect();
     let r = json!({ "columns": stringified }).to_string();
 

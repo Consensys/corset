@@ -17,6 +17,7 @@ simplelog = { version = "^0.11.0", features = ["paris"] }
 maplit = "1.0"
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
+pairing_ce = "0.28"
 pest = "2.3"
 pest_derive = "2.0"
 regex = "1.6"

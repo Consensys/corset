@@ -1,4 +1,3 @@
-use log::*;
 use num_bigint::BigInt;
 use std::{collections::HashMap, io::Write};
 
@@ -140,7 +139,7 @@ fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
     }
 }
 
-pub(crate) struct WizardIOP {
+pub struct WizardIOP {
     pub out_filename: Option<String>,
     pub package: String,
 }

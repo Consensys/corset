@@ -3,6 +3,8 @@ use log::*;
 use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
 use num_traits::{One, Zero};
+use pairing_ce::bn256::Fr;
+use pairing_ce::ff::{Field, PrimeField};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
@@ -39,32 +41,40 @@ impl Expression {
     pub fn eval(
         &self,
         i: usize,
-        f: &mut dyn FnMut(&str, &str, usize, usize) -> Option<BigInt>,
-    ) -> Option<BigInt> {
+        f: &mut dyn FnMut(&str, &str, usize, usize) -> Option<Fr>,
+    ) -> Option<Fr> {
         match self {
             Expression::Funcall { func, args } => match func {
-                Builtin::Add => args.iter().map(|x| x.eval(i, f)).sum(),
+                Builtin::Add => {
+                    let args = args
+                        .iter()
+                        .map(|x| x.eval(i, f))
+                        .collect::<Option<Vec<_>>>()?;
+                    Some(args.iter().fold(Fr::zero(), |mut ax, x| {
+                        ax.add_assign(x);
+                        ax
+                    }))
+                }
                 Builtin::Sub => {
-                    let mut xs = args.iter().map(|x| x.eval(i, f));
-                    let ax = xs.next().unwrap();
-                    xs.fold(ax, |ax, x| {
-                        if ax.is_some() && x.is_some() {
-                            Some(ax.unwrap() - x.unwrap())
-                        } else {
-                            x
-                        }
-                    })
+                    let args = args
+                        .iter()
+                        .map(|x| x.eval(i, f))
+                        .collect::<Option<Vec<_>>>()?;
+                    let mut ax = args[0];
+                    for x in args[1..].iter() {
+                        ax.sub_assign(x)
+                    }
+                    Some(ax)
                 }
                 Builtin::Mul => {
-                    args.iter()
+                    let args = args
+                        .iter()
                         .map(|x| x.eval(i, f))
-                        .fold(Some(One::one()), |ax, x| {
-                            if ax.is_some() && x.is_some() {
-                                Some(ax.unwrap() * x.unwrap())
-                            } else {
-                                x
-                            }
-                        })
+                        .collect::<Option<Vec<_>>>()?;
+                    Some(args.iter().fold(Fr::one(), |mut ax, x| {
+                        ax.mul_assign(x);
+                        ax
+                    }))
                 }
                 Builtin::Shift => {
                     if let Expression::Const(ii) = &args[1] {
@@ -73,8 +83,11 @@ impl Expression {
                         unreachable!()
                     }
                 }
-                Builtin::Neg => args[0].eval(i, f).map(|x| -x),
-                Builtin::Inv => todo!(),
+                Builtin::Neg => args[0].eval(i, f).map(|mut x| {
+                    x.negate();
+                    x
+                }),
+                Builtin::Inv => args[0].eval(i, f).and_then(|x| x.inverse()),
                 Builtin::Nth => {
                     if let (
                         Expression::ArrayColumn(module, name, domain, _),
@@ -95,7 +108,7 @@ impl Expression {
                 Builtin::IfZero => unreachable!(),
                 Builtin::IfNotZero => unreachable!(),
             },
-            Expression::Const(x) => Some(x.to_owned()),
+            Expression::Const(x) => Fr::from_str(&x.to_string()),
             Expression::Column(module, name, ..) => f(module, name, i, 0),
             Expression::ArrayColumnElement(module, name, idx, _) => f(module, name, i, *idx),
             _ => unreachable!(),
@@ -347,7 +360,7 @@ impl FuncVerifier<Expression> for Builtin {
 
 #[derive(Default, Debug)]
 pub struct ConstraintsSet {
-    pub columns: ColumnSet<BigInt>,
+    pub columns: ColumnSet<Fr>,
     pub constraints: Vec<Constraint>,
     pub constants: HashMap<String, i64>,
 }
@@ -419,7 +432,7 @@ impl ConstraintsSet {
                     }
                 })
             })
-            .map(|x| x.unwrap_or(Zero::zero()))
+            .map(|x| x.unwrap_or(Fr::zero()))
             .collect::<Vec<_>>();
 
         self.columns

@@ -1,4 +1,3 @@
-use log::*;
 use std::{collections::HashMap, io::Write};
 
 use convert_case::{Case, Casing};
@@ -29,7 +28,7 @@ return
 }
 
 #[derive(Debug)]
-pub(crate) struct GoExporter {
+pub struct GoExporter {
     pub fname: String,
     pub package: String,
     pub ce: String,

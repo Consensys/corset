@@ -2,7 +2,6 @@
 extern crate pest_derive;
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
-use serde_json::Value;
 
 mod column;
 mod compiler;

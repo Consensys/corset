@@ -1,14 +1,12 @@
 use log::*;
 
-use crate::column::Column;
-
 mod go;
 mod latex;
 mod wizardiop;
 
-pub use go::*;
+pub use go::GoExporter;
 pub use latex::*;
-pub use wizardiop::*;
+pub use wizardiop::WizardIOP;
 
 fn gofmt(filename: &str) {
     info!("Running gofmt on {}... ", filename);
@@ -25,7 +23,7 @@ fn gofmt(filename: &str) {
     }
 }
 
-fn goize(s: &str) -> String {
+pub fn goize(s: &str) -> String {
     s.replace('(', "_")
         .replace(')', "_")
         .replace('{', "_")
