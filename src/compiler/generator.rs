@@ -32,7 +32,7 @@ pub enum Expression {
     Const(BigInt),
     Column(String, String, Type, Kind<Expression>), // Module Name Type Kind
     ArrayColumn(String, String, Vec<usize>, Type),
-    ArrayColumnElement(String, usize, Type),
+    ArrayColumnElement(String, String, usize, Type),
     List(Vec<Expression>),
 }
 impl Expression {
@@ -80,7 +80,7 @@ impl Debug for Expression {
                     t
                 )
             }
-            Expression::ArrayColumnElement(name, i, t) => {
+            Expression::ArrayColumnElement(module, name, i, t) => {
                 write!(f, "{}[{}]:COLUMN{{{:?}}}", name, i, t)
             }
             Expression::List(cs) => write!(f, "'({})", format_list(cs)),
@@ -426,7 +426,12 @@ fn apply(
                                 array @ (Expression::ArrayColumn(module, name, range, t), _) => {
                                     if range.contains(&x) {
                                         Ok(Some((
-                                            Expression::ArrayColumnElement(name.to_owned(), x, *t),
+                                            Expression::ArrayColumnElement(
+                                                module.to_owned(),
+                                                name.to_owned(),
+                                                x,
+                                                *t,
+                                            ),
                                             *t,
                                         )))
                                     } else {

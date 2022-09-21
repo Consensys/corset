@@ -88,7 +88,7 @@ impl GoExporter {
                 self.ce,
                 name.to_case(Case::UpperSnake)
             )),
-            Expression::ArrayColumnElement(name, i, _) => Ok(format!(
+            Expression::ArrayColumnElement(_module, name, i, _) => Ok(format!(
                 "{}[{}{}{}.Name()]",
                 self.ce,
                 name.to_case(Case::UpperSnake),
