@@ -174,7 +174,7 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
 
     pub fn composite(e: &Expression) -> Self {
         Column::Composite {
-            exp: e.clone(),
+            exp: e.to_owned(),
             value: None,
         }
     }

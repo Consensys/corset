@@ -9,6 +9,13 @@ use eyre::*;
 
 const RESERVED_MODULE: &str = "%RESERVED%";
 
+fn invert_expr(e: &Expression) -> Expression {
+    Expression::Funcall {
+        func: Builtin::Inv,
+        args: vec![e.to_owned()],
+    }
+}
+
 fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) {
     cs.push(Expression::Funcall {
         func: Builtin::Mul,
@@ -113,7 +120,7 @@ fn expand_expr<T: Clone + Ord>(
                 let inverted = &mut args[0];
                 let inv_colname = expression_to_name(inverted, "INV");
                 validate_inv(new_cs, inverted, &inv_colname);
-                cols.insert_composite(RESERVED_MODULE, &inv_colname, inverted, true)?;
+                cols.insert_composite(RESERVED_MODULE, &inv_colname, &invert_expr(inverted), true)?;
                 *e = Expression::Column(
                     RESERVED_MODULE.to_owned(),
                     inv_colname,

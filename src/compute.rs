@@ -34,8 +34,6 @@ fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
 }
 
 fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Result<()> {
-    // info!("Browsing {:?}", path);
-    // let colname_regex = Regex::new(r"(.*)_([0-9]+)?").unwrap();
     match v {
         Value::Object(map) => {
             for (k, v) in map.iter() {
@@ -111,9 +109,6 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                             Ok(())
                         }
                     });
-                if r.is_err() {
-                    warn!("{:#?}", r);
-                }
             } else {
                 warn!("Found a path too short: {:?}", path)
             }
@@ -177,7 +172,7 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
             (
                 crate::exporters::goize(&k),
                 v.iter()
-                    .map(|x| format!("{:?}", x.into_repr()))
+                    .map(|x| x.into_repr().to_string())
                     .collect::<Vec<_>>(),
             )
         })
