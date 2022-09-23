@@ -117,12 +117,27 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
     }
 }
 
-fn pad(r: &mut ComputeResult) -> Result<()> {
-    let max_len = r.columns.values().map(|xs| xs.len()).max().unwrap();
+fn pad(r: &mut ColumnSet<F>) -> Result<()> {
+    let max_len = r
+        .cols
+        .values()
+        .flat_map(|module| module.values())
+        .filter_map(|col| col.len())
+        .max()
+        .unwrap();
+
     let pad_to = max_len.next_power_of_two();
-    r.columns
+    r.cols
         .values_mut()
-        .for_each(|xs| xs.resize(pad_to, Fr::zero()));
+        .flat_map(|module| module.values_mut())
+        .for_each(|x| {
+            x.map(&|xs| {
+                xs.reverse();
+                xs.resize(pad_to, Fr::zero());
+                xs.reverse();
+            })
+        });
+
     Ok(())
 }
 
@@ -133,6 +148,7 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
     )?;
 
     fill_traces(&v, vec![], &mut cs.columns)?;
+    pad(&mut cs.columns);
     cs.compute()?;
 
     let mut r = ComputeResult::default();
@@ -164,7 +180,6 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
         }
     }
 
-    pad(&mut r)?;
     let stringified: HashMap<String, Vec<String>> = r
         .columns
         .into_iter()

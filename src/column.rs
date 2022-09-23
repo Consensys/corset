@@ -146,17 +146,37 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
     pub fn len(&self) -> Option<usize> {
         match self {
             Column::Atomic(v, _) => Some(v.len()),
-            Column::Array { content, .. } => Some(content.iter().next().unwrap().1.len()),
+            Column::Array { content, .. } => content.values().next().map(|x| x.len()),
             Column::Composite { value, .. } => value.as_ref().map(|v| v.len()),
             Column::Interleaved { value, .. } => value.as_ref().map(|v| v.len()),
         }
     }
+
     pub fn get(&self, i: usize, idx: usize) -> Option<&T> {
         match self {
             Column::Atomic(v, _) => v.get(i),
             Column::Array { content, .. } => content.get(&idx).and_then(|v| v.get(i)),
             Column::Composite { value, .. } => value.as_ref().and_then(|v| v.get(i)),
             Column::Interleaved { value, .. } => value.as_ref().and_then(|v| v.get(i)),
+        }
+    }
+
+    pub fn map(&mut self, f: &dyn Fn(&mut Vec<T>)) {
+        match self {
+            Column::Atomic(values, ..) => f(values),
+            Column::Array { content, .. } => {
+                for values in content.values_mut() {
+                    f(values);
+                }
+            }
+            Column::Composite { value, .. } => match value {
+                Some(v) => f(v),
+                None => (),
+            },
+            Column::Interleaved { value, .. } => match value {
+                Some(v) => f(v),
+                None => (),
+            },
         }
     }
 
