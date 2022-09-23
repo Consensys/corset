@@ -36,6 +36,7 @@ pub enum Expression {
     ArrayColumn(String, String, Vec<usize>, Type),
     ArrayColumnElement(String, String, usize, Type),
     List(Vec<Expression>),
+    Void,
 }
 impl Expression {
     pub fn eval(
@@ -104,9 +105,10 @@ impl Expression {
                     }
                 }
                 Builtin::Begin => unreachable!(),
-                Builtin::InRange => unreachable!(),
                 Builtin::IfZero => unreachable!(),
                 Builtin::IfNotZero => unreachable!(),
+                Builtin::InRange => unreachable!(),
+                Builtin::ByteDecomposition => unreachable!(),
             },
             Expression::Const(x) => Fr::from_str(&x.to_string()),
             Expression::Column(module, name, ..) => f(module, name, i, 0),
@@ -118,7 +120,7 @@ impl Expression {
     pub fn leaves(&self) -> Vec<Expression> {
         fn _flatten(e: &Expression, ax: &mut Vec<Expression>) {
             match e {
-                Expression::Funcall { func, args } => {
+                Expression::Funcall { args, .. } => {
                     for a in args {
                         _flatten(a, ax);
                     }
@@ -132,6 +134,7 @@ impl Expression {
                         _flatten(a, ax);
                     }
                 }
+                Expression::Void => (),
             }
         }
 
@@ -196,6 +199,7 @@ impl Debug for Expression {
             Self::Funcall { func, args } => {
                 write!(f, "({:?} {})", func, format_list(args))
             }
+            Expression::Void => write!(f, "nil"),
         }
     }
 }
@@ -215,6 +219,8 @@ pub enum Builtin {
 
     IfZero,
     IfNotZero,
+
+    ByteDecomposition,
 }
 impl Builtin {
     fn typing(&self, argtype: &[Type]) -> Type {
@@ -233,6 +239,7 @@ impl Builtin {
             Builtin::Begin => *argtype.iter().max().unwrap(),
             Builtin::Shift | Builtin::Nth => argtype[0],
             Builtin::InRange => Type::Void,
+            Builtin::ByteDecomposition => Type::Void,
         }
     }
 }
@@ -278,7 +285,8 @@ impl FuncVerifier<Expression> for Builtin {
             Builtin::IfZero => Arity::Between(2, 3),
             Builtin::IfNotZero => Arity::Between(2, 3),
             Builtin::Nth => Arity::Dyadic,
-            Builtin::InRange => Arity::Dyadic,
+            Builtin::InRange => Arity::Exactly(3),
+            Builtin::ByteDecomposition => Arity::Exactly(3),
         }
     }
     fn validate_types(&self, args: &[Expression]) -> Result<()> {
@@ -354,6 +362,22 @@ impl FuncVerifier<Expression> for Builtin {
                     ))
                 }
             }
+            Builtin::ByteDecomposition => {
+                if matches!(
+                    args[0],
+                    Expression::Column(..) | Expression::ArrayColumnElement(..)
+                ) && matches!(args[1], Expression::Const(_))
+                    && matches!(args[2], Expression::Const(_))
+                {
+                    Ok(())
+                } else {
+                    Err(eyre!(
+                        "`{:?}` expects COLUMN ELEM_SIZE CHUNK_COUT but received {:?}",
+                        self,
+                        args
+                    ))
+                }
+            }
         }
     }
 }
@@ -366,9 +390,14 @@ pub struct ConstraintsSet {
 }
 impl ConstraintsSet {
     fn compute_column(&mut self, module: &str, name: &str) -> Result<()> {
+        info!("Computing {}/{}", module, name);
         let col = self.columns.cols.get(module).unwrap().get(name).unwrap();
+        if col.is_computed() {
+            return Ok(());
+        }
         let (exp, context) = match col {
-            Column::Composite { value, exp } => {
+            Column::Composite { exp, .. } => {
+                info!("{:?}", exp);
                 let cols_in_expr = exp
                     .leaves()
                     .into_iter()
@@ -381,8 +410,8 @@ impl ConstraintsSet {
                     .collect::<Vec<_>>();
                 (exp.clone(), cols_in_expr)
             }
-            Column::Interleaved { value, from } => todo!(),
-            x => return Ok(()),
+            Column::Interleaved { from, .. } => todo!(),
+            _ => return Ok(()),
         };
         let length = context
             .iter()
@@ -656,6 +685,11 @@ fn apply(
                         Ok(None)
                     }
 
+                    Builtin::ByteDecomposition => {
+                        warn!("BYTEDECOMPOSITION constraints not yet implemented");
+                        Ok(None)
+                    }
+
                     b @ (Builtin::Add
                     | Builtin::Sub
                     | Builtin::Mul
@@ -756,7 +790,11 @@ fn reduce_toplevel(
         Token::DefConstraint(name, domain, expr) => Ok(Some(Constraint::Vanishes {
             name: name.into(),
             domain: domain.to_owned(),
-            expr: Box::new(reduce(expr, ctx, module)?.unwrap().0), // the parser ensures that the body is never empty
+            expr: Box::new(
+                reduce(expr, ctx, module)?
+                    .unwrap_or((Expression::Void, Type::Void))
+                    .0,
+            ), // the parser ensures that the body is never empty
         })),
         Token::DefPlookup(parent, child) => {
             let parents = parent

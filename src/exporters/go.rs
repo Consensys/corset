@@ -93,6 +93,7 @@ impl GoExporter {
                 })
                 .collect::<Result<Vec<_>>>()?
                 .join("\n")),
+            Expression::Void => return Ok(String::new()),
         }?;
 
         Ok(r)

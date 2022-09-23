@@ -63,6 +63,11 @@ lazy_static::lazy_static! {
             name: "if-not-zero".into(),
             class: FunctionClass::Builtin(Builtin::IfNotZero)
         },
+
+        "make-byte-decomposition" => Function {
+            name: "make-byte-decomposition".into(),
+            class: FunctionClass::Builtin(Builtin::ByteDecomposition)
+        }
     };
 }
 

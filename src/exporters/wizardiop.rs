@@ -39,6 +39,7 @@ fn shift(e: &Expression, i: isize) -> Expression {
         },
         Expression::List(xs) => Expression::List(xs.iter().map(|x| shift(x, i)).collect()),
         Expression::ArrayColumn(_, _, _, _) => unreachable!(),
+        Expression::Void => Expression::Void,
     }
 }
 
@@ -94,6 +95,7 @@ fn render_expression(e: &Expression) -> String {
             })
             .collect::<Vec<_>>()
             .join("\n"),
+        Expression::Void => String::new(),
     }
 }
 
