@@ -349,16 +349,18 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                         ctx.borrow_mut()
                             .resolve_symbol(module, from)
                             .with_context(|| "while defining permutation")?;
-                        ctx.borrow_mut().insert_symbol(
-                            module,
-                            to,
-                            Expression::Column(
-                                module.to_owned(),
-                                to.to_owned(),
-                                Type::Numeric,
-                                Kind::Atomic,
-                            ),
-                        )?;
+                        ctx.borrow_mut()
+                            .insert_symbol(
+                                module,
+                                to,
+                                Expression::Column(
+                                    module.to_owned(),
+                                    to.to_owned(),
+                                    Type::Numeric,
+                                    Kind::Atomic,
+                                ),
+                            )
+                            .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
                     }
                     _ => {
                         return Err(eyre!("expected symbol, found `{:?}, {:?}`", pair.0, pair.1))

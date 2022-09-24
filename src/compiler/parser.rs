@@ -104,7 +104,7 @@ impl Debug for Token {
             }
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
             Token::DefColumn(name, t, kind) => write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind),
-            Token::DefPermutation(to, from, _) => write!(f, "{:?}:SORTED{:?}", to, from),
+            Token::DefPermutation(to, from, _) => write!(f, "({:?}):PERMUTATION({:?})", to, from),
             Token::DefArrayColumn(name, range, t) => {
                 write!(f, "DECLARATION {}{:?}{{{:?}}}", name, range, t)
             }
