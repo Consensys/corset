@@ -285,7 +285,7 @@ impl FuncVerifier<Expression> for Builtin {
             Builtin::IfZero => Arity::Between(2, 3),
             Builtin::IfNotZero => Arity::Between(2, 3),
             Builtin::Nth => Arity::Dyadic,
-            Builtin::InRange => Arity::Exactly(3),
+            Builtin::InRange => Arity::Exactly(2),
             Builtin::ByteDecomposition => Arity::Exactly(3),
         }
     }
