@@ -168,18 +168,7 @@ impl SymbolTable {
     }
 
     pub fn insert_symbol(&mut self, module: &str, symbol: &str, e: Expression) -> Result<()> {
-        let t = match e {
-            Expression::Column(_, _, t, _) => t,
-            Expression::ArrayColumn(_, _, _, t) => t,
-            Expression::Const(ref x) => {
-                if Zero::is_zero(x) || One::is_one(x) {
-                    Type::Boolean
-                } else {
-                    Type::Numeric
-                }
-            }
-            _ => Type::Numeric, // TODO FIXME
-        };
+        let t = e.t();
         if self
             .symbols
             .entry(module.into())

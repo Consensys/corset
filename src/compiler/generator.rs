@@ -39,6 +39,25 @@ pub enum Expression {
     Void,
 }
 impl Expression {
+    pub fn t(&self) -> Type {
+        match self {
+            Expression::Funcall { func, args } => {
+                func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
+            }
+            Expression::Const(ref x) => {
+                if Zero::is_zero(x) || One::is_one(x) {
+                    Type::Boolean
+                } else {
+                    Type::Numeric
+                }
+            }
+            Expression::Column(_, _, t, _) => *t,
+            Expression::ArrayColumn(_, _, _, t) => *t,
+            Expression::ArrayColumnElement(_, _, _, t) => *t,
+            Expression::List(xs) => xs.iter().map(|x| x.t()).max().unwrap(),
+            Expression::Void => Type::Void,
+        }
+    }
     pub fn eval(
         &self,
         i: usize,
@@ -234,7 +253,7 @@ impl Builtin {
                 }
             }
             Builtin::IfZero | Builtin::IfNotZero => {
-                std::cmp::min(argtype[1], *argtype.get(2).unwrap_or(&Type::Boolean))
+                std::cmp::max(argtype[1], *argtype.get(2).unwrap_or(&Type::Boolean))
             }
             Builtin::Begin => *argtype.iter().max().unwrap(),
             Builtin::Shift | Builtin::Nth => argtype[0],
