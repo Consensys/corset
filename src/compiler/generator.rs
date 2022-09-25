@@ -1,3 +1,4 @@
+use either::*;
 use eyre::*;
 use log::*;
 use num_bigint::BigInt;
@@ -61,14 +62,14 @@ impl Expression {
     pub fn eval(
         &self,
         i: usize,
-        f: &mut dyn FnMut(&str, &str, usize, usize) -> Option<Fr>,
+        get: &mut dyn FnMut(&str, &str, usize, Option<Either<usize, &str>>) -> Option<Fr>,
     ) -> Option<Fr> {
         match self {
             Expression::Funcall { func, args } => match func {
                 Builtin::Add => {
                     let args = args
                         .iter()
-                        .map(|x| x.eval(i, f))
+                        .map(|x| x.eval(i, get))
                         .collect::<Option<Vec<_>>>()?;
                     Some(args.iter().fold(Fr::zero(), |mut ax, x| {
                         ax.add_assign(x);
@@ -78,7 +79,7 @@ impl Expression {
                 Builtin::Sub => {
                     let args = args
                         .iter()
-                        .map(|x| x.eval(i, f))
+                        .map(|x| x.eval(i, get))
                         .collect::<Option<Vec<_>>>()?;
                     let mut ax = args[0];
                     for x in args[1..].iter() {
@@ -89,7 +90,7 @@ impl Expression {
                 Builtin::Mul => {
                     let args = args
                         .iter()
-                        .map(|x| x.eval(i, f))
+                        .map(|x| x.eval(i, get))
                         .collect::<Option<Vec<_>>>()?;
                     Some(args.iter().fold(Fr::one(), |mut ax, x| {
                         ax.mul_assign(x);
@@ -98,27 +99,27 @@ impl Expression {
                 }
                 Builtin::Shift => {
                     if let Expression::Const(ii) = &args[1] {
-                        args[0].eval(i + ii.to_usize().unwrap(), f)
+                        args[0].eval(i + ii.to_usize().unwrap(), get)
                     } else {
                         unreachable!()
                     }
                 }
-                Builtin::Neg => args[0].eval(i, f).map(|mut x| {
+                Builtin::Neg => args[0].eval(i, get).map(|mut x| {
                     x.negate();
                     x
                 }),
-                Builtin::Inv => args[0].eval(i, f).and_then(|x| x.inverse()),
+                Builtin::Inv => args[0].eval(i, get).and_then(|x| x.inverse()),
                 Builtin::Nth => {
                     if let (
                         Expression::ArrayColumn(module, name, domain, _),
-                        Expression::Const(j),
+                        Expression::Const(idx),
                     ) = (&args[0], &args[1])
                     {
-                        let j = j.to_usize().unwrap();
-                        if !domain.contains(&j) {
+                        let idx = idx.to_usize().unwrap();
+                        if !domain.contains(&idx) {
                             panic!("ASDFFDSA");
                         }
-                        f(module, name, i, j)
+                        get(module, name, i, Some(Left(idx)))
                     } else {
                         unreachable!()
                     }
@@ -130,8 +131,10 @@ impl Expression {
                 Builtin::ByteDecomposition => unreachable!(),
             },
             Expression::Const(x) => Fr::from_str(&x.to_string()),
-            Expression::Column(module, name, ..) => f(module, name, i, 0),
-            Expression::ArrayColumnElement(module, name, idx, _) => f(module, name, i, *idx),
+            Expression::Column(module, name, ..) => get(module, name, i, None),
+            Expression::ArrayColumnElement(module, name, idx, _) => {
+                get(module, name, i, Some(Left(*idx)))
+            }
             _ => unreachable!(),
         }
     }
@@ -442,7 +445,13 @@ impl ConstraintsSet {
         let mut values = Vec::new();
         for i in 0..len {
             for from in froms.iter() {
-                values.push(self.get(module, from).unwrap().get(i, 0).unwrap().clone());
+                values.push(
+                    self.get(module, from)
+                        .unwrap()
+                        .get(i, None)?
+                        .unwrap()
+                        .clone(),
+                );
             }
         }
 
@@ -492,12 +501,14 @@ impl ConstraintsSet {
                 exp.eval(i, &mut |module, name, i, idx| {
                     let col = self.get(module, name).unwrap();
                     if col.is_computed() {
-                        col.get(i, idx).cloned()
+                        col.get(i, idx).unwrap().cloned()
                     } else {
+                        self.compute_column(module, name);
                         self.columns
                             .get(module, name)
-                            .ok()
-                            .and_then(|col| col.get(i, idx))
+                            .unwrap()
+                            .get(i, idx)
+                            .unwrap()
                             .cloned()
                     }
                 })

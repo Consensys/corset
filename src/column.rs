@@ -1,4 +1,5 @@
 use crate::compiler::{Expression, Type};
+use either::*;
 use eyre::*;
 use std::collections::HashMap;
 
@@ -182,13 +183,27 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
         }
     }
 
-    pub fn get(&self, i: usize, idx: usize) -> Option<&T> {
+    // The Result<...> wrapping indicates whether the indexing is valid
+    // The Option<...> wrapping indicates whether the indexing is OoB
+    pub fn get(&self, i: usize, idx: Option<Either<usize, &str>>) -> Result<Option<&T>> {
         match self {
-            Column::Atomic { value, .. } => value.get(i),
-            Column::Composite { value, .. } => value.as_ref().and_then(|v| v.get(i)),
-            Column::Interleaved { value, .. } => value.as_ref().and_then(|v| v.get(i)),
-            Column::Array { values, .. } => values.get(&idx).and_then(|v| v.get(i)),
-            Column::Sorted { .. } => todo!(),
+            Column::Atomic { value, .. } => Ok(value.get(i)),
+            Column::Composite { value, .. } => Ok(value.as_ref().and_then(|v| v.get(i))),
+            Column::Interleaved { value, .. } => Ok(value.as_ref().and_then(|v| v.get(i))),
+            Column::Array { values, .. } => {
+                if let Some(Left(i)) = idx {
+                    Ok(values.get(&i).and_then(|v| v.get(i)))
+                } else {
+                    Err(anyhow!("column array cannot be indexed by `{:?}`", idx))
+                }
+            }
+            Column::Sorted { values, .. } => {
+                if let Some(Right(name)) = idx {
+                    Ok(values.get(name).and_then(|v| v.get(i)))
+                } else {
+                    Err(anyhow!("permutation cannot be indexed by `{:?}`", idx))
+                }
+            }
         }
     }
 
