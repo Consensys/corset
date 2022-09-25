@@ -1,5 +1,4 @@
 use color_eyre::eyre::*;
-use log::*;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use pest::{iterators::Pair, Parser};
@@ -40,6 +39,7 @@ pub enum Kind<T> {
     Atomic,
     Composite(Box<T>),
     Interleaved(Vec<String>),
+    Sorted(Vec<String>),
 }
 
 #[derive(PartialEq, Clone)]
@@ -167,18 +167,105 @@ impl AstNode {
                         }
                     }
                     ":SORTED" => {
-                        let n = pairs.next().map(rec_parse);
+                        let p = pairs.next().map(rec_parse);
                         if let Some(Ok(AstNode {
-                            class: Token::Symbol(_parent),
+                            class: Token::List(ref froms),
                             ..
-                        })) = n
+                        })) = p
                         {
-                            warn!(":SORTED not yet implemented")
+                            if froms.iter().all(|f| {
+                                matches!(
+                                    f,
+                                    AstNode {
+                                        class: Token::Symbol(_),
+                                        ..
+                                    }
+                                )
+                            }) {
+                                if kind != Kind::Atomic {
+                                    return Err(anyhow!(
+                                        "`{}` can not be sorted; is already {:?}",
+                                        name,
+                                        kind
+                                    ));
+                                } else {
+                                    kind = Kind::Sorted(
+                                        froms
+                                            .iter()
+                                            .map(|f| {
+                                                if let AstNode {
+                                                    class: Token::Symbol(from),
+                                                    ..
+                                                } = f
+                                                {
+                                                    from.to_owned()
+                                                } else {
+                                                    unreachable!()
+                                                }
+                                            })
+                                            .collect::<Vec<String>>(),
+                                    );
+                                }
+                            } else {
+                                return Err(anyhow!(
+                                    ":SORTED expects (SYMBOLS...), found `{:?}`",
+                                    p
+                                ));
+                            }
                         } else {
-                            return Err(eyre!(
-                                ":SORTED expects SYMBOL, found `{}`",
-                                n.map(|n| format!("{:?}", n.unwrap().class))
-                                    .unwrap_or_else(|| "nothing".to_string())
+                            return Err(anyhow!(":SORTED expects (SYMBOLS...), found `{:?}`", p));
+                        }
+                    }
+                    ":INTERLEAVED" => {
+                        let p = pairs.next().map(rec_parse);
+                        if let Some(Ok(AstNode {
+                            class: Token::List(ref froms),
+                            ..
+                        })) = p
+                        {
+                            if froms.iter().all(|f| {
+                                matches!(
+                                    f,
+                                    AstNode {
+                                        class: Token::Symbol(_),
+                                        ..
+                                    }
+                                )
+                            }) {
+                                if kind != Kind::Atomic {
+                                    return Err(anyhow!(
+                                        "`{}` can not be interleaved; is already {:?}",
+                                        name,
+                                        kind
+                                    ));
+                                } else {
+                                    kind = Kind::Interleaved(
+                                        froms
+                                            .iter()
+                                            .map(|f| {
+                                                if let AstNode {
+                                                    class: Token::Symbol(from),
+                                                    ..
+                                                } = f
+                                                {
+                                                    from.to_owned()
+                                                } else {
+                                                    unreachable!()
+                                                }
+                                            })
+                                            .collect::<Vec<String>>(),
+                                    );
+                                }
+                            } else {
+                                return Err(anyhow!(
+                                    ":INTERLEAVED expects (SYMBOLS...), found `{:?}`",
+                                    p
+                                ));
+                            }
+                        } else {
+                            return Err(anyhow!(
+                                ":INTERLEAVED expects (SYMBOLS...), found `{:?}`",
+                                p
                             ));
                         }
                     }

@@ -65,7 +65,7 @@ impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
         self.insert_column(
             module.as_ref(),
             name.as_ref(),
-            Column::Atomic { value: vec![], t },
+            Column::atomic(vec![], t),
             allow_dup,
         )
     }
@@ -105,6 +105,27 @@ impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
         )
     }
 
+    pub fn insert_sorted<S1: AsRef<str>, S2: AsRef<str>, S3: AsRef<str>>(
+        &mut self,
+        module: S1,
+        name: S2,
+        from: &[S3],
+        allow_dup: bool,
+    ) -> Result<()> {
+        self.insert_column(
+            module.as_ref(),
+            name.as_ref(),
+            Column::Sorted {
+                values: Default::default(),
+                froms: from
+                    .iter()
+                    .map(|n| n.as_ref().to_owned())
+                    .collect::<Vec<_>>(),
+            },
+            allow_dup,
+        )
+    }
+
     pub fn insert_interleaved<S1: AsRef<str>, S2: AsRef<str>, S3: AsRef<str>>(
         &mut self,
         module: S1,
@@ -115,13 +136,7 @@ impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
         self.insert_column(
             module.as_ref(),
             name.as_ref(),
-            Column::Interleaved {
-                value: None,
-                from: cols
-                    .iter()
-                    .map(|n| n.as_ref().to_owned())
-                    .collect::<Vec<_>>(),
-            },
+            Column::interleaved(cols),
             allow_dup,
         )
     }
@@ -137,18 +152,22 @@ pub enum Column<T> {
         value: Vec<T>,
         t: Type,
     },
-    Array {
-        values: HashMap<usize, Vec<T>>,
-        range: Vec<usize>,
-        t: Type,
-    },
     Composite {
         value: Option<Vec<T>>,
         exp: Expression,
     },
     Interleaved {
         value: Option<Vec<T>>,
-        from: Vec<String>,
+        froms: Vec<String>,
+    },
+    Array {
+        values: HashMap<usize, Vec<T>>,
+        range: Vec<usize>,
+        t: Type,
+    },
+    Sorted {
+        values: HashMap<String, Vec<T>>,
+        froms: Vec<String>,
     },
 }
 
@@ -156,29 +175,26 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
     pub fn len(&self) -> Option<usize> {
         match self {
             Column::Atomic { value, .. } => Some(value.len()),
-            Column::Array { values, .. } => values.values().next().map(|x| x.len()),
             Column::Composite { value, .. } => value.as_ref().map(|v| v.len()),
             Column::Interleaved { value, .. } => value.as_ref().map(|v| v.len()),
+            Column::Array { values, .. } => values.values().next().map(|x| x.len()),
+            Column::Sorted { values, .. } => values.values().next().map(|x| x.len()),
         }
     }
 
     pub fn get(&self, i: usize, idx: usize) -> Option<&T> {
         match self {
             Column::Atomic { value, .. } => value.get(i),
-            Column::Array { values, .. } => values.get(&idx).and_then(|v| v.get(i)),
             Column::Composite { value, .. } => value.as_ref().and_then(|v| v.get(i)),
             Column::Interleaved { value, .. } => value.as_ref().and_then(|v| v.get(i)),
+            Column::Array { values, .. } => values.get(&idx).and_then(|v| v.get(i)),
+            Column::Sorted { .. } => todo!(),
         }
     }
 
     pub fn map(&mut self, f: &dyn Fn(&mut Vec<T>)) {
         match self {
             Column::Atomic { value, .. } => f(value),
-            Column::Array { values, .. } => {
-                for values in values.values_mut() {
-                    f(values);
-                }
-            }
             Column::Composite { value, .. } => match value {
                 Some(v) => f(v),
                 None => (),
@@ -187,17 +203,29 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
                 Some(v) => f(v),
                 None => (),
             },
+            Column::Array { values, .. } => {
+                for values in values.values_mut() {
+                    f(values);
+                }
+            }
+            Column::Sorted { values, .. } => {
+                for values in values.values_mut() {
+                    f(values);
+                }
+            }
         }
     }
 
     pub fn is_computed(&self) -> bool {
         match self {
             Column::Atomic { .. } => true,
-            Column::Array { .. } => true,
             Column::Composite { value, .. } => value.is_some(),
             Column::Interleaved { value, .. } => value.is_some(),
+            Column::Array { .. } => true,
+            Column::Sorted { .. } => todo!(),
         }
     }
+
     pub fn atomic(v: Vec<T>, t: Type) -> Self {
         Column::Atomic { value: v, t }
     }
@@ -212,16 +240,17 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
     pub fn interleaved<S: AsRef<str>>(c: &[S]) -> Self {
         Column::Interleaved {
             value: None,
-            from: c.iter().map(|x| x.as_ref().to_string()).collect(),
+            froms: c.iter().map(|x| x.as_ref().to_string()).collect(),
         }
     }
 
     pub fn set_values(&mut self, values: Vec<T>) {
         match self {
             Column::Atomic { .. } => panic!("DASF"),
-            Column::Array { .. } => panic!("ASDF"),
             Column::Composite { ref mut value, .. } => *value = Some(values),
             Column::Interleaved { value, .. } => *value = Some(values),
+            Column::Array { .. } => panic!("ASDF"),
+            Column::Sorted { .. } => panic!("ASDF"),
         }
     }
 }

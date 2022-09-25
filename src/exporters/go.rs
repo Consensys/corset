@@ -180,11 +180,12 @@ const (
                     Column::Atomic { .. } => {}
                     Column::Array { .. } => {}
                     Column::Composite { .. } => todo!(),
-                    Column::Interleaved { from, .. } => r.push_str(&format!(
+                    Column::Interleaved { froms: from, .. } => r.push_str(&format!(
                         "var {} = column.Interleaved{{{}}}\n",
                         name.to_case(Case::ScreamingSnake),
                         from.join(", ")
                     )),
+                    Column::Sorted { .. } => {}
                 }
             }
         }

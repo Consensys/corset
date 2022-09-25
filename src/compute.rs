@@ -93,8 +93,18 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                             *value = parse_column(xs, *t)?;
                             Ok(())
                         }
+                        Column::Composite { ref mut value, .. } => {
+                            warn!("composite column `{}` filled from trace", colname);
+                            *value = Some(parse_column(xs, Type::Numeric)?);
+                            Ok(())
+                        }
+                        Column::Interleaved { ref mut value, .. } => {
+                            warn!("interleaved column `{}` filled from trace", colname);
+                            *value = Some(parse_column(xs, Type::Numeric)?);
+                            Ok(())
+                        }
                         Column::Array {
-                            values: ref mut values,
+                            ref mut values,
                             t,
                             range,
                         } => {
@@ -111,16 +121,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                                 ))
                             }
                         }
-                        Column::Composite { ref mut value, .. } => {
-                            warn!("composite column `{}` filled from trace", colname);
-                            *value = Some(parse_column(xs, Type::Numeric)?);
-                            Ok(())
-                        }
-                        Column::Interleaved { ref mut value, .. } => {
-                            warn!("interleaved column `{}` filled from trace", colname);
-                            *value = Some(parse_column(xs, Type::Numeric)?);
-                            Ok(())
-                        }
+                        Column::Sorted { .. } => todo!(),
                     })?;
             } else {
                 warn!("Found a path too short: {:?}", path)
@@ -174,16 +175,6 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
                         value.to_owned(),
                     );
                 }
-                Column::Array {
-                    values: content, ..
-                } => {
-                    for (i, col) in content.iter() {
-                        r.columns.insert(
-                            format!("{}{}{}{}{}", module, "___", colname, "_", i), // TODO module separator
-                            col.clone(),
-                        );
-                    }
-                }
                 Column::Composite { value, .. } => {
                     r.columns.insert(
                         format!("{}{}{}", module, "___", colname), // TODO module separator
@@ -195,6 +186,22 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
                         format!("{}{}{}", module, "___", colname), // TODO module separator
                         value.as_ref().unwrap().to_owned(),
                     );
+                }
+                Column::Array { values, .. } => {
+                    for (i, col) in values.iter() {
+                        r.columns.insert(
+                            format!("{}{}{}{}{}", module, "___", colname, "_", i), // TODO module separator
+                            col.clone(),
+                        );
+                    }
+                }
+                Column::Sorted { values, .. } => {
+                    for (i, col) in values.iter() {
+                        r.columns.insert(
+                            format!("{}{}{}{}{}", module, "___", colname, "_", i), // TODO module separator
+                            col.clone(),
+                        );
+                    }
                 }
             }
         }

@@ -1,1 +1,1 @@
-(defcolumns A B (C :SORTED B))
+(defcolumns A B (C :SORTED (B)))

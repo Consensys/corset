@@ -399,7 +399,7 @@ impl ConstraintsSet {
 
     fn compute_interleaved(&mut self, module: &str, name: &str) -> Result<()> {
         let col = self.get(module, name)?;
-        let froms = if let Column::Interleaved { from, .. } = col {
+        let froms = if let Column::Interleaved { froms: from, .. } = col {
             from.clone()
         } else {
             unreachable!()

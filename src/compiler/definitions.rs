@@ -315,6 +315,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                     Kind::Atomic => Kind::Atomic,
                     Kind::Composite(_) => Kind::Atomic, // The actual expression is computed by the generator
                     Kind::Interleaved(xs) => Kind::Interleaved(xs.clone()),
+                    Kind::Sorted(xs) => Kind::Sorted(xs.clone()),
                 },
             ),
         ),
