@@ -461,7 +461,7 @@ impl ConstraintsSet {
                     }
                 })
             })
-            .map(|x| x.unwrap_or(Fr::zero()))
+            .map(|x| x.unwrap_or_else(Fr::zero))
             .collect::<Vec<_>>();
 
         self.columns
@@ -484,7 +484,8 @@ impl ConstraintsSet {
             .collect::<Vec<_>>();
 
         for (module, colname) in handles.iter() {
-            self.compute_column(module, colname)?;
+            self.compute_column(module, colname)
+                .with_context(|| format!("computing {}/{}", module, colname))?;
         }
 
         Ok(())

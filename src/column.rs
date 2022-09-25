@@ -78,6 +78,7 @@ impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
             Column::Array {
                 range: range.to_vec(),
                 content: Default::default(),
+                t,
             },
             allow_dup,
         )
@@ -120,7 +121,6 @@ impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
 pub enum Direction {
     Ascending,
     Descending,
@@ -131,6 +131,7 @@ pub enum Column<T> {
     Array {
         range: Vec<usize>,
         content: HashMap<usize, Vec<T>>,
+        t: Type,
     },
     Composite {
         value: Option<Vec<T>>,
@@ -208,27 +209,10 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
 
     pub fn set_values(&mut self, values: Vec<T>) {
         match self {
-            Column::Atomic(_, _) => panic!("DASF"),
-            Column::Array { range, content } => panic!("ASDF"),
-            Column::Composite { ref mut value, exp } => *value = Some(values),
-            Column::Interleaved { value, from } => *value = Some(values),
-        }
-    }
-
-    pub fn compute(&mut self) {
-        match self {
-            Column::Atomic(values, _) => (),
-            Column::Array { .. } => (),
-            Column::Composite { exp, value } => {
-                if value.is_none() {
-                    todo!()
-                }
-            }
-            Column::Interleaved { value, from } => {
-                if value.is_none() {
-                    *value = Some(vec![]);
-                }
-            }
+            Column::Atomic(..) => panic!("DASF"),
+            Column::Array { .. } => panic!("ASDF"),
+            Column::Composite { ref mut value, .. } => *value = Some(values),
+            Column::Interleaved { value, .. } => *value = Some(values),
         }
     }
 }

@@ -70,14 +70,14 @@ fn render_expression(e: &Expression) -> String {
         Expression::Column(module, name, _, _) => {
             format!(
                 "{}{}{}.AsVariable()",
-                goize(&module),
+                goize(module),
                 MODULE_SEPARATOR,
                 goize(&name.to_case(Case::ScreamingSnake))
             )
         }
         Expression::ArrayColumnElement(module, name, i, _) => format!(
             "{}{}{}{}{}.AsVariable()",
-            goize(&module),
+            goize(module),
             MODULE_SEPARATOR,
             goize(&name.to_case(Case::ScreamingSnake)),
             ARRAY_SEPARATOR,
@@ -86,7 +86,7 @@ fn render_expression(e: &Expression) -> String {
         Expression::Funcall { func, args } => render_funcall(func, args),
         Expression::List(constraints) => constraints
             .iter()
-            .map(|x| render_expression(x))
+            .map(render_expression)
             .map(|mut x| {
                 if let Some(true) = x.chars().last().map(|c| c != ',') {
                     x.push(',');
@@ -110,14 +110,14 @@ fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
                 Expression::Column(module, name, ..) => {
                     format!(
                         "{}{}{}",
-                        goize(&module),
+                        goize(module),
                         MODULE_SEPARATOR,
                         goize(&name.to_case(Case::ScreamingSnake))
                     )
                 }
                 Expression::ArrayColumnElement(module, name, idx, ..) => format!(
                     "{}{}{}{}{}",
-                    goize(&module),
+                    goize(module),
                     MODULE_SEPARATOR,
                     goize(&name.to_case(Case::ScreamingSnake)),
                     ARRAY_SEPARATOR,
@@ -193,7 +193,7 @@ impl WizardIOP {
 
     fn render_constants(consts: &HashMap<String, i64>) -> String {
         if consts.is_empty() {
-            return String::default();
+            String::default()
         } else {
             format!(
                 "const (\n{}\n)",
@@ -212,10 +212,10 @@ impl WizardIOP {
                 match col {
                     Column::Atomic(..) => r.push_str(&format!(
                         "{}{}{} := build.RegisterCommit(\"{}{}{}\", 2048)\n",
-                        goize(&module),
+                        goize(module),
                         MODULE_SEPARATOR,
                         goize(&name.to_case(Case::ScreamingSnake)),
-                        goize(&module),
+                        goize(module),
                         MODULE_SEPARATOR,
                         goize(&name.to_case(Case::ScreamingSnake))
                     )),
@@ -223,12 +223,12 @@ impl WizardIOP {
                         for i in range {
                             r.push_str(&format!(
                                 "{}{}{}{}{} := build.RegisterCommit(\"{}{}{}{}{}\", 2048)\n",
-                                goize(&module),
+                                goize(module),
                                 MODULE_SEPARATOR,
                                 goize(&name.to_case(Case::ScreamingSnake)),
                                 ARRAY_SEPARATOR,
                                 i,
-                                goize(&module),
+                                goize(module),
                                 MODULE_SEPARATOR,
                                 goize(&name.to_case(Case::ScreamingSnake)),
                                 ARRAY_SEPARATOR,
@@ -238,10 +238,10 @@ impl WizardIOP {
                     }
                     Column::Composite { .. } => r.push_str(&format!(
                         "{}{}{} := build.RegisterCommit(\"{}{}{}\", 2048)\n",
-                        goize(&module),
+                        goize(module),
                         MODULE_SEPARATOR,
                         goize(&name.to_case(Case::ScreamingSnake)),
-                        goize(&module),
+                        goize(module),
                         MODULE_SEPARATOR,
                         goize(&name.to_case(Case::ScreamingSnake))
                     )),

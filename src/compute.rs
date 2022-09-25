@@ -18,7 +18,7 @@ struct ComputeResult {
     columns: HashMap<String, Vec<F>>,
 }
 
-fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
+fn parse_column(xs: &[Value], _t: Type) -> Result<Vec<F>> {
     xs.iter()
         .map(|x| match x {
             Value::Number(n) => {
@@ -38,11 +38,11 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
         Value::Object(map) => {
             for (k, v) in map.iter() {
                 if k == "Trace" || k == "Assignment" {
-                    fill_traces(v, path.clone(), columns);
+                    fill_traces(v, path.clone(), columns)?;
                 } else {
                     let mut path = path.clone();
                     path.push(k.to_owned());
-                    fill_traces(v, path, columns);
+                    fill_traces(v, path, columns)?;
                 }
             }
             Ok(())
@@ -55,7 +55,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
             if path.len() >= 2 {
                 let module = &path[path.len() - 2];
                 let colname = &path[path.len() - 1];
-                let col_components = colname.split("_").collect::<Vec<_>>();
+                let col_components = colname.split('_').collect::<Vec<_>>();
                 let idx = if col_components.len() > 2 {
                     col_components.last().unwrap().parse::<usize>().ok()
                 } else {
@@ -67,14 +67,14 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                     colname.to_string()
                 };
 
-                let r = columns
+                columns
                     .cols
                     .get_mut(module)
-                    .ok_or(eyre!("Module `{}` does not exist in constraints", module))
+                    .ok_or_else(|| eyre!("Module `{}` does not exist in constraints", module))
                     .and_then(|module| {
-                        module
-                            .get_mut(&radix)
-                            .ok_or(eyre!("Column `{}` does not exist in constraints", colname))
+                        module.get_mut(&radix).ok_or_else(|| {
+                            eyre!("Column `{}` does not exist in constraints", colname)
+                        })
                     })
                     .and_then(|column| match column {
                         Column::Atomic(ref mut value, t) => {
@@ -84,6 +84,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                         Column::Array {
                             range,
                             ref mut content,
+                            t,
                         } => {
                             let idx = idx.unwrap();
                             if range.contains(&idx) {
@@ -108,7 +109,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                             *value = Some(parse_column(xs, Type::Numeric)?);
                             Ok(())
                         }
-                    });
+                    })?;
             } else {
                 warn!("Found a path too short: {:?}", path)
             }
@@ -148,8 +149,8 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
     )?;
 
     fill_traces(&v, vec![], &mut cs.columns)?;
-    pad(&mut cs.columns);
-    cs.compute()?;
+    pad(&mut cs.columns).with_context(|| "padding columns")?;
+    cs.compute().with_context(|| "computing columns")?;
 
     let mut r = ComputeResult::default();
     for (module, columns) in cs.columns.cols.iter_mut() {
@@ -169,7 +170,7 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
                         );
                     }
                 }
-                Column::Composite { value, exp } => {
+                Column::Composite { value, .. } => {
                     r.columns.insert(
                         format!("{}{}{}", module, "___", colname), // TODO module separator
                         value.as_ref().unwrap().to_owned(),

@@ -166,7 +166,8 @@ fn main() -> Result<()> {
             latex_exporter.render(&ast)?
         }
         Commands::Compute { tracefile, outfile } => {
-            compute::compute(tracefile, &mut constraints, outfile.clone());
+            compute::compute(tracefile, &mut constraints, outfile.clone())
+                .with_context(|| format!("while computing from `{}`", tracefile))?;
         }
     }
 

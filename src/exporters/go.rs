@@ -155,7 +155,7 @@ const (
                         name.to_case(Case::ScreamingSnake),
                         name.to_case(Case::ScreamingSnake)
                     )),
-                    Column::Array { range, content } => {
+                    Column::Array { range, content, .. } => {
                         for i in range {
                             r.push_str(&format!(
                                 "{}{}{} column.Column = \"{}{}{}\"\n",
