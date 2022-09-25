@@ -460,8 +460,8 @@ impl ConstraintsSet {
                             .cloned()
                     }
                 })
+                .unwrap_or_else(Fr::zero)
             })
-            .map(|x| x.unwrap_or_else(Fr::zero))
             .collect::<Vec<_>>();
 
         self.columns

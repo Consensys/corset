@@ -18,17 +18,29 @@ struct ComputeResult {
     columns: HashMap<String, Vec<F>>,
 }
 
-fn parse_column(xs: &[Value], _t: Type) -> Result<Vec<F>> {
+fn validate(t: Type, x: F) -> Result<F> {
+    match t {
+        Type::Boolean => {
+            if x.is_zero() || x == F::one() {
+                Ok(x)
+            } else {
+                Err(anyhow!("expected bool, found {}", x))
+            }
+        }
+        Type::Numeric => Ok(x),
+        _ => unreachable!(),
+    }
+}
+fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
     xs.iter()
         .map(|x| match x {
-            Value::Number(n) => {
-                Fr::from_str(&n.to_string()).with_context(|| format!("while parsing `{:?}`", x))
-            }
-            Value::Null => todo!(),
-            Value::Bool(_) => todo!(),
-            Value::String(s) => Fr::from_str(s).with_context(|| format!("while parsing `{:?}`", x)),
-            Value::Array(_) => todo!(),
-            Value::Object(_) => todo!(),
+            Value::Number(n) => Fr::from_str(&n.to_string())
+                .with_context(|| format!("while parsing `{:?}`", x))
+                .and_then(|x| validate(t, x)),
+            Value::String(s) => Fr::from_str(s)
+                .with_context(|| format!("while parsing `{:?}`", x))
+                .and_then(|x| validate(t, x)),
+            _ => Err(anyhow!("expected numeric value, found `{}`", x)),
         })
         .collect()
 }
@@ -80,7 +92,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                         Column::Atomic(ref mut value, t) => {
                             *value = parse_column(xs, *t)?;
                             Ok(())
-                        } // TODO check type
+                        }
                         Column::Array {
                             range,
                             ref mut content,
@@ -88,7 +100,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                         } => {
                             let idx = idx.unwrap();
                             if range.contains(&idx) {
-                                content.insert(idx, parse_column(xs, Type::Numeric)?);
+                                content.insert(idx, parse_column(xs, *t)?);
                                 Ok(())
                             } else {
                                 Err(eyre!(
@@ -176,7 +188,12 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
                         value.as_ref().unwrap().to_owned(),
                     );
                 }
-                Column::Interleaved { value, from } => todo!(),
+                Column::Interleaved { value, .. } => {
+                    r.columns.insert(
+                        format!("{}{}{}", module, "___", colname), // TODO module separator
+                        value.as_ref().unwrap().to_owned(),
+                    );
+                }
             }
         }
     }

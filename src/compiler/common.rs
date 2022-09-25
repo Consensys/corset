@@ -172,7 +172,6 @@ pub enum Type {
     Numeric,
     Boolean,
     Void,
-    Sorted,
 }
 
 impl std::cmp::Ord for Type {
