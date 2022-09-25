@@ -32,35 +32,32 @@ pub struct Args {
 
     #[clap(subcommand)]
     command: Commands,
-
-    #[clap(
-        short = 'o',
-        long = "constraints-file",
-        help = "where to render the constraints",
-        global = true
-    )]
-    constraints_filename: Option<String>,
-    #[clap(
-        short = 'C',
-        long = "columns",
-        help = "whether to render columns definition",
-        global = true
-    )]
-    render_columns: bool,
-    #[clap(
-        long = "columns-file",
-        help = "where to render the columns",
-        global = true
-    )]
-    columns_filename: Option<String>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
     /// Produce a Go-based constraint system
     Go {
+        #[clap(
+            short = 'C',
+            long = "columns",
+            help = "whether to render columns definition"
+        )]
+        render_columns: bool,
+
+        #[clap(
+            short = 'o',
+            long = "constraints-file",
+            help = "where to render the constraints"
+        )]
+        constraints_filename: Option<String>,
+
+        #[clap(long = "columns-file", help = "where to render the columns")]
+        columns_filename: Option<String>,
+
         #[clap(long = "assignment", default_value = "CE")]
         columns_assignment: String,
+
         #[clap(
             short = 'F',
             long = "function-name",
@@ -68,6 +65,7 @@ enum Commands {
             help = "The name of the function to be generated"
         )]
         fname: String,
+
         #[clap(
             short = 'P',
             long = "package",
@@ -78,6 +76,9 @@ enum Commands {
     },
     /// Produce a WizardIOP constraint system
     WizardIOP {
+        #[clap(short = 'o', long = "out", help = "where to render the constraints")]
+        out_filename: Option<String>,
+
         #[clap(
             short = 'P',
             long = "package",
@@ -87,7 +88,17 @@ enum Commands {
         package: String,
     },
     /// Produce a LaTeX file describing the constraints
-    Latex {},
+    Latex {
+        #[clap(
+            short = 'o',
+            long = "constraints-file",
+            help = "where to render the constraints"
+        )]
+        constraints_filename: Option<String>,
+
+        #[clap(long = "columns-file", help = "where to render the columns")]
+        columns_filename: Option<String>,
+    },
     Compute {
         #[clap(
             short = 'T',
@@ -134,39 +145,48 @@ fn main() -> Result<()> {
         expander::expand(&mut constraints)?;
     }
 
-    match &args.command {
+    match args.command {
         Commands::Go {
+            constraints_filename,
+            columns_filename,
+            render_columns,
             package,
             columns_assignment,
             fname,
         } => {
             let mut go_exporter = exporters::GoExporter {
-                constraints_filename: args.constraints_filename,
-                package: package.clone(),
-                ce: columns_assignment.into(),
-                render_columns: args.render_columns,
-                columns_filename: args.columns_filename,
-                fname: fname.to_owned(),
+                constraints_filename,
+                package,
+                ce: columns_assignment,
+                render_columns,
+                columns_filename,
+                fname,
             };
             go_exporter.render(&constraints)?;
         }
-        Commands::WizardIOP { package } => {
+        Commands::WizardIOP {
+            out_filename,
+            package,
+        } => {
             let mut wiop_exporter = exporters::WizardIOP {
-                out_filename: args.constraints_filename,
-                package: package.clone(),
+                out_filename,
+                package,
             };
             wiop_exporter.render(&constraints)?;
         }
-        Commands::Latex {} => {
+        Commands::Latex {
+            constraints_filename,
+            columns_filename,
+        } => {
             let mut latex_exporter = exporters::LatexExporter {
-                constraints_filename: args.constraints_filename,
-                columns_filename: args.columns_filename,
-                render_columns: args.render_columns,
+                constraints_filename,
+                columns_filename,
+                render_columns: true,
             };
             latex_exporter.render(&ast)?
         }
         Commands::Compute { tracefile, outfile } => {
-            compute::compute(tracefile, &mut constraints, outfile.clone())
+            compute::compute(&tracefile, &mut constraints, outfile.clone())
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
         }
     }
