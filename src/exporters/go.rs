@@ -150,12 +150,12 @@ const (
         for (_module, m) in cols.cols.iter() {
             for (name, col) in m.iter() {
                 match col {
-                    Column::Atomic(_, _) => r.push_str(&format!(
+                    Column::Atomic { .. } => r.push_str(&format!(
                         "{} column.Column = \"{}\"\n",
                         name.to_case(Case::ScreamingSnake),
                         name.to_case(Case::ScreamingSnake)
                     )),
-                    Column::Array { range, content, .. } => {
+                    Column::Array { range, .. } => {
                         for i in range {
                             r.push_str(&format!(
                                 "{}{}{} column.Column = \"{}{}{}\"\n",
@@ -177,9 +177,9 @@ const (
         for (_module, m) in cols.cols.iter() {
             for (name, col) in m.iter() {
                 match col {
-                    Column::Atomic(..) => {}
+                    Column::Atomic { .. } => {}
                     Column::Array { .. } => {}
-                    Column::Composite { value, exp } => todo!(),
+                    Column::Composite { .. } => todo!(),
                     Column::Interleaved { from, .. } => r.push_str(&format!(
                         "var {} = column.Interleaved{{{}}}\n",
                         name.to_case(Case::ScreamingSnake),
@@ -195,7 +195,7 @@ const (
                 .values()
                 .flat_map(|module| module.iter())
                 .map(|(name, col)| match col {
-                    Column::Atomic(_, _) =>
+                    Column::Atomic { .. } =>
                         format!("{}.Name(),", name.to_case(Case::ScreamingSnake)),
                     Column::Array { range, .. } => {
                         range

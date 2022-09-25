@@ -178,7 +178,7 @@ impl Debug for Expression {
 
         match self {
             Expression::Const(x) => write!(f, "{}", x),
-            Expression::Column(module, name, t, k) => {
+            Expression::Column(module, name, t, _k) => {
                 write!(f, "{}/{}:{:?}", module, name, t)
             }
             Expression::ArrayColumn(module, name, range, t) => {
@@ -193,7 +193,7 @@ impl Debug for Expression {
                 )
             }
             Expression::ArrayColumnElement(module, name, i, t) => {
-                write!(f, "{}/{}[{}]", module, name, i)
+                write!(f, "{}/{}[{}]:{:?}", module, name, i, t)
             }
             Expression::List(cs) => write!(f, "'({})", format_list(cs)),
             Self::Funcall { func, args } => {
@@ -389,73 +389,95 @@ pub struct ConstraintsSet {
     pub constants: HashMap<String, i64>,
 }
 impl ConstraintsSet {
-    fn compute_column(&mut self, module: &str, name: &str) -> Result<()> {
-        info!("Computing {}/{}", module, name);
-        let col = self.columns.cols.get(module).unwrap().get(name).unwrap();
-        if col.is_computed() {
-            return Ok(());
-        }
-        let (exp, context) = match col {
-            Column::Composite { exp, .. } => {
-                info!("{:?}", exp);
-                let cols_in_expr = exp
-                    .leaves()
-                    .into_iter()
-                    .filter(|e| {
-                        matches!(
-                            e,
-                            Expression::ArrayColumnElement(..) | Expression::Column(..)
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                (exp.clone(), cols_in_expr)
-            }
-            Column::Interleaved { from, .. } => todo!(),
-            _ => return Ok(()),
+    fn get(&self, module: &str, name: &str) -> Result<&Column<Fr>> {
+        self.columns.get(module, name)
+    }
+
+    fn get_mut(&mut self, module: &str, name: &str) -> Result<&mut Column<Fr>> {
+        self.columns.get_mut(module, name)
+    }
+
+    fn compute_interleaved(&mut self, module: &str, name: &str) -> Result<()> {
+        let col = self.get(module, name)?;
+        let froms = if let Column::Interleaved { from, .. } = col {
+            from.clone()
+        } else {
+            unreachable!()
         };
-        let length = context
+
+        for from in froms.iter() {
+            self.compute_column(module, from)?;
+        }
+
+        if !froms
             .iter()
-            .map(|e| match e {
-                Expression::Column(module, name, ..) => {
-                    let col = self.columns.cols.get(module).unwrap().get(name).unwrap();
-                    if let Some(l) = col.len() {
-                        l
-                    } else {
-                        self.compute_column(module, name);
-                        self.columns
-                            .cols
-                            .get(module)
-                            .unwrap()
-                            .get(name)
-                            .unwrap()
-                            .len()
-                            .unwrap()
+            .map(|c| self.get(module, c).unwrap().len().unwrap())
+            .collect::<Vec<_>>()
+            .windows(2)
+            .all(|w| w[0] == w[1])
+        {
+            return Err(anyhow!("interleaving columns of incoherent lengths"));
+        }
+        let len = self.get(module, &froms[0])?.len().unwrap();
+
+        let mut values = Vec::new();
+        for i in 0..len {
+            for from in froms.iter() {
+                values.push(self.get(module, from).unwrap().get(i, 0).unwrap().clone());
+            }
+        }
+
+        self.get_mut(module, name).unwrap().set_values(values);
+
+        Ok(())
+    }
+
+    fn compute_composite(&mut self, module: &str, name: &str) -> Result<()> {
+        let col = self.columns.get(module, name).unwrap();
+        let (exp, cols_in_expr) = if let Column::Composite { exp, .. } = col {
+            let cols_in_expr = exp
+                .leaves()
+                .into_iter()
+                .filter(|e| {
+                    matches!(
+                        e,
+                        Expression::ArrayColumnElement(..) | Expression::Column(..)
+                    )
+                })
+                .map(|e| match e {
+                    Expression::Column(module, name, ..) => (module.to_owned(), name.to_owned()),
+                    Expression::ArrayColumnElement(module, name, ..) => {
+                        (module.to_owned(), name.to_owned())
                     }
-                }
-                Expression::ArrayColumnElement(_, _, _, _) => self
-                    .columns
-                    .cols
-                    .get(module)
-                    .unwrap()
-                    .get(name)
-                    .unwrap()
-                    .len()
-                    .unwrap(),
-                _ => unreachable!(),
+                    _ => unreachable!(),
+                })
+                .collect::<Vec<_>>();
+            (exp.clone(), cols_in_expr)
+        } else {
+            unreachable!()
+        };
+
+        let length = *cols_in_expr
+            .iter()
+            .map(|(module, name)| {
+                self.compute_column(module, name)?;
+                Ok(self.get(module, name).unwrap().len().unwrap().to_owned())
             })
+            .collect::<Result<Vec<_>>>()?
+            .iter()
             .max()
             .unwrap();
 
         let values = (0..length)
             .map(|i| {
                 exp.eval(i, &mut |module, name, i, idx| {
-                    let col = self.columns.cols.get(module).unwrap().get(name).unwrap();
+                    let col = self.get(module, name).unwrap();
                     if col.is_computed() {
                         col.get(i, idx).cloned()
                     } else {
-                        self.compute_column(module, name);
                         self.columns
                             .get(module, name)
+                            .ok()
                             .and_then(|col| col.get(i, idx))
                             .cloned()
                     }
@@ -470,6 +492,20 @@ impl ConstraintsSet {
             .set_values(values);
 
         Ok(())
+    }
+
+    fn compute_column(&mut self, module: &str, name: &str) -> Result<()> {
+        info!("Computing {}/{}", module, name);
+        let col = self.get(module, name).unwrap();
+        if col.is_computed() {
+            return Ok(());
+        }
+
+        match col {
+            Column::Composite { .. } => self.compute_composite(module, name),
+            Column::Interleaved { .. } => self.compute_interleaved(module, name),
+            _ => todo!(),
+        }
     }
 
     pub fn compute(&mut self) -> Result<()> {

@@ -89,18 +89,18 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                         })
                     })
                     .and_then(|column| match column {
-                        Column::Atomic(ref mut value, t) => {
+                        Column::Atomic { ref mut value, t } => {
                             *value = parse_column(xs, *t)?;
                             Ok(())
                         }
                         Column::Array {
-                            range,
-                            ref mut content,
+                            values: ref mut values,
                             t,
+                            range,
                         } => {
                             let idx = idx.unwrap();
                             if range.contains(&idx) {
-                                content.insert(idx, parse_column(xs, *t)?);
+                                values.insert(idx, parse_column(xs, *t)?);
                                 Ok(())
                             } else {
                                 Err(eyre!(
@@ -168,13 +168,15 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
     for (module, columns) in cs.columns.cols.iter_mut() {
         for (colname, col) in columns.iter_mut() {
             match col {
-                Column::Atomic(content, _) => {
+                Column::Atomic { value, .. } => {
                     r.columns.insert(
                         format!("{}{}{}", module, "___", colname), // TODO module separator
-                        content.to_owned(),
+                        value.to_owned(),
                     );
                 }
-                Column::Array { content, .. } => {
+                Column::Array {
+                    values: content, ..
+                } => {
                     for (i, col) in content.iter() {
                         r.columns.insert(
                             format!("{}{}{}{}{}", module, "___", colname, "_", i), // TODO module separator

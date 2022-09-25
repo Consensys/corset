@@ -169,7 +169,7 @@ impl AstNode {
                     ":SORTED" => {
                         let n = pairs.next().map(rec_parse);
                         if let Some(Ok(AstNode {
-                            class: Token::Symbol(parent),
+                            class: Token::Symbol(_parent),
                             ..
                         })) = n
                         {

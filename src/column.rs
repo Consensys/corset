@@ -7,14 +7,20 @@ pub struct ColumnSet<T> {
     pub cols: HashMap<String, HashMap<String, Column<T>>>, // Module -> Name -> Column
 }
 impl<T> ColumnSet<T> {
-    pub fn get(&self, module: &str, name: &str) -> Option<&Column<T>> {
-        self.cols.get(module).and_then(|module| module.get(name))
+    pub fn get(&self, module: &str, name: &str) -> Result<&Column<T>> {
+        self.cols
+            .get(module)
+            .ok_or_else(|| anyhow!("module `{}` unknwown", module))?
+            .get(name)
+            .ok_or_else(|| anyhow!("column `{}` not found in module `{}`", name, module))
     }
 
-    pub fn get_mut(&mut self, module: &str, name: &str) -> Option<&mut Column<T>> {
+    pub fn get_mut(&mut self, module: &str, name: &str) -> Result<&mut Column<T>> {
         self.cols
             .get_mut(module)
-            .and_then(|module| module.get_mut(name))
+            .ok_or_else(|| anyhow!("module `{}` unknwown", module))?
+            .get_mut(name)
+            .ok_or_else(|| anyhow!("column `{}` not found in module `{}`", name, module))
     }
 }
 
@@ -59,7 +65,7 @@ impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
         self.insert_column(
             module.as_ref(),
             name.as_ref(),
-            Column::Atomic(vec![], t),
+            Column::Atomic { value: vec![], t },
             allow_dup,
         )
     }
@@ -77,7 +83,7 @@ impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
             name.as_ref(),
             Column::Array {
                 range: range.to_vec(),
-                content: Default::default(),
+                values: Default::default(),
                 t,
             },
             allow_dup,
@@ -127,10 +133,13 @@ pub enum Direction {
 }
 #[derive(Debug)]
 pub enum Column<T> {
-    Atomic(Vec<T>, Type),
+    Atomic {
+        value: Vec<T>,
+        t: Type,
+    },
     Array {
+        values: HashMap<usize, Vec<T>>,
         range: Vec<usize>,
-        content: HashMap<usize, Vec<T>>,
         t: Type,
     },
     Composite {
@@ -146,8 +155,8 @@ pub enum Column<T> {
 impl<T: std::cmp::Ord + Clone> Column<T> {
     pub fn len(&self) -> Option<usize> {
         match self {
-            Column::Atomic(v, _) => Some(v.len()),
-            Column::Array { content, .. } => content.values().next().map(|x| x.len()),
+            Column::Atomic { value, .. } => Some(value.len()),
+            Column::Array { values, .. } => values.values().next().map(|x| x.len()),
             Column::Composite { value, .. } => value.as_ref().map(|v| v.len()),
             Column::Interleaved { value, .. } => value.as_ref().map(|v| v.len()),
         }
@@ -155,8 +164,8 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
 
     pub fn get(&self, i: usize, idx: usize) -> Option<&T> {
         match self {
-            Column::Atomic(v, _) => v.get(i),
-            Column::Array { content, .. } => content.get(&idx).and_then(|v| v.get(i)),
+            Column::Atomic { value, .. } => value.get(i),
+            Column::Array { values, .. } => values.get(&idx).and_then(|v| v.get(i)),
             Column::Composite { value, .. } => value.as_ref().and_then(|v| v.get(i)),
             Column::Interleaved { value, .. } => value.as_ref().and_then(|v| v.get(i)),
         }
@@ -164,9 +173,9 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
 
     pub fn map(&mut self, f: &dyn Fn(&mut Vec<T>)) {
         match self {
-            Column::Atomic(values, ..) => f(values),
-            Column::Array { content, .. } => {
-                for values in content.values_mut() {
+            Column::Atomic { value, .. } => f(value),
+            Column::Array { values, .. } => {
+                for values in values.values_mut() {
                     f(values);
                 }
             }
@@ -183,14 +192,14 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
 
     pub fn is_computed(&self) -> bool {
         match self {
-            Column::Atomic(..) => true,
+            Column::Atomic { .. } => true,
             Column::Array { .. } => true,
             Column::Composite { value, .. } => value.is_some(),
             Column::Interleaved { value, .. } => value.is_some(),
         }
     }
     pub fn atomic(v: Vec<T>, t: Type) -> Self {
-        Column::Atomic(v, t)
+        Column::Atomic { value: v, t }
     }
 
     pub fn composite(e: &Expression) -> Self {
@@ -209,7 +218,7 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
 
     pub fn set_values(&mut self, values: Vec<T>) {
         match self {
-            Column::Atomic(..) => panic!("DASF"),
+            Column::Atomic { .. } => panic!("DASF"),
             Column::Array { .. } => panic!("ASDF"),
             Column::Composite { ref mut value, .. } => *value = Some(values),
             Column::Interleaved { value, .. } => *value = Some(values),

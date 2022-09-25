@@ -210,7 +210,7 @@ impl WizardIOP {
         for (module, m) in cols.cols.iter() {
             for (name, col) in m.iter() {
                 match col {
-                    Column::Atomic(..) => r.push_str(&format!(
+                    Column::Atomic { .. } => r.push_str(&format!(
                         "{}{}{} := build.RegisterCommit(\"{}{}{}\", 2048)\n",
                         goize(module),
                         MODULE_SEPARATOR,
