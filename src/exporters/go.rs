@@ -224,7 +224,7 @@ const (
         r
     }
 
-    pub fn render(&mut self, cs: &ConstraintsSet) -> Result<()> {
+    pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
         let columns = if self.render_columns {
             self.render_columns(&cs.columns)
         } else {

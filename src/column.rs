@@ -11,17 +11,17 @@ impl<T> ColumnSet<T> {
     pub fn get(&self, module: &str, name: &str) -> Result<&Column<T>> {
         self.cols
             .get(module)
-            .ok_or_else(|| anyhow!("module `{}` unknwown", module))?
+            .ok_or_else(|| eyre!("module `{}` unknwown", module))?
             .get(name)
-            .ok_or_else(|| anyhow!("column `{}` not found in module `{}`", name, module))
+            .ok_or_else(|| eyre!("column `{}` not found in module `{}`", name, module))
     }
 
     pub fn get_mut(&mut self, module: &str, name: &str) -> Result<&mut Column<T>> {
         self.cols
             .get_mut(module)
-            .ok_or_else(|| anyhow!("module `{}` unknwown", module))?
+            .ok_or_else(|| eyre!("module `{}` unknwown", module))?
             .get_mut(name)
-            .ok_or_else(|| anyhow!("column `{}` not found in module `{}`", name, module))
+            .ok_or_else(|| eyre!("column `{}` not found in module `{}`", name, module))
     }
 }
 
@@ -194,14 +194,14 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
                 if let Some(Left(i)) = idx {
                     Ok(values.get(&i).and_then(|v| v.get(i)))
                 } else {
-                    Err(anyhow!("column array cannot be indexed by `{:?}`", idx))
+                    Err(eyre!("column array cannot be indexed by `{:?}`", idx))
                 }
             }
             Column::Sorted { values, .. } => {
                 if let Some(Right(name)) = idx {
                     Ok(values.get(name).and_then(|v| v.get(i)))
                 } else {
-                    Err(anyhow!("permutation cannot be indexed by `{:?}`", idx))
+                    Err(eyre!("permutation cannot be indexed by `{:?}`", idx))
                 }
             }
         }

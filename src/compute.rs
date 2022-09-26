@@ -1,21 +1,23 @@
 use eyre::*;
 use log::*;
-use pairing_ce::bn256::Fr;
-use pairing_ce::ff::{Field, PrimeField};
+use pairing_ce::{
+    bn256::Fr,
+    ff::{Field, PrimeField},
+};
 use serde::Serialize;
-use serde_json::{json, Value};
-use std::{collections::HashMap, io::Write};
+use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::{
     column::{Column, ColumnSet},
-    compiler::{ConstraintsSet, Type},
+    compiler::{ConstraintSet, Type},
 };
 
 type F = Fr;
 
 #[derive(Default, Serialize, Debug)]
-struct ComputeResult {
-    columns: HashMap<String, Vec<F>>,
+pub struct ComputeResult {
+    pub columns: HashMap<String, Vec<F>>,
 }
 
 fn validate(t: Type, x: F) -> Result<F> {
@@ -24,7 +26,7 @@ fn validate(t: Type, x: F) -> Result<F> {
             if x.is_zero() || x == F::one() {
                 Ok(x)
             } else {
-                Err(anyhow!("expected bool, found {}", x))
+                Err(eyre!("expected bool, found {}", x))
             }
         }
         Type::Numeric => Ok(x),
@@ -40,7 +42,7 @@ fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
             Value::String(s) => Fr::from_str(s)
                 .with_context(|| format!("while parsing `{:?}`", x))
                 .and_then(|x| validate(t, x)),
-            _ => Err(anyhow!("expected numeric value, found `{}`", x)),
+            _ => Err(eyre!("expected numeric value, found `{}`", x)),
         })
         .collect()
 }
@@ -155,13 +157,14 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
     Ok(())
 }
 
-pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>) -> Result<()> {
+pub fn compute(tracefile: &str, cs: &mut ConstraintSet) -> Result<ComputeResult> {
     let v: Value = serde_json::from_str(
         &std::fs::read_to_string(tracefile)
             .with_context(|| format!("while reading `{}`", tracefile))?,
     )?;
 
-    fill_traces(&v, vec![], &mut cs.columns)?;
+    fill_traces(&v, vec![], &mut cs.columns)
+        .with_context(|| eyre!("reading columns from `{}`", tracefile))?;
     pad(&mut cs.columns).with_context(|| "padding columns")?;
     cs.compute().with_context(|| "computing columns")?;
 
@@ -206,28 +209,5 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintsSet, outfile: Option<String>
             }
         }
     }
-
-    let stringified: HashMap<String, Vec<String>> = r
-        .columns
-        .into_iter()
-        .map(|(k, v)| {
-            (
-                crate::exporters::goize(&k),
-                v.iter()
-                    .map(|x| x.into_repr().to_string())
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .collect();
-    let r = json!({ "columns": stringified }).to_string();
-
-    if let Some(outfilename) = outfile.as_ref() {
-        std::fs::File::create(outfilename)
-            .with_context(|| format!("while creating `{}`", outfilename))?
-            .write_all(r.as_bytes())
-            .with_context(|| format!("while writing to `{}`", outfilename))
-    } else {
-        println!("{}", r);
-        Ok(())
-    }
+    Ok(r)
 }

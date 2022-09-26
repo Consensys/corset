@@ -405,12 +405,12 @@ impl FuncVerifier<Expression> for Builtin {
 }
 
 #[derive(Default, Debug)]
-pub struct ConstraintsSet {
+pub struct ConstraintSet {
     pub columns: ColumnSet<Fr>,
     pub constraints: Vec<Constraint>,
     pub constants: HashMap<String, i64>,
 }
-impl ConstraintsSet {
+impl ConstraintSet {
     fn get(&self, module: &str, name: &str) -> Result<&Column<Fr>> {
         self.columns.get(module, name)
     }
@@ -438,7 +438,7 @@ impl ConstraintsSet {
             .windows(2)
             .all(|w| w[0] == w[1])
         {
-            return Err(anyhow!("interleaving columns of incoherent lengths"));
+            return Err(eyre!("interleaving columns of incoherent lengths"));
         }
         let len = self.get(module, &froms[0])?.len().unwrap();
 

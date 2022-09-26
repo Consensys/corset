@@ -183,7 +183,7 @@ impl AstNode {
                                 )
                             }) {
                                 if kind != Kind::Atomic {
-                                    return Err(anyhow!(
+                                    return Err(eyre!(
                                         "`{}` can not be sorted; is already {:?}",
                                         name,
                                         kind
@@ -207,13 +207,10 @@ impl AstNode {
                                     );
                                 }
                             } else {
-                                return Err(anyhow!(
-                                    ":SORTED expects (SYMBOLS...), found `{:?}`",
-                                    p
-                                ));
+                                return Err(eyre!(":SORTED expects (SYMBOLS...), found `{:?}`", p));
                             }
                         } else {
-                            return Err(anyhow!(":SORTED expects (SYMBOLS...), found `{:?}`", p));
+                            return Err(eyre!(":SORTED expects (SYMBOLS...), found `{:?}`", p));
                         }
                     }
                     ":INTERLEAVED" => {
@@ -233,7 +230,7 @@ impl AstNode {
                                 )
                             }) {
                                 if kind != Kind::Atomic {
-                                    return Err(anyhow!(
+                                    return Err(eyre!(
                                         "`{}` can not be interleaved; is already {:?}",
                                         name,
                                         kind
@@ -257,13 +254,13 @@ impl AstNode {
                                     );
                                 }
                             } else {
-                                return Err(anyhow!(
+                                return Err(eyre!(
                                     ":INTERLEAVED expects (SYMBOLS...), found `{:?}`",
                                     p
                                 ));
                             }
                         } else {
-                            return Err(anyhow!(
+                            return Err(eyre!(
                                 ":INTERLEAVED expects (SYMBOLS...), found `{:?}`",
                                 p
                             ));

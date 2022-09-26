@@ -175,7 +175,7 @@ impl SymbolTable {
             .or_default()
             .contains_key(symbol)
         {
-            Err(anyhow!(
+            Err(eyre!(
                 "column `{}` already exists in module `{}`",
                 symbol,
                 module
@@ -191,7 +191,7 @@ impl SymbolTable {
 
     pub fn insert_func(&mut self, f: Function) -> Result<()> {
         if self.funcs.contains_key(&f.name) {
-            Err(anyhow!("function `{}` already defined", &f.name))
+            Err(eyre!("function `{}` already defined", &f.name))
         } else {
             self.funcs.insert(f.name.clone(), f);
             Ok(())
@@ -200,7 +200,7 @@ impl SymbolTable {
 
     pub fn insert_alias(&mut self, module: &str, from: &str, to: &str) -> Result<()> {
         if self.symbols.contains_key(from) {
-            Err(anyhow!("`{}` already exists", from))
+            Err(eyre!("`{}` already exists", from))
         } else {
             self.symbols
                 .entry(module.into())
@@ -212,7 +212,7 @@ impl SymbolTable {
 
     pub fn insert_funalias(&mut self, from: &str, to: &str) -> Result<()> {
         if self.funcs.contains_key(from) {
-            Err(anyhow!(
+            Err(eyre!(
                 "`{}` already exists: {} -> {:?}",
                 from,
                 from,
@@ -254,7 +254,7 @@ impl SymbolTable {
             Type::Numeric
         };
         if self.symbols.contains_key(name) {
-            Err(anyhow!("`{}` already exists", name))
+            Err(eyre!("`{}` already exists", name))
         } else {
             self.symbols.entry(module.into()).or_default().insert(
                 name.into(),

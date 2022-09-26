@@ -1,7 +1,11 @@
 #[macro_use]
 extern crate pest_derive;
+use std::{collections::HashMap, io::Write};
+
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
+use pairing_ce::ff::PrimeField;
+use serde_json::json;
 
 mod column;
 mod compiler;
@@ -99,6 +103,7 @@ enum Commands {
         #[clap(long = "columns-file", help = "where to render the columns")]
         columns_filename: Option<String>,
     },
+    /// Given a set of constraints and a trace file, fill the computed columns
     Compute {
         #[clap(
             short = 'T',
@@ -110,6 +115,16 @@ enum Commands {
 
         #[clap(short = '0', long = "out", help = "where to write the computed trace")]
         outfile: Option<String>,
+    },
+    /// Given a set of constraints and a filled trace, check the validity of the constraints
+    Check {
+        #[clap(
+            short = 'T',
+            long = "trace",
+            required = true,
+            help = "the trace to compute & verify"
+        )]
+        tracefile: String,
     },
 }
 
@@ -186,7 +201,33 @@ fn main() -> Result<()> {
             latex_exporter.render(&ast)?
         }
         Commands::Compute { tracefile, outfile } => {
-            compute::compute(&tracefile, &mut constraints, outfile.clone())
+            let r = compute::compute(&tracefile, &mut constraints)
+                .with_context(|| format!("while computing from `{}`", tracefile))?;
+            let stringified: HashMap<String, Vec<String>> = r
+                .columns
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        crate::exporters::goize(&k),
+                        v.iter()
+                            .map(|x| x.into_repr().to_string())
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect();
+            let r = json!({ "columns": stringified }).to_string();
+
+            if let Some(outfilename) = outfile.as_ref() {
+                std::fs::File::create(outfilename)
+                    .with_context(|| format!("while creating `{}`", outfilename))?
+                    .write_all(r.as_bytes())
+                    .with_context(|| format!("while writing to `{}`", outfilename))?;
+            } else {
+                println!("{}", r);
+            }
+        }
+        Commands::Check { tracefile } => {
+            compute::compute(&tracefile, &mut constraints)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
         }
     }

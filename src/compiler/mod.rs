@@ -6,7 +6,7 @@ use log::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use common::Type;
-pub use generator::{Builtin, Constraint, ConstraintsSet, Expression};
+pub use generator::{Builtin, Constraint, ConstraintSet, Expression};
 pub use parser::{Ast, AstNode, Kind, Token};
 
 mod common;
@@ -16,7 +16,7 @@ mod parser;
 
 const MAIN_MODULE: &str = "MAIN";
 
-pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, ConstraintsSet)> {
+pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, ConstraintSet)> {
     let mut asts = vec![];
     let ctx = Rc::new(RefCell::new(SymbolTable::new_root()));
 
@@ -57,7 +57,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         }
     }
 
-    let r = ConstraintsSet {
+    let r = ConstraintSet {
         constraints: asts
             .iter()
             .map(|(name, ast)| {
