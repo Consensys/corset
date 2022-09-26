@@ -81,7 +81,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                     colname.to_string()
                 };
 
-                columns
+                let r = columns
                     .cols
                     .get_mut(module)
                     .ok_or_else(|| eyre!("Module `{}` does not exist in constraints", module))
@@ -124,7 +124,10 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                             }
                         }
                         Column::Sorted { .. } => todo!(),
-                    })?;
+                    });
+                if let Err(e) = r {
+                    warn!("{}", e);
+                }
             } else {
                 warn!("Found a path too short: {:?}", path)
             }

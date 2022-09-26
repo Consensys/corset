@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate pest_derive;
+use log::*;
 use std::{collections::HashMap, io::Write};
 
 use clap::{Parser, Subcommand};
@@ -7,6 +8,7 @@ use color_eyre::eyre::*;
 use pairing_ce::ff::PrimeField;
 use serde_json::json;
 
+mod check;
 mod column;
 mod compiler;
 mod compute;
@@ -227,8 +229,11 @@ fn main() -> Result<()> {
             }
         }
         Commands::Check { tracefile } => {
-            compute::compute(&tracefile, &mut constraints)
+            info!("Computing columns...");
+            let _ = compute::compute(&tracefile, &mut constraints)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
+            info!("Checking constraints...");
+            check::check(&constraints)?;
         }
     }
 
