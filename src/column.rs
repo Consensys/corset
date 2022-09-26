@@ -185,21 +185,24 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
 
     // The Result<...> wrapping indicates whether the indexing is valid
     // The Option<...> wrapping indicates whether the indexing is OoB
-    pub fn get(&self, i: usize, idx: Option<Either<usize, &str>>) -> Result<Option<&T>> {
+    pub fn get(&self, i: isize, idx: Option<Either<usize, &str>>) -> Result<Option<&T>> {
+        fn get_rel<T>(v: &[T], i: isize) -> Option<&T> {
+            v.get((i % v.len() as isize) as usize)
+        }
         match self {
-            Column::Atomic { value, .. } => Ok(value.get(i)),
-            Column::Composite { value, .. } => Ok(value.as_ref().and_then(|v| v.get(i))),
-            Column::Interleaved { value, .. } => Ok(value.as_ref().and_then(|v| v.get(i))),
+            Column::Atomic { value, .. } => Ok(get_rel(&value, i)),
+            Column::Composite { value, .. } => Ok(value.as_ref().and_then(|v| get_rel(v, i))),
+            Column::Interleaved { value, .. } => Ok(value.as_ref().and_then(|v| get_rel(v, i))),
             Column::Array { values, .. } => {
-                if let Some(Left(i)) = idx {
-                    Ok(values.get(&i).and_then(|v| v.get(i)))
+                if let Some(Left(j)) = idx {
+                    Ok(values.get(&j).and_then(|v| get_rel(v, i)))
                 } else {
                     Err(eyre!("column array cannot be indexed by `{:?}`", idx))
                 }
             }
             Column::Sorted { values, .. } => {
                 if let Some(Right(name)) = idx {
-                    Ok(values.get(name).and_then(|v| v.get(i)))
+                    Ok(values.get(name).and_then(|v| get_rel(v, i)))
                 } else {
                     Err(eyre!("permutation cannot be indexed by `{:?}`", idx))
                 }
