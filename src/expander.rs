@@ -3,7 +3,7 @@ use num_traits::One;
 
 use crate::{
     column::ColumnSet,
-    compiler::{Builtin, Constraint, ConstraintsSet, Expression, Kind, Type},
+    compiler::{Builtin, Constraint, ConstraintSet, Expression, Kind, Type},
 };
 use eyre::*;
 
@@ -150,7 +150,7 @@ fn expand_plookup<T: Ord + Clone>(
     }
 }
 
-pub fn expand(cs: &mut ConstraintsSet) -> Result<()> {
+pub fn expand(cs: &mut ConstraintSet) -> Result<()> {
     let mut new_cs_inv = vec![];
     let mut new_cs_plookup = vec![];
     for c in cs.constraints.iter_mut() {

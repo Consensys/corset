@@ -253,7 +253,7 @@ impl WizardIOP {
         r
     }
 
-    pub fn render(&mut self, cs: &ConstraintsSet) -> Result<()> {
+    pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
         let consts = Self::render_constants(&cs.constants);
         let columns = Self::render_columns(&cs.columns);
         let constraints = Self::render_constraints(&cs.constraints);

@@ -61,8 +61,8 @@ impl Expression {
     }
     pub fn eval(
         &self,
-        i: usize,
-        get: &mut dyn FnMut(&str, &str, usize, Option<Either<usize, &str>>) -> Option<Fr>,
+        i: isize,
+        get: &mut dyn FnMut(&str, &str, isize, Option<Either<usize, &str>>) -> Option<Fr>,
     ) -> Option<Fr> {
         match self {
             Expression::Funcall { func, args } => match func {
@@ -99,7 +99,7 @@ impl Expression {
                 }
                 Builtin::Shift => {
                     if let Expression::Const(ii) = &args[1] {
-                        args[0].eval(i + ii.to_usize().unwrap(), get)
+                        args[0].eval(i + ii.to_isize().unwrap(), get)
                     } else {
                         unreachable!()
                     }
@@ -443,7 +443,7 @@ impl ConstraintSet {
         let len = self.get(module, &froms[0])?.len().unwrap();
 
         let mut values = Vec::new();
-        for i in 0..len {
+        for i in 0..len as isize {
             for from in froms.iter() {
                 values.push(
                     self.get(module, from)
@@ -496,7 +496,7 @@ impl ConstraintSet {
             .max()
             .unwrap();
 
-        let values = (0..length)
+        let values = (0..length as isize)
             .map(|i| {
                 exp.eval(i, &mut |module, name, i, idx| {
                     let col = self.get(module, name).unwrap();
