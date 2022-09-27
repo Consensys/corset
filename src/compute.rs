@@ -174,7 +174,7 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintSet) -> Result<ComputeResult>
                     }
                 }
                 Column::Sorted { values, .. } => {
-                    for (i, col) in values.iter() {
+                    for (i, col) in values.as_ref().unwrap().iter() {
                         r.columns.insert(
                             format!("{}{}{}{}{}", module, "___", colname, "_", i), // TODO module separator
                             col.clone(),

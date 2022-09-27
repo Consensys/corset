@@ -167,7 +167,7 @@ pub enum Column<T> {
         t: Type,
     },
     Sorted {
-        values: HashMap<String, Vec<T>>,
+        values: Option<HashMap<String, Vec<T>>>,
         froms: Vec<String>,
     },
 }
@@ -179,7 +179,10 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
             Column::Composite { value, .. } => value.as_ref().map(|v| v.len()),
             Column::Interleaved { value, .. } => value.as_ref().map(|v| v.len()),
             Column::Array { values, .. } => values.values().next().map(|x| x.len()),
-            Column::Sorted { values, .. } => values.values().next().map(|x| x.len()),
+            Column::Sorted { values, .. } => values
+                .as_ref()
+                .and_then(|values| values.values().next())
+                .map(|x| x.len()),
         }
     }
 
@@ -206,7 +209,10 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
             }
             Column::Sorted { values, .. } => {
                 if let Some(Right(name)) = idx {
-                    Ok(values.get(name).and_then(|v| get_rel(v, i)))
+                    Ok(values
+                        .as_ref()
+                        .and_then(|values| values.get(name))
+                        .and_then(|v| get_rel(v, i)))
                 } else {
                     Err(eyre!("permutation cannot be indexed by `{:?}`", idx))
                 }
@@ -231,9 +237,11 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
                 }
             }
             Column::Sorted { values, .. } => {
-                for values in values.values_mut() {
-                    f(values);
-                }
+                values.as_mut().map(|values| {
+                    for values in values.values_mut() {
+                        f(values);
+                    }
+                });
             }
         }
     }
@@ -244,7 +252,7 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
             Column::Composite { value, .. } => value.is_some(),
             Column::Interleaved { value, .. } => value.is_some(),
             Column::Array { .. } => true,
-            Column::Sorted { .. } => todo!(),
+            Column::Sorted { values, .. } => values.is_some(),
         }
     }
 
