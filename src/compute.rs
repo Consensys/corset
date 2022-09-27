@@ -69,24 +69,13 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
             if path.len() >= 2 {
                 let module = &path[path.len() - 2];
                 let colname = &path[path.len() - 1];
-                let col_components = colname.split('_').collect::<Vec<_>>();
-                let idx = if col_components.len() > 2 {
-                    col_components.last().unwrap().parse::<usize>().ok()
-                } else {
-                    None
-                };
-                let radix = if idx.is_some() {
-                    col_components[0..col_components.len() - 1].join("_")
-                } else {
-                    colname.to_string()
-                };
 
                 let r = columns
                     .cols
                     .get_mut(module)
                     .ok_or_else(|| eyre!("Module `{}` does not exist in constraints", module))
                     .and_then(|module| {
-                        module.get_mut(&radix).ok_or_else(|| {
+                        module.get_mut(colname).ok_or_else(|| {
                             eyre!("Column `{}` does not exist in constraints", colname)
                         })
                     })
@@ -105,25 +94,8 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                             *value = Some(parse_column(xs, Type::Numeric)?);
                             Ok(())
                         }
-                        Column::Array {
-                            ref mut values,
-                            t,
-                            range,
-                        } => {
-                            let idx = idx.unwrap();
-                            if range.contains(&idx) {
-                                values.insert(idx, parse_column(xs, *t)?);
-                                Ok(())
-                            } else {
-                                Err(eyre!(
-                                    "index {} for column {} is out of range {:?}",
-                                    idx,
-                                    colname,
-                                    range
-                                ))
-                            }
-                        }
                         Column::Sorted { .. } => todo!(),
+                        _ => unreachable!(),
                     });
                 if let Err(e) = r {
                     warn!("{}", e);

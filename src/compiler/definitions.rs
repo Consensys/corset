@@ -292,27 +292,34 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
         Token::DefColumns(cols) => cols
             .iter()
             .fold(Ok(()), |ax, col| ax.and(reduce(col, ctx.clone(), module))),
-        Token::DefColumn(col, t, kind) => ctx.borrow_mut().insert_symbol(
-            module,
-            col,
-            Expression::Column(
-                module.to_owned(),
-                col.to_owned(),
-                *t,
-                // Convert Kind<AstNode> to Kind<Expression>
-                match kind {
-                    Kind::Atomic => Kind::Atomic,
-                    Kind::Composite(_) => Kind::Atomic, // The actual expression is computed by the generator
-                    Kind::Interleaved(xs) => Kind::Interleaved(xs.clone()),
-                    Kind::Sorted(xs) => Kind::Sorted(xs.clone()),
-                },
-            ),
-        ),
-        Token::DefArrayColumn(col, range, t) => ctx.borrow_mut().insert_symbol(
-            module,
-            col,
-            Expression::ArrayColumn(module.clone(), col.clone(), range.clone(), *t),
-        ),
+        Token::DefColumn(col, t, kind) => {
+            ctx.borrow_mut().insert_symbol(
+                module,
+                col,
+                Expression::Column(
+                    module.to_owned(),
+                    col.to_owned(),
+                    *t,
+                    // Convert Kind<AstNode> to Kind<Expression>
+                    match kind {
+                        Kind::Atomic => Kind::Atomic,
+                        Kind::Composite(_) => Kind::Atomic, // The actual expression is computed by the generator
+                        Kind::Interleaved(xs) => Kind::Interleaved(xs.clone()),
+                        Kind::Sorted(xs) => Kind::Sorted(xs.clone()),
+                    },
+                ),
+            )
+        }
+        Token::DefArrayColumn(col, range, t) => {
+            for i in range {
+                ctx.borrow_mut().insert_symbol(
+                    module,
+                    col,
+                    Expression::Column(module.clone(), format!("{}_{}", col, i), *t, Kind::Atomic),
+                )?;
+            }
+            Ok(())
+        }
         Token::DefPermutation(tos, froms, sorters) => {
             if tos.len() != froms.len() {
                 return Err(eyre!(

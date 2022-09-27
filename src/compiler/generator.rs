@@ -720,19 +720,19 @@ fn apply(
                     }
 
                     Builtin::Nth => {
-                        if let (Expression::ArrayColumn(module, cname, ..), Expression::Const(x)) =
+                        if let (Expression::ArrayColumn(module, cname, ..), Expression::Const(i)) =
                             (&traversed_args[0], &traversed_args[1])
                         {
-                            let x = x.to_usize().unwrap();
+                            let x = i.to_usize().unwrap();
                             match &ctx.borrow_mut().resolve_symbol(module, cname)? {
                                 array @ (Expression::ArrayColumn(module, name, range, t), _) => {
                                     if range.contains(&x) {
                                         Ok(Some((
-                                            Expression::ArrayColumnElement(
+                                            Expression::Column(
                                                 module.to_owned(),
-                                                name.to_owned(),
-                                                x,
+                                                format!("{}_{}", cname, i),
                                                 *t,
+                                                Kind::Atomic,
                                             ),
                                             *t,
                                         )))
