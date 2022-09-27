@@ -7,7 +7,7 @@ use crate::{
 };
 use eyre::*;
 
-const RESERVED_MODULE: &str = "%RESERVED%";
+const RESERVED_MODULE: &str = "RESERVED";
 
 fn invert_expr(e: &Expression) -> Expression {
     Expression::Funcall {
@@ -97,7 +97,7 @@ fn validate_plookup(cs: &mut Vec<Expression>, x_expr: &Expression, x_col: &str) 
 }
 
 fn expression_to_name(e: &Expression, prefix: &str) -> String {
-    format!("%{}_{:?}%", prefix, e).to_case(Case::ScreamingSnake)
+    format!("{}_{}", prefix, e)
 }
 
 fn expand_expr<T: Clone + Ord>(

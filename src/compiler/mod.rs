@@ -27,6 +27,17 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         asts.push((name, ast));
     }
 
+    let constraints = asts
+        .iter()
+        .map(|(name, ast)| {
+            generator::pass(ast, ctx.clone())
+                .with_context(|| eyre!("compiling constraints in `{}`", name))
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+
     let mut columns: ColumnSet<pairing_ce::bn256::Fr> = Default::default();
     let mut constants: HashMap<String, i64> = Default::default();
     for s in ctx.borrow().symbols() {
@@ -58,16 +69,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
     }
 
     let r = ConstraintSet {
-        constraints: asts
-            .iter()
-            .map(|(name, ast)| {
-                generator::pass(ast, ctx.clone())
-                    .with_context(|| eyre!("compiling constraints in `{}`", name))
-            })
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect(),
+        constraints,
         columns,
         constants,
     };

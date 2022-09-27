@@ -10,6 +10,61 @@ use crate::{
     utils::*,
 };
 
+fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Result<()> {
+    let r = expr.eval(
+        i,
+        &mut |module, name, i, idx| {
+            columns
+                .get(module, name)
+                .unwrap()
+                .get(i, idx)
+                .unwrap()
+                .cloned()
+        },
+        true,
+        0,
+    );
+    Err(eyre!(
+        "{}|{}{}\n -> {}",
+        expr.pretty(),
+        i,
+        l.map(|l| format!("/{}", l)).unwrap_or(Default::default()),
+        r.as_ref().map(Pretty::pretty).unwrap_or("nil".to_owned()),
+    ))
+}
+
+fn check_constraint_at(
+    expr: &Expression,
+    i: isize,
+    l: Option<usize>,
+    columns: &ColumnSet<Fr>,
+    fail_on_oob: bool,
+) -> Result<()> {
+    let r = expr.eval(
+        i,
+        &mut |module, name, i, idx| {
+            columns
+                .get(module, name)
+                .unwrap()
+                .get(i, idx)
+                .unwrap()
+                .cloned()
+        },
+        false,
+        0,
+    );
+    if let Some(r) = r {
+        if !r.is_zero() {
+            return fail(expr, i, l, columns);
+        }
+    } else {
+        if fail_on_oob {
+            return fail(expr, i, l, columns);
+        }
+    }
+    Ok(())
+}
+
 fn check_constraint(
     expr: &Expression,
     domain: &Option<Vec<isize>>,
@@ -18,25 +73,7 @@ fn check_constraint(
     match domain {
         Some(is) => {
             for i in is {
-                let r = expr.eval(
-                    *i,
-                    &mut |module, name, i, idx| {
-                        columns
-                            .get(module, name)
-                            .unwrap()
-                            .get(i, idx)
-                            .unwrap()
-                            .cloned()
-                    },
-                    false,
-                );
-                if let Some(x) = r {
-                    if !x.is_zero() {
-                        return Err(eyre!("Should vanish: {:?}", r));
-                    }
-                } else {
-                    return Err(eyre!("{} out of range for {:?}/{:?}: {:?}", i, expr, is, r));
-                }
+                check_constraint_at(expr, *i, None, columns, true)?;
             }
             Ok(())
         }
@@ -48,7 +85,7 @@ fn check_constraint(
                 .collect::<Vec<_>>();
             if !cols_lens.iter().all(|&l| l == cols_lens[0]) {
                 error!(
-                    "all columns in `{:?}` are not of the same length: `{:?}`",
+                    "all columns in `{}` are not of the same length: `{:?}`",
                     &expr,
                     expr.dependencies()
                         .iter()
@@ -64,37 +101,7 @@ fn check_constraint(
             }
             let l = cols_lens[0];
             for i in 0..l as isize {
-                let r = expr.eval(
-                    i,
-                    &mut |module, name, i, idx| {
-                        columns
-                            .get(module, name)
-                            .unwrap()
-                            .get(i, idx)
-                            .unwrap()
-                            .cloned()
-                    },
-                    false,
-                );
-                if let Some(r) = r {
-                    if !r.is_zero() {
-                        let _ = expr.eval(
-                            i,
-                            &mut |module, name, i, idx| {
-                                columns
-                                    .get(module, name)
-                                    .unwrap()
-                                    .get(i, idx)
-                                    .unwrap()
-                                    .cloned()
-                            },
-                            true,
-                        );
-                        return Err(eyre!("{:?}|{}/{}\n -> {}", expr, i, l, pretty(&r),));
-                    }
-                } else {
-                    info!("{} out of range for {:?}", i, expr);
-                }
+                check_constraint_at(expr, i, Some(l), columns, false)?;
             }
             Ok(())
         }
@@ -114,14 +121,18 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
                 match expr.as_ref() {
                     Expression::List(es) => {
                         for e in es {
-                            if check_constraint(e, domain, &cs.columns).is_err() {
+                            if let Err(err) = check_constraint(e, domain, &cs.columns) {
+                                error!("{}", err);
                                 failed.insert(name.to_owned());
                             };
                         }
                     }
                     _ => {
-                        if check_constraint(expr, domain, &cs.columns).is_err() {
+                        if let Err(err) = check_constraint(expr, domain, &cs.columns) {
+                            error!("{}", err);
                             failed.insert(name.to_owned());
+                        } else {
+                            info!("{} validated", name);
                         }
                     }
                 }

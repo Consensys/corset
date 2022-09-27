@@ -52,6 +52,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
         Value::Object(map) => {
             for (k, v) in map.iter() {
                 if k == "Trace" || k == "Assignment" {
+                    info!("importing {:?}", path[path.len() - 1]);
                     fill_traces(v, path.clone(), columns)?;
                 } else {
                     let mut path = path.clone();
@@ -70,7 +71,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                 let module = &path[path.len() - 2];
                 let colname = &path[path.len() - 1];
 
-                let r = columns
+                let _r = columns
                     .cols
                     .get_mut(module)
                     .ok_or_else(|| eyre!("Module `{}` does not exist in constraints", module))
@@ -97,11 +98,9 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                         Column::Sorted { .. } => todo!(),
                         _ => unreachable!(),
                     });
-                if let Err(e) = r {
-                    warn!("{}", e);
-                }
-            } else {
-                warn!("Found a path too short: {:?}", path)
+                // if let Err(e) = r {
+                //     warn!("{}", e);
+                // }
             }
             Ok(())
         }

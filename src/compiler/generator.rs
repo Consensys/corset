@@ -8,7 +8,7 @@ use pairing_ce::bn256::Fr;
 use pairing_ce::ff::{Field, PrimeField};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
 use super::common::*;
@@ -74,13 +74,14 @@ impl Expression {
         i: isize,
         get: &mut dyn FnMut(&str, &str, isize, Option<Either<usize, &str>>) -> Option<Fr>,
         trace: bool,
+        depth: usize,
     ) -> Option<Fr> {
         let r = match self {
             Expression::Funcall { func, args } => match func {
                 Builtin::Add => {
                     let args = args
                         .iter()
-                        .map(|x| x.eval(i, get, trace))
+                        .map(|x| x.eval(i, get, trace, depth + 1))
                         .collect::<Option<Vec<_>>>()?;
                     Some(args.iter().fold(Fr::zero(), |mut ax, x| {
                         ax.add_assign(x);
@@ -90,7 +91,7 @@ impl Expression {
                 Builtin::Sub => {
                     let args = args
                         .iter()
-                        .map(|x| x.eval(i, get, trace))
+                        .map(|x| x.eval(i, get, trace, depth + 1))
                         .collect::<Option<Vec<_>>>()?;
                     let mut ax = args[0];
                     for x in args[1..].iter() {
@@ -101,7 +102,7 @@ impl Expression {
                 Builtin::Mul => {
                     let args = args
                         .iter()
-                        .map(|x| x.eval(i, get, trace))
+                        .map(|x| x.eval(i, get, trace, depth + 1))
                         .collect::<Option<Vec<_>>>()?;
                     Some(args.iter().fold(Fr::one(), |mut ax, x| {
                         ax.mul_assign(x);
@@ -110,16 +111,18 @@ impl Expression {
                 }
                 Builtin::Shift => {
                     if let Expression::Const(ii) = &args[1] {
-                        args[0].eval(i + ii.to_isize().unwrap(), get, false)
+                        args[0].eval(i + ii.to_isize().unwrap(), get, false, depth + 1)
                     } else {
                         unreachable!()
                     }
                 }
-                Builtin::Neg => args[0].eval(i, get, trace).map(|mut x| {
+                Builtin::Neg => args[0].eval(i, get, trace, depth + 1).map(|mut x| {
                     x.negate();
                     x
                 }),
-                Builtin::Inv => args[0].eval(i, get, trace).and_then(|x| x.inverse()),
+                Builtin::Inv => args[0]
+                    .eval(i, get, trace, depth + 1)
+                    .and_then(|x| x.inverse()),
                 Builtin::Nth => {
                     if let (
                         Expression::ArrayColumn(module, name, domain, _),
@@ -146,7 +149,11 @@ impl Expression {
             _ => unreachable!(),
         };
         if trace && !matches!(self, Expression::Const(_)) {
-            eprintln!("{:?}[{}]-> {:?}", self, i, pretty(&r.unwrap()));
+            eprintln!(
+                "{:70} <- {}",
+                r.as_ref().map(Pretty::pretty).unwrap_or("nil".to_owned()),
+                format!("{}[{}]", self, i),
+            );
         }
         r
     }
@@ -198,6 +205,37 @@ impl Expression {
             x => ax.push(f(x)),
         }
         ax
+    }
+}
+impl Display for Expression {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        fn format_list(cs: &[Expression]) -> String {
+            cs.iter()
+                .map(|c| format!("{}", c))
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+
+        match self {
+            Expression::Const(x) => write!(f, "{}", x),
+            Expression::Column(module, name, _t, _k) => {
+                write!(f, "{}.{}", module, name)
+            }
+            Expression::ArrayColumn(_module, name, range, _t) => {
+                write!(
+                    f,
+                    "{}[{}:{}]",
+                    name,
+                    range.first().unwrap(),
+                    range.last().unwrap(),
+                )
+            }
+            Expression::List(cs) => write!(f, "{{{}}}", format_list(cs)),
+            Self::Funcall { func, args } => {
+                write!(f, "({:?} {})", func, format_list(args))
+            }
+            Expression::Void => write!(f, "nil"),
+        }
     }
 }
 impl Debug for Expression {
@@ -500,6 +538,7 @@ impl ConstraintSet {
                         }
                     },
                     false,
+                    0,
                 )
                 .unwrap_or_else(Fr::zero)
             })
