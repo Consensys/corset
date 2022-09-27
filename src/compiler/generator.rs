@@ -7,7 +7,7 @@ use num_traits::{One, Zero};
 use pairing_ce::bn256::Fr;
 use pairing_ce::ff::{Field, PrimeField};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
@@ -59,17 +59,32 @@ impl Expression {
             Expression::Void => Type::Void,
         }
     }
+
+    pub fn dependencies(&self) -> HashSet<(String, String)> {
+        self.leaves()
+            .into_iter()
+            .filter_map(|e| match e {
+                Expression::Column(module, name, ..) => Some((module.to_owned(), name.to_owned())),
+                Expression::ArrayColumnElement(module, name, ..) => {
+                    Some((module.to_owned(), name.to_owned()))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     pub fn eval(
         &self,
         i: isize,
         get: &mut dyn FnMut(&str, &str, isize, Option<Either<usize, &str>>) -> Option<Fr>,
+        trace: bool,
     ) -> Option<Fr> {
-        match self {
+        let r = match self {
             Expression::Funcall { func, args } => match func {
                 Builtin::Add => {
                     let args = args
                         .iter()
-                        .map(|x| x.eval(i, get))
+                        .map(|x| x.eval(i, get, trace))
                         .collect::<Option<Vec<_>>>()?;
                     Some(args.iter().fold(Fr::zero(), |mut ax, x| {
                         ax.add_assign(x);
@@ -79,7 +94,7 @@ impl Expression {
                 Builtin::Sub => {
                     let args = args
                         .iter()
-                        .map(|x| x.eval(i, get))
+                        .map(|x| x.eval(i, get, trace))
                         .collect::<Option<Vec<_>>>()?;
                     let mut ax = args[0];
                     for x in args[1..].iter() {
@@ -90,7 +105,7 @@ impl Expression {
                 Builtin::Mul => {
                     let args = args
                         .iter()
-                        .map(|x| x.eval(i, get))
+                        .map(|x| x.eval(i, get, trace))
                         .collect::<Option<Vec<_>>>()?;
                     Some(args.iter().fold(Fr::one(), |mut ax, x| {
                         ax.mul_assign(x);
@@ -99,16 +114,16 @@ impl Expression {
                 }
                 Builtin::Shift => {
                     if let Expression::Const(ii) = &args[1] {
-                        args[0].eval(i + ii.to_isize().unwrap(), get)
+                        args[0].eval(i + ii.to_isize().unwrap(), get, false)
                     } else {
                         unreachable!()
                     }
                 }
-                Builtin::Neg => args[0].eval(i, get).map(|mut x| {
+                Builtin::Neg => args[0].eval(i, get, trace).map(|mut x| {
                     x.negate();
                     x
                 }),
-                Builtin::Inv => args[0].eval(i, get).and_then(|x| x.inverse()),
+                Builtin::Inv => args[0].eval(i, get, trace).and_then(|x| x.inverse()),
                 Builtin::Nth => {
                     if let (
                         Expression::ArrayColumn(module, name, domain, _),
@@ -119,7 +134,7 @@ impl Expression {
                         if !domain.contains(&idx) {
                             panic!("ASDFFDSA");
                         }
-                        get(module, name, i, Some(Left(idx)))
+                        get(module, &format!("{}_{}", name, idx), i, None)
                     } else {
                         unreachable!()
                     }
@@ -136,7 +151,11 @@ impl Expression {
                 get(module, name, i, Some(Left(*idx)))
             }
             _ => unreachable!(),
+        };
+        if trace && !matches!(self, Expression::Const(_)) {
+            eprintln!("{:50?}[{}]-> {:?}", self, i, r);
         }
+        r
     }
 
     pub fn leaves(&self) -> Vec<Expression> {
@@ -463,24 +482,7 @@ impl ConstraintSet {
     fn compute_composite(&mut self, module: &str, name: &str) -> Result<()> {
         let col = self.columns.get(module, name).unwrap();
         let (exp, cols_in_expr) = if let Column::Composite { exp, .. } = col {
-            let cols_in_expr = exp
-                .leaves()
-                .into_iter()
-                .filter(|e| {
-                    matches!(
-                        e,
-                        Expression::ArrayColumnElement(..) | Expression::Column(..)
-                    )
-                })
-                .map(|e| match e {
-                    Expression::Column(module, name, ..) => (module.to_owned(), name.to_owned()),
-                    Expression::ArrayColumnElement(module, name, ..) => {
-                        (module.to_owned(), name.to_owned())
-                    }
-                    _ => unreachable!(),
-                })
-                .collect::<Vec<_>>();
-            (exp.clone(), cols_in_expr)
+            (exp.clone(), exp.dependencies())
         } else {
             unreachable!()
         };
@@ -498,20 +500,24 @@ impl ConstraintSet {
 
         let values = (0..length as isize)
             .map(|i| {
-                exp.eval(i, &mut |module, name, i, idx| {
-                    let col = self.get(module, name).unwrap();
-                    if col.is_computed() {
-                        col.get(i, idx).unwrap().cloned()
-                    } else {
-                        self.compute_column(module, name);
-                        self.columns
-                            .get(module, name)
-                            .unwrap()
-                            .get(i, idx)
-                            .unwrap()
-                            .cloned()
-                    }
-                })
+                exp.eval(
+                    i,
+                    &mut |module, name, i, idx| {
+                        let col = self.get(module, name).unwrap();
+                        if col.is_computed() {
+                            col.get(i, idx).unwrap().cloned()
+                        } else {
+                            self.compute_column(module, name);
+                            self.columns
+                                .get(module, name)
+                                .unwrap()
+                                .get(i, idx)
+                                .unwrap()
+                                .cloned()
+                        }
+                    },
+                    false,
+                )
                 .unwrap_or_else(Fr::zero)
             })
             .collect::<Vec<_>>();
