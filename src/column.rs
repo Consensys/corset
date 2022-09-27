@@ -188,7 +188,7 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
     pub fn get(&self, i: isize, idx: Option<Either<usize, &str>>) -> Result<Option<&T>> {
         fn get_rel<T>(v: &[T], i: isize) -> Option<&T> {
             if i < 0 {
-                v.get((i % v.len() as isize) as usize)
+                v.get(((i + v.len() as isize) % v.len() as isize) as usize)
             } else {
                 v.get(i as usize)
             }
