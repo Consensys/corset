@@ -3,6 +3,7 @@ extern crate pest_derive;
 use log::*;
 use pairing_ce::ff::PrimeField;
 use std::{collections::HashMap, io::Write};
+use utils::export_symbol;
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
@@ -211,7 +212,7 @@ fn main() -> Result<()> {
                 .into_iter()
                 .map(|(k, v)| {
                     (
-                        crate::exporters::goize(&k),
+                        export_symbol(&k),
                         v.iter()
                             .map(|x| x.into_repr().to_string())
                             .collect::<Vec<_>>(),
