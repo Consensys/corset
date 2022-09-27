@@ -65,7 +65,7 @@ impl GoExporter {
 
     pub fn render_node(&self, node: &Expression) -> Result<String> {
         let r = match node {
-            Expression::ArrayColumn(..) => unreachable!(),
+            Expression::Permutation(..) | Expression::ArrayColumn(..) => unreachable!(),
             Expression::Const(x) => Ok(format!("column.CONST_STRING(\"{}\")", x)),
             Expression::Column(_module, name, _, _) => Ok(format!(
                 "{}[\"{}\"]",

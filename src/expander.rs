@@ -97,7 +97,7 @@ fn validate_plookup(cs: &mut Vec<Expression>, x_expr: &Expression, x_col: &str) 
 }
 
 fn expression_to_name(e: &Expression, prefix: &str) -> String {
-    format!("{}_{}", prefix, e)
+    format!("{}_{}", prefix, e).replace(" ", "_")
 }
 
 fn expand_expr<T: Clone + Ord>(

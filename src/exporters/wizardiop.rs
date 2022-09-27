@@ -38,7 +38,7 @@ fn shift(e: &Expression, i: isize) -> Expression {
             args: vec![e.clone(), Expression::Const(BigInt::from(i))],
         },
         Expression::List(xs) => Expression::List(xs.iter().map(|x| shift(x, i)).collect()),
-        Expression::ArrayColumn(_, _, _, _) => unreachable!(),
+        Expression::ArrayColumn(..) | Expression::Permutation(..) => unreachable!(),
         Expression::Void => Expression::Void,
     }
 }
@@ -65,7 +65,7 @@ fn make_chain(xs: &[Expression], operand: &str, surround: bool) -> String {
 
 fn render_expression(e: &Expression) -> String {
     match e {
-        Expression::ArrayColumn(..) => unreachable!(),
+        Expression::ArrayColumn(..) | Expression::Permutation(..) => unreachable!(),
         Expression::Const(x) => format!("symbolic.NewConstant(\"{}\")", x),
         Expression::Column(module, name, _, _) => {
             format!(

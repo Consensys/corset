@@ -39,7 +39,7 @@ pub enum Kind<T> {
     Atomic,
     Composite(Box<T>),
     Interleaved(Vec<String>),
-    Sorted(Vec<String>),
+    Sorted(Vec<String>, Vec<String>),
 }
 
 #[derive(PartialEq, Clone)]
@@ -55,7 +55,7 @@ pub enum Token {
     DefConsts(Vec<(String, BigInt)>),
     DefColumns(Vec<AstNode>),
     DefColumn(String, Type, Kind<AstNode>),
-    DefPermutation(Vec<AstNode>, Vec<AstNode>, Vec<AstNode>),
+    DefSort(Vec<AstNode>, Vec<AstNode>, Vec<AstNode>),
     DefArrayColumn(String, Vec<usize>, Type),
     DefConstraint(String, Option<Vec<isize>>, Box<AstNode>),
     Defun(String, Vec<String>, Box<AstNode>),
@@ -104,7 +104,7 @@ impl Debug for Token {
             }
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
             Token::DefColumn(name, t, kind) => write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind),
-            Token::DefPermutation(to, from, _) => write!(f, "({:?}):PERMUTATION({:?})", to, from),
+            Token::DefSort(to, from, _) => write!(f, "({:?}):PERMUTATION({:?})", to, from),
             Token::DefArrayColumn(name, range, t) => {
                 write!(f, "DECLARATION {}{:?}{{{:?}}}", name, range, t)
             }
@@ -164,53 +164,6 @@ impl AstNode {
                                 n.map(|n| format!("{:?}", n.unwrap().class))
                                     .unwrap_or_else(|| "nothing".to_string())
                             ));
-                        }
-                    }
-                    ":SORTED" => {
-                        let p = pairs.next().map(rec_parse);
-                        if let Some(Ok(AstNode {
-                            class: Token::List(ref froms),
-                            ..
-                        })) = p
-                        {
-                            if froms.iter().all(|f| {
-                                matches!(
-                                    f,
-                                    AstNode {
-                                        class: Token::Symbol(_),
-                                        ..
-                                    }
-                                )
-                            }) {
-                                if kind != Kind::Atomic {
-                                    return Err(eyre!(
-                                        "`{}` can not be sorted; is already {:?}",
-                                        name,
-                                        kind
-                                    ));
-                                } else {
-                                    kind = Kind::Sorted(
-                                        froms
-                                            .iter()
-                                            .map(|f| {
-                                                if let AstNode {
-                                                    class: Token::Symbol(from),
-                                                    ..
-                                                } = f
-                                                {
-                                                    from.to_owned()
-                                                } else {
-                                                    unreachable!()
-                                                }
-                                            })
-                                            .collect::<Vec<String>>(),
-                                    );
-                                }
-                            } else {
-                                return Err(eyre!(":SORTED expects (SYMBOLS...), found `{:?}`", p));
-                            }
-                        } else {
-                            return Err(eyre!(":SORTED expects (SYMBOLS...), found `{:?}`", p));
                         }
                     }
                     ":INTERLEAVED" => {
@@ -470,11 +423,7 @@ impl AstNode {
                         Some(Token::List(from)),
                         Some(Token::List(sorters)),
                     ) => Ok(AstNode {
-                        class: Token::DefPermutation(
-                            to.to_owned(),
-                            from.to_owned(),
-                            sorters.to_owned(),
-                        ),
+                        class: Token::DefSort(to.to_owned(), from.to_owned(), sorters.to_owned()),
                         src: src.into(),
                         lc,
                     }),

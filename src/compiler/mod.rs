@@ -53,7 +53,9 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                         Kind::Interleaved(cols) => {
                             columns.insert_interleaved(module, name, cols, true)?
                         }
-                        Kind::Sorted(from) => columns.insert_sorted(module, name, from, true)?,
+                        Kind::Sorted(from, to) => {
+                            columns.insert_sorted(module, name, from, to, true)?
+                        }
                         Kind::Composite(_) => todo!(),
                     },
                     Expression::ArrayColumn(module, name, range, t) => {

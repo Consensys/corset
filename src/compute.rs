@@ -82,7 +82,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                     })
                     .and_then(|column| match column {
                         Column::Atomic { ref mut value, t } => {
-                            *value = parse_column(xs, *t)?;
+                            *value = Some(parse_column(xs, *t)?);
                             Ok(())
                         }
                         Column::Composite { ref mut value, .. } => {
@@ -139,7 +139,7 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintSet) -> Result<ComputeResult>
 
     fill_traces(&v, vec![], &mut cs.columns)
         .with_context(|| eyre!("reading columns from `{}`", tracefile))?;
-    pad(&mut cs.columns).with_context(|| "padding columns")?;
+    // pad(&mut cs.columns).with_context(|| "padding columns")?;
     cs.compute().with_context(|| "computing columns")?;
 
     let mut r = ComputeResult::default();
@@ -149,7 +149,7 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintSet) -> Result<ComputeResult>
                 Column::Atomic { value, .. } => {
                     r.columns.insert(
                         format!("{}{}{}", module, "___", colname), // TODO module separator
-                        value.to_owned(),
+                        value.to_owned().unwrap_or_default(),
                     );
                 }
                 Column::Composite { value, .. } => {
@@ -164,22 +164,7 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintSet) -> Result<ComputeResult>
                         value.as_ref().unwrap().to_owned(),
                     );
                 }
-                Column::Array { values, .. } => {
-                    for (i, col) in values.iter() {
-                        r.columns.insert(
-                            format!("{}{}{}{}{}", module, "___", colname, "_", i), // TODO module separator
-                            col.clone(),
-                        );
-                    }
-                }
-                Column::Sorted { values, .. } => {
-                    for (i, col) in values.as_ref().unwrap().iter() {
-                        r.columns.insert(
-                            format!("{}{}{}{}{}", module, "___", colname, "_", i), // TODO module separator
-                            col.clone(),
-                        );
-                    }
-                }
+                _ => unreachable!("{:?}", col),
             }
         }
     }

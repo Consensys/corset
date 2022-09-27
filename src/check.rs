@@ -13,14 +13,7 @@ use crate::{
 fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Result<()> {
     let r = expr.eval(
         i,
-        &mut |module, name, i, idx| {
-            columns
-                .get(module, name)
-                .unwrap()
-                .get(i, idx)
-                .unwrap()
-                .cloned()
-        },
+        &mut |module, name, i| columns.get(module, name).unwrap().get(i).unwrap().cloned(),
         true,
         0,
     );
@@ -28,7 +21,7 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
         "{}|{}{}\n -> {}",
         expr.pretty(),
         i,
-        l.map(|l| format!("/{}", l)).unwrap_or(Default::default()),
+        l.map(|l| format!("/{}", l)).unwrap_or_default(),
         r.as_ref().map(Pretty::pretty).unwrap_or("nil".to_owned()),
     ))
 }
@@ -42,14 +35,7 @@ fn check_constraint_at(
 ) -> Result<()> {
     let r = expr.eval(
         i,
-        &mut |module, name, i, idx| {
-            columns
-                .get(module, name)
-                .unwrap()
-                .get(i, idx)
-                .unwrap()
-                .cloned()
-        },
+        &mut |module, name, i| columns.get(module, name).unwrap().get(i).unwrap().cloned(),
         false,
         0,
     );
@@ -100,6 +86,9 @@ fn check_constraint(
                 );
             }
             let l = cols_lens[0];
+            if l == 0 {
+                return Err(eyre!("empty trace, aborting"));
+            }
             for i in 0..l as isize {
                 check_constraint_at(expr, i, Some(l), columns, false)?;
             }

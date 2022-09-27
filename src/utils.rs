@@ -40,6 +40,9 @@ impl Pretty for Expression {
                     range.last().unwrap(),
                 )
                 .color(*c),
+                Expression::Permutation(froms, tos) => {
+                    format!("{:?} <=> {:?}", tos.join(", "), froms.join(", "),).color(*c)
+                }
                 Expression::List(cs) => format!("{{{}}}", format_list(cs, depth + 1)).color(*c),
                 Expression::Funcall { func, args } => {
                     format!("({:?} {})", func, format_list(args, depth + 1)).color(*c)

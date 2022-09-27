@@ -1,5 +1,4 @@
 use crate::compiler::{Expression, Type};
-use either::*;
 use eyre::*;
 use std::collections::HashMap;
 
@@ -106,11 +105,12 @@ impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
         )
     }
 
-    pub fn insert_sorted<S1: AsRef<str>, S2: AsRef<str>, S3: AsRef<str>>(
+    pub fn insert_sorted<S1: AsRef<str>, S2: AsRef<str>, S3: AsRef<str>, S4: AsRef<str>>(
         &mut self,
         module: S1,
         name: S2,
         from: &[S3],
+        to: &[S4],
         allow_dup: bool,
     ) -> Result<()> {
         self.insert_column(
@@ -122,6 +122,7 @@ impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
                     .iter()
                     .map(|n| n.as_ref().to_owned())
                     .collect::<Vec<_>>(),
+                tos: to.iter().map(|n| n.as_ref().to_owned()).collect::<Vec<_>>(),
             },
             allow_dup,
         )
@@ -147,10 +148,10 @@ pub enum Direction {
     Ascending,
     Descending,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Column<T> {
     Atomic {
-        value: Vec<T>,
+        value: Option<Vec<T>>,
         t: Type,
     },
     Composite {
@@ -169,13 +170,14 @@ pub enum Column<T> {
     Sorted {
         values: Option<HashMap<String, Vec<T>>>,
         froms: Vec<String>,
+        tos: Vec<String>,
     },
 }
 
 impl<T: std::cmp::Ord + Clone> Column<T> {
     pub fn len(&self) -> Option<usize> {
         match self {
-            Column::Atomic { value, .. } => Some(value.len()),
+            Column::Atomic { value, .. } => value.as_ref().map(|v| v.len()),
             Column::Composite { value, .. } => value.as_ref().map(|v| v.len()),
             Column::Interleaved { value, .. } => value.as_ref().map(|v| v.len()),
             Column::Array { values, .. } => values.values().next().map(|x| x.len()),
@@ -188,7 +190,7 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
 
     // The Result<...> wrapping indicates whether the indexing is valid
     // The Option<...> wrapping indicates whether the indexing is OoB
-    pub fn get(&self, i: isize, idx: Option<Either<usize, &str>>) -> Result<Option<&T>> {
+    pub fn get(&self, i: isize) -> Result<Option<&T>> {
         fn get_rel<T>(v: &[T], i: isize) -> Option<&T> {
             if i < 0 {
                 v.get(((i + v.len() as isize) % v.len() as isize) as usize)
@@ -196,53 +198,23 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
                 v.get(i as usize)
             }
         }
+
         match self {
-            Column::Atomic { value, .. } => Ok(get_rel(&value, i)),
+            Column::Atomic { value, .. } => Ok(value.as_ref().and_then(|v| get_rel(v, i))),
             Column::Composite { value, .. } => Ok(value.as_ref().and_then(|v| get_rel(v, i))),
             Column::Interleaved { value, .. } => Ok(value.as_ref().and_then(|v| get_rel(v, i))),
-            Column::Array { values, .. } => {
-                if let Some(Left(j)) = idx {
-                    Ok(values.get(&j).and_then(|v| get_rel(v, i)))
-                } else {
-                    Err(eyre!("column array cannot be indexed by `{:?}`", idx))
-                }
-            }
-            Column::Sorted { values, .. } => {
-                if let Some(Right(name)) = idx {
-                    Ok(values
-                        .as_ref()
-                        .and_then(|values| values.get(name))
-                        .and_then(|v| get_rel(v, i)))
-                } else {
-                    Err(eyre!("permutation cannot be indexed by `{:?}`", idx))
-                }
-            }
+            Column::Array { .. } | Column::Sorted { .. } => unreachable!(),
         }
     }
 
     pub fn map(&mut self, f: &dyn Fn(&mut Vec<T>)) {
         match self {
-            Column::Atomic { value, .. } => f(value),
-            Column::Composite { value, .. } => match value {
-                Some(v) => f(v),
-                None => (),
-            },
-            Column::Interleaved { value, .. } => match value {
-                Some(v) => f(v),
-                None => (),
-            },
-            Column::Array { values, .. } => {
-                for values in values.values_mut() {
-                    f(values);
-                }
+            Column::Atomic { value, .. }
+            | Column::Composite { value, .. }
+            | Column::Interleaved { value, .. } => {
+                value.as_mut().map(f);
             }
-            Column::Sorted { values, .. } => {
-                values.as_mut().map(|values| {
-                    for values in values.values_mut() {
-                        f(values);
-                    }
-                });
-            }
+            Column::Array { .. } | Column::Sorted { .. } => unreachable!(),
         }
     }
 
@@ -257,7 +229,7 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
     }
 
     pub fn atomic(v: Vec<T>, t: Type) -> Self {
-        Column::Atomic { value: v, t }
+        Column::Atomic { value: Some(v), t }
     }
 
     pub fn composite(e: &Expression) -> Self {
@@ -279,8 +251,7 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
             Column::Atomic { .. } => panic!("DASF"),
             Column::Composite { ref mut value, .. } => *value = Some(values),
             Column::Interleaved { value, .. } => *value = Some(values),
-            Column::Array { .. } => panic!("ASDF"),
-            Column::Sorted { .. } => panic!("ASDF"),
+            Column::Array { .. } | Column::Sorted { .. } => unreachable!(),
         }
     }
 }

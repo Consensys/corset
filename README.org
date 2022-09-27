@@ -56,7 +56,7 @@ Column arrays are typically used to group semantically similar columns, /e.g./ h
     X Y Z)
 
   ;; Columns may have a stype
-  (defcolumns A B:BOOLEAN C:NATURAL)
+  (defcolumns A (B :BOOLEAN) (C :NATURAL))
 
   ;; Columns can be scalar...
   (defcolumns VALUE)

@@ -1,4 +1,3 @@
-use either::*;
 use eyre::*;
 use log::*;
 use num_bigint::BigInt;
@@ -7,6 +6,7 @@ use num_traits::{One, Zero};
 use pairing_ce::bn256::Fr;
 use pairing_ce::ff::{Field, PrimeField};
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
@@ -36,6 +36,7 @@ pub enum Expression {
     Const(BigInt),
     Column(String, String, Type, Kind<Expression>), // Module Name Type Kind
     ArrayColumn(String, String, Vec<usize>, Type),
+    Permutation(Vec<String>, Vec<String>),
     List(Vec<Expression>),
     Void,
 }
@@ -56,6 +57,7 @@ impl Expression {
             Expression::ArrayColumn(_, _, _, t) => *t,
             Expression::List(xs) => xs.iter().map(|x| x.t()).max().unwrap(),
             Expression::Void => Type::Void,
+            Expression::Permutation(..) => Type::Void,
         }
     }
 
@@ -72,7 +74,7 @@ impl Expression {
     pub fn eval(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&str, &str, isize, Option<Either<usize, &str>>) -> Option<Fr>,
+        get: &mut dyn FnMut(&str, &str, isize) -> Option<Fr>,
         trace: bool,
         depth: usize,
     ) -> Option<Fr> {
@@ -133,7 +135,7 @@ impl Expression {
                         if !domain.contains(&idx) {
                             panic!("ASDFFDSA");
                         }
-                        get(module, &format!("{}_{}", name, idx), i, None)
+                        get(module, &format!("{}_{}", name, idx), i)
                     } else {
                         unreachable!()
                     }
@@ -145,7 +147,7 @@ impl Expression {
                 Builtin::ByteDecomposition => unreachable!(),
             },
             Expression::Const(x) => Fr::from_str(&x.to_string()),
-            Expression::Column(module, name, ..) => get(module, name, i, None),
+            Expression::Column(module, name, ..) => get(module, name, i),
             _ => unreachable!(),
         };
         if trace && !matches!(self, Expression::Const(_)) {
@@ -174,7 +176,7 @@ impl Expression {
                         _flatten(a, ax);
                     }
                 }
-                Expression::Void => (),
+                Expression::Permutation(..) | Expression::Void => (),
             }
         }
 
@@ -235,6 +237,7 @@ impl Display for Expression {
                 write!(f, "({:?} {})", func, format_list(args))
             }
             Expression::Void => write!(f, "nil"),
+            Expression::Permutation(froms, tos) => write!(f, "{:?}<=>{:?}", froms, tos),
         }
     }
 }
@@ -268,6 +271,7 @@ impl Debug for Expression {
                 write!(f, "({:?} {})", func, format_list(args))
             }
             Expression::Void => write!(f, "nil"),
+            Expression::Permutation(froms, tos) => write!(f, "{:?}<=>{:?}", froms, tos),
         }
     }
 }
@@ -485,17 +489,70 @@ impl ConstraintSet {
         let mut values = Vec::new();
         for i in 0..len as isize {
             for from in froms.iter() {
-                values.push(
-                    self.get(module, from)
-                        .unwrap()
-                        .get(i, None)?
-                        .unwrap()
-                        .clone(),
-                );
+                values.push(self.get(module, from).unwrap().get(i)?.unwrap().clone());
             }
         }
 
         self.get_mut(module, name).unwrap().set_values(values);
+
+        Ok(())
+    }
+
+    fn compute_sorted(&mut self, module: &str, name: &str) -> Result<()> {
+        let col = self.get(module, name)?;
+        let froms = if let Column::Sorted { froms, .. } = col {
+            froms.clone()
+        } else {
+            unreachable!()
+        };
+
+        for from in froms.iter() {
+            self.compute_column(module, from)?;
+        }
+        let from_cols = froms
+            .iter()
+            .map(|c| self.get(module, c).unwrap())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if !from_cols.windows(2).all(|w| w[0].len() == w[1].len()) {
+            return Err(eyre!("sorted columns of incoherent lengths"));
+        }
+        let len = from_cols[0].len().unwrap();
+
+        let mut sorted_is = (0..len).collect::<Vec<_>>();
+        sorted_is.sort_by(|i, j| {
+            for t in 0..from_cols.len() {
+                let i_t = from_cols[*i].get(t as isize).unwrap();
+                let j_t = from_cols[*j].get(t as isize).unwrap();
+                if i_t > j_t {
+                    return Ordering::Greater;
+                } else if i_t < j_t {
+                    return Ordering::Less;
+                }
+            }
+            Ordering::Equal
+        });
+
+        for k in 0..froms.len() {
+            let mut value = Vec::with_capacity(len);
+            value.resize_with(len, || Fr::zero());
+            for i in &sorted_is {
+                value[*i] = from_cols[k]
+                    .get((*i).try_into().unwrap())
+                    .unwrap()
+                    .unwrap()
+                    .clone();
+            }
+            if self.get_mut(module, name).unwrap().is_computed() {
+                warn!(
+                    "{}/{} already filled; dropping computing value",
+                    module, name
+                )
+            } else {
+                self.get_mut(module, name).unwrap().set_values(value);
+            }
+        }
 
         Ok(())
     }
@@ -523,16 +580,16 @@ impl ConstraintSet {
             .map(|i| {
                 exp.eval(
                     i,
-                    &mut |module, name, i, idx| {
+                    &mut |module, name, i| {
                         let col = self.get(module, name).unwrap();
                         if col.is_computed() {
-                            col.get(i, idx).unwrap().cloned()
+                            col.get(i).unwrap().cloned()
                         } else {
                             self.compute_column(module, name);
                             self.columns
                                 .get(module, name)
                                 .unwrap()
-                                .get(i, idx)
+                                .get(i)
                                 .unwrap()
                                 .cloned()
                         }
@@ -555,14 +612,15 @@ impl ConstraintSet {
     fn compute_column(&mut self, module: &str, name: &str) -> Result<()> {
         let col = self.get(module, name).unwrap();
         if col.is_computed() {
-            return Ok(());
-        }
-        info!("Computing {}/{}", module, name);
-
-        match col {
-            Column::Composite { .. } => self.compute_composite(module, name),
-            Column::Interleaved { .. } => self.compute_interleaved(module, name),
-            _ => todo!(),
+            Ok(())
+        } else {
+            info!("Computing {}/{}", module, name);
+            match col {
+                Column::Composite { .. } => self.compute_composite(module, name),
+                Column::Interleaved { .. } => self.compute_interleaved(module, name),
+                Column::Sorted { .. } => self.compute_sorted(module, name),
+                _ => unreachable!("{:?}", col),
+            }
         }
     }
 
@@ -870,7 +928,7 @@ fn reduce(
         | Token::DefunAlias(..)
         | Token::DefConsts(..)
         | Token::Defun(..)
-        | Token::DefPermutation(..)
+        | Token::DefSort(..)
         | Token::DefPlookup(..) => Ok(None),
     }
     .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))

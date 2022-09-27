@@ -305,7 +305,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                         Kind::Atomic => Kind::Atomic,
                         Kind::Composite(_) => Kind::Atomic, // The actual expression is computed by the generator
                         Kind::Interleaved(xs) => Kind::Interleaved(xs.clone()),
-                        Kind::Sorted(xs) => Kind::Sorted(xs.clone()),
+                        Kind::Sorted(xs, ys) => Kind::Sorted(xs.clone(), ys.clone()),
                     },
                 ),
             )
@@ -326,7 +326,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
             }
             Ok(())
         }
-        Token::DefPermutation(tos, froms, sorters) => {
+        Token::DefSort(tos, froms, sorters) => {
             if tos.len() != froms.len() {
                 return Err(eyre!(
                     "cardinality mismatch in permutation declaration: {:?} vs. {:?}",
@@ -337,6 +337,9 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
             if sorters.is_empty() {
                 warn!("empty sorter found in `{}`", e.src.as_str());
             }
+
+            let mut _froms = Vec::new();
+            let mut _tos = Vec::new();
             for pair in tos.iter().zip(froms.iter()) {
                 match pair {
                     (
@@ -349,6 +352,8 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                             ..
                         },
                     ) => {
+                        _froms.push(from.to_owned());
+                        _tos.push(to.to_owned());
                         ctx.borrow_mut()
                             .resolve_symbol(module, from)
                             .with_context(|| "while defining permutation")?;
@@ -371,6 +376,11 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                     }
                 }
             }
+            ctx.borrow_mut().insert_symbol(
+                module,
+                &format!("SRT__{:?}", froms),
+                Expression::Permutation(_froms.to_owned(), _tos.to_owned()),
+            )?;
             Ok(())
         }
         Token::DefAliases(aliases) => aliases.iter().fold(Ok(()), |ax, alias| {
