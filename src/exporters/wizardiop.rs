@@ -33,7 +33,7 @@ fn shift(e: &Expression, i: isize) -> Expression {
             },
         },
         Expression::Const(_) => e.clone(),
-        Expression::Column(..) | Expression::ArrayColumnElement(..) => Expression::Funcall {
+        Expression::Column(..) => Expression::Funcall {
             func: Builtin::Shift,
             args: vec![e.clone(), Expression::Const(BigInt::from(i))],
         },
@@ -75,14 +75,6 @@ fn render_expression(e: &Expression) -> String {
                 goize(&name.to_case(Case::ScreamingSnake))
             )
         }
-        Expression::ArrayColumnElement(module, name, i, _) => format!(
-            "{}{}{}{}{}.AsVariable()",
-            goize(module),
-            MODULE_SEPARATOR,
-            goize(&name.to_case(Case::ScreamingSnake)),
-            ARRAY_SEPARATOR,
-            i,
-        ),
         Expression::Funcall { func, args } => render_funcall(func, args),
         Expression::List(constraints) => constraints
             .iter()
@@ -115,14 +107,6 @@ fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
                         goize(&name.to_case(Case::ScreamingSnake))
                     )
                 }
-                Expression::ArrayColumnElement(module, name, idx, ..) => format!(
-                    "{}{}{}{}{}",
-                    goize(module),
-                    MODULE_SEPARATOR,
-                    goize(&name.to_case(Case::ScreamingSnake)),
-                    ARRAY_SEPARATOR,
-                    idx
-                ),
                 _ => unreachable!(),
             };
             format!(

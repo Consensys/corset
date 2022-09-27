@@ -35,7 +35,6 @@ pub enum Expression {
     Const(BigInt),
     Column(String, String, Type, Kind<Expression>), // Module Name Type Kind
     ArrayColumn(String, String, Vec<usize>, Type),
-    ArrayColumnElement(String, String, usize, Type),
     List(Vec<Expression>),
     Void,
 }
@@ -54,7 +53,6 @@ impl Expression {
             }
             Expression::Column(_, _, t, _) => *t,
             Expression::ArrayColumn(_, _, _, t) => *t,
-            Expression::ArrayColumnElement(_, _, _, t) => *t,
             Expression::List(xs) => xs.iter().map(|x| x.t()).max().unwrap(),
             Expression::Void => Type::Void,
         }
@@ -65,9 +63,6 @@ impl Expression {
             .into_iter()
             .filter_map(|e| match e {
                 Expression::Column(module, name, ..) => Some((module.to_owned(), name.to_owned())),
-                Expression::ArrayColumnElement(module, name, ..) => {
-                    Some((module.to_owned(), name.to_owned()))
-                }
                 _ => None,
             })
             .collect()
@@ -147,9 +142,6 @@ impl Expression {
             },
             Expression::Const(x) => Fr::from_str(&x.to_string()),
             Expression::Column(module, name, ..) => get(module, name, i, None),
-            Expression::ArrayColumnElement(module, name, idx, _) => {
-                get(module, name, i, Some(Left(*idx)))
-            }
             _ => unreachable!(),
         };
         if trace && !matches!(self, Expression::Const(_)) {
@@ -169,7 +161,6 @@ impl Expression {
                 Expression::Const(_) => ax.push(e.clone()),
                 Expression::Column(_, _, _, _) => ax.push(e.clone()),
                 Expression::ArrayColumn(_, _, _, _) => {}
-                Expression::ArrayColumnElement(_, _, _, _) => ax.push(e.clone()),
                 Expression::List(args) => {
                     for a in args {
                         _flatten(a, ax);
@@ -232,9 +223,6 @@ impl Debug for Expression {
                     range.first().unwrap(),
                     range.last().unwrap(),
                 )
-            }
-            Expression::ArrayColumnElement(module, name, i, t) => {
-                write!(f, "{}/{}[{}]:{:?}", module, name, i, t)
             }
             Expression::List(cs) => write!(f, "'({})", format_list(cs)),
             Self::Funcall { func, args } => {
@@ -353,10 +341,8 @@ impl FuncVerifier<Expression> for Builtin {
                 }
             }
             Builtin::Shift => {
-                if matches!(
-                    &args[0],
-                    Expression::Column(..) | Expression::ArrayColumnElement(..)
-                ) && matches!(&args[1], Expression::Const(x) if !Zero::is_zero(x))
+                if matches!(&args[0], Expression::Column(..))
+                    && matches!(&args[1], Expression::Const(x) if !Zero::is_zero(x))
                 {
                     Ok(())
                 } else {
@@ -389,10 +375,8 @@ impl FuncVerifier<Expression> for Builtin {
             }
             Builtin::Begin => Ok(()),
             Builtin::InRange => {
-                if matches!(
-                    args[0],
-                    Expression::Column(..) | Expression::ArrayColumnElement(..)
-                ) && matches!(args[1], Expression::Const(_))
+                if matches!(args[0], Expression::Column(..))
+                    && matches!(args[1], Expression::Const(_))
                 {
                     Ok(())
                 } else {
@@ -404,10 +388,8 @@ impl FuncVerifier<Expression> for Builtin {
                 }
             }
             Builtin::ByteDecomposition => {
-                if matches!(
-                    args[0],
-                    Expression::Column(..) | Expression::ArrayColumnElement(..)
-                ) && matches!(args[1], Expression::Const(_))
+                if matches!(args[0], Expression::Column(..))
+                    && matches!(args[1], Expression::Const(_))
                     && matches!(args[2], Expression::Const(_))
                 {
                     Ok(())
@@ -731,7 +713,7 @@ fn apply(
                         {
                             let x = i.to_usize().unwrap();
                             match &ctx.borrow_mut().resolve_symbol(module, cname)? {
-                                array @ (Expression::ArrayColumn(module, name, range, t), _) => {
+                                array @ (Expression::ArrayColumn(_, _, range, t), _) => {
                                     if range.contains(&x) {
                                         Ok(Some((
                                             Expression::Column(

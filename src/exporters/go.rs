@@ -72,13 +72,6 @@ impl GoExporter {
                 self.ce,
                 name.to_case(Case::UpperSnake)
             )),
-            Expression::ArrayColumnElement(_module, name, i, _) => Ok(format!(
-                "{}[{}{}{}.Name()]",
-                self.ce,
-                name.to_case(Case::UpperSnake),
-                ARRAY_SEPARATOR,
-                i
-            )),
             Expression::Funcall { func, args } => self.render_funcall(func, args),
             Expression::List(constraints) => Ok(constraints
                 .iter()

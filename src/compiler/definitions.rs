@@ -311,11 +311,17 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
             )
         }
         Token::DefArrayColumn(col, range, t) => {
+            ctx.borrow_mut().insert_symbol(
+                module,
+                col,
+                Expression::ArrayColumn(module.clone(), col.to_owned(), range.to_owned(), *t),
+            )?;
             for i in range {
+                let column_name = format!("{}_{}", col, i);
                 ctx.borrow_mut().insert_symbol(
                     module,
-                    col,
-                    Expression::Column(module.clone(), format!("{}_{}", col, i), *t, Kind::Atomic),
+                    &column_name,
+                    Expression::Column(module.clone(), column_name.to_owned(), *t, Kind::Atomic),
                 )?;
             }
             Ok(())
