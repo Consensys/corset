@@ -187,7 +187,11 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
     // The Option<...> wrapping indicates whether the indexing is OoB
     pub fn get(&self, i: isize, idx: Option<Either<usize, &str>>) -> Result<Option<&T>> {
         fn get_rel<T>(v: &[T], i: isize) -> Option<&T> {
-            v.get((i % v.len() as isize) as usize)
+            if i < 0 {
+                v.get((i % v.len() as isize) as usize)
+            } else {
+                v.get(i as usize)
+            }
         }
         match self {
             Column::Atomic { value, .. } => Ok(get_rel(&value, i)),
