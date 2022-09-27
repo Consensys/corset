@@ -1,10 +1,108 @@
+use std::collections::HashSet;
+
 use eyre::*;
 use log::*;
-use pairing_ce::ff::{Field, PrimeField};
+use pairing_ce::{bn256::Fr, ff::Field};
 
-use crate::compiler::{ConstraintSet, Expression};
+use crate::{
+    column::ColumnSet,
+    compiler::{ConstraintSet, Expression},
+    utils::*,
+};
+
+fn check_constraint(
+    expr: &Expression,
+    domain: &Option<Vec<isize>>,
+    columns: &ColumnSet<Fr>,
+) -> Result<()> {
+    match domain {
+        Some(is) => {
+            for i in is {
+                let r = expr.eval(
+                    *i,
+                    &mut |module, name, i, idx| {
+                        columns
+                            .get(module, name)
+                            .unwrap()
+                            .get(i, idx)
+                            .unwrap()
+                            .cloned()
+                    },
+                    false,
+                );
+                if let Some(x) = r {
+                    if !x.is_zero() {
+                        return Err(eyre!("Should vanish: {:?}", r));
+                    }
+                } else {
+                    return Err(eyre!("{} out of range for {:?}/{:?}: {:?}", i, expr, is, r));
+                }
+            }
+            Ok(())
+        }
+        None => {
+            let cols_lens = expr
+                .dependencies()
+                .into_iter()
+                .map(|(module, name)| columns.get(&module, &name).unwrap().len().unwrap())
+                .collect::<Vec<_>>();
+            if !cols_lens.iter().all(|&l| l == cols_lens[0]) {
+                error!(
+                    "all columns in `{:?}` are not of the same length: `{:?}`",
+                    &expr,
+                    expr.dependencies()
+                        .iter()
+                        .map(|(module, name)| format!(
+                            "{}/{}: {}",
+                            module,
+                            name,
+                            columns.get(module, name).unwrap().len().unwrap()
+                        ))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            let l = cols_lens[0];
+            for i in 0..l as isize {
+                let r = expr.eval(
+                    i,
+                    &mut |module, name, i, idx| {
+                        columns
+                            .get(module, name)
+                            .unwrap()
+                            .get(i, idx)
+                            .unwrap()
+                            .cloned()
+                    },
+                    false,
+                );
+                if let Some(r) = r {
+                    if !r.is_zero() {
+                        let _ = expr.eval(
+                            i,
+                            &mut |module, name, i, idx| {
+                                columns
+                                    .get(module, name)
+                                    .unwrap()
+                                    .get(i, idx)
+                                    .unwrap()
+                                    .cloned()
+                            },
+                            true,
+                        );
+                        return Err(eyre!("{:?}|{}/{}\n -> {}", expr, i, l, pretty(&r),));
+                    }
+                } else {
+                    info!("{} out of range for {:?}", i, expr);
+                }
+            }
+            Ok(())
+        }
+    }
+}
 
 pub fn check(cs: &ConstraintSet) -> Result<()> {
+    let mut failed = HashSet::new();
     for c in cs.constraints.iter() {
         match c {
             crate::compiler::Constraint::Vanishes { name, domain, expr } => {
@@ -13,87 +111,17 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
                     continue;
                 }
 
-                match domain {
-                    Some(is) => {
-                        for i in is {
-                            let r = expr.eval(
-                                *i,
-                                &mut |module, name, i, idx| {
-                                    cs.columns
-                                        .get(module, name)
-                                        .unwrap()
-                                        .get(i, idx)
-                                        .unwrap()
-                                        .cloned()
-                                },
-                                false,
-                            );
-                            println!("{:?} -> {:?}", expr, r.map(|r| r.into_repr().to_string()));
+                match expr.as_ref() {
+                    Expression::List(es) => {
+                        for e in es {
+                            if check_constraint(e, domain, &cs.columns).is_err() {
+                                failed.insert(name.to_owned());
+                            };
                         }
                     }
-                    None => {
-                        let cols_lens = expr
-                            .dependencies()
-                            .into_iter()
-                            .map(|(module, name)| {
-                                cs.columns.get(&module, &name).unwrap().len().unwrap()
-                            })
-                            .collect::<Vec<_>>();
-                        if !cols_lens.iter().all(|&l| l == cols_lens[0]) {
-                            bail!(
-                                "all columns in `{:?}` are not of the same length: `{:?}`",
-                                &expr,
-                                expr.dependencies()
-                                    .iter()
-                                    .map(|(module, name)| format!(
-                                        "{}/{}: {}",
-                                        module,
-                                        name,
-                                        cs.columns.get(module, name).unwrap().len().unwrap()
-                                    ))
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            );
-                        }
-                        let l = cols_lens[0];
-                        for i in 0..l as isize {
-                            let r = expr.eval(
-                                i,
-                                &mut |module, name, i, idx| {
-                                    cs.columns
-                                        .get(module, name)
-                                        .unwrap()
-                                        .get(i, idx)
-                                        .unwrap()
-                                        .cloned()
-                                },
-                                false,
-                            );
-                            if let Some(r) = r {
-                                if !r.is_zero() {
-                                    error!(
-                                        "{:?}|{}/{}\n -> {:?}",
-                                        expr,
-                                        i,
-                                        l,
-                                        r.into_repr().to_string()
-                                    );
-                                    let _ = expr.eval(
-                                        i,
-                                        &mut |module, name, i, idx| {
-                                            cs.columns
-                                                .get(module, name)
-                                                .unwrap()
-                                                .get(i, idx)
-                                                .unwrap()
-                                                .cloned()
-                                        },
-                                        true,
-                                    );
-                                }
-                            } else {
-                                info!("{} out of range for {:?}", i, expr)
-                            }
+                    _ => {
+                        if check_constraint(expr, domain, &cs.columns).is_err() {
+                            failed.insert(name.to_owned());
                         }
                     }
                 }
@@ -101,5 +129,12 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
             crate::compiler::Constraint::Plookup(_, _) => todo!(),
         }
     }
-    Ok(())
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(eyre!(
+            "Constraints failed: {}",
+            failed.into_iter().collect::<Vec<_>>().join(", ")
+        ))
+    }
 }
