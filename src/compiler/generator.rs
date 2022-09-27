@@ -15,6 +15,7 @@ use super::common::*;
 use crate::column::{Column, ColumnSet};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
+use crate::utils::*;
 
 #[derive(Debug)]
 pub enum Constraint {
@@ -145,7 +146,7 @@ impl Expression {
             _ => unreachable!(),
         };
         if trace && !matches!(self, Expression::Const(_)) {
-            eprintln!("{:50?}[{}]-> {:?}", self, i, r);
+            eprintln!("{:?}[{}]-> {:?}", self, i, pretty(&r.unwrap()));
         }
         r
     }
@@ -513,11 +514,11 @@ impl ConstraintSet {
     }
 
     fn compute_column(&mut self, module: &str, name: &str) -> Result<()> {
-        info!("Computing {}/{}", module, name);
         let col = self.get(module, name).unwrap();
         if col.is_computed() {
             return Ok(());
         }
+        info!("Computing {}/{}", module, name);
 
         match col {
             Column::Composite { .. } => self.compute_composite(module, name),

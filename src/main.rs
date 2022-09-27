@@ -1,11 +1,11 @@
 #[macro_use]
 extern crate pest_derive;
 use log::*;
+use pairing_ce::ff::PrimeField;
 use std::{collections::HashMap, io::Write};
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
-use pairing_ce::ff::PrimeField;
 use serde_json::json;
 
 mod check;
@@ -14,6 +14,7 @@ mod compiler;
 mod compute;
 mod expander;
 mod exporters;
+mod utils;
 
 #[derive(Parser)]
 #[clap(author, version)]
@@ -233,7 +234,13 @@ fn main() -> Result<()> {
             let _ = compute::compute(&tracefile, &mut constraints)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
             info!("Checking constraints...");
-            check::check(&constraints)?;
+            check::check(&constraints).with_context(|| {
+                format!(
+                    "while checking `{}` against {}",
+                    tracefile,
+                    inputs.iter().map(|x| x.0).collect::<Vec<_>>().join(", ")
+                )
+            })?;
         }
     }
 
