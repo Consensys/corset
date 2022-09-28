@@ -45,7 +45,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
             Symbol::Alias(_) => {}
             Symbol::Final(symbol, used) => {
                 if !used {
-                    warn!("{:?} unused", symbol);
+                    warn!("{} unused", symbol);
                 }
                 match symbol {
                     Expression::Column(module, name, t, k) => match k {

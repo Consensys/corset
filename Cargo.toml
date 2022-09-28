@@ -8,6 +8,7 @@ authors = [ "Franklin Delehelle <franklin.delehelle@consensys.net>" ]
 
 [dependencies]
 clap = { version = "3.2", features = ["derive"] }
+clap-verbosity-flag = "1.0"
 color-eyre = { version = "0.6", default-features = false }
 colored = "2.0"
 convert_case = "0.5"

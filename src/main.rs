@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate pest_derive;
-use log::*;
+use clap_verbosity_flag::Verbosity;
 use pairing_ce::ff::PrimeField;
 use std::{collections::HashMap, io::Write};
 use utils::export_symbol;
@@ -21,6 +21,9 @@ mod utils;
 #[clap(author, version)]
 #[clap(propagate_version = true)]
 pub struct Args {
+    #[clap(flatten)]
+    verbose: Verbosity,
+
     #[clap(
         help = "Either a file or a string containing the Corset code to process",
         global = true
@@ -133,16 +136,16 @@ enum Commands {
 }
 
 fn main() -> Result<()> {
+    let args = Args::parse();
     color_eyre::install()?;
     simplelog::TermLogger::init(
-        simplelog::LevelFilter::Trace,
+        args.verbose.log_level_filter(),
         simplelog::ConfigBuilder::new()
             .set_time_level(simplelog::LevelFilter::Off)
             .build(),
         simplelog::TerminalMode::Stderr,
         simplelog::ColorChoice::Auto,
     )?;
-    let args = Args::parse();
 
     let mut inputs = vec![];
     if !args.no_stdlib {
