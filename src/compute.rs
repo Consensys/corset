@@ -164,7 +164,7 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintSet) -> Result<ComputeResult>
                         value.as_ref().unwrap().to_owned(),
                     );
                 }
-                _ => unreachable!("{:?}", col),
+                _ => (),
             }
         }
     }
