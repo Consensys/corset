@@ -212,11 +212,9 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
         }
     }
 
-    // The Result<...> wrapping indicates whether the indexing is valid
-    // The Option<...> wrapping indicates whether the indexing is OoB
-    pub fn get(&self, i: isize) -> Result<Option<&T>> {
-        fn get_rel<T>(v: &[T], i: isize) -> Option<&T> {
-            if i < 0 {
+    pub fn get(&self, i: isize, wrap: bool) -> Option<&T> {
+        fn get_rel<T>(v: &[T], i: isize, wrap: bool) -> Option<&T> {
+            if wrap && i < 0 {
                 v.get(((i + v.len() as isize) % v.len() as isize) as usize)
             } else {
                 v.get(i as usize)
@@ -224,9 +222,9 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
         }
 
         match self {
-            Column::Atomic { value, .. } => Ok(value.as_ref().and_then(|v| get_rel(v, i))),
-            Column::Composite { value, .. } => Ok(value.as_ref().and_then(|v| get_rel(v, i))),
-            Column::Interleaved { value, .. } => Ok(value.as_ref().and_then(|v| get_rel(v, i))),
+            Column::Atomic { value, .. } => value.as_ref().and_then(|v| get_rel(v, i, wrap)),
+            Column::Composite { value, .. } => value.as_ref().and_then(|v| get_rel(v, i, wrap)),
+            Column::Interleaved { value, .. } => value.as_ref().and_then(|v| get_rel(v, i, wrap)),
             Column::Array { .. } | Column::Sorted { .. } => unreachable!(),
         }
     }

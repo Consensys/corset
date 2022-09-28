@@ -74,16 +74,17 @@ impl Expression {
     pub fn eval(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&str, &str, isize) -> Option<Fr>,
+        get: &mut dyn FnMut(&str, &str, isize, bool) -> Option<Fr>,
         trace: bool,
         depth: usize,
+        wrap: bool,
     ) -> Option<Fr> {
         let r = match self {
             Expression::Funcall { func, args } => match func {
                 Builtin::Add => {
                     let args = args
                         .iter()
-                        .map(|x| x.eval(i, get, trace, depth + 1))
+                        .map(|x| x.eval(i, get, trace, depth + 1, wrap))
                         .collect::<Option<Vec<_>>>()?;
                     Some(args.iter().fold(Fr::zero(), |mut ax, x| {
                         ax.add_assign(x);
@@ -93,7 +94,7 @@ impl Expression {
                 Builtin::Sub => {
                     let args = args
                         .iter()
-                        .map(|x| x.eval(i, get, trace, depth + 1))
+                        .map(|x| x.eval(i, get, trace, depth + 1, wrap))
                         .collect::<Option<Vec<_>>>()?;
                     let mut ax = args[0];
                     for x in args[1..].iter() {
@@ -104,7 +105,7 @@ impl Expression {
                 Builtin::Mul => {
                     let args = args
                         .iter()
-                        .map(|x| x.eval(i, get, trace, depth + 1))
+                        .map(|x| x.eval(i, get, trace, depth + 1, wrap))
                         .collect::<Option<Vec<_>>>()?;
                     Some(args.iter().fold(Fr::one(), |mut ax, x| {
                         ax.mul_assign(x);
@@ -113,29 +114,29 @@ impl Expression {
                 }
                 Builtin::Shift => {
                     if let Expression::Const(ii) = &args[1] {
-                        args[0].eval(i + ii.to_isize().unwrap(), get, false, depth + 1)
+                        args[0].eval(i + ii.to_isize().unwrap(), get, false, depth + 1, false)
                     } else {
                         unreachable!()
                     }
                 }
-                Builtin::Neg => args[0].eval(i, get, trace, depth + 1).map(|mut x| {
+                Builtin::Neg => args[0].eval(i, get, trace, depth + 1, true).map(|mut x| {
                     x.negate();
                     x
                 }),
                 Builtin::Inv => args[0]
-                    .eval(i, get, trace, depth + 1)
+                    .eval(i, get, trace, depth + 1, true)
                     .and_then(|x| x.inverse()),
                 Builtin::Nth => {
                     if let (
-                        Expression::ArrayColumn(module, name, domain, _),
+                        Expression::ArrayColumn(module, name, range, _),
                         Expression::Const(idx),
                     ) = (&args[0], &args[1])
                     {
                         let idx = idx.to_usize().unwrap();
-                        if !domain.contains(&idx) {
-                            panic!("ASDFFDSA");
+                        if !range.contains(&idx) {
+                            panic!("trying to access `{}.{}` ad index `{}`", module, name, idx);
                         }
-                        get(module, &format!("{}_{}", name, idx), i)
+                        get(module, &format!("{}_{}", name, idx), i, wrap)
                     } else {
                         unreachable!()
                     }
@@ -147,7 +148,7 @@ impl Expression {
                 Builtin::ByteDecomposition => unreachable!(),
             },
             Expression::Const(x) => Fr::from_str(&x.to_string()),
-            Expression::Column(module, name, ..) => get(module, name, i),
+            Expression::Column(module, name, ..) => get(module, name, i, wrap),
             _ => unreachable!(),
         };
         if trace && !matches!(self, Expression::Const(_)) {
@@ -489,7 +490,13 @@ impl ConstraintSet {
         let mut values = Vec::new();
         for i in 0..len as isize {
             for from in froms.iter() {
-                values.push(self.get(module, from).unwrap().get(i)?.unwrap().clone());
+                values.push(
+                    self.get(module, from)
+                        .unwrap()
+                        .get(i, false)
+                        .unwrap()
+                        .clone(),
+                );
             }
         }
 
@@ -523,8 +530,8 @@ impl ConstraintSet {
         let mut sorted_is = (0..len).collect::<Vec<_>>();
         sorted_is.sort_by(|i, j| {
             for t in 0..from_cols.len() {
-                let i_t = from_cols[*i].get(t as isize).unwrap();
-                let j_t = from_cols[*j].get(t as isize).unwrap();
+                let i_t = from_cols[*i].get(t as isize, false).unwrap();
+                let j_t = from_cols[*j].get(t as isize, false).unwrap();
                 if i_t > j_t {
                     return Ordering::Greater;
                 } else if i_t < j_t {
@@ -539,8 +546,7 @@ impl ConstraintSet {
             value.resize_with(len, || Fr::zero());
             for i in &sorted_is {
                 value[*i] = from_cols[k]
-                    .get((*i).try_into().unwrap())
-                    .unwrap()
+                    .get((*i).try_into().unwrap(), false)
                     .unwrap()
                     .clone();
             }
@@ -580,22 +586,22 @@ impl ConstraintSet {
             .map(|i| {
                 exp.eval(
                     i,
-                    &mut |module, name, i| {
+                    &mut |module, name, i, _| {
                         let col = self.get(module, name).unwrap();
                         if col.is_computed() {
-                            col.get(i).unwrap().cloned()
+                            col.get(i, false).cloned()
                         } else {
                             self.compute_column(module, name);
                             self.columns
                                 .get(module, name)
                                 .unwrap()
-                                .get(i)
-                                .unwrap()
+                                .get(i, false)
                                 .cloned()
                         }
                     },
                     false,
                     0,
+                    false,
                 )
                 .unwrap_or_else(Fr::zero)
             })

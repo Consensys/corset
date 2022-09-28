@@ -13,9 +13,16 @@ use crate::{
 fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Result<()> {
     let r = expr.eval(
         i,
-        &mut |module, name, i| columns.get(module, name).unwrap().get(i).unwrap().cloned(),
+        &mut |module, name, i, wrap| {
+            columns
+                .get(module, name)
+                .ok()
+                .and_then(|c| c.get(i, wrap))
+                .cloned()
+        },
         true,
         0,
+        true,
     );
     Err(eyre!(
         "{}|{}{}\n -> {}",
@@ -35,9 +42,10 @@ fn check_constraint_at(
 ) -> Result<()> {
     let r = expr.eval(
         i,
-        &mut |module, name, i| columns.get(module, name).unwrap().get(i).unwrap().cloned(),
+        &mut |module, name, i, wrap| columns.get(module, name).unwrap().get(i, wrap).cloned(),
         false,
         0,
+        true,
     );
     if let Some(r) = r {
         if !r.is_zero() {

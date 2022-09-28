@@ -231,10 +231,8 @@ fn main() -> Result<()> {
             }
         }
         Commands::Check { tracefile } => {
-            info!("Computing columns...");
             let _ = compute::compute(&tracefile, &mut constraints)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
-            info!("Checking constraints...");
             check::check(&constraints).with_context(|| {
                 format!(
                     "while checking `{}` against {}",
