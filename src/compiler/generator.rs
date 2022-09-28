@@ -729,14 +729,11 @@ fn apply(
                     b @ (Builtin::IfZero | Builtin::IfNotZero) => {
                         let conds = {
                             let cond_not_zero = cond.clone();
-                            // If the condition is binary, cond_not_zero = 1 - x...
+                            // If the condition is binary, cond_zero = 1 - x...
                             let cond_zero = if matches!(traversed_args_t[0], Type::Boolean) {
                                 Expression::Funcall {
                                     func: Builtin::Sub,
-                                    args: vec![
-                                        Expression::Const(One::one()),
-                                        cond_not_zero.clone(),
-                                    ],
+                                    args: vec![Expression::Const(One::one()), cond.clone()],
                                 }
                             } else {
                                 // ...otherwise, cond_zero = 1 - x.INV(x)

@@ -108,15 +108,12 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
 }
 
 fn pad(r: &mut ColumnSet<F>) -> Result<()> {
-    let max_len = r
-        .cols
-        .values()
-        .flat_map(|module| module.values())
-        .filter_map(|col| col.len())
-        .max()
-        .unwrap();
+    if r.is_empty() {
+        return Ok(());
+    }
+    let max_len = r.len();
 
-    let pad_to = max_len.next_power_of_two();
+    let pad_to = (max_len + 1).next_power_of_two();
     r.cols
         .values_mut()
         .flat_map(|module| module.values_mut())
@@ -139,7 +136,7 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintSet) -> Result<ComputeResult>
 
     fill_traces(&v, vec![], &mut cs.columns)
         .with_context(|| eyre!("reading columns from `{}`", tracefile))?;
-    // pad(&mut cs.columns).with_context(|| "padding columns")?;
+    pad(&mut cs.columns).with_context(|| "padding columns")?;
     cs.compute().with_context(|| "computing columns")?;
 
     let mut r = ComputeResult::default();

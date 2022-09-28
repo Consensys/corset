@@ -98,6 +98,9 @@ fn check_constraint(
 }
 
 pub fn check(cs: &ConstraintSet) -> Result<()> {
+    if cs.columns.is_empty() {
+        return Ok(());
+    }
     let mut failed = HashSet::new();
     for c in cs.constraints.iter() {
         match c {

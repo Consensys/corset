@@ -6,7 +6,7 @@ use std::collections::HashMap;
 pub struct ColumnSet<T> {
     pub cols: HashMap<String, HashMap<String, Column<T>>>, // Module -> Name -> Column
 }
-impl<T> ColumnSet<T> {
+impl<T: Ord + Clone> ColumnSet<T> {
     pub fn get(&self, module: &str, name: &str) -> Result<&Column<T>> {
         self.cols
             .get(module)
@@ -21,6 +21,30 @@ impl<T> ColumnSet<T> {
             .ok_or_else(|| eyre!("module `{}` unknwown", module))?
             .get_mut(name)
             .ok_or_else(|| eyre!("column `{}` not found in module `{}`", name, module))
+    }
+
+    pub fn len(&self) -> usize {
+        let lens = self
+            .cols
+            .values()
+            .map(|m| m.values())
+            .flatten()
+            .filter_map(|c| c.len())
+            .collect::<Vec<_>>();
+
+        if lens.is_empty() {
+            return 0;
+        }
+
+        if !lens.windows(2).all(|w| w[0] == w[1]) {
+            // panic!("different columns size found: {:?}", lens)
+        }
+
+        *lens.iter().max().unwrap()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
