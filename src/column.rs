@@ -27,8 +27,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
         let lens = self
             .cols
             .values()
-            .map(|m| m.values())
-            .flatten()
+            .flat_map(|m| m.values())
             .filter_map(|c| c.len())
             .collect::<Vec<_>>();
 
@@ -168,10 +167,6 @@ impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
     }
 }
 
-pub enum Direction {
-    Ascending,
-    Descending,
-}
 #[derive(Debug, Clone)]
 pub enum Column<T> {
     Atomic {

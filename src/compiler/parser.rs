@@ -39,7 +39,6 @@ pub enum Kind<T> {
     Atomic,
     Composite(Box<T>),
     Interleaved(Vec<String>),
-    Sorted(Vec<String>, Vec<String>),
 }
 
 #[derive(PartialEq, Clone)]

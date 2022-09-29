@@ -32,7 +32,7 @@ impl Pretty for Expression {
             let c = &COLORS[depth % COLORS.len()];
             match s {
                 Expression::Const(x) => format!("{}", x).color(*c),
-                Expression::Column(_module, name, _t, _k) => format!("{}", name).color(*c),
+                Expression::Column(_module, name, _t, _k) => name.to_string().color(*c),
                 Expression::ArrayColumn(_module, name, range, _t) => format!(
                     "{}[{}:{}]",
                     name,
@@ -57,7 +57,7 @@ impl Pretty for Expression {
                 .join(" ")
         }
 
-        format!("{}", rec_pretty(&self, 0))
+        format!("{}", rec_pretty(self, 0))
     }
 }
 

@@ -65,7 +65,7 @@ impl Expression {
         self.leaves()
             .into_iter()
             .filter_map(|e| match e {
-                Expression::Column(module, name, ..) => Some((module.to_owned(), name.to_owned())),
+                Expression::Column(module, name, ..) => Some((module, name)),
                 _ => None,
             })
             .collect()
@@ -153,9 +153,12 @@ impl Expression {
         };
         if trace && !matches!(self, Expression::Const(_)) {
             eprintln!(
-                "{:70} <- {}",
-                r.as_ref().map(Pretty::pretty).unwrap_or("nil".to_owned()),
-                format!("{}[{}]", self, i),
+                "{:70} <- {}[{}]",
+                r.as_ref()
+                    .map(Pretty::pretty)
+                    .unwrap_or_else(|| "nil".to_owned()),
+                self,
+                i
             );
         }
         r
@@ -490,13 +493,7 @@ impl ConstraintSet {
         let mut values = Vec::new();
         for i in 0..len as isize {
             for from in froms.iter() {
-                values.push(
-                    self.get(module, from)
-                        .unwrap()
-                        .get(i, false)
-                        .unwrap()
-                        .clone(),
-                );
+                values.push(*self.get(module, from).unwrap().get(i, false).unwrap());
             }
         }
 
@@ -532,23 +529,18 @@ impl ConstraintSet {
             for t in 0..from_cols.len() {
                 let i_t = from_cols[*i].get(t as isize, false).unwrap();
                 let j_t = from_cols[*j].get(t as isize, false).unwrap();
-                if i_t > j_t {
-                    return Ordering::Greater;
-                } else if i_t < j_t {
-                    return Ordering::Less;
+                if let x @ (Ordering::Greater | Ordering::Less) = i_t.cmp(j_t) {
+                    return x;
                 }
             }
             Ordering::Equal
         });
 
-        for k in 0..froms.len() {
+        for from_col in from_cols.iter() {
             let mut value = Vec::with_capacity(len);
-            value.resize_with(len, || Fr::zero());
+            value.resize_with(len, Fr::zero);
             for i in &sorted_is {
-                value[*i] = from_cols[k]
-                    .get((*i).try_into().unwrap(), false)
-                    .unwrap()
-                    .clone();
+                value[*i] = *from_col.get((*i).try_into().unwrap(), false).unwrap();
             }
             if self.get_mut(module, name).unwrap().is_computed() {
                 warn!(
@@ -739,7 +731,7 @@ fn apply(
                             let cond_zero = if matches!(traversed_args_t[0], Type::Boolean) {
                                 Expression::Funcall {
                                     func: Builtin::Sub,
-                                    args: vec![Expression::Const(One::one()), cond.clone()],
+                                    args: vec![Expression::Const(One::one()), cond],
                                 }
                             } else {
                                 // ...otherwise, cond_zero = 1 - x.INV(x)

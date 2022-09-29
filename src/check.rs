@@ -29,7 +29,9 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
         expr.pretty(),
         i,
         l.map(|l| format!("/{}", l)).unwrap_or_default(),
-        r.as_ref().map(Pretty::pretty).unwrap_or("nil".to_owned()),
+        r.as_ref()
+            .map(Pretty::pretty)
+            .unwrap_or_else(|| "nil".to_owned()),
     ))
 }
 
@@ -51,10 +53,8 @@ fn check_constraint_at(
         if !r.is_zero() {
             return fail(expr, i, l, columns);
         }
-    } else {
-        if fail_on_oob {
-            return fail(expr, i, l, columns);
-        }
+    } else if fail_on_oob {
+        return fail(expr, i, l, columns);
     }
     Ok(())
 }
