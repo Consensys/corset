@@ -166,19 +166,32 @@ impl WizardIOP {
         constraints
             .iter()
             .filter_map(|constraint| match constraint {
-                Constraint::Vanishes { name, domain, expr } =>
-                    Some(Self::render_constraint(name, domain.clone(), expr)),
+                Constraint::Vanishes { name, domain, expr } => {
+                    Some(Self::render_constraint(name, domain.clone(), expr))
+                }
                 Constraint::Plookup(name, from, to) => Some(format!(
-                    "build.Inclusion(\"{}\", []commitment.Handle{{{}}}, []commitment.Handle{{{}}})",
+                    "build.Inclusion(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
                     name,
-                    from.iter().map(render_expression).collect::<Vec<_>>().join(", "),
-                    to.iter().map(render_expression).collect::<Vec<_>>().join(", ")
+                    from.iter()
+                        .map(render_expression)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    to.iter()
+                        .map(render_expression)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )),
                 Constraint::Permutation(name, from, to) => Some(format!(
-                    "build.Permutation(\"{}\", []commitment.Handle{{{}}}, []commitment.Handle{{{}}})",
+                    "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
                     name,
-                    from.iter().map(ColumnHandle::mangle).collect::<Vec<_>>().join(", "),
-                    to.iter().map(ColumnHandle::mangle).collect::<Vec<_>>().join(", ")
+                    from.iter()
+                        .map(ColumnHandle::mangle)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    to.iter()
+                        .map(ColumnHandle::mangle)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )),
             })
             .collect::<Vec<String>>()
@@ -256,14 +269,16 @@ impl WizardIOP {
             r#"
 package {}
 
+
 import (
+    "github.com/consensys/accelerated-crypto-monorepo/example/zkevm"
     "github.com/consensys/accelerated-crypto-monorepo/protocol/commitment"
-    "github.com/consensys/accelerated-crypto-monorepo/protocol/wizard"
+    "github.com/consensys/accelerated-crypto-monorepo/symbolic"
 )
 
 {}
 
-func Define(build *wizard.Builder) {{
+func Define(build *zkevm.Builder) {{
 //
 // Columns declarations
 //
