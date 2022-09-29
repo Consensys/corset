@@ -113,7 +113,11 @@ impl GoExporter {
         consts
             .iter()
             .fold(String::new(), |mut ax, (handle, value)| {
-                ax.push_str(&format!("const {} = {}\n", handle.mangle(), value));
+                ax.push_str(&format!(
+                    "const {} = {}\n",
+                    handle.mangle_no_module(),
+                    value
+                ));
                 ax
             })
     }

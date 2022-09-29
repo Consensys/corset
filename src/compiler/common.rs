@@ -217,30 +217,34 @@ impl Handle {
         }
     }
 
-    pub fn mangle(&self) -> String {
-        fn purify(s: &str) -> String {
-            s.replace('(', "_")
-                .replace(')', "_")
-                .replace('{', "_")
-                .replace('}', "_")
-                .replace('[', "_")
-                .replace(']', "_")
-                .replace('/', "_")
-                .replace(':', "_")
-                .replace('%', "_")
-                .replace('.', "_")
-        }
+    fn purify(s: &str) -> String {
+        s.replace('(', "_")
+            .replace(')', "_")
+            .replace('{', "_")
+            .replace('}', "_")
+            .replace('[', "_")
+            .replace(']', "_")
+            .replace('/', "_")
+            .replace(':', "_")
+            .replace('%', "_")
+            .replace('.', "_")
+    }
 
+    pub fn mangle(&self) -> String {
         format!(
             "{}{}{}",
-            purify(&self.module),
+            Self::purify(&self.module),
             if self.module.is_empty() {
                 ""
             } else {
                 MODULE_SEPARATOR
             },
-            purify(&self.name)
+            Self::purify(&self.name)
         )
+    }
+
+    pub fn mangle_no_module(&self) -> String {
+        format!("{}", Self::purify(&self.name))
     }
 }
 impl std::fmt::Debug for Handle {
