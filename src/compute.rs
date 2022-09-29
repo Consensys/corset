@@ -112,8 +112,10 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
         return Ok(());
     }
     let max_len = r.len();
-
     let pad_to = (max_len + 1).next_power_of_two();
+    let padded = max_len - pad_to;
+    let _255 = Fr::from_str("255").unwrap();
+
     r.cols
         .values_mut()
         .flat_map(|module| module.values_mut())
@@ -123,6 +125,17 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
                 xs.resize(pad_to, Fr::zero());
                 xs.reverse();
             })
+        });
+
+    r.cols
+        .get_mut("binary")
+        .and_then(|m| m.get_mut("NOT"))
+        .map(|x| {
+            x.map(&|xs| {
+                for i in 0..padded {
+                    xs[i] = _255;
+                }
+            });
         });
 
     Ok(())
