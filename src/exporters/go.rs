@@ -115,7 +115,7 @@ impl GoExporter {
             .fold(String::new(), |mut ax, (handle, value)| {
                 ax.push_str(&format!(
                     "const {} = {}\n",
-                    handle.mangle_no_module(),
+                    handle.mangle_no_module().to_case(Case::ScreamingSnake),
                     value
                 ));
                 ax
