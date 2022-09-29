@@ -210,7 +210,24 @@ impl Handle {
     }
 
     pub fn mangle(&self) -> String {
-        format!("{}{}{}", self.module, MODULE_SEPARATOR, self.name)
+        fn purify(s: &str) -> String {
+            s.replace('(', "_")
+                .replace(')', "_")
+                .replace('{', "_")
+                .replace('}', "_")
+                .replace('[', "_")
+                .replace(']', "_")
+                .replace('/', "_")
+                .replace(':', "_")
+                .replace('%', "_")
+        }
+
+        format!(
+            "{}{}{}",
+            purify(&self.module),
+            MODULE_SEPARATOR,
+            purify(&self.name)
+        )
     }
 }
 impl std::fmt::Debug for Handle {

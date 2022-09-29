@@ -22,15 +22,3 @@ fn gofmt(filename: &str) {
         eprintln!("{}", std::str::from_utf8(&output.stderr).unwrap());
     }
 }
-
-pub fn goize(s: &str) -> String {
-    s.replace('(', "_")
-        .replace(')', "_")
-        .replace('{', "_")
-        .replace('}', "_")
-        .replace('[', "_")
-        .replace(']', "_")
-        .replace('/', "_")
-        .replace(':', "_")
-        .replace('%', "_")
-}

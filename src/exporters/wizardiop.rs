@@ -9,10 +9,8 @@ use crate::{
     compiler::*,
 };
 
-use super::goize;
-
+const SIZE: usize = 2048;
 const ARRAY_SEPARATOR: char = '_';
-const MODULE_SEPARATOR: &str = "___";
 
 fn shift(e: &Expression, i: isize) -> Expression {
     match e {
@@ -201,41 +199,23 @@ impl WizardIOP {
         let mut r = String::new();
         for (module, m) in cols.cols.iter() {
             for (name, col) in m.iter() {
+                let name = Handle::new(module, name).mangle();
                 match col {
                     Column::Atomic { .. } => r.push_str(&format!(
-                        "{}{}{} := build.RegisterCommit(\"{}{}{}\", 2048)\n",
-                        goize(module),
-                        MODULE_SEPARATOR,
-                        goize(&name.to_case(Case::ScreamingSnake)),
-                        goize(module),
-                        MODULE_SEPARATOR,
-                        goize(&name.to_case(Case::ScreamingSnake))
+                        "{} := build.RegisterCommit(\"{}\", {})\n",
+                        name, name, SIZE
                     )),
                     Column::Array { range, .. } => {
                         for i in range {
                             r.push_str(&format!(
-                                "{}{}{}{}{} := build.RegisterCommit(\"{}{}{}{}{}\", 2048)\n",
-                                goize(module),
-                                MODULE_SEPARATOR,
-                                goize(&name.to_case(Case::ScreamingSnake)),
-                                ARRAY_SEPARATOR,
-                                i,
-                                goize(module),
-                                MODULE_SEPARATOR,
-                                goize(&name.to_case(Case::ScreamingSnake)),
-                                ARRAY_SEPARATOR,
-                                i
+                                "{}{}{} := build.RegisterCommit(\"{}{}{}\", {})\n",
+                                name, ARRAY_SEPARATOR, i, name, ARRAY_SEPARATOR, i, SIZE
                             ))
                         }
                     }
                     Column::Composite { .. } => r.push_str(&format!(
-                        "{}{}{} := build.RegisterCommit(\"{}{}{}\", 2048)\n",
-                        goize(module),
-                        MODULE_SEPARATOR,
-                        goize(&name.to_case(Case::ScreamingSnake)),
-                        goize(module),
-                        MODULE_SEPARATOR,
-                        goize(&name.to_case(Case::ScreamingSnake))
+                        "{} := build.RegisterCommit(\"{}\", {})\n",
+                        name, name, SIZE
                     )),
                     _ => {}
                 }
