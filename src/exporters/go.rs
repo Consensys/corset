@@ -135,7 +135,11 @@ const (
 
         for (_module, m) in cols.cols.iter() {
             for (name, _) in m.iter() {
-                r.push_str(&Handle::new("", name).mangle())
+                r.push_str(&format!(
+                    "{} column.Column = \"{}\"\n",
+                    &Handle::new("", name).mangle(),
+                    &Handle::new("", name).mangle(),
+                ))
             }
         }
         r += ")\n\n";
@@ -165,29 +169,31 @@ const (
         let constraints = cs
             .constraints
             .iter()
-            .map(|c| match c {
+            .filter_map(|c| match c {
                 Constraint::Vanishes {
                     name,
                     domain: _,
                     expr,
-                } => self
-                    .render_node(expr)
-                    .map(|mut r| {
-                        if let Some(true) = r.chars().last().map(|c| c != ',') {
-                            r.push(',');
-                        }
-                        r
-                    })
-                    .map(|r| {
-                        make_go_function(
-                            &name.to_case(Case::Snake),
-                            "r = []column.Expression {",
-                            &r,
-                            "}",
-                            "[]column.Expression",
-                        )
-                    }),
-                x => Ok(format!("{:?}", x)),
+                } => Some(
+                    self.render_node(expr)
+                        .map(|mut r| {
+                            if let Some(true) = r.chars().last().map(|c| c != ',') {
+                                r.push(',');
+                            }
+                            r
+                        })
+                        .map(|r| {
+                            make_go_function(
+                                &name.to_case(Case::Snake),
+                                "r = []column.Expression {",
+                                &r,
+                                "}",
+                                "[]column.Expression",
+                            )
+                        }),
+                ),
+                Constraint::Plookup(_, _, _) => None,
+                Constraint::Permutation(_, _, _) => None,
             })
             .collect::<Result<Vec<_>>>()?
             .join("\n");

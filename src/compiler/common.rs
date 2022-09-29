@@ -228,6 +228,7 @@ impl Handle {
                 .replace('/', "_")
                 .replace(':', "_")
                 .replace('%', "_")
+                .replace('.', "_")
         }
 
         format!(
