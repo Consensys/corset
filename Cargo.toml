@@ -11,11 +11,11 @@ clap = { version = "3.2", features = ["derive"] }
 clap-verbosity-flag = "1.0"
 color-eyre = { version = "0.6", default-features = false }
 colored = "2.0"
-convert_case = "0.5"
+convert_case = "0.6"
 eyre = "0.6"
 lazy_static = "1.4"
 log = "0.4"
-simplelog = { version = "^0.11.0", features = ["paris"] }
+simplelog = { version = "0.12.0", features = ["paris"] }
 maplit = "1.0"
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
