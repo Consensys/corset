@@ -28,6 +28,19 @@ pub struct AstNode {
     pub src: String,
     pub lc: LinCol,
 }
+impl AstNode {
+    pub fn into_symbol(&self) -> Option<String> {
+        if let AstNode {
+            class: Token::Symbol(x),
+            ..
+        } = self
+        {
+            Some(x.to_owned())
+        } else {
+            None
+        }
+    }
+}
 impl Debug for AstNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Debug::fmt(&self.class, f)
@@ -54,7 +67,7 @@ pub enum Token {
     DefConsts(Vec<(String, BigInt)>),
     DefColumns(Vec<AstNode>),
     DefColumn(String, Type, Kind<AstNode>),
-    DefSort(Vec<AstNode>, Vec<AstNode>, Vec<AstNode>),
+    DefSort(Vec<AstNode>, Vec<AstNode>),
     DefArrayColumn(String, Vec<usize>, Type),
     DefConstraint(String, Option<Vec<isize>>, Box<AstNode>),
     Defun(String, Vec<String>, Box<AstNode>),
@@ -103,7 +116,7 @@ impl Debug for Token {
             }
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
             Token::DefColumn(name, t, kind) => write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind),
-            Token::DefSort(to, from, _) => write!(f, "({:?}):PERMUTATION({:?})", to, from),
+            Token::DefSort(to, from) => write!(f, "({:?}):PERMUTATION({:?})", to, from),
             Token::DefArrayColumn(name, range, t) => {
                 write!(f, "DECLARATION {}{:?}{{{:?}}}", name, range, t)
             }
@@ -422,7 +435,7 @@ impl AstNode {
                         Some(Token::List(from)),
                         Some(Token::List(sorters)),
                     ) => Ok(AstNode {
-                        class: Token::DefSort(to.to_owned(), from.to_owned(), sorters.to_owned()),
+                        class: Token::DefSort(to.to_owned(), from.to_owned()),
                         src: src.into(),
                         lc,
                     }),

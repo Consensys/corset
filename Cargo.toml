@@ -17,6 +17,7 @@ lazy_static = "1.4"
 log = "0.4"
 simplelog = { version = "0.12.0", features = ["paris"] }
 maplit = "1.0"
+names = { version = "0.12.0", default-features = false }
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
 pairing_ce = "0.28"

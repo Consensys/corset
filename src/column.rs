@@ -199,11 +199,12 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
             Column::Atomic { value, .. } => value.as_ref().map(|v| v.len()),
             Column::Composite { value, .. } => value.as_ref().map(|v| v.len()),
             Column::Interleaved { value, .. } => value.as_ref().map(|v| v.len()),
-            Column::Array { values, .. } => values.values().next().map(|x| x.len()),
-            Column::Sorted { values, .. } => values
-                .as_ref()
-                .and_then(|values| values.values().next())
-                .map(|x| x.len()),
+            _ => unreachable!(),
+            // Column::Array { values, .. } => values.values().next().map(|x| x.len()),
+            // Column::Sorted { values, .. } => values
+            //     .as_ref()
+            //     .and_then(|values| values.values().next())
+            //     .map(|x| x.len()),
         }
     }
 

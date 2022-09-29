@@ -137,7 +137,8 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
                     }
                 }
             }
-            crate::compiler::Constraint::Plookup(_, _) => todo!(),
+            crate::compiler::Constraint::Plookup(_, _, _) => todo!(),
+            crate::compiler::Constraint::Permutation(_name, _from, _to) => todo!(),
         }
     }
     if failed.is_empty() {

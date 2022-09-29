@@ -5,7 +5,7 @@ use eyre::*;
 use log::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-pub use common::Type;
+pub use common::*;
 pub use generator::{Builtin, Constraint, ConstraintSet, Expression};
 pub use parser::{Ast, AstNode, Kind, Token};
 
@@ -61,7 +61,10 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                     Expression::Const(x) => {
                         constants.insert(s.1.to_owned(), x.try_into().unwrap());
                     }
-                    _ => {}
+                    // Expression::Permutation(from, to) => {
+                    //     columns.insert_sorted("PRIVATE", name, from, to, true)?
+                    // }
+                    x => todo!("{:?}", x),
                 }
             }
         }

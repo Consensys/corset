@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
-use super::common::*;
+use super::{common::*, ColumnHandle};
 use crate::column::{Column, ColumnSet};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
@@ -24,7 +24,8 @@ pub enum Constraint {
         domain: Option<Vec<isize>>,
         expr: Box<Expression>,
     },
-    Plookup(Vec<Expression>, Vec<Expression>),
+    Plookup(String, Vec<Expression>, Vec<Expression>),
+    Permutation(String, Vec<ColumnHandle>, Vec<ColumnHandle>),
 }
 
 #[derive(Clone)]
@@ -36,7 +37,7 @@ pub enum Expression {
     Const(BigInt),
     Column(String, String, Type, Kind<Expression>), // Module Name Type Kind
     ArrayColumn(String, String, Vec<usize>, Type),
-    Permutation(Vec<String>, Vec<String>),
+    // Permutation(Vec<String>, Vec<String>),
     List(Vec<Expression>),
     Void,
 }
@@ -57,7 +58,7 @@ impl Expression {
             Expression::ArrayColumn(_, _, _, t) => *t,
             Expression::List(xs) => xs.iter().map(|x| x.t()).max().unwrap(),
             Expression::Void => Type::Void,
-            Expression::Permutation(..) => Type::Void,
+            // Expression::Permutation(..) => Type::Void,
         }
     }
 
@@ -180,7 +181,7 @@ impl Expression {
                         _flatten(a, ax);
                     }
                 }
-                Expression::Permutation(..) | Expression::Void => (),
+                Expression::Void => (),
             }
         }
 
@@ -241,7 +242,7 @@ impl Display for Expression {
                 write!(f, "({:?} {})", func, format_list(args))
             }
             Expression::Void => write!(f, "nil"),
-            Expression::Permutation(froms, tos) => write!(f, "{:?}<=>{:?}", froms, tos),
+            // Expression::Permutation(froms, tos) => write!(f, "{:?}<=>{:?}", froms, tos),
         }
     }
 }
@@ -275,7 +276,7 @@ impl Debug for Expression {
                 write!(f, "({:?} {})", func, format_list(args))
             }
             Expression::Void => write!(f, "nil"),
-            Expression::Permutation(froms, tos) => write!(f, "{:?}<=>{:?}", froms, tos),
+            // Expression::Permutation(froms, tos) => write!(f, "{:?}<=>{:?}", froms, tos),
         }
     }
 }
@@ -959,7 +960,11 @@ fn reduce_toplevel(
                 .into_iter()
                 .map(|e| e.unwrap().0)
                 .collect::<Vec<_>>();
-            Ok(Some(Constraint::Plookup(parents, children)))
+            Ok(Some(Constraint::Plookup(
+                names::Generator::default().next().unwrap(),
+                parents,
+                children,
+            )))
         }
         Token::DefColumns(columns) => {
             for c in columns {
@@ -976,7 +981,23 @@ fn reduce_toplevel(
             Err(eyre!("Unexpected top-level form: {:?}", e))
         }
 
-        _ => Ok(None),
+        Token::Defun(..) | Token::DefAliases(_) | Token::DefunAlias(..) => Ok(None),
+        Token::DefSort(to, from) => Ok(Some(Constraint::Permutation(
+            names::Generator::default().next().unwrap(),
+            from.into_iter()
+                .map(|f| ColumnHandle {
+                    module: module.clone(),
+                    name: f.into_symbol().unwrap(),
+                })
+                .collect::<Vec<_>>(),
+            to.into_iter()
+                .map(|f| ColumnHandle {
+                    module: module.clone(),
+                    name: f.into_symbol().unwrap(),
+                })
+                .collect::<Vec<_>>(),
+        ))),
+        _ => unreachable!("{:?}", e),
     }
 }
 

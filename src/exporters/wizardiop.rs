@@ -38,7 +38,7 @@ fn shift(e: &Expression, i: isize) -> Expression {
             args: vec![e.clone(), Expression::Const(BigInt::from(i))],
         },
         Expression::List(xs) => Expression::List(xs.iter().map(|x| shift(x, i)).collect()),
-        Expression::ArrayColumn(..) | Expression::Permutation(..) => unreachable!(),
+        Expression::ArrayColumn(..) => unreachable!(),
         Expression::Void => Expression::Void,
     }
 }
@@ -65,7 +65,7 @@ fn make_chain(xs: &[Expression], operand: &str, surround: bool) -> String {
 
 fn render_expression(e: &Expression) -> String {
     match e {
-        Expression::ArrayColumn(..) | Expression::Permutation(..) => unreachable!(),
+        Expression::ArrayColumn(..) => unreachable!(),
         Expression::Const(x) => format!("symbolic.NewConstant(\"{}\")", x),
         Expression::Column(module, name, _, _) => {
             format!(
@@ -166,10 +166,20 @@ impl WizardIOP {
         constraints
             .iter()
             .filter_map(|constraint| match constraint {
-                Constraint::Vanishes { name, domain, expr } => {
-                    Some(Self::render_constraint(name, domain.clone(), expr))
-                }
-                _ => None,
+                Constraint::Vanishes { name, domain, expr } =>
+                    Some(Self::render_constraint(name, domain.clone(), expr)),
+                Constraint::Plookup(name, from, to) => Some(format!(
+                    "build.Inclusion(\"{}\", []commitment.Handle{{{}}}, []commitment.Handle{{{}}})",
+                    name,
+                    from.iter().map(render_expression).collect::<Vec<_>>().join(", "),
+                    to.iter().map(render_expression).collect::<Vec<_>>().join(", ")
+                )),
+                Constraint::Permutation(name, from, to) => Some(format!(
+                    "build.Permutation(\"{}\", []commitment.Handle{{{}}}, []commitment.Handle{{{}}})",
+                    name,
+                    from.iter().map(ColumnHandle::mangle).collect::<Vec<_>>().join(", "),
+                    to.iter().map(ColumnHandle::mangle).collect::<Vec<_>>().join(", ")
+                )),
             })
             .collect::<Vec<String>>()
             .join("\n")
@@ -241,7 +251,6 @@ impl WizardIOP {
         let consts = Self::render_constants(&cs.constants);
         let columns = Self::render_columns(&cs.columns);
         let constraints = Self::render_constraints(&cs.constraints);
-        let plookups = "";
 
         let r = format!(
             r#"
@@ -265,16 +274,9 @@ func Define(build *wizard.Builder) {{
 // Constraints declarations
 //
 {}
-
-
-//
-// PLookups declarations
-//
-{}
-
 }}
 "#,
-            &self.package, consts, columns, constraints, plookups,
+            &self.package, consts, columns, constraints,
         );
 
         if let Some(filename) = self.out_filename.as_ref() {

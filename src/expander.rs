@@ -157,11 +157,12 @@ pub fn expand(cs: &mut ConstraintSet) -> Result<()> {
             Constraint::Vanishes { expr: e, .. } => {
                 expand_expr(e, &mut cs.columns, &mut new_cs_inv)?;
             }
-            Constraint::Plookup(parents, children) => {
+            Constraint::Plookup(name, parents, children) => {
                 for e in parents.iter().chain(children.iter()) {
                     expand_plookup(e, &mut cs.columns, &mut new_cs_plookup)?;
                 }
             }
+            Constraint::Permutation(..) => (),
         }
     }
     if !new_cs_inv.is_empty() {

@@ -325,7 +325,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
             }
             Ok(())
         }
-        Token::DefSort(tos, froms, sorters) => {
+        Token::DefSort(tos, froms) => {
             if tos.len() != froms.len() {
                 return Err(eyre!(
                     "cardinality mismatch in permutation declaration: {:?} vs. {:?}",
@@ -333,9 +333,9 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                     froms
                 ));
             }
-            if sorters.is_empty() {
-                warn!("empty sorter found in `{}`", e.src.as_str());
-            }
+            // if sorters.is_empty() {
+            //     warn!("empty sorter found in `{}`", e.src.as_str());
+            // }
 
             let mut _froms = Vec::new();
             let mut _tos = Vec::new();
@@ -375,11 +375,6 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                     }
                 }
             }
-            ctx.borrow_mut().insert_symbol(
-                module,
-                &format!("SRT__{:?}", froms),
-                Expression::Permutation(_froms.to_owned(), _tos.to_owned()),
-            )?;
             Ok(())
         }
         Token::DefAliases(aliases) => aliases.iter().fold(Ok(()), |ax, alias| {

@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use super::generator::{Builtin, Function, FunctionClass};
 use super::parser::{AstNode, Token};
 
+const MODULE_SEPARATOR: &str = "___";
+
 lazy_static::lazy_static! {
     pub static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
         "nth" => Function {
@@ -191,5 +193,16 @@ impl std::cmp::PartialOrd for Type {
             (Type::Boolean, Type::Numeric) => Some(Ordering::Less),
             _ => Some(Ordering::Equal),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ColumnHandle {
+    pub module: String,
+    pub name: String,
+}
+impl ColumnHandle {
+    pub fn mangle(&self) -> String {
+        format!("{}{}{}", self.module, MODULE_SEPARATOR, self.name)
     }
 }

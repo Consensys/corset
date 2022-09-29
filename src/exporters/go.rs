@@ -65,7 +65,7 @@ impl GoExporter {
 
     pub fn render_node(&self, node: &Expression) -> Result<String> {
         let r = match node {
-            Expression::Permutation(..) | Expression::ArrayColumn(..) => unreachable!(),
+            Expression::ArrayColumn(..) => unreachable!(),
             Expression::Const(x) => Ok(format!("column.CONST_STRING(\"{}\")", x)),
             Expression::Column(_module, name, _, _) => Ok(format!(
                 "{}[\"{}\"]",
@@ -277,9 +277,11 @@ const (
                                 }
                             }
                         },
-                        Constraint::Plookup(parents, children)  => {
-                            format!("// New Plookup\n// Parents:\n// {:?}\n// Children:\n// {:?}", parents, children)
-                        }
+                        Constraint::Plookup(name, parents, children)  => {
+                            format!("// New Plookup {}\n// Parents:\n// {:?}\n// Children:\n// {:?}", name, parents, children)
+                        },
+                        Constraint::Permutation(name, from, to) =>
+                            format!("// Permutation {}\n// Parents:\n// {:?}\n// Children:\n// {:?}", name, from, to),
                     }
                 })
                 .collect::<Vec<_>>()
