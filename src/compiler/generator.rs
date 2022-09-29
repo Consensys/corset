@@ -11,8 +11,9 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
+use super::definitions::ComputationTable;
 use super::{common::*, Handle};
-use crate::column::{Column, ColumnSet};
+use crate::column::{Column, ColumnSet, Computation};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 use crate::utils::*;
@@ -465,6 +466,7 @@ pub struct ConstraintSet {
     pub columns: ColumnSet<Fr>,
     pub constraints: Vec<Constraint>,
     pub constants: HashMap<Handle, i64>,
+    pub computations: ComputationTable,
 }
 impl ConstraintSet {
     fn get(&self, handle: &Handle) -> Result<&Column<Fr>> {
@@ -475,14 +477,7 @@ impl ConstraintSet {
         self.columns.get_mut(handle)
     }
 
-    fn compute_interleaved(&mut self, handle: &Handle) -> Result<()> {
-        let col = self.get(handle)?;
-        let froms = if let Column::Interleaved { froms: from, .. } = col {
-            from.clone()
-        } else {
-            unreachable!()
-        };
-
+    fn compute_interleaved(&mut self, target: &Handle, froms: &[Handle]) -> Result<()> {
         for from in froms.iter() {
             self.compute_column(from)?;
         }
@@ -505,26 +500,19 @@ impl ConstraintSet {
             }
         }
 
-        self.get_mut(handle).unwrap().set_values(values);
+        self.get_mut(target)?.set_value(values);
 
         Ok(())
     }
 
-    fn compute_sorted(&mut self, handle: &Handle) -> Result<()> {
-        let col = self.get(handle)?;
-        let froms = if let Column::Sorted { froms, .. } = col {
-            froms.clone()
-        } else {
-            unreachable!()
-        };
-
+    fn compute_sorted(&mut self, froms: &[Handle], tos: &[Handle]) -> Result<()> {
         for from in froms.iter() {
             self.compute_column(from)?;
         }
+
         let from_cols = froms
             .iter()
             .map(|c| self.get(c).unwrap())
-            .cloned()
             .collect::<Vec<_>>();
 
         if !from_cols.windows(2).all(|w| w[0].len() == w[1].len()) {
@@ -544,36 +532,35 @@ impl ConstraintSet {
             Ordering::Equal
         });
 
-        for from_col in from_cols.iter() {
+        for (k, from) in froms.iter().enumerate() {
             let mut value = Vec::with_capacity(len);
             value.resize_with(len, Fr::zero);
             for i in &sorted_is {
-                value[*i] = *from_col.get((*i).try_into().unwrap(), false).unwrap();
+                value[*i] = *self
+                    .get(from)
+                    .unwrap()
+                    .get((*i).try_into().unwrap(), false)
+                    .unwrap();
             }
-            if self.get_mut(handle).unwrap().is_computed() {
-                warn!("{} already filled; dropping computing value", handle)
-            } else {
-                self.get_mut(handle).unwrap().set_values(value);
-            }
+            self.get_mut(&tos[k]).unwrap().set_value(value);
         }
 
         Ok(())
     }
 
-    fn compute_composite(&mut self, handle: &Handle) -> Result<()> {
-        let col = self.columns.get(handle).unwrap();
-        let (exp, cols_in_expr) = if let Column::Composite { exp, .. } = col {
-            (exp.clone(), exp.dependencies())
-        } else {
-            unreachable!()
-        };
+    fn compute_composite(&mut self, target: &Handle, exp: &Expression) -> Result<()> {
+        let target_col = self.columns.get(target)?;
+        if target_col.is_computed() {
+            return Ok(());
+        }
 
+        let cols_in_expr = exp.dependencies();
+        for c in &cols_in_expr {
+            self.compute_column(c)?
+        }
         let length = *cols_in_expr
             .iter()
-            .map(|handle| {
-                self.compute_column(handle)?;
-                Ok(self.get(handle).unwrap().len().unwrap().to_owned())
-            })
+            .map(|handle| Ok(self.get(handle).unwrap().len().unwrap().to_owned()))
             .collect::<Result<Vec<_>>>()?
             .iter()
             .max()
@@ -588,7 +575,7 @@ impl ConstraintSet {
                         if col.is_computed() {
                             col.get(i, false).cloned()
                         } else {
-                            self.compute_column(handle);
+                            self.compute_column(handle).unwrap();
                             self.columns.get(handle).unwrap().get(i, false).cloned()
                         }
                     },
@@ -600,40 +587,37 @@ impl ConstraintSet {
             })
             .collect::<Vec<_>>();
 
-        self.columns.get_mut(handle).unwrap().set_values(values);
+        self.columns.get_mut(target).unwrap().set_value(values);
 
         Ok(())
     }
 
-    fn compute_column(&mut self, handle: &Handle) -> Result<()> {
-        let col = self.get(handle).unwrap();
-        if col.is_computed() {
+    fn compute_column(&mut self, target: &Handle) -> Result<()> {
+        if self.get(target).unwrap().is_computed() {
             Ok(())
         } else {
-            info!("Computing {}", handle);
-            match col {
-                Column::Composite { .. } => self.compute_composite(handle),
-                Column::Interleaved { .. } => self.compute_interleaved(handle),
-                Column::Sorted { .. } => self.compute_sorted(handle),
-                _ => unreachable!("{:?}", col),
-            }
+            self.compute(
+                self.computations
+                    .dep(target)
+                    .ok_or_else(|| eyre!("No computations found for  {}", target))?,
+            )
         }
     }
 
-    pub fn compute(&mut self) -> Result<()> {
-        let handles = self
-            .columns
-            .cols
-            .iter()
-            .flat_map(|(module, cols)| {
-                cols.keys()
-                    .map(|colname| Handle::new(module.clone(), colname.clone()))
-            })
-            .collect::<Vec<_>>();
+    pub fn compute(&mut self, i: usize) -> Result<()> {
+        let comp = self.computations.get(i).unwrap().clone();
 
-        for handle in handles.iter() {
-            self.compute_column(handle)
-                .with_context(|| format!("computing {}", handle))?;
+        match &comp {
+            Computation::Composite { target, exp } => self.compute_composite(target, exp),
+            Computation::Interleaved { target, froms } => self.compute_interleaved(target, froms),
+            Computation::Sorted { froms, tos } => self.compute_sorted(froms, tos),
+        }
+    }
+
+    pub fn compute_all(&mut self) -> Result<()> {
+        for i in 0..self.computations.iter().count() {
+            info!("Computing {:?}", self.computations.get(i).unwrap());
+            self.compute(i)?
         }
 
         Ok(())

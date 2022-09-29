@@ -3,12 +3,7 @@ use std::{collections::HashMap, io::Write};
 use convert_case::{Case, Casing};
 use eyre::*;
 
-use crate::{
-    column::{Column, ColumnSet},
-    compiler::*,
-};
-
-const ARRAY_SEPARATOR: char = '_';
+use crate::{column::ColumnSet, compiler::*};
 
 fn make_go_function(name: &str, prelude: &str, content: &str, postlude: &str, ret: &str) -> String {
     format!(
@@ -123,7 +118,7 @@ impl GoExporter {
             })
     }
 
-    fn render_columns<T>(&self, cols: &ColumnSet<T>) -> String {
+    fn render_columns<T: Clone>(&self, cols: &ColumnSet<T>) -> String {
         let mut r = format!(
             r#"
 package {}
@@ -139,75 +134,18 @@ const (
         );
 
         for (_module, m) in cols.cols.iter() {
-            for (name, col) in m.iter() {
-                match col {
-                    Column::Atomic { .. } => r.push_str(&format!(
-                        "{} column.Column = \"{}\"\n",
-                        name.to_case(Case::ScreamingSnake),
-                        name.to_case(Case::ScreamingSnake)
-                    )),
-                    Column::Array { range, .. } => {
-                        for i in range {
-                            r.push_str(&format!(
-                                "{}{}{} column.Column = \"{}{}{}\"\n",
-                                name.to_case(Case::ScreamingSnake),
-                                ARRAY_SEPARATOR,
-                                i,
-                                name.to_case(Case::ScreamingSnake),
-                                ARRAY_SEPARATOR,
-                                i
-                            ))
-                        }
-                    }
-                    _ => {}
-                }
+            for (name, _) in m.iter() {
+                r.push_str(&Handle::new("", name).mangle())
             }
         }
         r += ")\n\n";
-
-        for (_module, m) in cols.cols.iter() {
-            for (name, col) in m.iter() {
-                match col {
-                    Column::Atomic { .. } => {}
-                    Column::Array { .. } => {}
-                    Column::Composite { .. } => todo!(),
-                    Column::Interleaved { froms: from, .. } => r.push_str(&format!(
-                        "var {} = column.Interleaved{{{}}}\n",
-                        name.to_case(Case::ScreamingSnake),
-                        from.iter()
-                            .map(Handle::mangle)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )),
-                    Column::Sorted { .. } => {}
-                }
-            }
-        }
 
         r.push_str(&format!(
             "var AllColumns = column.BuildColumnList(\n{}\n)\n",
             cols.cols
                 .values()
-                .flat_map(|module| module.iter())
-                .map(|(name, col)| match col {
-                    Column::Atomic { .. } =>
-                        format!("{}.Name(),", name.to_case(Case::ScreamingSnake)),
-                    Column::Array { range, .. } => {
-                        range
-                            .iter()
-                            .map(|i| {
-                                format!(
-                                    "{}{}{}.Name(),",
-                                    name.to_case(Case::ScreamingSnake),
-                                    ARRAY_SEPARATOR,
-                                    i,
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    }
-                    _ => "".into(),
-                })
+                .flat_map(|module| module.keys())
+                .map(|name| format!("{}.Name(),", Handle::new("", name).mangle()))
                 .collect::<Vec<_>>()
                 .join("\n")
         ));

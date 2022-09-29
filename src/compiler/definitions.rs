@@ -9,6 +9,7 @@ use std::rc::Rc;
 use super::common::BUILTINS;
 use super::generator::{Defined, Expression, Function, FunctionClass};
 use super::{Handle, Type};
+use crate::column::Computation;
 use crate::compiler::parser::*;
 
 #[derive(Debug, Clone)]
@@ -16,32 +17,56 @@ pub enum Symbol {
     Alias(Handle),
     Final(Expression, bool),
 }
+#[derive(Default, Debug, Clone)]
+pub struct ComputationTable {
+    dependencies: HashMap<Handle, usize>,
+    computations: Vec<Computation>,
+}
+impl ComputationTable {
+    pub fn dep(&self, target: &Handle) -> Option<usize> {
+        self.dependencies.get(target).cloned()
+    }
+    pub fn get(&self, i: usize) -> Option<&Computation> {
+        self.computations.get(i)
+    }
+    pub fn iter(&'_ self) -> impl Iterator<Item = &'_ Computation> {
+        self.computations.iter()
+    }
+    pub fn insert(&mut self, target: &Handle, computation: Computation) {
+        self.computations.push(computation);
+        self.dependencies
+            .insert(target.to_owned(), self.computations.len());
+    }
+}
 #[derive(Debug)]
 pub struct SymbolTable {
     parent: Option<Rc<RefCell<SymbolTable>>>,
-    constraints: HashMap<String, HashSet<String>>, // Module -> Name -> Present?
+    constraints: HashMap<String, HashSet<String>>,
     funcs: HashMap<String, Function>,
-    symbols: HashMap<Handle, (Symbol, Type)>, // Module -> Name -> Symbol/Type
+    symbols: HashMap<Handle, (Symbol, Type)>,
+    pub computation_table: ComputationTable,
 }
 impl SymbolTable {
     pub fn new_root() -> SymbolTable {
         SymbolTable {
+            parent: None,
+            constraints: Default::default(),
             funcs: BUILTINS
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.clone()))
                 .collect(),
             symbols: Default::default(),
-            parent: None,
-            constraints: Default::default(),
+            computation_table: Default::default(),
         }
     }
 
     pub fn derived(parent: Rc<RefCell<SymbolTable>>) -> Rc<RefCell<SymbolTable>> {
         Rc::new(RefCell::new(SymbolTable {
+            parent: Some(parent),
+            constraints: Default::default(),
             funcs: Default::default(),
             symbols: Default::default(),
-            constraints: Default::default(),
-            parent: Some(parent),
+            computation_table: Default::default(),
         }))
     }
 
@@ -207,6 +232,20 @@ impl SymbolTable {
         }
     }
 
+    pub fn insert_computation(&mut self, targets: &[Handle], c: Computation) {
+        self.computation_table.computations.push(c);
+        let i = self.computation_table.computations.len();
+        for target in targets {
+            if self.computation_table.dependencies.contains_key(target) {
+                error!("`{}` has multiple dependencies", target);
+            } else {
+                self.computation_table
+                    .dependencies
+                    .insert(target.to_owned(), i);
+            }
+        }
+    }
+
     pub fn resolve_symbol(&mut self, handle: &Handle) -> Result<(Expression, Type)> {
         self._resolve_symbol(handle, &mut HashSet::new())
     }
@@ -310,9 +349,6 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                     froms
                 ));
             }
-            // if sorters.is_empty() {
-            //     warn!("empty sorter found in `{}`", e.src.as_str());
-            // }
 
             let mut _froms = Vec::new();
             let mut _tos = Vec::new();
@@ -328,14 +364,14 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                             ..
                         },
                     ) => {
-                        _froms.push(from.to_owned());
-                        _tos.push(to.to_owned());
+                        let from_handle = Handle::new(&module, &from);
+                        let to_handle = Handle::new(&module, &to);
                         ctx.borrow_mut()
                             .resolve_symbol(&Handle::new(&module, from))
                             .with_context(|| "while defining permutation")?;
                         ctx.borrow_mut()
                             .insert_symbol(
-                                &Handle::new(&module, to),
+                                &to_handle,
                                 Expression::Column(
                                     Handle::new(&module, to),
                                     Type::Numeric,
@@ -343,6 +379,8 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                                 ),
                             )
                             .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
+                        _froms.push(from_handle);
+                        _tos.push(to_handle);
                     }
                     _ => {
                         return Err(eyre!("expected symbol, found `{:?}, {:?}`", pair.0, pair.1))
@@ -350,6 +388,13 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                     }
                 }
             }
+            ctx.borrow_mut().insert_computation(
+                &_tos,
+                Computation::Sorted {
+                    froms: _froms,
+                    tos: _tos.clone(),
+                },
+            );
             Ok(())
         }
         Token::DefAliases(aliases) => aliases.iter().fold(Ok(()), |ax, alias| {

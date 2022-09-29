@@ -9,8 +9,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::{
-    column::{Column, ColumnSet},
-    compiler::{ConstraintSet, Type},
+    column::ColumnSet,
+    compiler::{ConstraintSet, Handle, Type},
 };
 
 type F = Fr;
@@ -80,24 +80,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                             eyre!("Column `{}` does not exist in constraints", colname)
                         })
                     })
-                    .and_then(|column| match column {
-                        Column::Atomic { ref mut value, t } => {
-                            *value = Some(parse_column(xs, *t)?);
-                            Ok(())
-                        }
-                        Column::Composite { ref mut value, .. } => {
-                            warn!("composite column `{}` filled from trace", colname);
-                            *value = Some(parse_column(xs, Type::Numeric)?);
-                            Ok(())
-                        }
-                        Column::Interleaved { ref mut value, .. } => {
-                            warn!("interleaved column `{}` filled from trace", colname);
-                            *value = Some(parse_column(xs, Type::Numeric)?);
-                            Ok(())
-                        }
-                        Column::Sorted { .. } => todo!(),
-                        _ => unreachable!(),
-                    });
+                    .and_then(|column| Ok(column.set_value(parse_column(xs, column.t)?)));
                 if let Err(e) = r {
                     debug!("{}", e);
                 }
@@ -147,32 +130,13 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintSet) -> Result<ComputeResult>
     fill_traces(&v, vec![], &mut cs.columns)
         .with_context(|| eyre!("reading columns from `{}`", tracefile))?;
     pad(&mut cs.columns).with_context(|| "padding columns")?;
-    cs.compute().with_context(|| "computing columns")?;
+    cs.compute_all().with_context(|| "computing columns")?;
 
     let mut r = ComputeResult::default();
     for (module, columns) in cs.columns.cols.iter_mut() {
-        for (colname, col) in columns.iter_mut() {
-            match col {
-                Column::Atomic { value, .. } => {
-                    r.columns.insert(
-                        format!("{}{}{}", module, "___", colname), // TODO module separator
-                        value.to_owned().unwrap_or_default(),
-                    );
-                }
-                Column::Composite { value, .. } => {
-                    r.columns.insert(
-                        format!("{}{}{}", module, "___", colname), // TODO module separator
-                        value.as_ref().unwrap().to_owned(),
-                    );
-                }
-                Column::Interleaved { value, .. } => {
-                    r.columns.insert(
-                        format!("{}{}{}", module, "___", colname), // TODO module separator
-                        value.as_ref().unwrap().to_owned(),
-                    );
-                }
-                _ => (),
-            }
+        for (name, col) in columns.iter_mut() {
+            let handle = Handle::new(&module, &name);
+            r.columns.insert(handle.mangle(), col.value().unwrap());
         }
     }
     Ok(r)

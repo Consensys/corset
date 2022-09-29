@@ -1,11 +1,51 @@
 use crate::compiler::{Expression, Handle, Type};
 use eyre::*;
+use log::*;
 use std::collections::HashMap;
 
+#[derive(Debug)]
+pub struct Column<T: Clone> {
+    value: Option<Vec<T>>,
+    pub t: Type,
+}
+impl<T: Clone> Column<T> {
+    pub fn len(&self) -> Option<usize> {
+        self.value.as_ref().map(|v| v.len())
+    }
+    pub fn is_computed(&self) -> bool {
+        self.value.is_some()
+    }
+
+    pub fn get(&self, i: isize, wrap: bool) -> Option<&T> {
+        fn get_rel<T>(v: &[T], i: isize, wrap: bool) -> Option<&T> {
+            if wrap && i < 0 {
+                v.get(((i + v.len() as isize) % v.len() as isize) as usize)
+            } else {
+                v.get(i as usize)
+            }
+        }
+
+        self.value.as_ref().and_then(|v| get_rel(v, i, wrap))
+    }
+
+    pub fn set_value(&mut self, v: Vec<T>) {
+        self.value = Some(v);
+    }
+
+    pub fn value(&self) -> Option<Vec<T>> {
+        self.value.clone()
+    }
+
+    pub fn map(&mut self, f: &dyn Fn(&mut Vec<T>)) {
+        self.value.as_mut().map(f);
+    }
+}
+
 #[derive(Debug, Default)]
-pub struct ColumnSet<T> {
+pub struct ColumnSet<T: Clone> {
     pub cols: HashMap<String, HashMap<String, Column<T>>>, // Module -> Name -> Column
 }
+
 impl<T: Ord + Clone> ColumnSet<T> {
     pub fn get(&self, handle: &Handle) -> Result<&Column<T>> {
         self.cols
@@ -35,6 +75,37 @@ impl<T: Ord + Clone> ColumnSet<T> {
             })
     }
 
+    pub fn insert_column(&mut self, handle: &Handle, t: Type, allow_dup: bool) -> Result<()> {
+        if self
+            .cols
+            .get(&handle.module)
+            .map(|module| module.contains_key(&handle.name))
+            .unwrap_or(false)
+            && !allow_dup
+        {
+            Err(eyre!("`{}` already exists", handle))
+        } else {
+            self.cols
+                .entry(handle.module.to_owned())
+                .or_default()
+                .insert(handle.name.to_owned(), Column { value: None, t });
+            Ok(())
+        }
+    }
+
+    pub fn insert_array(
+        &mut self,
+        handle: &Handle,
+        range: &[usize],
+        t: Type,
+        allow_dup: bool,
+    ) -> Result<()> {
+        for i in range.iter() {
+            self.insert_column(&handle.ith(*i), t, allow_dup)?
+        }
+        Ok(())
+    }
+
     pub fn len(&self) -> usize {
         let lens = self
             .cols
@@ -48,7 +119,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
         }
 
         if !lens.windows(2).all(|w| w[0] == w[1]) {
-            // panic!("different columns size found: {:?}", lens)
+            warn!("different columns size found: {:?}", lens)
         }
 
         *lens.iter().max().unwrap()
@@ -59,216 +130,24 @@ impl<T: Ord + Clone> ColumnSet<T> {
     }
 }
 
-impl<T> std::convert::From<HashMap<String, HashMap<String, Column<T>>>> for ColumnSet<T> {
+impl<T: Clone> std::convert::From<HashMap<String, HashMap<String, Column<T>>>> for ColumnSet<T> {
     fn from(x: HashMap<String, HashMap<String, Column<T>>>) -> Self {
         ColumnSet { cols: x }
     }
 }
 
-impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
-    fn insert_column(
-        &mut self,
-        module: &str,
-        name: &str,
-        c: Column<T>,
-        allow_dup: bool,
-    ) -> Result<()> {
-        if self
-            .cols
-            .get(module)
-            .map(|module| module.contains_key(name))
-            .unwrap_or(false)
-            && !allow_dup
-        {
-            Err(eyre!("`{}/{}` already exists", module, name))
-        } else {
-            self.cols
-                .entry(module.into())
-                .or_default()
-                .insert(name.into(), c);
-            Ok(())
-        }
-    }
-
-    pub fn insert_atomic(&mut self, handle: &Handle, t: Type, allow_dup: bool) -> Result<()> {
-        self.insert_column(
-            handle.module.as_ref(),
-            handle.name.as_ref(),
-            Column::atomic(vec![], t),
-            allow_dup,
-        )
-    }
-
-    pub fn insert_array(
-        &mut self,
-        handle: &Handle,
-        t: Type,
-        range: &[usize],
-        allow_dup: bool,
-    ) -> Result<()> {
-        self.insert_column(
-            handle.module.as_ref(),
-            handle.name.as_ref(),
-            Column::Array {
-                range: range.to_vec(),
-                values: Default::default(),
-                t,
-            },
-            allow_dup,
-        )
-    }
-
-    pub fn insert_composite(
-        &mut self,
-        handle: &Handle,
-        e: &Expression,
-        allow_dup: bool,
-    ) -> Result<()> {
-        self.insert_column(
-            handle.module.as_ref(),
-            handle.name.as_ref(),
-            Column::composite(e),
-            allow_dup,
-        )
-    }
-
-    pub fn insert_sorted<S1: AsRef<str>, S2: AsRef<str>>(
-        &mut self,
-        handle: &Handle,
-        from: &[Handle],
-        to: &[Handle],
-        allow_dup: bool,
-    ) -> Result<()> {
-        self.insert_column(
-            handle.module.as_ref(),
-            handle.name.as_ref(),
-            Column::Sorted {
-                values: Default::default(),
-                froms: from.iter().map(|n| n.to_owned()).collect::<Vec<_>>(),
-                tos: to.iter().map(|n| n.to_owned()).collect::<Vec<_>>(),
-            },
-            allow_dup,
-        )
-    }
-
-    pub fn insert_interleaved(
-        &mut self,
-        handle: &Handle,
-        cols: &[Handle],
-        allow_dup: bool,
-    ) -> Result<()> {
-        self.insert_column(
-            handle.module.as_ref(),
-            handle.name.as_ref(),
-            Column::interleaved(cols),
-            allow_dup,
-        )
-    }
-}
-
 #[derive(Debug, Clone)]
-pub enum Column<T> {
-    Atomic {
-        value: Option<Vec<T>>,
-        t: Type,
-    },
+pub enum Computation {
     Composite {
-        value: Option<Vec<T>>,
+        target: Handle,
         exp: Expression,
     },
     Interleaved {
-        value: Option<Vec<T>>,
+        target: Handle,
         froms: Vec<Handle>,
     },
-    Array {
-        values: HashMap<usize, Vec<T>>,
-        range: Vec<usize>,
-        t: Type,
-    },
     Sorted {
-        values: Option<HashMap<String, Vec<T>>>,
         froms: Vec<Handle>,
         tos: Vec<Handle>,
     },
-}
-
-impl<T: std::cmp::Ord + Clone> Column<T> {
-    pub fn len(&self) -> Option<usize> {
-        match self {
-            Column::Atomic { value, .. } => value.as_ref().map(|v| v.len()),
-            Column::Composite { value, .. } => value.as_ref().map(|v| v.len()),
-            Column::Interleaved { value, .. } => value.as_ref().map(|v| v.len()),
-            _ => unreachable!(),
-            // Column::Array { values, .. } => values.values().next().map(|x| x.len()),
-            // Column::Sorted { values, .. } => values
-            //     .as_ref()
-            //     .and_then(|values| values.values().next())
-            //     .map(|x| x.len()),
-        }
-    }
-
-    pub fn get(&self, i: isize, wrap: bool) -> Option<&T> {
-        fn get_rel<T>(v: &[T], i: isize, wrap: bool) -> Option<&T> {
-            if wrap && i < 0 {
-                v.get(((i + v.len() as isize) % v.len() as isize) as usize)
-            } else {
-                v.get(i as usize)
-            }
-        }
-
-        match self {
-            Column::Atomic { value, .. } => value.as_ref().and_then(|v| get_rel(v, i, wrap)),
-            Column::Composite { value, .. } => value.as_ref().and_then(|v| get_rel(v, i, wrap)),
-            Column::Interleaved { value, .. } => value.as_ref().and_then(|v| get_rel(v, i, wrap)),
-            Column::Array { .. } | Column::Sorted { .. } => unreachable!(),
-        }
-    }
-
-    pub fn map(&mut self, f: &dyn Fn(&mut Vec<T>)) {
-        match self {
-            Column::Atomic { value, .. }
-            | Column::Composite { value, .. }
-            | Column::Interleaved { value, .. } => {
-                value.as_mut().map(f);
-            }
-            Column::Array { .. } | Column::Sorted { .. } => unreachable!(),
-        }
-    }
-
-    pub fn is_computed(&self) -> bool {
-        match self {
-            Column::Atomic { .. } => true,
-            Column::Composite { value, .. } => value.is_some(),
-            Column::Interleaved { value, .. } => value.is_some(),
-            Column::Array { .. } => true,
-            Column::Sorted { values, .. } => values.is_some(),
-        }
-    }
-
-    pub fn atomic(v: Vec<T>, t: Type) -> Self {
-        Column::Atomic { value: Some(v), t }
-    }
-
-    pub fn composite(e: &Expression) -> Self {
-        Column::Composite {
-            exp: e.to_owned(),
-            value: None,
-        }
-    }
-
-    pub fn interleaved(c: &[Handle]) -> Self {
-        Column::Interleaved {
-            value: None,
-            froms: c.iter().map(|x| x.to_owned()).collect(),
-        }
-    }
-
-    pub fn set_values(&mut self, values: Vec<T>) {
-        match self {
-            Column::Atomic { .. } => panic!("DASF"),
-            Column::Composite { ref mut value, .. } => *value = Some(values),
-            Column::Interleaved { value, .. } => *value = Some(values),
-            Column::Array { .. } | Column::Sorted { .. } => unreachable!(),
-        }
-    }
 }

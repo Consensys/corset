@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use super::generator::{Builtin, Function, FunctionClass};
 use super::parser::{AstNode, Token};
 
-const MODULE_SEPARATOR: &str = "___";
+const MODULE_SEPARATOR: &str = "__";
+const ARRAY_SEPARATOR: &str = "_";
 
 lazy_static::lazy_static! {
     pub static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
@@ -209,6 +210,13 @@ impl Handle {
         }
     }
 
+    pub fn ith(&self, i: usize) -> Handle {
+        Handle {
+            module: self.module.clone(),
+            name: format!("{}{}{}", self.name, ARRAY_SEPARATOR, i),
+        }
+    }
+
     pub fn mangle(&self) -> String {
         fn purify(s: &str) -> String {
             s.replace('(', "_")
@@ -225,7 +233,11 @@ impl Handle {
         format!(
             "{}{}{}",
             purify(&self.module),
-            MODULE_SEPARATOR,
+            if self.module.is_empty() {
+                ""
+            } else {
+                MODULE_SEPARATOR
+            },
             purify(&self.name)
         )
     }

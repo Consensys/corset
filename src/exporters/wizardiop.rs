@@ -4,13 +4,9 @@ use std::{collections::HashMap, io::Write};
 use convert_case::{Case, Casing};
 use eyre::*;
 
-use crate::{
-    column::{Column, ColumnSet},
-    compiler::*,
-};
+use crate::{column::ColumnSet, compiler::*};
 
 const SIZE: usize = 2048;
-const ARRAY_SEPARATOR: char = '_';
 
 fn shift(e: &Expression, i: isize) -> Expression {
     match e {
@@ -128,7 +124,7 @@ impl WizardIOP {
             _ => match domain {
                 None => format!(
                     "build.GlobalConstraint(\"{}\", {})",
-                    name.to_case(Case::ScreamingSnake),
+                    name,
                     render_expression(expr)
                 ),
                 Some(domain) => domain
@@ -136,7 +132,7 @@ impl WizardIOP {
                     .map(|x| {
                         format!(
                             "build.LocalConstraint(\"{}\", {})",
-                            name.to_case(Case::ScreamingSnake),
+                            name,
                             render_expression(&shift(expr, *x))
                         )
                     })
@@ -167,7 +163,7 @@ impl WizardIOP {
                 ),
                 Constraint::Permutation(name, from, to) => format!(
                     "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
-                    name,
+                    name.to_case(Case::Snake),
                     from.iter()
                         .map(Handle::mangle)
                         .collect::<Vec<_>>()
@@ -195,30 +191,15 @@ impl WizardIOP {
         }
     }
 
-    fn render_columns<T>(cols: &ColumnSet<T>) -> String {
+    fn render_columns<T: Clone>(cols: &ColumnSet<T>) -> String {
         let mut r = String::new();
         for (module, m) in cols.cols.iter() {
-            for (name, col) in m.iter() {
+            for (name, _) in m.iter() {
                 let name = Handle::new(module, name).mangle();
-                match col {
-                    Column::Atomic { .. } => r.push_str(&format!(
-                        "{} := build.RegisterCommit(\"{}\", {})\n",
-                        name, name, SIZE
-                    )),
-                    Column::Array { range, .. } => {
-                        for i in range {
-                            r.push_str(&format!(
-                                "{}{}{} := build.RegisterCommit(\"{}{}{}\", {})\n",
-                                name, ARRAY_SEPARATOR, i, name, ARRAY_SEPARATOR, i, SIZE
-                            ))
-                        }
-                    }
-                    Column::Composite { .. } => r.push_str(&format!(
-                        "{} := build.RegisterCommit(\"{}\", {})\n",
-                        name, name, SIZE
-                    )),
-                    _ => {}
-                }
+                r.push_str(&format!(
+                    "{} := build.RegisterCommit(\"{}\", {})\n",
+                    name, name, SIZE
+                ));
             }
         }
 

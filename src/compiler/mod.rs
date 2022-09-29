@@ -1,11 +1,12 @@
 use self::definitions::Symbol;
-use crate::column::ColumnSet;
+use crate::column::{ColumnSet, Computation};
 use definitions::SymbolTable;
 use eyre::*;
 use log::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use common::*;
+pub use definitions::ComputationTable;
 pub use generator::{Builtin, Constraint, ConstraintSet, Expression};
 pub use parser::{Ast, AstNode, Kind, Token};
 
@@ -15,6 +16,8 @@ mod generator;
 mod parser;
 
 const MAIN_MODULE: &str = "MAIN";
+
+const ALLOW_DUP: bool = true;
 
 pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, ConstraintSet)> {
     let mut asts = vec![];
@@ -40,6 +43,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
 
     let mut columns: ColumnSet<pairing_ce::bn256::Fr> = Default::default();
     let mut constants: HashMap<Handle, i64> = Default::default();
+    let mut computations = ctx.borrow().computation_table.clone();
     for s in ctx.borrow().symbols() {
         match &s.1 .0 {
             Symbol::Alias(_) => {}
@@ -48,15 +52,28 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                     warn!("{} unused", symbol);
                 }
                 match symbol {
-                    Expression::Column(handle, t, k) => match k {
-                        Kind::Atomic => columns.insert_atomic(handle, *t, true)?,
-                        Kind::Interleaved(cols) => {
-                            columns.insert_interleaved(handle, cols, true)?
+                    Expression::Column(handle, t, k) => {
+                        columns.insert_column(handle, *t, ALLOW_DUP)?;
+                        match k {
+                            Kind::Atomic => (),
+                            Kind::Composite(e) => computations.insert(
+                                handle,
+                                Computation::Composite {
+                                    target: handle.clone(),
+                                    exp: *e.clone(),
+                                },
+                            ),
+                            Kind::Interleaved(froms) => computations.insert(
+                                handle,
+                                Computation::Interleaved {
+                                    target: handle.clone(),
+                                    froms: froms.clone(),
+                                },
+                            ),
                         }
-                        Kind::Composite(_) => todo!(),
-                    },
+                    }
                     Expression::ArrayColumn(handle, range, t) => {
-                        columns.insert_array(handle, *t, range, true)?
+                        columns.insert_array(handle, range, *t, ALLOW_DUP)?
                     }
                     Expression::Const(x) => {
                         constants.insert(s.0.to_owned(), x.try_into().unwrap());
@@ -71,6 +88,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         constraints,
         columns,
         constants,
+        computations,
     };
 
     Ok((asts.into_iter().map(|x| x.1).collect(), r))
