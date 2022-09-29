@@ -13,9 +13,9 @@ use crate::{
 fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Result<()> {
     let r = expr.eval(
         i,
-        &mut |module, name, i, wrap| {
+        &mut |handle, i, wrap| {
             columns
-                .get(module, name)
+                .get(handle)
                 .ok()
                 .and_then(|c| c.get(i, wrap))
                 .cloned()
@@ -44,7 +44,7 @@ fn check_constraint_at(
 ) -> Result<()> {
     let r = expr.eval(
         i,
-        &mut |module, name, i, wrap| columns.get(module, name).unwrap().get(i, wrap).cloned(),
+        &mut |handle, i, wrap| columns.get(handle).unwrap().get(i, wrap).cloned(),
         false,
         0,
         true,
@@ -75,7 +75,7 @@ fn check_constraint(
             let cols_lens = expr
                 .dependencies()
                 .into_iter()
-                .map(|(module, name)| columns.get(&module, &name).unwrap().len().unwrap())
+                .map(|handle| columns.get(&handle).unwrap().len().unwrap())
                 .collect::<Vec<_>>();
             if !cols_lens.iter().all(|&l| l == cols_lens[0]) {
                 error!(
@@ -83,11 +83,10 @@ fn check_constraint(
                     &expr,
                     expr.dependencies()
                         .iter()
-                        .map(|(module, name)| format!(
-                            "{}/{}: {}",
-                            module,
-                            name,
-                            columns.get(module, name).unwrap().len().unwrap()
+                        .map(|handle| format!(
+                            "{}: {}",
+                            handle,
+                            columns.get(handle).unwrap().len().unwrap()
                         ))
                         .collect::<Vec<_>>()
                         .join(", ")

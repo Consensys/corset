@@ -2,7 +2,7 @@ use num_traits::One;
 
 use crate::{
     column::ColumnSet,
-    compiler::{Builtin, Constraint, ConstraintSet, Expression, Kind, Type},
+    compiler::{Builtin, Constraint, ConstraintSet, Expression, Handle, Kind, Type},
 };
 use eyre::*;
 
@@ -28,8 +28,10 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) 
                         args: vec![
                             x_expr.clone(),
                             Expression::Column(
-                                RESERVED_MODULE.to_owned(),
-                                inv_x_col.into(),
+                                Handle {
+                                    module: RESERVED_MODULE.to_owned(),
+                                    name: inv_x_col.into(),
+                                },
                                 Type::Numeric,
                                 Kind::Composite(Box::new(Expression::Funcall {
                                     func: Builtin::Inv,
@@ -47,8 +49,10 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) 
         func: Builtin::Mul,
         args: vec![
             Expression::Column(
-                RESERVED_MODULE.to_owned(),
-                inv_x_col.into(),
+                Handle {
+                    module: RESERVED_MODULE.to_owned(),
+                    name: inv_x_col.into(),
+                },
                 Type::Numeric,
                 Kind::Composite(Box::new(Expression::Funcall {
                     func: Builtin::Inv,
@@ -63,8 +67,10 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &str) 
                         args: vec![
                             x_expr.clone(),
                             Expression::Column(
-                                RESERVED_MODULE.to_owned(),
-                                inv_x_col.into(),
+                                Handle {
+                                    module: RESERVED_MODULE.to_owned(),
+                                    name: inv_x_col.into(),
+                                },
                                 Type::Numeric,
                                 Kind::Composite(Box::new(Expression::Funcall {
                                     func: Builtin::Inv,
@@ -86,8 +92,10 @@ fn validate_plookup(cs: &mut Vec<Expression>, x_expr: &Expression, x_col: &str) 
         args: vec![
             x_expr.clone(),
             Expression::Column(
-                RESERVED_MODULE.to_owned(),
-                x_col.into(),
+                Handle {
+                    module: RESERVED_MODULE.to_owned(),
+                    name: x_col.into(),
+                },
                 Type::Numeric,
                 Kind::Composite(Box::new(x_expr.clone())),
             ),
@@ -119,10 +127,16 @@ fn expand_expr<T: Clone + Ord>(
                 let inverted = &mut args[0];
                 let inv_colname = expression_to_name(inverted, "INV");
                 validate_inv(new_cs, inverted, &inv_colname);
-                cols.insert_composite(RESERVED_MODULE, &inv_colname, &invert_expr(inverted), true)?;
+                cols.insert_composite(
+                    &Handle::new(RESERVED_MODULE, &inv_colname),
+                    &invert_expr(inverted),
+                    true,
+                )?;
                 *e = Expression::Column(
-                    RESERVED_MODULE.to_owned(),
-                    inv_colname,
+                    Handle {
+                        module: RESERVED_MODULE.to_owned(),
+                        name: inv_colname,
+                    },
                     Type::Numeric,
                     Kind::Composite(Box::new(inverted.clone())),
                 )
@@ -143,7 +157,7 @@ fn expand_plookup<T: Ord + Clone>(
         e => {
             let plookup_colname = expression_to_name(e, "PLKP");
             validate_plookup(new_cs, e, &plookup_colname);
-            cols.insert_composite(RESERVED_MODULE, &plookup_colname, e, true)?;
+            cols.insert_composite(&Handle::new(RESERVED_MODULE, plookup_colname), e, true)?;
             Ok(())
         }
     }
@@ -157,7 +171,7 @@ pub fn expand(cs: &mut ConstraintSet) -> Result<()> {
             Constraint::Vanishes { expr: e, .. } => {
                 expand_expr(e, &mut cs.columns, &mut new_cs_inv)?;
             }
-            Constraint::Plookup(name, parents, children) => {
+            Constraint::Plookup(_name, parents, children) => {
                 for e in parents.iter().chain(children.iter()) {
                     expand_plookup(e, &mut cs.columns, &mut new_cs_plookup)?;
                 }

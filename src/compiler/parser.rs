@@ -6,6 +6,7 @@ use std::fmt;
 use std::fmt::Debug;
 
 use super::common::Type;
+use super::Handle;
 
 #[derive(Parser)]
 #[grammar = "corset.pest"]
@@ -29,7 +30,7 @@ pub struct AstNode {
     pub lc: LinCol,
 }
 impl AstNode {
-    pub fn into_symbol(&self) -> Option<String> {
+    pub fn as_symbol(&self) -> Option<String> {
         if let AstNode {
             class: Token::Symbol(x),
             ..
@@ -51,7 +52,7 @@ impl Debug for AstNode {
 pub enum Kind<T> {
     Atomic,
     Composite(Box<T>),
-    Interleaved(Vec<String>),
+    Interleaved(Vec<Handle>),
 }
 
 #[derive(PartialEq, Clone)]
@@ -204,18 +205,8 @@ impl AstNode {
                                     kind = Kind::Interleaved(
                                         froms
                                             .iter()
-                                            .map(|f| {
-                                                if let AstNode {
-                                                    class: Token::Symbol(from),
-                                                    ..
-                                                } = f
-                                                {
-                                                    from.to_owned()
-                                                } else {
-                                                    unreachable!()
-                                                }
-                                            })
-                                            .collect::<Vec<String>>(),
+                                            .map(|f| Handle::new("??", f.as_symbol().unwrap()))
+                                            .collect(),
                                     );
                                 }
                             } else {
@@ -429,12 +420,8 @@ impl AstNode {
             }
 
             Some(Token::Symbol(defkw)) if defkw == "defpermutation" => {
-                match (tokens.get(1), tokens.get(2), tokens.get(3)) {
-                    (
-                        Some(Token::List(to)),
-                        Some(Token::List(from)),
-                        Some(Token::List(sorters)),
-                    ) => Ok(AstNode {
+                match (tokens.get(1), tokens.get(2)) {
+                    (Some(Token::List(to)), Some(Token::List(from))) => Ok(AstNode {
                         class: Token::DefSort(to.to_owned(), from.to_owned()),
                         src: src.into(),
                         lc,

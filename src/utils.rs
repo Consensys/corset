@@ -32,10 +32,10 @@ impl Pretty for Expression {
             let c = &COLORS[depth % COLORS.len()];
             match s {
                 Expression::Const(x) => format!("{}", x).color(*c),
-                Expression::Column(_module, name, _t, _k) => name.to_string().color(*c),
-                Expression::ArrayColumn(_module, name, range, _t) => format!(
+                Expression::Column(handle, _t, _k) => handle.name.to_string().color(*c),
+                Expression::ArrayColumn(handle, range, _t) => format!(
                     "{}[{}:{}]",
-                    name,
+                    handle.name,
                     range.first().unwrap(),
                     range.last().unwrap(),
                 )

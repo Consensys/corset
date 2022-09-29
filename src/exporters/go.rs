@@ -67,10 +67,10 @@ impl GoExporter {
         let r = match node {
             Expression::ArrayColumn(..) => unreachable!(),
             Expression::Const(x) => Ok(format!("column.CONST_STRING(\"{}\")", x)),
-            Expression::Column(_module, name, _, _) => Ok(format!(
+            Expression::Column(handle, _, _) => Ok(format!(
                 "{}[\"{}\"]",
                 self.ce,
-                name.to_case(Case::UpperSnake)
+                handle.name.to_case(Case::UpperSnake)
             )),
             Expression::Funcall { func, args } => self.render_funcall(func, args),
             Expression::List(constraints) => Ok(constraints
@@ -114,15 +114,13 @@ impl GoExporter {
         Ok(r)
     }
 
-    fn render_consts(&self, consts: &HashMap<String, i64>) -> String {
-        consts.iter().fold(String::new(), |mut ax, (name, value)| {
-            ax.push_str(&format!(
-                "const {} = {}\n",
-                name.to_case(Case::ScreamingSnake),
-                value
-            ));
-            ax
-        })
+    fn render_consts(&self, consts: &HashMap<Handle, i64>) -> String {
+        consts
+            .iter()
+            .fold(String::new(), |mut ax, (handle, value)| {
+                ax.push_str(&format!("const {} = {}\n", handle.mangle(), value));
+                ax
+            })
     }
 
     fn render_columns<T>(&self, cols: &ColumnSet<T>) -> String {
@@ -176,7 +174,10 @@ const (
                     Column::Interleaved { froms: from, .. } => r.push_str(&format!(
                         "var {} = column.Interleaved{{{}}}\n",
                         name.to_case(Case::ScreamingSnake),
-                        from.join(", ")
+                        from.iter()
+                            .map(Handle::mangle)
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     )),
                     Column::Sorted { .. } => {}
                 }

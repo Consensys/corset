@@ -39,31 +39,28 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         .collect();
 
     let mut columns: ColumnSet<pairing_ce::bn256::Fr> = Default::default();
-    let mut constants: HashMap<String, i64> = Default::default();
+    let mut constants: HashMap<Handle, i64> = Default::default();
     for s in ctx.borrow().symbols() {
-        match &s.2 .0 {
+        match &s.1 .0 {
             Symbol::Alias(_) => {}
             Symbol::Final(symbol, used) => {
                 if !used {
                     warn!("{} unused", symbol);
                 }
                 match symbol {
-                    Expression::Column(module, name, t, k) => match k {
-                        Kind::Atomic => columns.insert_atomic(module, name, *t, true)?,
+                    Expression::Column(handle, t, k) => match k {
+                        Kind::Atomic => columns.insert_atomic(handle, *t, true)?,
                         Kind::Interleaved(cols) => {
-                            columns.insert_interleaved(module, name, cols, true)?
+                            columns.insert_interleaved(handle, cols, true)?
                         }
                         Kind::Composite(_) => todo!(),
                     },
-                    Expression::ArrayColumn(module, name, range, t) => {
-                        columns.insert_array(module, name, *t, range, true)?
+                    Expression::ArrayColumn(handle, range, t) => {
+                        columns.insert_array(handle, *t, range, true)?
                     }
                     Expression::Const(x) => {
-                        constants.insert(s.1.to_owned(), x.try_into().unwrap());
+                        constants.insert(s.0.to_owned(), x.try_into().unwrap());
                     }
-                    // Expression::Permutation(from, to) => {
-                    //     columns.insert_sorted("PRIVATE", name, from, to, true)?
-                    // }
                     x => todo!("{:?}", x),
                 }
             }

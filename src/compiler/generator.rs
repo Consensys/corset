@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
-use super::{common::*, ColumnHandle};
+use super::{common::*, Handle};
 use crate::column::{Column, ColumnSet};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
@@ -25,7 +25,7 @@ pub enum Constraint {
         expr: Box<Expression>,
     },
     Plookup(String, Vec<Expression>, Vec<Expression>),
-    Permutation(String, Vec<ColumnHandle>, Vec<ColumnHandle>),
+    Permutation(String, Vec<Handle>, Vec<Handle>),
 }
 
 #[derive(Clone)]
@@ -35,8 +35,8 @@ pub enum Expression {
         args: Vec<Expression>,
     },
     Const(BigInt),
-    Column(String, String, Type, Kind<Expression>), // Module Name Type Kind
-    ArrayColumn(String, String, Vec<usize>, Type),
+    Column(Handle, Type, Kind<Expression>), // Module Name Type Kind
+    ArrayColumn(Handle, Vec<usize>, Type),
     // Permutation(Vec<String>, Vec<String>),
     List(Vec<Expression>),
     Void,
@@ -54,19 +54,19 @@ impl Expression {
                     Type::Numeric
                 }
             }
-            Expression::Column(_, _, t, _) => *t,
-            Expression::ArrayColumn(_, _, _, t) => *t,
+            Expression::Column(_, t, _) => *t,
+            Expression::ArrayColumn(_, _, t) => *t,
             Expression::List(xs) => xs.iter().map(|x| x.t()).max().unwrap(),
             Expression::Void => Type::Void,
             // Expression::Permutation(..) => Type::Void,
         }
     }
 
-    pub fn dependencies(&self) -> HashSet<(String, String)> {
+    pub fn dependencies(&self) -> HashSet<Handle> {
         self.leaves()
             .into_iter()
             .filter_map(|e| match e {
-                Expression::Column(module, name, ..) => Some((module, name)),
+                Expression::Column(handle, ..) => Some(handle),
                 _ => None,
             })
             .collect()
@@ -75,7 +75,7 @@ impl Expression {
     pub fn eval(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&str, &str, isize, bool) -> Option<Fr>,
+        get: &mut dyn FnMut(&Handle, isize, bool) -> Option<Fr>,
         trace: bool,
         depth: usize,
         wrap: bool,
@@ -128,16 +128,24 @@ impl Expression {
                     .eval(i, get, trace, depth + 1, true)
                     .and_then(|x| x.inverse()),
                 Builtin::Nth => {
-                    if let (
-                        Expression::ArrayColumn(module, name, range, _),
-                        Expression::Const(idx),
-                    ) = (&args[0], &args[1])
+                    if let (Expression::ArrayColumn(h, range, _), Expression::Const(idx)) =
+                        (&args[0], &args[1])
                     {
                         let idx = idx.to_usize().unwrap();
                         if !range.contains(&idx) {
-                            panic!("trying to access `{}.{}` ad index `{}`", module, name, idx);
+                            panic!(
+                                "trying to access `{}.{}` ad index `{}`",
+                                h.module, h.name, idx
+                            );
                         }
-                        get(module, &format!("{}_{}", name, idx), i, wrap)
+                        get(
+                            &Handle {
+                                module: h.module.to_owned(),
+                                name: format!("{}_{}", h.name, idx),
+                            },
+                            i,
+                            wrap,
+                        )
                     } else {
                         unreachable!()
                     }
@@ -149,7 +157,7 @@ impl Expression {
                 Builtin::ByteDecomposition => unreachable!(),
             },
             Expression::Const(x) => Fr::from_str(&x.to_string()),
-            Expression::Column(module, name, ..) => get(module, name, i, wrap),
+            Expression::Column(handle, ..) => get(handle, i, wrap),
             _ => unreachable!(),
         };
         if trace && !matches!(self, Expression::Const(_)) {
@@ -174,8 +182,8 @@ impl Expression {
                     }
                 }
                 Expression::Const(_) => ax.push(e.clone()),
-                Expression::Column(_, _, _, _) => ax.push(e.clone()),
-                Expression::ArrayColumn(_, _, _, _) => {}
+                Expression::Column(_, _, _) => ax.push(e.clone()),
+                Expression::ArrayColumn(_, _, _) => {}
                 Expression::List(args) => {
                     for a in args {
                         _flatten(a, ax);
@@ -225,14 +233,14 @@ impl Display for Expression {
 
         match self {
             Expression::Const(x) => write!(f, "{}", x),
-            Expression::Column(module, name, _t, _k) => {
-                write!(f, "{}.{}", module, name)
+            Expression::Column(handle, _t, _k) => {
+                write!(f, "{}", handle)
             }
-            Expression::ArrayColumn(_module, name, range, _t) => {
+            Expression::ArrayColumn(handle, range, _t) => {
                 write!(
                     f,
                     "{}[{}:{}]",
-                    name,
+                    handle,
                     range.first().unwrap(),
                     range.last().unwrap(),
                 )
@@ -257,15 +265,14 @@ impl Debug for Expression {
 
         match self {
             Expression::Const(x) => write!(f, "{}", x),
-            Expression::Column(module, name, t, _k) => {
-                write!(f, "{}/{}:{:?}", module, name, t)
+            Expression::Column(handle, t, _k) => {
+                write!(f, "{}:{:?}", handle, t)
             }
-            Expression::ArrayColumn(module, name, range, t) => {
+            Expression::ArrayColumn(handle, range, t) => {
                 write!(
                     f,
-                    "{}/{}:{:?}[{}:{}]",
-                    module,
-                    name,
+                    "{}:{:?}[{}:{}]",
+                    handle,
                     t,
                     range.first().unwrap(),
                     range.last().unwrap(),
@@ -457,19 +464,19 @@ impl FuncVerifier<Expression> for Builtin {
 pub struct ConstraintSet {
     pub columns: ColumnSet<Fr>,
     pub constraints: Vec<Constraint>,
-    pub constants: HashMap<String, i64>,
+    pub constants: HashMap<Handle, i64>,
 }
 impl ConstraintSet {
-    fn get(&self, module: &str, name: &str) -> Result<&Column<Fr>> {
-        self.columns.get(module, name)
+    fn get(&self, handle: &Handle) -> Result<&Column<Fr>> {
+        self.columns.get(handle)
     }
 
-    fn get_mut(&mut self, module: &str, name: &str) -> Result<&mut Column<Fr>> {
-        self.columns.get_mut(module, name)
+    fn get_mut(&mut self, handle: &Handle) -> Result<&mut Column<Fr>> {
+        self.columns.get_mut(handle)
     }
 
-    fn compute_interleaved(&mut self, module: &str, name: &str) -> Result<()> {
-        let col = self.get(module, name)?;
+    fn compute_interleaved(&mut self, handle: &Handle) -> Result<()> {
+        let col = self.get(handle)?;
         let froms = if let Column::Interleaved { froms: from, .. } = col {
             from.clone()
         } else {
@@ -477,34 +484,34 @@ impl ConstraintSet {
         };
 
         for from in froms.iter() {
-            self.compute_column(module, from)?;
+            self.compute_column(from)?;
         }
 
         if !froms
             .iter()
-            .map(|c| self.get(module, c).unwrap().len().unwrap())
+            .map(|h| self.get(h).unwrap().len().unwrap())
             .collect::<Vec<_>>()
             .windows(2)
             .all(|w| w[0] == w[1])
         {
             return Err(eyre!("interleaving columns of incoherent lengths"));
         }
-        let len = self.get(module, &froms[0])?.len().unwrap();
+        let len = self.get(&froms[0])?.len().unwrap();
 
         let mut values = Vec::new();
         for i in 0..len as isize {
             for from in froms.iter() {
-                values.push(*self.get(module, from).unwrap().get(i, false).unwrap());
+                values.push(*self.get(from).unwrap().get(i, false).unwrap());
             }
         }
 
-        self.get_mut(module, name).unwrap().set_values(values);
+        self.get_mut(handle).unwrap().set_values(values);
 
         Ok(())
     }
 
-    fn compute_sorted(&mut self, module: &str, name: &str) -> Result<()> {
-        let col = self.get(module, name)?;
+    fn compute_sorted(&mut self, handle: &Handle) -> Result<()> {
+        let col = self.get(handle)?;
         let froms = if let Column::Sorted { froms, .. } = col {
             froms.clone()
         } else {
@@ -512,11 +519,11 @@ impl ConstraintSet {
         };
 
         for from in froms.iter() {
-            self.compute_column(module, from)?;
+            self.compute_column(from)?;
         }
         let from_cols = froms
             .iter()
-            .map(|c| self.get(module, c).unwrap())
+            .map(|c| self.get(c).unwrap())
             .cloned()
             .collect::<Vec<_>>();
 
@@ -543,21 +550,18 @@ impl ConstraintSet {
             for i in &sorted_is {
                 value[*i] = *from_col.get((*i).try_into().unwrap(), false).unwrap();
             }
-            if self.get_mut(module, name).unwrap().is_computed() {
-                warn!(
-                    "{}/{} already filled; dropping computing value",
-                    module, name
-                )
+            if self.get_mut(handle).unwrap().is_computed() {
+                warn!("{} already filled; dropping computing value", handle)
             } else {
-                self.get_mut(module, name).unwrap().set_values(value);
+                self.get_mut(handle).unwrap().set_values(value);
             }
         }
 
         Ok(())
     }
 
-    fn compute_composite(&mut self, module: &str, name: &str) -> Result<()> {
-        let col = self.columns.get(module, name).unwrap();
+    fn compute_composite(&mut self, handle: &Handle) -> Result<()> {
+        let col = self.columns.get(handle).unwrap();
         let (exp, cols_in_expr) = if let Column::Composite { exp, .. } = col {
             (exp.clone(), exp.dependencies())
         } else {
@@ -566,9 +570,9 @@ impl ConstraintSet {
 
         let length = *cols_in_expr
             .iter()
-            .map(|(module, name)| {
-                self.compute_column(module, name)?;
-                Ok(self.get(module, name).unwrap().len().unwrap().to_owned())
+            .map(|handle| {
+                self.compute_column(handle)?;
+                Ok(self.get(handle).unwrap().len().unwrap().to_owned())
             })
             .collect::<Result<Vec<_>>>()?
             .iter()
@@ -579,17 +583,13 @@ impl ConstraintSet {
             .map(|i| {
                 exp.eval(
                     i,
-                    &mut |module, name, i, _| {
-                        let col = self.get(module, name).unwrap();
+                    &mut |handle, i, _| {
+                        let col = self.get(handle).unwrap();
                         if col.is_computed() {
                             col.get(i, false).cloned()
                         } else {
-                            self.compute_column(module, name);
-                            self.columns
-                                .get(module, name)
-                                .unwrap()
-                                .get(i, false)
-                                .cloned()
+                            self.compute_column(handle);
+                            self.columns.get(handle).unwrap().get(i, false).cloned()
                         }
                     },
                     false,
@@ -600,24 +600,21 @@ impl ConstraintSet {
             })
             .collect::<Vec<_>>();
 
-        self.columns
-            .get_mut(module, name)
-            .unwrap()
-            .set_values(values);
+        self.columns.get_mut(handle).unwrap().set_values(values);
 
         Ok(())
     }
 
-    fn compute_column(&mut self, module: &str, name: &str) -> Result<()> {
-        let col = self.get(module, name).unwrap();
+    fn compute_column(&mut self, handle: &Handle) -> Result<()> {
+        let col = self.get(handle).unwrap();
         if col.is_computed() {
             Ok(())
         } else {
-            info!("Computing {}/{}", module, name);
+            info!("Computing {}", handle);
             match col {
-                Column::Composite { .. } => self.compute_composite(module, name),
-                Column::Interleaved { .. } => self.compute_interleaved(module, name),
-                Column::Sorted { .. } => self.compute_sorted(module, name),
+                Column::Composite { .. } => self.compute_composite(handle),
+                Column::Interleaved { .. } => self.compute_interleaved(handle),
+                Column::Sorted { .. } => self.compute_sorted(handle),
                 _ => unreachable!("{:?}", col),
             }
         }
@@ -630,13 +627,13 @@ impl ConstraintSet {
             .iter()
             .flat_map(|(module, cols)| {
                 cols.keys()
-                    .map(|colname| (module.to_owned(), colname.to_owned()))
+                    .map(|colname| Handle::new(module.clone(), colname.clone()))
             })
             .collect::<Vec<_>>();
 
-        for (module, colname) in handles.iter() {
-            self.compute_column(module, colname)
-                .with_context(|| format!("computing {}/{}", module, colname))?;
+        for handle in handles.iter() {
+            self.compute_column(handle)
+                .with_context(|| format!("computing {}", handle))?;
         }
 
         Ok(())
@@ -664,8 +661,7 @@ fn apply_form(
                 for i in is {
                     let new_ctx = SymbolTable::derived(ctx.clone());
                     new_ctx.borrow_mut().insert_symbol(
-                        module,
-                        i_name,
+                        &Handle::new(&module, i_name),
                         Expression::Const(BigInt::from(*i)),
                     )?;
 
@@ -802,17 +798,19 @@ fn apply(
                     }
 
                     Builtin::Nth => {
-                        if let (Expression::ArrayColumn(module, cname, ..), Expression::Const(i)) =
+                        if let (Expression::ArrayColumn(handle, ..), Expression::Const(i)) =
                             (&traversed_args[0], &traversed_args[1])
                         {
                             let x = i.to_usize().unwrap();
-                            match &ctx.borrow_mut().resolve_symbol(module, cname)? {
-                                array @ (Expression::ArrayColumn(_, _, range, t), _) => {
+                            match &ctx.borrow_mut().resolve_symbol(handle)? {
+                                array @ (Expression::ArrayColumn(_, range, t), _) => {
                                     if range.contains(&x) {
                                         Ok(Some((
                                             Expression::Column(
-                                                module.to_owned(),
-                                                format!("{}_{}", cname, i),
+                                                Handle {
+                                                    module: module.to_owned(),
+                                                    name: format!("{}_{}", handle.name, i),
+                                                },
                                                 *t,
                                                 Kind::Atomic,
                                             ),
@@ -862,7 +860,7 @@ fn apply(
                 for (i, f_arg) in f_args.iter().enumerate() {
                     new_ctx
                         .borrow_mut()
-                        .insert_symbol(module, f_arg, traversed_args[i].clone())?;
+                        .insert_symbol(&Handle::new(&module, f_arg), traversed_args[i].clone())?;
                 }
 
                 reduce(body, new_ctx, module)
@@ -887,7 +885,10 @@ fn reduce(
                 Type::Numeric
             },
         ))),
-        Token::Symbol(name) => Ok(Some(ctx.borrow_mut().resolve_symbol(module, name)?)),
+        Token::Symbol(name) => Ok(Some(
+            ctx.borrow_mut()
+                .resolve_symbol(&Handle::new(module, name))?,
+        )),
         Token::List(args) => {
             if args.is_empty() {
                 Ok(Some((Expression::List(vec![]), Type::Void)))
@@ -906,11 +907,12 @@ fn reduce(
         Token::DefColumn(name, _, k) => match k {
             Kind::Composite(e) => {
                 let e = reduce(e, ctx.clone(), module)?.unwrap();
-                ctx.borrow_mut().edit_symbol(module, name, &|x| {
-                    if let Expression::Column(_, _, _, kind) = x {
-                        *kind = Kind::Composite(Box::new(e.0.clone()))
-                    }
-                })?;
+                ctx.borrow_mut()
+                    .edit_symbol(&Handle::new(module, name), &|x| {
+                        if let Expression::Column(_, _, kind) = x {
+                            *kind = Kind::Composite(Box::new(e.0.clone()))
+                        }
+                    })?;
                 Ok(None)
             }
             _ => Ok(None),
@@ -981,23 +983,25 @@ fn reduce_toplevel(
             Err(eyre!("Unexpected top-level form: {:?}", e))
         }
 
-        Token::Defun(..) | Token::DefAliases(_) | Token::DefunAlias(..) => Ok(None),
+        Token::Defun(..) | Token::DefAliases(_) | Token::DefunAlias(..) | Token::DefConsts(_) => {
+            Ok(None)
+        }
         Token::DefSort(to, from) => Ok(Some(Constraint::Permutation(
             names::Generator::default().next().unwrap(),
-            from.into_iter()
-                .map(|f| ColumnHandle {
+            from.iter()
+                .map(|f| Handle {
                     module: module.clone(),
-                    name: f.into_symbol().unwrap(),
+                    name: f.as_symbol().unwrap(),
                 })
                 .collect::<Vec<_>>(),
-            to.into_iter()
-                .map(|f| ColumnHandle {
+            to.iter()
+                .map(|f| Handle {
                     module: module.clone(),
-                    name: f.into_symbol().unwrap(),
+                    name: f.as_symbol().unwrap(),
                 })
                 .collect::<Vec<_>>(),
         ))),
-        _ => unreachable!("{:?}", e),
+        _ => unreachable!("{:?}", e.src),
     }
 }
 

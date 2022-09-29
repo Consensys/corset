@@ -127,16 +127,13 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
             })
         });
 
-    r.cols
-        .get_mut("binary")
-        .and_then(|m| m.get_mut("NOT"))
-        .map(|x| {
-            x.map(&|xs| {
-                for i in 0..padded {
-                    xs[i] = _255;
-                }
-            });
+    if let Some(col) = r.cols.get_mut("binary").and_then(|m| m.get_mut("NOT")) {
+        col.map(&|xs| {
+            for x in xs.iter_mut().take(padded) {
+                *x = _255;
+            }
         });
+    }
 
     Ok(())
 }

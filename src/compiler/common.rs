@@ -196,13 +196,30 @@ impl std::cmp::PartialOrd for Type {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ColumnHandle {
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Handle {
     pub module: String,
     pub name: String,
 }
-impl ColumnHandle {
+impl Handle {
+    pub fn new<S1: AsRef<str>, S2: AsRef<str>>(module: S1, name: S2) -> Self {
+        Handle {
+            module: module.as_ref().to_owned(),
+            name: name.as_ref().to_owned(),
+        }
+    }
+
     pub fn mangle(&self) -> String {
         format!("{}{}{}", self.module, MODULE_SEPARATOR, self.name)
+    }
+}
+impl std::fmt::Debug for Handle {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}::{}", self.module, self.name)
+    }
+}
+impl std::fmt::Display for Handle {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}.{}", self.module, self.name)
     }
 }

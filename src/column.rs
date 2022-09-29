@@ -1,4 +1,4 @@
-use crate::compiler::{Expression, Type};
+use crate::compiler::{Expression, Handle, Type};
 use eyre::*;
 use std::collections::HashMap;
 
@@ -7,20 +7,32 @@ pub struct ColumnSet<T> {
     pub cols: HashMap<String, HashMap<String, Column<T>>>, // Module -> Name -> Column
 }
 impl<T: Ord + Clone> ColumnSet<T> {
-    pub fn get(&self, module: &str, name: &str) -> Result<&Column<T>> {
+    pub fn get(&self, handle: &Handle) -> Result<&Column<T>> {
         self.cols
-            .get(module)
-            .ok_or_else(|| eyre!("module `{}` unknwown", module))?
-            .get(name)
-            .ok_or_else(|| eyre!("column `{}` not found in module `{}`", name, module))
+            .get(&handle.module)
+            .ok_or_else(|| eyre!("module `{}` unknwown", handle.module))?
+            .get(&handle.name)
+            .ok_or_else(|| {
+                eyre!(
+                    "column `{}` not found in module `{}`",
+                    handle.name,
+                    handle.module
+                )
+            })
     }
 
-    pub fn get_mut(&mut self, module: &str, name: &str) -> Result<&mut Column<T>> {
+    pub fn get_mut(&mut self, handle: &Handle) -> Result<&mut Column<T>> {
         self.cols
-            .get_mut(module)
-            .ok_or_else(|| eyre!("module `{}` unknwown", module))?
-            .get_mut(name)
-            .ok_or_else(|| eyre!("column `{}` not found in module `{}`", name, module))
+            .get_mut(&handle.module)
+            .ok_or_else(|| eyre!("module `{}` unknwown", handle.module))?
+            .get_mut(&handle.name)
+            .ok_or_else(|| {
+                eyre!(
+                    "column `{}` not found in module `{}`",
+                    handle.name,
+                    handle.module
+                )
+            })
     }
 
     pub fn len(&self) -> usize {
@@ -78,32 +90,25 @@ impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
         }
     }
 
-    pub fn insert_atomic<S: AsRef<str>>(
-        &mut self,
-        module: S,
-        name: S,
-        t: Type,
-        allow_dup: bool,
-    ) -> Result<()> {
+    pub fn insert_atomic(&mut self, handle: &Handle, t: Type, allow_dup: bool) -> Result<()> {
         self.insert_column(
-            module.as_ref(),
-            name.as_ref(),
+            handle.module.as_ref(),
+            handle.name.as_ref(),
             Column::atomic(vec![], t),
             allow_dup,
         )
     }
 
-    pub fn insert_array<S: AsRef<str>>(
+    pub fn insert_array(
         &mut self,
-        module: S,
-        name: S,
+        handle: &Handle,
         t: Type,
         range: &[usize],
         allow_dup: bool,
     ) -> Result<()> {
         self.insert_column(
-            module.as_ref(),
-            name.as_ref(),
+            handle.module.as_ref(),
+            handle.name.as_ref(),
             Column::Array {
                 range: range.to_vec(),
                 values: Default::default(),
@@ -113,54 +118,48 @@ impl<T: std::cmp::Ord + Clone> ColumnSet<T> {
         )
     }
 
-    pub fn insert_composite<S: AsRef<str>>(
+    pub fn insert_composite(
         &mut self,
-        module: S,
-        name: S,
+        handle: &Handle,
         e: &Expression,
         allow_dup: bool,
     ) -> Result<()> {
         self.insert_column(
-            module.as_ref(),
-            name.as_ref(),
+            handle.module.as_ref(),
+            handle.name.as_ref(),
             Column::composite(e),
             allow_dup,
         )
     }
 
-    pub fn insert_sorted<S1: AsRef<str>, S2: AsRef<str>, S3: AsRef<str>, S4: AsRef<str>>(
+    pub fn insert_sorted<S1: AsRef<str>, S2: AsRef<str>>(
         &mut self,
-        module: S1,
-        name: S2,
-        from: &[S3],
-        to: &[S4],
+        handle: &Handle,
+        from: &[Handle],
+        to: &[Handle],
         allow_dup: bool,
     ) -> Result<()> {
         self.insert_column(
-            module.as_ref(),
-            name.as_ref(),
+            handle.module.as_ref(),
+            handle.name.as_ref(),
             Column::Sorted {
                 values: Default::default(),
-                froms: from
-                    .iter()
-                    .map(|n| n.as_ref().to_owned())
-                    .collect::<Vec<_>>(),
-                tos: to.iter().map(|n| n.as_ref().to_owned()).collect::<Vec<_>>(),
+                froms: from.iter().map(|n| n.to_owned()).collect::<Vec<_>>(),
+                tos: to.iter().map(|n| n.to_owned()).collect::<Vec<_>>(),
             },
             allow_dup,
         )
     }
 
-    pub fn insert_interleaved<S1: AsRef<str>, S2: AsRef<str>, S3: AsRef<str>>(
+    pub fn insert_interleaved(
         &mut self,
-        module: S1,
-        name: S2,
-        cols: &[S3],
+        handle: &Handle,
+        cols: &[Handle],
         allow_dup: bool,
     ) -> Result<()> {
         self.insert_column(
-            module.as_ref(),
-            name.as_ref(),
+            handle.module.as_ref(),
+            handle.name.as_ref(),
             Column::interleaved(cols),
             allow_dup,
         )
@@ -179,7 +178,7 @@ pub enum Column<T> {
     },
     Interleaved {
         value: Option<Vec<T>>,
-        froms: Vec<String>,
+        froms: Vec<Handle>,
     },
     Array {
         values: HashMap<usize, Vec<T>>,
@@ -188,8 +187,8 @@ pub enum Column<T> {
     },
     Sorted {
         values: Option<HashMap<String, Vec<T>>>,
-        froms: Vec<String>,
-        tos: Vec<String>,
+        froms: Vec<Handle>,
+        tos: Vec<Handle>,
     },
 }
 
@@ -257,10 +256,10 @@ impl<T: std::cmp::Ord + Clone> Column<T> {
         }
     }
 
-    pub fn interleaved<S: AsRef<str>>(c: &[S]) -> Self {
+    pub fn interleaved(c: &[Handle]) -> Self {
         Column::Interleaved {
             value: None,
-            froms: c.iter().map(|x| x.as_ref().to_string()).collect(),
+            froms: c.iter().map(|x| x.to_owned()).collect(),
         }
     }
 

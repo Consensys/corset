@@ -67,14 +67,7 @@ fn render_expression(e: &Expression) -> String {
     match e {
         Expression::ArrayColumn(..) => unreachable!(),
         Expression::Const(x) => format!("symbolic.NewConstant(\"{}\")", x),
-        Expression::Column(module, name, _, _) => {
-            format!(
-                "{}{}{}.AsVariable()",
-                goize(module),
-                MODULE_SEPARATOR,
-                goize(&name.to_case(Case::ScreamingSnake))
-            )
-        }
+        Expression::Column(handle, _, _) => format!("{}.AsVariable()", handle.mangle()),
         Expression::Funcall { func, args } => render_funcall(func, args),
         Expression::List(constraints) => constraints
             .iter()
@@ -99,14 +92,7 @@ fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
         Builtin::Neg => format!("({}).Neg()", render_expression(&args[0])),
         Builtin::Shift => {
             let leaf = match &args[0] {
-                Expression::Column(module, name, ..) => {
-                    format!(
-                        "{}{}{}",
-                        goize(module),
-                        MODULE_SEPARATOR,
-                        goize(&name.to_case(Case::ScreamingSnake))
-                    )
-                }
+                Expression::Column(handle, ..) => handle.mangle(),
                 _ => unreachable!(),
             };
             format!(
@@ -165,11 +151,11 @@ impl WizardIOP {
     fn render_constraints(constraints: &[Constraint]) -> String {
         constraints
             .iter()
-            .filter_map(|constraint| match constraint {
+            .map(|constraint| match constraint {
                 Constraint::Vanishes { name, domain, expr } => {
-                    Some(Self::render_constraint(name, domain.clone(), expr))
+                    Self::render_constraint(name, domain.clone(), expr)
                 }
-                Constraint::Plookup(name, from, to) => Some(format!(
+                Constraint::Plookup(name, from, to) => format!(
                     "build.Inclusion(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
                     name,
                     from.iter()
@@ -180,34 +166,33 @@ impl WizardIOP {
                         .map(render_expression)
                         .collect::<Vec<_>>()
                         .join(", ")
-                )),
-                Constraint::Permutation(name, from, to) => Some(format!(
+                ),
+                Constraint::Permutation(name, from, to) => format!(
                     "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
                     name,
                     from.iter()
-                        .map(ColumnHandle::mangle)
+                        .map(Handle::mangle)
                         .collect::<Vec<_>>()
                         .join(", "),
-                    to.iter()
-                        .map(ColumnHandle::mangle)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )),
+                    to.iter().map(Handle::mangle).collect::<Vec<_>>().join(", ")
+                ),
             })
             .collect::<Vec<String>>()
             .join("\n")
     }
 
-    fn render_constants(consts: &HashMap<String, i64>) -> String {
+    fn render_constants(consts: &HashMap<Handle, i64>) -> String {
         if consts.is_empty() {
             String::default()
         } else {
             format!(
                 "const (\n{}\n)",
-                consts.iter().fold(String::new(), |mut ax, (name, value)| {
-                    ax.push_str(&format!("{} int = {}\n", name, value));
-                    ax
-                })
+                consts
+                    .iter()
+                    .fold(String::new(), |mut ax, (handle, value)| {
+                        ax.push_str(&format!("{} int = {}\n", handle.mangle(), value));
+                        ax
+                    })
             )
         }
     }
