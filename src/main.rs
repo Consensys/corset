@@ -163,9 +163,6 @@ fn main() -> Result<()> {
     }
 
     let (ast, mut constraints) = compiler::make(inputs.as_slice())?;
-    if args.expand {
-        expander::expand(&mut constraints)?;
-    }
 
     match args.command {
         Commands::Go {
@@ -176,6 +173,9 @@ fn main() -> Result<()> {
             columns_assignment,
             fname,
         } => {
+            if args.expand {
+                expander::expand(&mut constraints)?;
+            }
             let mut go_exporter = exporters::GoExporter {
                 constraints_filename,
                 package,
@@ -190,6 +190,7 @@ fn main() -> Result<()> {
             out_filename,
             package,
         } => {
+            expander::expand(&mut constraints)?;
             let mut wiop_exporter = exporters::WizardIOP {
                 out_filename,
                 package,
@@ -200,6 +201,9 @@ fn main() -> Result<()> {
             constraints_filename,
             columns_filename,
         } => {
+            if args.expand {
+                expander::expand(&mut constraints)?;
+            }
             let mut latex_exporter = exporters::LatexExporter {
                 constraints_filename,
                 columns_filename,
@@ -208,6 +212,7 @@ fn main() -> Result<()> {
             latex_exporter.render(&ast)?
         }
         Commands::Compute { tracefile, outfile } => {
+            expander::expand(&mut constraints)?;
             let r = compute::compute(&tracefile, &mut constraints)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
             let stringified: HashMap<String, Vec<String>> = r
@@ -234,6 +239,9 @@ fn main() -> Result<()> {
             }
         }
         Commands::Check { tracefile } => {
+            if args.expand {
+                expander::expand(&mut constraints)?;
+            }
             let _ = compute::compute(&tracefile, &mut constraints)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
             check::check(&constraints).with_context(|| {
