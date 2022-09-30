@@ -41,7 +41,7 @@ impl ComputationTable {
         }
         self.computations.push(computation);
         self.dependencies
-            .insert(target.to_owned(), self.computations.len());
+            .insert(target.to_owned(), self.computations.len() - 1);
         Ok(())
     }
 }
@@ -240,16 +240,8 @@ impl SymbolTable {
     }
 
     pub fn insert_computation(&mut self, targets: &[Handle], c: Computation) {
-        self.computation_table.computations.push(c);
-        let i = self.computation_table.computations.len();
-        for target in targets {
-            if self.computation_table.dependencies.contains_key(target) {
-                error!("`{}` has multiple dependencies", target);
-            } else {
-                self.computation_table
-                    .dependencies
-                    .insert(target.to_owned(), i);
-            }
+        for target in targets.iter() {
+            self.computation_table.insert(target, c.clone()).unwrap();
         }
     }
 
