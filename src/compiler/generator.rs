@@ -522,9 +522,9 @@ impl ConstraintSet {
 
         let mut sorted_is = (0..len).collect::<Vec<_>>();
         sorted_is.sort_by(|i, j| {
-            for t in 0..from_cols.len() {
-                let i_t = from_cols[t].get(*i as isize, false).unwrap();
-                let j_t = from_cols[t].get(*j as isize, false).unwrap();
+            for from in from_cols.iter() {
+                let i_t = from.get(*i as isize, false).unwrap();
+                let j_t = from.get(*j as isize, false).unwrap();
                 if let x @ (Ordering::Greater | Ordering::Less) = i_t.cmp(j_t) {
                     return x;
                 }

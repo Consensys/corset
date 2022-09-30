@@ -71,7 +71,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                 let module = &path[path.len() - 2];
                 let colname = &path[path.len() - 1];
 
-                let r = columns
+                let _r = columns
                     .cols
                     .get_mut(module)
                     .and_then(|module| module.get_mut(colname))

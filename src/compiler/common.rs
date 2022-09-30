@@ -244,7 +244,7 @@ impl Handle {
     }
 
     pub fn mangle_no_module(&self) -> String {
-        format!("{}", Self::purify(&self.name))
+        Self::purify(&self.name)
     }
 }
 impl std::fmt::Debug for Handle {

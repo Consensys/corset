@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::Write};
 use convert_case::{Case, Casing};
 use eyre::*;
 
-use crate::{column::ColumnSet, compiler::*};
+use crate::compiler::*;
 
 fn make_go_function(name: &str, prelude: &str, content: &str, postlude: &str, ret: &str) -> String {
     format!(
@@ -62,11 +62,9 @@ impl GoExporter {
         let r = match node {
             Expression::ArrayColumn(..) => unreachable!(),
             Expression::Const(x) => Ok(format!("column.CONST_STRING(\"{}\")", x)),
-            Expression::Column(handle, _, _) => Ok(format!(
-                "{}[\"{}\"]",
-                self.ce,
-                handle.name.to_case(Case::UpperSnake)
-            )),
+            Expression::Column(handle, _, _) => {
+                Ok(format!("{}[{}.Name()]", self.ce, handle.mangle_no_module()))
+            }
             Expression::Funcall { func, args } => self.render_funcall(func, args),
             Expression::List(constraints) => Ok(constraints
                 .iter()
@@ -138,13 +136,12 @@ import (
         r += "const (\n";
         for (_module, m) in cs.columns.cols.iter() {
             for (name, col) in m.iter() {
-                match col.kind {
-                    Kind::Atomic => r.push_str(&format!(
+                if col.kind == Kind::Atomic {
+                    r.push_str(&format!(
                         "{} column.Column = \"{}\"\n",
                         &Handle::new("", name).mangle(),
                         &Handle::new("", name).mangle(),
-                    )),
-                    _ => (),
+                    ))
                 };
             }
         }
@@ -214,7 +211,7 @@ import (
 
     pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
         let columns = if self.render_columns {
-            self.render_columns(&cs)
+            self.render_columns(cs)
         } else {
             String::new()
         };
