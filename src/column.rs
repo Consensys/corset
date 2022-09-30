@@ -1,6 +1,5 @@
 use crate::compiler::{Expression, Handle, Type};
 use eyre::*;
-use log::*;
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -118,10 +117,6 @@ impl<T: Ord + Clone> ColumnSet<T> {
             return 0;
         }
 
-        if !lens.windows(2).all(|w| w[0] == w[1]) {
-            warn!("different columns size found: {:?}", lens)
-        }
-
         *lens.iter().max().unwrap()
     }
 
@@ -150,4 +145,17 @@ pub enum Computation {
         froms: Vec<Handle>,
         tos: Vec<Handle>,
     },
+}
+impl Computation {
+    pub fn target(&self) -> String {
+        match self {
+            Computation::Composite { target, .. } => target.to_string(),
+            Computation::Interleaved { target, .. } => target.to_string(),
+            Computation::Sorted { tos, .. } => tos
+                .iter()
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+        }
+    }
 }

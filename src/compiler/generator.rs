@@ -523,8 +523,8 @@ impl ConstraintSet {
         let mut sorted_is = (0..len).collect::<Vec<_>>();
         sorted_is.sort_by(|i, j| {
             for t in 0..from_cols.len() {
-                let i_t = from_cols[*i].get(t as isize, false).unwrap();
-                let j_t = from_cols[*j].get(t as isize, false).unwrap();
+                let i_t = from_cols[t].get(*i as isize, false).unwrap();
+                let j_t = from_cols[t].get(*j as isize, false).unwrap();
                 if let x @ (Ordering::Greater | Ordering::Less) = i_t.cmp(j_t) {
                     return x;
                 }
@@ -606,6 +606,7 @@ impl ConstraintSet {
 
     pub fn compute(&mut self, i: usize) -> Result<()> {
         let comp = self.computations.get(i).unwrap().clone();
+        info!("Computing `{}`", comp.target());
 
         match &comp {
             Computation::Composite { target, exp } => self.compute_composite(target, exp),
@@ -616,7 +617,6 @@ impl ConstraintSet {
 
     pub fn compute_all(&mut self) -> Result<()> {
         for i in 0..self.computations.iter().count() {
-            info!("Computing {:?}", self.computations.get(i).unwrap());
             self.compute(i)?
         }
 

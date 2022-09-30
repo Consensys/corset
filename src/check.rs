@@ -1,3 +1,4 @@
+use indicatif::ProgressBar;
 use std::collections::HashSet;
 
 use eyre::*;
@@ -109,6 +110,8 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
         return Ok(());
     }
     let mut failed = HashSet::new();
+
+    let bar = ProgressBar::new(cs.constraints.len() as u64);
     for c in cs.constraints.iter() {
         match c {
             crate::compiler::Constraint::Vanishes { name, domain, expr } => {
@@ -130,15 +133,14 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
                         if let Err(err) = check_constraint(expr, domain, &cs.columns) {
                             error!("{}", err);
                             failed.insert(name.to_owned());
-                        } else {
-                            info!("{} validated", name);
                         }
                     }
                 }
             }
             crate::compiler::Constraint::Plookup(_, _, _) => todo!(),
-            crate::compiler::Constraint::Permutation(_name, _from, _to) => todo!(),
+            crate::compiler::Constraint::Permutation(_name, _from, _to) => (),
         }
+        bar.inc(1);
     }
     if failed.is_empty() {
         Ok(())

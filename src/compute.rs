@@ -74,16 +74,11 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                 let r = columns
                     .cols
                     .get_mut(module)
-                    .ok_or_else(|| eyre!("Module `{}` does not exist in constraints", module))
-                    .and_then(|module| {
-                        module.get_mut(colname).ok_or_else(|| {
-                            eyre!("Column `{}` does not exist in constraints", colname)
-                        })
-                    })
-                    .and_then(|column| Ok(column.set_value(parse_column(xs, column.t)?)));
-                if let Err(e) = r {
-                    debug!("{}", e);
-                }
+                    .and_then(|module| module.get_mut(colname))
+                    .map(|column| column.set_value(parse_column(xs, column.t).unwrap()));
+                // if let Err(e) = r {
+                //     debug!("{}", e);
+                // }
             }
             Ok(())
         }
