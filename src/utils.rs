@@ -59,12 +59,12 @@ impl Pretty for Expression {
 }
 
 pub fn export_symbol(s: &str) -> String {
-    s.replace('(', "_")
-        .replace(')', "_")
-        .replace('{', "_")
-        .replace('}', "_")
-        .replace('[', "_")
-        .replace(']', "_")
+    s.replace('(', "I")
+        .replace('{', "I")
+        .replace('[', "I")
+        .replace(')', "I")
+        .replace('}', "I")
+        .replace(']', "I")
         .replace('/', "_")
         .replace(':', "_")
         .replace('%', "_")

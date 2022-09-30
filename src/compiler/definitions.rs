@@ -32,10 +32,17 @@ impl ComputationTable {
     pub fn iter(&'_ self) -> impl Iterator<Item = &'_ Computation> {
         self.computations.iter()
     }
-    pub fn insert(&mut self, target: &Handle, computation: Computation) {
+    pub fn insert(&mut self, target: &Handle, computation: Computation) -> Result<()> {
+        if self.dependencies.contains_key(target) {
+            return Err(eyre!(
+                "`{}` already present as a computation target",
+                target
+            ));
+        }
         self.computations.push(computation);
         self.dependencies
             .insert(target.to_owned(), self.computations.len());
+        Ok(())
     }
 }
 #[derive(Debug)]

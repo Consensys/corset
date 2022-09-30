@@ -62,14 +62,14 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                                     target: handle.clone(),
                                     exp: *e.clone(),
                                 },
-                            ),
+                            )?,
                             Kind::Interleaved(froms) => computations.insert(
                                 handle,
                                 Computation::Interleaved {
                                     target: handle.clone(),
                                     froms: froms.clone(),
                                 },
-                            ),
+                            )?,
                         }
                     }
                     Expression::ArrayColumn(handle, range, t) => {

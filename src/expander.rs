@@ -120,7 +120,7 @@ fn expand_expr<T: Clone + Ord>(
                     Handle::new(RESERVED_MODULE, expression_to_name(inverted, "INV"));
                 validate_inv(new_cs, inverted, &inverted_handle);
                 cols.insert_column(&inverted_handle, Type::Numeric, true)?;
-                comps.insert(
+                let _ = comps.insert(
                     &inverted_handle,
                     Computation::Composite {
                         target: inverted_handle.clone(),
@@ -148,7 +148,7 @@ fn expand_plookup<T: Clone + Ord>(
             validate_plookup(new_cs, e, &plookup_handle);
 
             cols.insert_column(&plookup_handle, Type::Numeric, true)?;
-            comps.insert(
+            let _ = comps.insert(
                 &plookup_handle,
                 Computation::Composite {
                     target: plookup_handle.clone(),
