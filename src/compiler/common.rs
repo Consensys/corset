@@ -19,10 +19,6 @@ lazy_static::lazy_static! {
             name: "for".into(),
             class: FunctionClass::SpecialForm(Form::For),
         },
-        "in-range" => Function {
-            name: "in-range".into(),
-            class: FunctionClass::Builtin(Builtin::InRange),
-        },
 
 
         // monadic

@@ -170,6 +170,12 @@ impl WizardIOP {
                         .join(", "),
                     to.iter().map(Handle::mangle).collect::<Vec<_>>().join(", ")
                 ),
+                Constraint::InRange(name, from, range) => format!(
+                    "build.Range(\"{}\", {}, {})",
+                    name.to_case(Case::Snake),
+                    render_expression(from),
+                    range
+                ),
             })
             .collect::<Vec<String>>()
             .join("\n")

@@ -256,8 +256,9 @@ import (
                             )
                         }),
                 ),
-                Constraint::Plookup(_, _, _) => None,
-                Constraint::Permutation(_, _, _) => None,
+                Constraint::Plookup(..) => None,
+                Constraint::Permutation(..) => None,
+                Constraint::InRange(..) => None,
             })
             .collect::<Result<Vec<_>>>()?
             .join("\n");
@@ -291,6 +292,7 @@ import (
                         },
                         Constraint::Permutation(name, from, to) =>
                             format!("// Permutation {}\n// Parents:\n// {:?}\n// Children:\n// {:?}", name, from, to),
+                        Constraint::InRange(.. ) => "".into()
                     }
                 })
                 .collect::<Vec<_>>()

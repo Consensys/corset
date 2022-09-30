@@ -79,7 +79,7 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &Handl
     });
 }
 
-fn validate_plookup(cs: &mut Vec<Expression>, x_expr: &Expression, x_col: &Handle) {
+fn validate_computation(cs: &mut Vec<Expression>, x_expr: &Expression, x_col: &Handle) {
     cs.push(Expression::Funcall {
         func: Builtin::Sub,
         args: vec![
@@ -97,7 +97,7 @@ fn expression_to_name(e: &Expression, prefix: &str) -> String {
     format!("{}_{}", prefix, e).replace(' ', "_")
 }
 
-fn expand_expr<T: Clone + Ord>(
+fn expand_inv<T: Clone + Ord>(
     e: &mut Expression,
     cols: &mut ColumnSet<T>,
     comps: &mut ComputationTable,
@@ -106,20 +106,20 @@ fn expand_expr<T: Clone + Ord>(
     match e {
         Expression::List(es) => {
             for e in es.iter_mut() {
-                expand_expr(e, cols, comps, new_cs)?;
+                expand_inv(e, cols, comps, new_cs)?;
             }
             Ok(())
         }
         Expression::Funcall { func, args, .. } => {
             for e in args.iter_mut() {
-                expand_expr(e, cols, comps, new_cs)?;
+                expand_inv(e, cols, comps, new_cs)?;
             }
             if matches!(func, Builtin::Inv) {
                 let inverted = &mut args[0];
                 let inverted_handle =
                     Handle::new(RESERVED_MODULE, expression_to_name(inverted, "INV"));
                 validate_inv(new_cs, inverted, &inverted_handle);
-                cols.insert_column(&inverted_handle, Type::Numeric, Kind::Phantom, true)?;
+                cols.insert_column(&inverted_handle, Type::Numeric, Kind::Atomic, true)?;
                 let _ = comps.insert(
                     &inverted_handle,
                     Computation::Composite {
@@ -127,7 +127,7 @@ fn expand_expr<T: Clone + Ord>(
                         exp: invert_expr(inverted),
                     },
                 );
-                *e = Expression::Column(inverted_handle.clone(), Type::Numeric, Kind::Phantom)
+                *e = Expression::Column(inverted_handle.clone(), Type::Numeric, Kind::Atomic)
             }
             Ok(())
         }
@@ -135,50 +135,48 @@ fn expand_expr<T: Clone + Ord>(
     }
 }
 
-fn expand_plookup<T: Clone + Ord>(
+fn expand_expr<T: Clone + Ord>(
     e: &Expression,
     cols: &mut ColumnSet<T>,
     comps: &mut ComputationTable,
     new_cs: &mut Vec<Expression>,
-) -> Result<()> {
+) -> Result<Expression> {
     match e {
-        Expression::Column(..) => Ok(()),
+        Expression::Column(..) => Ok(e.clone()),
         e => {
-            let plookup_handle = Handle::new(RESERVED_MODULE, expression_to_name(e, "PLKP"));
-            validate_plookup(new_cs, e, &plookup_handle);
+            let new_handle = Handle::new(RESERVED_MODULE, expression_to_name(e, "EXPAND"));
+            validate_computation(new_cs, e, &new_handle);
+            cols.insert_column(&new_handle, Type::Numeric, Kind::Phantom, true)?;
 
-            cols.insert_column(&plookup_handle, Type::Numeric, Kind::Phantom, true)?;
             let _ = comps.insert(
-                &plookup_handle,
+                &new_handle,
                 Computation::Composite {
-                    target: plookup_handle.clone(),
+                    target: new_handle.clone(),
                     exp: e.clone(),
                 },
             );
-            Ok(())
+            Ok(Expression::Column(new_handle, Type::Numeric, Kind::Phantom))
         }
     }
 }
 
 pub fn expand(cs: &mut ConstraintSet) -> Result<()> {
     let mut new_cs_inv = vec![];
-    let mut new_cs_plookup = vec![];
+    let mut new_cs_exps = vec![];
     for c in cs.constraints.iter_mut() {
         match c {
             Constraint::Vanishes { expr: e, .. } => {
-                expand_expr(e, &mut cs.columns, &mut cs.computations, &mut new_cs_inv)?;
+                expand_inv(e, &mut cs.columns, &mut cs.computations, &mut new_cs_inv)?;
             }
             Constraint::Plookup(_name, parents, children) => {
-                for e in parents.iter().chain(children.iter()) {
-                    expand_plookup(
-                        e,
-                        &mut cs.columns,
-                        &mut cs.computations,
-                        &mut new_cs_plookup,
-                    )?;
+                for e in parents.iter_mut().chain(children.iter_mut()) {
+                    *e = expand_expr(e, &mut cs.columns, &mut cs.computations, &mut new_cs_exps)?;
                 }
             }
             Constraint::Permutation(..) => (),
+            Constraint::InRange(_, e, _) => {
+                *e = expand_expr(e, &mut cs.columns, &mut cs.computations, &mut new_cs_exps)?;
+            }
         }
     }
     if !new_cs_inv.is_empty() {
@@ -188,11 +186,11 @@ pub fn expand(cs: &mut ConstraintSet) -> Result<()> {
             expr: Expression::List(new_cs_inv).into(),
         });
     }
-    if !new_cs_plookup.is_empty() {
+    if !new_cs_exps.is_empty() {
         cs.constraints.push(Constraint::Vanishes {
-            name: "PLOOKUPS_CONSTRAINTS".into(),
+            name: "EXPANSION_CONSTRAINTS".into(),
             domain: None,
-            expr: Expression::List(new_cs_plookup).into(),
+            expr: Expression::List(new_cs_exps).into(),
         });
     }
 

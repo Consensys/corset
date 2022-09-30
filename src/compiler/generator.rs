@@ -27,6 +27,7 @@ pub enum Constraint {
     },
     Plookup(String, Vec<Expression>, Vec<Expression>),
     Permutation(String, Vec<Handle>, Vec<Handle>),
+    InRange(String, Expression, usize),
 }
 
 #[derive(Clone)]
@@ -154,7 +155,6 @@ impl Expression {
                 Builtin::Begin => unreachable!(),
                 Builtin::IfZero => unreachable!(),
                 Builtin::IfNotZero => unreachable!(),
-                Builtin::InRange => unreachable!(),
                 Builtin::ByteDecomposition => unreachable!(),
             },
             Expression::Const(x) => Fr::from_str(&x.to_string()),
@@ -300,7 +300,6 @@ pub enum Builtin {
 
     Nth,
     Begin,
-    InRange,
 
     IfZero,
     IfNotZero,
@@ -323,7 +322,6 @@ impl Builtin {
             }
             Builtin::Begin => *argtype.iter().max().unwrap(),
             Builtin::Shift | Builtin::Nth => argtype[0],
-            Builtin::InRange => Type::Void,
             Builtin::ByteDecomposition => Type::Void,
         }
     }
@@ -370,7 +368,6 @@ impl FuncVerifier<Expression> for Builtin {
             Builtin::IfZero => Arity::Between(2, 3),
             Builtin::IfNotZero => Arity::Between(2, 3),
             Builtin::Nth => Arity::Dyadic,
-            Builtin::InRange => Arity::Exactly(2),
             Builtin::ByteDecomposition => Arity::Exactly(3),
         }
     }
@@ -430,19 +427,6 @@ impl FuncVerifier<Expression> for Builtin {
                 }
             }
             Builtin::Begin => Ok(()),
-            Builtin::InRange => {
-                if matches!(args[0], Expression::Column(..))
-                    && matches!(args[1], Expression::Const(_))
-                {
-                    Ok(())
-                } else {
-                    Err(eyre!(
-                        "`{:?}` expects a column and a number but received {:?}",
-                        self,
-                        args
-                    ))
-                }
-            }
             Builtin::ByteDecomposition => {
                 if matches!(args[0], Expression::Column(..))
                     && matches!(args[1], Expression::Const(_))
@@ -811,11 +795,6 @@ fn apply(
                         }
                     }
 
-                    Builtin::InRange => {
-                        warn!("INRANGE constraints not yet implemented");
-                        Ok(None)
-                    }
-
                     Builtin::ByteDecomposition => {
                         warn!("BYTEDECOMPOSITION constraints not yet implemented");
                         Ok(None)
@@ -911,7 +890,8 @@ fn reduce(
         | Token::DefConsts(..)
         | Token::Defun(..)
         | Token::DefSort(..)
-        | Token::DefPlookup(..) => Ok(None),
+        | Token::DefPlookup(..)
+        | Token::DefInrange(..) => Ok(None),
     }
     .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))
 }
@@ -952,6 +932,11 @@ fn reduce_toplevel(
                 children,
             )))
         }
+        Token::DefInrange(e, range) => Ok(Some(Constraint::InRange(
+            names::Generator::default().next().unwrap(),
+            reduce(e, ctx, module)?.unwrap().0,
+            *range,
+        ))),
         Token::DefColumns(columns) => {
             for c in columns {
                 reduce(c, ctx.clone(), module)?;

@@ -289,7 +289,8 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
         | Token::List(_)
         | Token::Range(_)
         | Token::Type(_)
-        | Token::DefPlookup(..) => Ok(()),
+        | Token::DefPlookup(..)
+        | Token::DefInrange(..) => Ok(()),
 
         Token::DefConstraint(name, ..) => ctx
             .borrow_mut()

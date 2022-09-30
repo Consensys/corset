@@ -80,6 +80,8 @@ pub enum Token {
     DefColumns(Vec<AstNode>),
     DefColumn(String, Type, Kind<AstNode>),
     DefSort(Vec<AstNode>, Vec<AstNode>),
+
+    DefInrange(Box<AstNode>, usize),
     DefArrayColumn(String, Vec<usize>, Type),
     DefConstraint(String, Option<Vec<isize>>, Box<AstNode>),
     Defun(String, Vec<String>, Box<AstNode>),
@@ -129,6 +131,7 @@ impl Debug for Token {
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
             Token::DefColumn(name, t, kind) => write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind),
             Token::DefSort(to, from) => write!(f, "({:?}):PERMUTATION({:?})", to, from),
+            Token::DefInrange(exp, max) => write!(f, "{:?}E{}", exp, max),
             Token::DefArrayColumn(name, range, t) => {
                 write!(f, "DECLARATION {}{:?}{{{:?}}}", name, range, t)
             }
@@ -425,6 +428,23 @@ impl AstNode {
                     }),
                     _ => Err(eyre!(
                         "DEFPLOOKUP expects (PARENT:LIST CHILD:LIST); received {:?}",
+                        &tokens[1..]
+                    )),
+                }
+            }
+
+            Some(Token::Symbol(defkw)) if defkw == "definrange" => {
+                match (tokens.get(1), tokens.get(2)) {
+                    (Some(_), Some(Token::Value(range))) => Ok(AstNode {
+                        class: Token::DefInrange(
+                            Box::new(args[1].to_owned()),
+                            range.to_usize().unwrap(),
+                        ),
+                        src: src.into(),
+                        lc,
+                    }),
+                    _ => Err(eyre!(
+                        "DEFINRANGE expects (EXPRESSION RANGE); received {:?}",
                         &tokens[1..]
                     )),
                 }

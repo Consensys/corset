@@ -7,7 +7,7 @@ use pairing_ce::{bn256::Fr, ff::Field};
 
 use crate::{
     column::ColumnSet,
-    compiler::{ConstraintSet, Expression},
+    compiler::{Constraint, ConstraintSet, Expression},
     utils::*,
 };
 
@@ -114,7 +114,7 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
     let bar = ProgressBar::new(cs.constraints.len() as u64);
     for c in cs.constraints.iter() {
         match c {
-            crate::compiler::Constraint::Vanishes { name, domain, expr } => {
+            Constraint::Vanishes { name, domain, expr } => {
                 if matches!(**expr, Expression::Void) {
                     warn!("Ignoring Void expression {}", name);
                     continue;
@@ -137,8 +137,15 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
                     }
                 }
             }
-            crate::compiler::Constraint::Plookup(_, _, _) => todo!(),
-            crate::compiler::Constraint::Permutation(_name, _from, _to) => (),
+            Constraint::Plookup(_, _, _) => {
+                warn!("Plookup validation not yet implemented");
+            }
+            Constraint::Permutation(_name, _from, _to) => {
+                warn!("Permutation validation not yet implemented");
+            }
+            Constraint::InRange(_, _e, _range) => {
+                warn!("Range validation not yet implemented")
+            }
         }
         bar.inc(1);
     }
