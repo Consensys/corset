@@ -171,8 +171,9 @@ import (
             }
         }
 
+        r += "var AllColumns = []column.Description{";
         r.push_str(&format!(
-            "var AllColumns = []column.Description{{\n{}\n}}\n",
+            "\n{}\n",
             cs.columns
                 .cols
                 .values()
@@ -186,6 +187,20 @@ import (
                 .collect::<Vec<_>>()
                 .join("\n")
         ));
+        for comp in cs.computations.iter() {
+            match &comp {
+                crate::column::Computation::Composite { .. } => (),
+                crate::column::Computation::Interleaved { target, .. } => {
+                    r.push_str(&format!("{},\n", target.name))
+                }
+                crate::column::Computation::Sorted { tos, .. } => {
+                    for to in tos.iter() {
+                        r.push_str(&format!("{},\n", to.mangle_no_module()))
+                    }
+                }
+            }
+        }
+        r += "}\n\n";
 
         r.push_str(&format!(
             "var InterleavedColumns = []column.Description{{\n{}\n}}\n",
