@@ -51,8 +51,19 @@ impl Debug for AstNode {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind<T> {
     Atomic,
+    Phantom,
     Composite(Box<T>),
     Interleaved(Vec<Handle>),
+}
+impl<T> Kind<T> {
+    pub fn to_nil(&self) -> Kind<()> {
+        match self {
+            Kind::Atomic => Kind::Atomic,
+            Kind::Phantom => Kind::Phantom,
+            Kind::Composite(_) => Kind::Composite(Default::default()),
+            Kind::Interleaved(froms) => Kind::Interleaved(froms.clone()),
+        }
+    }
 }
 
 #[derive(PartialEq, Clone)]

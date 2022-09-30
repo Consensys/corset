@@ -53,9 +53,9 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                 }
                 match symbol {
                     Expression::Column(handle, t, k) => {
-                        columns.insert_column(handle, *t, ALLOW_DUP)?;
+                        columns.insert_column(handle, *t, k.to_nil(), ALLOW_DUP)?;
                         match k {
-                            Kind::Atomic => (),
+                            Kind::Atomic | Kind::Phantom => (),
                             Kind::Composite(e) => computations.insert(
                                 handle,
                                 Computation::Composite {

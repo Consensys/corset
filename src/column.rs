@@ -1,10 +1,11 @@
-use crate::compiler::{Expression, Handle, Type};
+use crate::compiler::{Expression, Handle, Kind, Type};
 use eyre::*;
 use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Column<T: Clone> {
     value: Option<Vec<T>>,
+    pub kind: Kind<()>,
     pub t: Type,
 }
 impl<T: Clone> Column<T> {
@@ -74,7 +75,13 @@ impl<T: Ord + Clone> ColumnSet<T> {
             })
     }
 
-    pub fn insert_column(&mut self, handle: &Handle, t: Type, allow_dup: bool) -> Result<()> {
+    pub fn insert_column(
+        &mut self,
+        handle: &Handle,
+        t: Type,
+        kind: Kind<()>,
+        allow_dup: bool,
+    ) -> Result<()> {
         if self
             .cols
             .get(&handle.module)
@@ -87,7 +94,14 @@ impl<T: Ord + Clone> ColumnSet<T> {
             self.cols
                 .entry(handle.module.to_owned())
                 .or_default()
-                .insert(handle.name.to_owned(), Column { value: None, t });
+                .insert(
+                    handle.name.to_owned(),
+                    Column {
+                        value: None,
+                        t,
+                        kind,
+                    },
+                );
             Ok(())
         }
     }
@@ -100,7 +114,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
         allow_dup: bool,
     ) -> Result<()> {
         for i in range.iter() {
-            self.insert_column(&handle.ith(*i), t, allow_dup)?
+            self.insert_column(&handle.ith(*i), t, Kind::Atomic, allow_dup)?
         }
         Ok(())
     }

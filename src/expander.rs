@@ -119,7 +119,7 @@ fn expand_expr<T: Clone + Ord>(
                 let inverted_handle =
                     Handle::new(RESERVED_MODULE, expression_to_name(inverted, "INV"));
                 validate_inv(new_cs, inverted, &inverted_handle);
-                cols.insert_column(&inverted_handle, Type::Numeric, true)?;
+                cols.insert_column(&inverted_handle, Type::Numeric, Kind::Phantom, true)?;
                 let _ = comps.insert(
                     &inverted_handle,
                     Computation::Composite {
@@ -127,7 +127,7 @@ fn expand_expr<T: Clone + Ord>(
                         exp: invert_expr(inverted),
                     },
                 );
-                *e = Expression::Column(inverted_handle.clone(), Type::Numeric, Kind::Atomic)
+                *e = Expression::Column(inverted_handle.clone(), Type::Numeric, Kind::Phantom)
             }
             Ok(())
         }
@@ -147,7 +147,7 @@ fn expand_plookup<T: Clone + Ord>(
             let plookup_handle = Handle::new(RESERVED_MODULE, expression_to_name(e, "PLKP"));
             validate_plookup(new_cs, e, &plookup_handle);
 
-            cols.insert_column(&plookup_handle, Type::Numeric, true)?;
+            cols.insert_column(&plookup_handle, Type::Numeric, Kind::Phantom, true)?;
             let _ = comps.insert(
                 &plookup_handle,
                 Computation::Composite {

@@ -44,6 +44,14 @@ impl ComputationTable {
             .insert(target.to_owned(), self.computations.len() - 1);
         Ok(())
     }
+    pub fn insert_multiple(&mut self, targets: &[Handle], computation: Computation) -> Result<()> {
+        self.computations.push(computation);
+        for target in targets.iter() {
+            self.dependencies
+                .insert(target.to_owned(), self.computations.len() - 1);
+        }
+        Ok(())
+    }
 }
 #[derive(Debug)]
 pub struct SymbolTable {
@@ -239,12 +247,6 @@ impl SymbolTable {
         }
     }
 
-    pub fn insert_computation(&mut self, targets: &[Handle], c: Computation) {
-        for target in targets.iter() {
-            self.computation_table.insert(target, c.clone()).unwrap();
-        }
-    }
-
     pub fn resolve_symbol(&mut self, handle: &Handle) -> Result<(Expression, Type)> {
         self._resolve_symbol(handle, &mut HashSet::new())
     }
@@ -316,7 +318,8 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                     // Convert Kind<AstNode> to Kind<Expression>
                     match kind {
                         Kind::Atomic => Kind::Atomic,
-                        Kind::Composite(_) => Kind::Atomic, // The actual expression is computed by the generator
+                        Kind::Phantom => Kind::Phantom,
+                        Kind::Composite(_) => Kind::Phantom, // The actual expression is computed by the generator
                         Kind::Interleaved(xs) => Kind::Interleaved(
                             xs.iter().map(|h| Handle::new(&module, &h.name)).collect(),
                         ),
@@ -374,7 +377,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                                 Expression::Column(
                                     Handle::new(&module, to),
                                     Type::Numeric,
-                                    Kind::Atomic,
+                                    Kind::Phantom,
                                 ),
                             )
                             .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
@@ -387,13 +390,14 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                     }
                 }
             }
-            ctx.borrow_mut().insert_computation(
+
+            ctx.borrow_mut().computation_table.insert_multiple(
                 &_tos,
                 Computation::Sorted {
                     froms: _froms,
                     tos: _tos.clone(),
                 },
-            );
+            )?;
             Ok(())
         }
         Token::DefAliases(aliases) => aliases.iter().fold(Ok(()), |ax, alias| {

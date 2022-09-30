@@ -122,7 +122,7 @@ impl GoExporter {
             })
     }
 
-    fn render_columns<T: Clone>(&self, cols: &ColumnSet<T>) -> String {
+    fn render_columns(&self, cs: &ConstraintSet) -> String {
         let mut r = format!(
             r#"
 package {}
@@ -131,29 +131,77 @@ import (
     "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"
     "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/module"
 )
-
-const (
 "#,
             self.package,
         );
 
-        for (_module, m) in cols.cols.iter() {
-            for (name, _) in m.iter() {
-                r.push_str(&format!(
-                    "{} column.Column = \"{}\"\n",
-                    &Handle::new("", name).mangle(),
-                    &Handle::new("", name).mangle(),
-                ))
+        r += "const (\n";
+        for (_module, m) in cs.columns.cols.iter() {
+            for (name, col) in m.iter() {
+                match col.kind {
+                    Kind::Atomic => r.push_str(&format!(
+                        "{} column.Column = \"{}\"\n",
+                        &Handle::new("", name).mangle(),
+                        &Handle::new("", name).mangle(),
+                    )),
+                    _ => (),
+                };
             }
         }
         r += ")\n\n";
 
+        for comp in cs.computations.iter() {
+            match &comp {
+                crate::column::Computation::Composite { .. } => (),
+                crate::column::Computation::Interleaved { target, froms } => r.push_str(&format!(
+                    "var {} = column.Interleaved{{\n{}\n}}\n",
+                    target.name,
+                    froms
+                        .iter()
+                        .map(|f| format!("{},", f.name))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )),
+                crate::column::Computation::Sorted { froms, tos } => {
+                    for (from, to) in froms.iter().zip(tos.iter()) {
+                        r.push_str(&format!(
+                            "var {}  = column.NewSorted({})\n",
+                            to.mangle_no_module(),
+                            from.mangle_no_module()
+                        ))
+                    }
+                }
+            }
+        }
+
         r.push_str(&format!(
-            "var AllColumns = column.BuildColumnList(\n{}\n)\n",
-            cols.cols
+            "var AllColumns = []column.Description{{\n{}\n}}\n",
+            cs.columns
+                .cols
                 .values()
-                .flat_map(|module| module.keys())
-                .map(|name| format!("{}.Name(),", Handle::new("", name).mangle()))
+                .flat_map(|module| module.iter())
+                .filter_map(|(name, col)| match col.kind {
+                    Kind::Atomic => Some(format!("{},", Handle::new("", name).mangle())),
+                    Kind::Phantom => None,
+                    Kind::Composite(_) => None,
+                    Kind::Interleaved(_) => Some(format!("{},", Handle::new("", name).mangle())),
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        ));
+
+        r.push_str(&format!(
+            "var InterleavedColumns = []column.Description{{\n{}\n}}\n",
+            cs.columns
+                .cols
+                .values()
+                .flat_map(|module| module.iter())
+                .filter_map(|(name, col)| match col.kind {
+                    Kind::Atomic => None,
+                    Kind::Phantom => None,
+                    Kind::Composite(_) => None,
+                    Kind::Interleaved(_) => Some(format!("{},", Handle::new("", name).mangle())),
+                })
                 .collect::<Vec<_>>()
                 .join("\n")
         ));
@@ -166,7 +214,7 @@ const (
 
     pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
         let columns = if self.render_columns {
-            self.render_columns(&cs.columns)
+            self.render_columns(&cs)
         } else {
             String::new()
         };
