@@ -7,7 +7,7 @@ use eyre::*;
 
 use crate::{column::ColumnSet, compiler::*};
 
-const SIZE: usize = 2048;
+const SIZE: usize = 4_194_304;
 
 fn shift(e: &Expression, i: isize) -> Expression {
     match e {
