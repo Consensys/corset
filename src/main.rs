@@ -4,11 +4,12 @@ use clap_verbosity_flag::Verbosity;
 use log::*;
 use pairing_ce::ff::PrimeField;
 use std::{collections::HashMap, io::Write};
-use utils::export_symbol;
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
 use serde_json::json;
+
+use crate::compiler::Handle;
 
 mod check;
 mod column;
@@ -121,7 +122,12 @@ enum Commands {
         )]
         tracefile: String,
 
-        #[clap(short = '0', long = "out", help = "where to write the computed trace")]
+        #[clap(
+            short = 'O',
+            long = "out",
+            help = "where to write the computed trace",
+            required = true
+        )]
         outfile: Option<String>,
     },
     /// Given a set of constraints and a filled trace, check the validity of the constraints
@@ -215,45 +221,63 @@ fn main() -> Result<()> {
             latex_exporter.render(&ast)?
         }
         Commands::Compute { tracefile, outfile } => {
-            expander::expand(&mut constraints)?;
-            let r = compute::compute(&tracefile, &mut constraints)
-                .with_context(|| format!("while computing from `{}`", tracefile))?;
-            let stringified: HashMap<String, Vec<String>> = r
-                .columns
-                .into_iter()
-                .map(|(k, v)| {
-                    (
-                        export_symbol(&k),
-                        v.iter()
-                            .map(|x| x.into_repr().to_string())
-                            .collect::<Vec<_>>(),
-                    )
-                })
-                .collect();
-            let r = json!({ "columns": stringified }).to_string();
+            let outfile = outfile.as_ref().unwrap();
 
-            if let Some(outfilename) = outfile.as_ref() {
-                std::fs::File::create(outfilename)
-                    .with_context(|| format!("while creating `{}`", outfilename))?
-                    .write_all(r.as_bytes())
-                    .with_context(|| format!("while writing to `{}`", outfilename))?;
-            } else {
-                println!("{}", r);
+            expander::expand(&mut constraints)?;
+            let _ = compute::compute(&tracefile, &mut constraints)
+                .with_context(|| format!("while computing from `{}`", tracefile))?;
+
+            let mut f = std::fs::File::create(&outfile)
+                .with_context(|| format!("while creating `{}`", &outfile))?;
+            f.write_all("{\"columns\":{".as_bytes())
+                .with_context(|| format!("while writing to `{}`", &outfile))?;
+
+            for (i, (module, columns)) in constraints.columns.cols.iter().enumerate() {
+                for (j, (name, column)) in columns.iter().enumerate() {
+                    f.write_all(
+                        format!("\"{}\":[", Handle::new(&module, &name).mangle()).as_bytes(),
+                    )
+                    .with_context(|| format!("while writing to `{}`", &outfile))?;
+
+                    f.write_all(
+                        column
+                            .value()
+                            .unwrap()
+                            .iter()
+                            .map(|x| format!("\"{}\"", x.into_repr().to_string()))
+                            .collect::<Vec<_>>()
+                            .join(",")
+                            .as_bytes(),
+                    )
+                    .with_context(|| format!("while writing to `{}`", &outfile))?;
+
+                    f.write_all(
+                        format!("]{}", if j < columns.len() - 1 { "," } else { "" },).as_bytes(),
+                    )
+                    .with_context(|| format!("while writing to `{}`", &outfile))?;
+                }
+                f.write_all(
+                    format!(
+                        "{}",
+                        if i < constraints.columns.cols.len() - 1 {
+                            ","
+                        } else {
+                            ""
+                        }
+                    )
+                    .as_bytes(),
+                )?;
             }
+            f.write_all("}}".as_bytes())?;
         }
         Commands::Check { tracefile } => {
             if args.expand {
                 expander::expand(&mut constraints)?;
             }
             let _ = compute::compute(&tracefile, &mut constraints)
-                .with_context(|| format!("while computing from `{}`", tracefile))?;
-            check::check(&constraints).with_context(|| {
-                format!(
-                    "while checking `{}` against {}",
-                    tracefile,
-                    inputs.iter().map(|x| x.0).collect::<Vec<_>>().join(", ")
-                )
-            })?;
+                .with_context(|| format!("while expanding `{}`", tracefile))?;
+            check::check(&constraints)
+                .with_context(|| format!("while checking `{}`", tracefile))?;
         }
     }
 

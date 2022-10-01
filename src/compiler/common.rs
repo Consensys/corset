@@ -224,6 +224,7 @@ impl Handle {
             .replace(':', "_")
             .replace('%', "_")
             .replace('.', "_")
+            .replace('-', "_")
     }
 
     pub fn mangle(&self) -> String {

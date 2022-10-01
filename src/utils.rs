@@ -31,7 +31,7 @@ impl Pretty for Expression {
         fn rec_pretty(s: &Expression, depth: usize) -> ColoredString {
             let c = &COLORS[depth % COLORS.len()];
             match s {
-                Expression::Const(x) => format!("{}", x).color(*c),
+                Expression::Const(x, _) => format!("{}", x).color(*c),
                 Expression::Column(handle, _t, _k) => handle.name.to_string().color(*c),
                 Expression::ArrayColumn(handle, range, _t) => format!(
                     "{}[{}:{}]",
@@ -56,16 +56,4 @@ impl Pretty for Expression {
 
         format!("{}", rec_pretty(self, 0))
     }
-}
-
-pub fn export_symbol(s: &str) -> String {
-    s.replace('(', "I")
-        .replace('{', "I")
-        .replace('[', "I")
-        .replace(')', "I")
-        .replace('}', "I")
-        .replace(']', "I")
-        .replace('/', "_")
-        .replace(':', "_")
-        .replace('%', "_")
 }
