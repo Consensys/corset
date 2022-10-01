@@ -3,11 +3,10 @@ extern crate pest_derive;
 use clap_verbosity_flag::Verbosity;
 use log::*;
 use pairing_ce::ff::PrimeField;
-use std::{collections::HashMap, io::Write};
+use std::io::Write;
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
-use serde_json::json;
 
 use crate::compiler::Handle;
 
@@ -244,7 +243,12 @@ fn main() -> Result<()> {
                             .value()
                             .unwrap()
                             .iter()
-                            .map(|x| format!("\"{}\"", x.into_repr().to_string()))
+                            .map(|x| {
+                                format!(
+                                    "\"0x0{}\"",
+                                    x.into_repr().to_string()[2..].trim_start_matches('0')
+                                )
+                            })
                             .collect::<Vec<_>>()
                             .join(",")
                             .as_bytes(),
