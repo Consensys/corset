@@ -507,9 +507,9 @@ impl ConstraintSet {
         let mut sorted_is = (0..len).collect::<Vec<_>>();
         sorted_is.sort_by(|i, j| {
             for from in from_cols.iter() {
-                let i_t = from.get(*i as isize, false).unwrap();
-                let j_t = from.get(*j as isize, false).unwrap();
-                if let x @ (Ordering::Greater | Ordering::Less) = i_t.cmp(j_t) {
+                let x_i = from.get(*i as isize, false).unwrap();
+                let x_j = from.get(*j as isize, false).unwrap();
+                if let x @ (Ordering::Greater | Ordering::Less) = x_i.cmp(x_j) {
                     return x;
                 }
             }
@@ -517,15 +517,16 @@ impl ConstraintSet {
         });
 
         for (k, from) in froms.iter().enumerate() {
-            let mut value = Vec::with_capacity(len);
-            value.resize_with(len, Fr::zero);
-            for i in &sorted_is {
-                value[*i] = *self
-                    .get(from)
-                    .unwrap()
-                    .get((*i).try_into().unwrap(), false)
-                    .unwrap();
-            }
+            let value = sorted_is
+                .iter()
+                .map(|i| {
+                    *self
+                        .get(from)
+                        .unwrap()
+                        .get((*i).try_into().unwrap(), false)
+                        .unwrap()
+                })
+                .collect();
             self.get_mut(&tos[k]).unwrap().set_value(value);
         }
 
