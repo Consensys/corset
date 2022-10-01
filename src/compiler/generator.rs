@@ -36,10 +36,9 @@ pub enum Expression {
         func: Builtin,
         args: Vec<Expression>,
     },
-    Const(BigInt),
+    Const(BigInt, Option<Fr>),
     Column(Handle, Type, Kind<Expression>), // Module Name Type Kind
     ArrayColumn(Handle, Vec<usize>, Type),
-    // Permutation(Vec<String>, Vec<String>),
     List(Vec<Expression>),
     Void,
 }
@@ -49,7 +48,7 @@ impl Expression {
             Expression::Funcall { func, args } => {
                 func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
             }
-            Expression::Const(ref x) => {
+            Expression::Const(ref x, _) => {
                 if Zero::is_zero(x) || One::is_one(x) {
                     Type::Boolean
                 } else {
@@ -116,7 +115,7 @@ impl Expression {
                     }))
                 }
                 Builtin::Shift => {
-                    if let Expression::Const(ii) = &args[1] {
+                    if let Expression::Const(ii, _) = &args[1] {
                         args[0].eval(i + ii.to_isize().unwrap(), get, false, depth + 1, false)
                     } else {
                         unreachable!()
@@ -130,7 +129,7 @@ impl Expression {
                     .eval(i, get, trace, depth + 1, true)
                     .and_then(|x| x.inverse()),
                 Builtin::Nth => {
-                    if let (Expression::ArrayColumn(h, range, _), Expression::Const(idx)) =
+                    if let (Expression::ArrayColumn(h, range, _), Expression::Const(idx, _)) =
                         (&args[0], &args[1])
                     {
                         let idx = idx.to_usize().unwrap();
@@ -157,11 +156,11 @@ impl Expression {
                 Builtin::IfNotZero => unreachable!(),
                 Builtin::ByteDecomposition => unreachable!(),
             },
-            Expression::Const(x) => Fr::from_str(&x.to_string()),
+            Expression::Const(v, x) => Some(x.expect(&format!("{} is not an Fr element.", v))),
             Expression::Column(handle, ..) => get(handle, i, wrap),
             _ => unreachable!(),
         };
-        if trace && !matches!(self, Expression::Const(_)) {
+        if trace && !matches!(self, Expression::Const(..)) {
             eprintln!(
                 "{:70} <- {}[{}]",
                 r.as_ref()
@@ -182,7 +181,7 @@ impl Expression {
                         _flatten(a, ax);
                     }
                 }
-                Expression::Const(_) => ax.push(e.clone()),
+                Expression::Const(..) => ax.push(e.clone()),
                 Expression::Column(_, _, _) => ax.push(e.clone()),
                 Expression::ArrayColumn(_, _, _) => {}
                 Expression::List(args) => {
@@ -233,7 +232,7 @@ impl Display for Expression {
         }
 
         match self {
-            Expression::Const(x) => write!(f, "{}", x),
+            Expression::Const(x, _) => write!(f, "{}", x),
             Expression::Column(handle, _t, _k) => {
                 write!(f, "{}", handle)
             }
@@ -265,7 +264,7 @@ impl Debug for Expression {
         }
 
         match self {
-            Expression::Const(x) => write!(f, "{}", x),
+            Expression::Const(x, _) => write!(f, "{}", x),
             Expression::Column(handle, t, _k) => {
                 write!(f, "{}:{:?}", handle, t)
             }
@@ -395,7 +394,7 @@ impl FuncVerifier<Expression> for Builtin {
             }
             Builtin::Shift => {
                 if matches!(&args[0], Expression::Column(..))
-                    && matches!(&args[1], Expression::Const(x) if !Zero::is_zero(x))
+                    && matches!(&args[1], Expression::Const(x, _) if !Zero::is_zero(x))
                 {
                     Ok(())
                 } else {
@@ -408,7 +407,7 @@ impl FuncVerifier<Expression> for Builtin {
             }
             Builtin::Nth => {
                 if matches!(args[0], Expression::ArrayColumn(..))
-                    && matches!(&args[1], Expression::Const(x) if x.sign() != num_bigint::Sign::Minus)
+                    && matches!(&args[1], Expression::Const(x, _) if x.sign() != num_bigint::Sign::Minus)
                 {
                     Ok(())
                 } else {
@@ -429,8 +428,8 @@ impl FuncVerifier<Expression> for Builtin {
             Builtin::Begin => Ok(()),
             Builtin::ByteDecomposition => {
                 if matches!(args[0], Expression::Column(..))
-                    && matches!(args[1], Expression::Const(_))
-                    && matches!(args[2], Expression::Const(_))
+                    && matches!(args[1], Expression::Const(..))
+                    && matches!(args[2], Expression::Const(..))
                 {
                     Ok(())
                 } else {
@@ -631,7 +630,7 @@ fn apply_form(
                     let new_ctx = SymbolTable::derived(ctx.clone());
                     new_ctx.borrow_mut().insert_symbol(
                         &Handle::new(&module, i_name),
-                        Expression::Const(BigInt::from(*i)),
+                        Expression::Const(BigInt::from(*i), Fr::from_str(&i.to_string())),
                     )?;
 
                     let (r, to) = reduce(&body.clone(), new_ctx, module)?.unwrap();
@@ -697,14 +696,17 @@ fn apply(
                             let cond_zero = if matches!(traversed_args_t[0], Type::Boolean) {
                                 Expression::Funcall {
                                     func: Builtin::Sub,
-                                    args: vec![Expression::Const(One::one()), cond],
+                                    args: vec![
+                                        Expression::Const(One::one(), Some(Fr::one())),
+                                        cond,
+                                    ],
                                 }
                             } else {
                                 // ...otherwise, cond_zero = 1 - x.INV(x)
                                 Expression::Funcall {
                                     func: Builtin::Sub,
                                     args: vec![
-                                        Expression::Const(One::one()),
+                                        Expression::Const(One::one(), Some(Fr::one())),
                                         Expression::Funcall {
                                             func: Builtin::Mul,
                                             args: vec![
@@ -767,7 +769,7 @@ fn apply(
                     }
 
                     Builtin::Nth => {
-                        if let (Expression::ArrayColumn(handle, ..), Expression::Const(i)) =
+                        if let (Expression::ArrayColumn(handle, ..), Expression::Const(i, _)) =
                             (&traversed_args[0], &traversed_args[1])
                         {
                             let x = i.to_usize().unwrap();
@@ -842,7 +844,7 @@ fn reduce(
     match &e.class {
         Token::Keyword(_) | Token::Type(_) | Token::Range(_) => Ok(None),
         Token::Value(x) => Ok(Some((
-            Expression::Const(x.clone()),
+            Expression::Const(x.clone(), Fr::from_str(&x.to_string())),
             if *x >= Zero::zero() && *x <= One::one() {
                 Type::Boolean
             } else {

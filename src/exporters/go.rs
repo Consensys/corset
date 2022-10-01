@@ -61,7 +61,7 @@ impl GoExporter {
     pub fn render_node(&self, node: &Expression) -> Result<String> {
         let r = match node {
             Expression::ArrayColumn(..) => unreachable!(),
-            Expression::Const(x) => Ok(format!("column.CONST_STRING(\"{}\")", x)),
+            Expression::Const(x, _) => Ok(format!("column.CONST_STRING(\"{}\")", x)),
             Expression::Column(handle, _, _) => {
                 Ok(format!("{}[{}.Name()]", self.ce, handle.mangle_no_module()))
             }
@@ -94,7 +94,7 @@ impl GoExporter {
             Builtin::Shift => Ok(format!(
                 "({}).Shift({})",
                 self.render_node(&args[0])?,
-                if let Expression::Const(x) = &args[1] {
+                if let Expression::Const(x, _) = &args[1] {
                     x
                 } else {
                     unreachable!()

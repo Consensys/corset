@@ -1,4 +1,5 @@
 use num_bigint::BigInt;
+use pairing_ce::{bn256::Fr, ff::PrimeField};
 use std::{collections::HashMap, io::Write};
 
 use convert_case::{Case, Casing};
@@ -12,10 +13,14 @@ fn shift(e: &Expression, i: isize) -> Expression {
     match e {
         Expression::Funcall { func, args } => match func {
             Builtin::Shift => {
-                if let Expression::Const(j) = &args[1] {
+                if let Expression::Const(j, _) = &args[1] {
+                    let value = BigInt::from(i) + j;
                     Expression::Funcall {
                         func: Builtin::Shift,
-                        args: vec![args[0].clone(), Expression::Const(BigInt::from(i) + j)],
+                        args: vec![
+                            args[0].clone(),
+                            Expression::Const(value.clone(), Fr::from_str(&value.to_string())),
+                        ],
                     }
                 } else {
                     unreachable!()
@@ -26,10 +31,13 @@ fn shift(e: &Expression, i: isize) -> Expression {
                 args: args.iter().map(|a| shift(a, i)).collect(),
             },
         },
-        Expression::Const(_) => e.clone(),
+        Expression::Const(..) => e.clone(),
         Expression::Column(..) => Expression::Funcall {
             func: Builtin::Shift,
-            args: vec![e.clone(), Expression::Const(BigInt::from(i))],
+            args: vec![
+                e.clone(),
+                Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())),
+            ],
         },
         Expression::List(xs) => Expression::List(xs.iter().map(|x| shift(x, i)).collect()),
         Expression::ArrayColumn(..) => unreachable!(),
@@ -60,7 +68,7 @@ fn make_chain(xs: &[Expression], operand: &str, surround: bool) -> String {
 fn render_expression(e: &Expression) -> String {
     match e {
         Expression::ArrayColumn(..) => unreachable!(),
-        Expression::Const(x) => format!("symbolic.NewConstant(\"{}\")", x),
+        Expression::Const(x, _) => format!("symbolic.NewConstant(\"{}\")", x),
         Expression::Column(handle, _, _) => format!("{}.AsVariable()", handle.mangle()),
         Expression::Funcall { func, args } => render_funcall(func, args),
         Expression::List(constraints) => constraints
@@ -92,7 +100,7 @@ fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
             format!(
                 "({}).Shift({}).AsVariable()",
                 leaf,
-                if let Expression::Const(x) = &args[1] {
+                if let Expression::Const(x, _) = &args[1] {
                     x
                 } else {
                     unreachable!()

@@ -2,6 +2,8 @@ use eyre::*;
 use log::*;
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
+use pairing_ce::bn256::Fr;
+use pairing_ce::ff::PrimeField;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -274,7 +276,13 @@ impl SymbolTable {
         } else {
             self.symbols.insert(
                 handle.to_owned(),
-                (Symbol::Final(Expression::Const(value), false), t),
+                (
+                    Symbol::Final(
+                        Expression::Const(value.clone(), Fr::from_str(&value.to_string())),
+                        false,
+                    ),
+                    t,
+                ),
             );
             Ok(())
         }

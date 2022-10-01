@@ -75,7 +75,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                     Expression::ArrayColumn(handle, range, t) => {
                         columns.insert_array(handle, range, *t, ALLOW_DUP)?
                     }
-                    Expression::Const(x) => {
+                    Expression::Const(x, _) => {
                         constants.insert(s.0.to_owned(), x.try_into().unwrap());
                     }
                     x => todo!("{:?}", x),

@@ -1,4 +1,5 @@
 use num_traits::One;
+use pairing_ce::{bn256::Fr, ff::Field};
 
 use crate::{
     column::{ColumnSet, Computation},
@@ -39,7 +40,7 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &Handl
                             ),
                         ],
                     },
-                    Expression::Const(One::one()),
+                    Expression::Const(One::one(), Some(Fr::one())),
                 ],
             },
         ],
@@ -72,7 +73,7 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &Handl
                             ),
                         ],
                     },
-                    Expression::Const(One::one()),
+                    Expression::Const(One::one(), Some(Fr::one())),
                 ],
             },
         ],
