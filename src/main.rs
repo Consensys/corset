@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate pest_derive;
 use clap_verbosity_flag::Verbosity;
+use log::*;
 use pairing_ce::ff::PrimeField;
 use std::{collections::HashMap, io::Write};
 use utils::export_symbol;
@@ -147,6 +148,7 @@ fn main() -> Result<()> {
         simplelog::ColorChoice::Auto,
     )?;
 
+    info!("Parsing Corset source files...");
     let mut inputs = vec![];
     if !args.no_stdlib {
         inputs.push(("stdlib", include_str!("stdlib.lisp").to_owned()));
@@ -163,6 +165,7 @@ fn main() -> Result<()> {
     }
 
     let (ast, mut constraints) = compiler::make(inputs.as_slice())?;
+    info!("Done.");
 
     match args.command {
         Commands::Go {

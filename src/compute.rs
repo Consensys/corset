@@ -51,7 +51,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
     match v {
         Value::Object(map) => {
             for (k, v) in map.iter() {
-                if k == "Trace" || k == "Assignment" {
+                if k == "Trace" {
                     info!("importing {:?}", path[path.len() - 1]);
                     fill_traces(v, path.clone(), columns)?;
                 } else {
@@ -70,15 +70,16 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
             if path.len() >= 2 {
                 let module = &path[path.len() - 2];
                 let colname = &path[path.len() - 1];
+                trace!("Looking for {}.{}", module, colname);
 
-                let _r = columns
+                if let Some(column) = columns
                     .cols
                     .get_mut(module)
                     .and_then(|module| module.get_mut(colname))
-                    .map(|column| column.set_value(parse_column(xs, column.t).unwrap()));
-                // if let Err(e) = r {
-                //     debug!("{}", e);
-                // }
+                {
+                    debug!("Inserting {}.{}", module, colname);
+                    column.set_value(parse_column(xs, column.t)?)
+                }
             }
             Ok(())
         }
@@ -117,21 +118,27 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
 }
 
 pub fn compute(tracefile: &str, cs: &mut ConstraintSet) -> Result<ComputeResult> {
+    info!("Parsing {}...", tracefile);
     let v: Value = serde_json::from_str(
         &std::fs::read_to_string(tracefile)
             .with_context(|| format!("while reading `{}`", tracefile))?,
     )?;
+    info!("Done.");
 
     fill_traces(&v, vec![], &mut cs.columns)
-        .with_context(|| eyre!("reading columns from `{}`", tracefile))?;
-    pad(&mut cs.columns).with_context(|| "padding columns")?;
-    cs.compute_all().with_context(|| "computing columns")?;
+        .with_context(|| eyre!("while reading columns from `{}`", tracefile))?;
+    pad(&mut cs.columns).with_context(|| "while padding columns")?;
+    cs.compute_all()
+        .with_context(|| "while computing columns")?;
 
     let mut r = ComputeResult::default();
     for (module, columns) in cs.columns.cols.iter_mut() {
         for (name, col) in columns.iter_mut() {
             let handle = Handle::new(&module, &name);
-            r.columns.insert(handle.mangle(), col.value().unwrap());
+            r.columns.insert(
+                handle.mangle(),
+                col.value().expect(&format!("Column `{}` is void", handle)),
+            );
         }
     }
     Ok(r)

@@ -583,7 +583,7 @@ impl ConstraintSet {
             self.compute(
                 self.computations
                     .dep(target)
-                    .ok_or_else(|| eyre!("No computations found for  {}", target))?,
+                    .ok_or_else(|| eyre!("No computations found for `{}`", target))?,
             )
         }
     }

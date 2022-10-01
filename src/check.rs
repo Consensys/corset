@@ -146,8 +146,13 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
     }
     let mut failed = HashSet::new();
 
-    let bar = ProgressBar::new(cs.constraints.len() as u64)
-        .with_style(ProgressStyle::default_bar().progress_chars("##-"));
+    let bar = ProgressBar::new(cs.constraints.len() as u64).with_style(
+        ProgressStyle::default_bar()
+            .template("Validating {msg} {bar:80} {pos}/{len}")
+            .unwrap()
+            .progress_chars("##-"),
+    );
+
     for c in cs.constraints.iter() {
         match c {
             Constraint::Vanishes { name, domain, expr } => {
@@ -155,6 +160,7 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
                     warn!("Ignoring Void expression {}", name);
                     continue;
                 }
+                bar.set_message(name.to_owned());
 
                 match expr.as_ref() {
                     Expression::List(es) => {
@@ -186,6 +192,7 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
         bar.inc(1);
     }
     if failed.is_empty() {
+        info!("Validation successful");
         Ok(())
     } else {
         Err(eyre!(
