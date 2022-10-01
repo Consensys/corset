@@ -100,6 +100,16 @@ fn check_constraint(
     domain: &Option<Vec<isize>>,
     columns: &ColumnSet<Fr>,
 ) -> Result<()> {
+    // Early exit if all the columns are empty: the module is not triggered
+    if expr.dependencies().iter().all(|handle| {
+        columns
+            .get(&handle)
+            .and_then(|col| col.len().ok_or(eyre!("")))
+            .is_err()
+    }) {
+        return Ok(());
+    }
+
     match domain {
         Some(is) => {
             for i in is {
@@ -111,8 +121,12 @@ fn check_constraint(
             let cols_lens = expr
                 .dependencies()
                 .into_iter()
-                .map(|handle| columns.get(&handle).unwrap().len().unwrap())
-                .collect::<Vec<_>>();
+                .map(|handle| {
+                    columns
+                        .get(&handle)
+                        .and_then(|col| col.len().ok_or_else(|| eyre!("{} is void", handle)))
+                })
+                .collect::<Result<Vec<_>>>()?;
             if !cols_lens.iter().all(|&l| l == cols_lens[0]) {
                 error!(
                     "all columns in `{}` are not of the same length: `{:?}`",
@@ -148,14 +162,18 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
 
     let bar = ProgressBar::new(cs.constraints.len() as u64).with_style(
         ProgressStyle::default_bar()
-            .template("Validating {msg} {bar:80} {pos}/{len}")
+            .template("Validating {msg} {bar:50} {pos}/{len}")
             .unwrap()
             .progress_chars("##-"),
     );
 
     for c in cs.constraints.iter() {
+        bar.inc(1);
         match c {
             Constraint::Vanishes { name, domain, expr } => {
+                if name == "INV_CONSTRAINTS" {
+                    continue;
+                }
                 if matches!(**expr, Expression::Void) {
                     warn!("Ignoring Void expression {}", name);
                     continue;
@@ -189,7 +207,6 @@ pub fn check(cs: &ConstraintSet) -> Result<()> {
                 warn!("Range validation not yet implemented")
             }
         }
-        bar.inc(1);
     }
     if failed.is_empty() {
         info!("Validation successful");

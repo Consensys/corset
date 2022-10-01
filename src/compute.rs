@@ -133,12 +133,24 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintSet) -> Result<ComputeResult>
 
     let mut r = ComputeResult::default();
     for (module, columns) in cs.columns.cols.iter_mut() {
-        for (name, col) in columns.iter_mut() {
-            let handle = Handle::new(&module, &name);
-            r.columns.insert(
-                handle.mangle(),
-                col.value().expect(&format!("Column `{}` is void", handle)),
-            );
+        let module_columns = columns
+            .iter_mut()
+            .map(|(name, col)| {
+                let handle = Handle::new(&module, &name);
+                (handle, col.value().unwrap_or(Default::default()))
+            })
+            .collect::<Vec<_>>();
+
+        if module_columns.iter().all(|c| c.1.is_empty()) {
+            warn!("Module {} is empty", module);
+        } else {
+            for (handle, col) in module_columns.into_iter() {
+                if col.is_empty() {
+                    return Err(eyre!("column `{}` is void", handle));
+                } else {
+                    r.columns.insert(handle.mangle(), col);
+                }
+            }
         }
     }
     Ok(r)
