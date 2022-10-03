@@ -130,17 +130,16 @@ fn check_constraint(
                 .collect::<Result<Vec<_>>>()?;
             if !cols_lens.iter().all(|&l| l == cols_lens[0]) {
                 error!(
-                    "all columns in `{}` are not of the same length: `{:?}`",
-                    &expr,
+                    "all columns are not of the same length:\n{}",
                     expr.dependencies()
                         .iter()
                         .map(|handle| format!(
-                            "{}: {}",
+                            "\t{}: {}",
                             handle,
                             columns.get(handle).unwrap().len().unwrap()
                         ))
                         .collect::<Vec<_>>()
-                        .join(", ")
+                        .join("\n")
                 );
             }
             let l = cols_lens[0];
