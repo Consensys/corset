@@ -4,7 +4,7 @@ use clap_verbosity_flag::Verbosity;
 use is_terminal::IsTerminal;
 use log::*;
 use pairing_ce::ff::PrimeField;
-use std::io::Write;
+use std::{io::Write, path::Path};
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
@@ -140,6 +140,16 @@ enum Commands {
         )]
         tracefile: String,
     },
+    /// Given a set of Corset files, compile them into a single file for faster later use
+    Compile {
+        #[clap(
+            short = 'o',
+            long = "out",
+            required = true,
+            help = "compiled Corset file to create"
+        )]
+        outfile: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -154,23 +164,40 @@ fn main() -> Result<()> {
         simplelog::ColorChoice::Auto,
     )?;
 
-    info!("Parsing Corset source files...");
-    let mut inputs = vec![];
-    if !args.no_stdlib {
-        inputs.push(("stdlib", include_str!("stdlib.lisp").to_owned()));
-    }
-    for f in args.source.iter() {
-        if std::path::Path::new(&f).is_file() {
-            inputs.push((
-                f.as_str(),
-                std::fs::read_to_string(f).with_context(|| eyre!("reading `{}`", f))?,
-            ));
-        } else {
-            inputs.push(("Immediate expression", f.into()));
+    let (ast, mut constraints) = if args.source.len() == 1
+        && Path::new(&args.source[0])
+            .extension()
+            .map(|e| e == "bin")
+            .unwrap_or(false)
+    {
+        info!("Loading Corset binary...");
+        (
+            Vec::new(),
+            ron::from_str(
+                &std::fs::read_to_string(&args.source[0])
+                    .with_context(|| eyre!("while reading `{}`", &args.source[0]))?,
+            )
+            .with_context(|| eyre!("while parsing `{}`", &args.source[0]))?,
+        )
+    } else {
+        info!("Parsing Corset source files...");
+        let mut inputs = vec![];
+        if !args.no_stdlib {
+            inputs.push(("stdlib", include_str!("stdlib.lisp").to_owned()));
         }
-    }
+        for f in args.source.iter() {
+            if std::path::Path::new(&f).is_file() {
+                inputs.push((
+                    f.as_str(),
+                    std::fs::read_to_string(f).with_context(|| eyre!("reading `{}`", f))?,
+                ));
+            } else {
+                inputs.push(("Immediate expression", f.into()));
+            }
+        }
+        compiler::make(inputs.as_slice())?
+    };
 
-    let (ast, mut constraints) = compiler::make(inputs.as_slice())?;
     info!("Done.");
 
     match args.command {
@@ -285,6 +312,12 @@ fn main() -> Result<()> {
             )
             .with_context(|| format!("while checking `{}`", tracefile))?;
             println!("{}: SUCCESS", tracefile)
+        }
+        Commands::Compile { outfile } => {
+            std::fs::File::create(&outfile)
+                .with_context(|| format!("while creating `{}`", &outfile))?
+                .write_all(ron::to_string(&constraints).unwrap().as_bytes())
+                .with_context(|| format!("while writing to `{}`", &outfile))?;
         }
     }
 

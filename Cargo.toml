@@ -26,6 +26,7 @@ pairing_ce = "0.28"
 pest = "2.3"
 pest_derive = "2.0"
 regex = "1.6"
+ron = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
 tabled = "0.9"

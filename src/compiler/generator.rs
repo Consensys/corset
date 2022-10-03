@@ -5,6 +5,7 @@ use num_traits::cast::ToPrimitive;
 use num_traits::{One, Zero};
 use pairing_ce::bn256::Fr;
 use pairing_ce::ff::{Field, PrimeField};
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -18,7 +19,7 @@ use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 use crate::utils::*;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Constraint {
     Vanishes {
         name: String,
@@ -30,7 +31,7 @@ pub enum Constraint {
     InRange(String, Expression, usize),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Expression {
     Funcall {
         func: Builtin,
@@ -290,7 +291,7 @@ impl Debug for Expression {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Builtin {
     Add,
     Sub,
@@ -446,7 +447,7 @@ impl FuncVerifier<Expression> for Builtin {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct ConstraintSet {
     pub columns: ColumnSet<Fr>,
     pub constraints: Vec<Constraint>,

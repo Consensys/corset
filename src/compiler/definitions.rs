@@ -4,6 +4,7 @@ use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use pairing_ce::bn256::Fr;
 use pairing_ce::ff::PrimeField;
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -19,7 +20,7 @@ pub enum Symbol {
     Alias(Handle),
     Final(Expression, bool),
 }
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct ComputationTable {
     dependencies: HashMap<Handle, usize>,
     computations: Vec<Computation>,

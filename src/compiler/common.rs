@@ -1,4 +1,5 @@
 use eyre::*;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -166,7 +167,7 @@ impl FuncVerifier<AstNode> for Form {
 }
 
 /// The type of a column in the IR
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Type {
     Numeric,
     Boolean,
@@ -193,7 +194,7 @@ impl std::cmp::PartialOrd for Type {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Handle {
     pub module: String,
     pub name: String,

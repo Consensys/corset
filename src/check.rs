@@ -208,13 +208,13 @@ pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {
                 }
             }
             Constraint::Plookup(_, _, _) => {
-                warn!("Plookup validation not yet implemented");
+                // warn!("Plookup validation not yet implemented");
             }
             Constraint::Permutation(_name, _from, _to) => {
-                warn!("Permutation validation not yet implemented");
+                // warn!("Permutation validation not yet implemented");
             }
             Constraint::InRange(_, _e, _range) => {
-                warn!("Range validation not yet implemented")
+                // warn!("Range validation not yet implemented")
             }
         }
     }

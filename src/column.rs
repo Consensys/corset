@@ -1,8 +1,9 @@
 use crate::compiler::{Expression, Handle, Kind, Type};
 use eyre::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Column<T: Clone> {
     value: Option<Vec<T>>,
     pub kind: Kind<()>,
@@ -41,7 +42,7 @@ impl<T: Clone> Column<T> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ColumnSet<T: Clone> {
     pub cols: HashMap<String, HashMap<String, Column<T>>>, // Module -> Name -> Column
 }
@@ -146,7 +147,7 @@ impl<T: Clone> std::convert::From<HashMap<String, HashMap<String, Column<T>>>> f
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Computation {
     Composite {
         target: Handle,

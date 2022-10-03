@@ -2,6 +2,7 @@ use color_eyre::eyre::*;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use pest::{iterators::Pair, Parser};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Debug;
 
@@ -48,7 +49,7 @@ impl Debug for AstNode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Kind<T> {
     Atomic,
     Phantom,
