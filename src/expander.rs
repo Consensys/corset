@@ -119,7 +119,7 @@ fn expand_inv<T: Clone + Ord>(
                 let inverted = &mut args[0];
                 let inverted_handle =
                     Handle::new(RESERVED_MODULE, expression_to_name(inverted, "INV"));
-                if !cols.get(&inverted_handle).is_ok() {
+                if cols.get(&inverted_handle).is_err() {
                     validate_inv(new_cs, inverted, &inverted_handle);
                     cols.insert_column(&inverted_handle, Type::Numeric, Kind::Atomic, true)?;
                     comps.insert(

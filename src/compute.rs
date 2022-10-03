@@ -137,7 +137,7 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintSet) -> Result<ComputeResult>
             .iter_mut()
             .map(|(name, col)| {
                 let handle = Handle::new(&module, &name);
-                (handle, col.value().unwrap_or(Default::default()))
+                (handle, col.value().unwrap_or_default())
             })
             .collect::<Vec<_>>();
 

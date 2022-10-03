@@ -25,7 +25,7 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
                         .unwrap()
                         .get(i, false)
                         .map(|x| x.pretty())
-                        .unwrap_or("nil".into())
+                        .unwrap_or_else(|| "nil".into())
                 }))
                 .collect::<Vec<_>>(),
         );
@@ -103,7 +103,7 @@ fn check_constraint(
     // Early exit if all the columns are empty: the module is not triggered
     if expr.dependencies().iter().all(|handle| {
         columns
-            .get(&handle)
+            .get(handle)
             .and_then(|col| col.len().ok_or(eyre!("")))
             .is_err()
     }) {

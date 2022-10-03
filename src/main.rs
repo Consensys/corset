@@ -262,14 +262,11 @@ fn main() -> Result<()> {
                     .with_context(|| format!("while writing to `{}`", &outfile))?;
                 }
                 f.write_all(
-                    format!(
-                        "{}",
-                        if i < constraints.columns.cols.len() - 1 {
-                            ","
-                        } else {
-                            ""
-                        }
-                    )
+                    if i < constraints.columns.cols.len() - 1 {
+                        ","
+                    } else {
+                        ""
+                    }
                     .as_bytes(),
                 )?;
             }

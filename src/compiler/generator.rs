@@ -156,7 +156,9 @@ impl Expression {
                 Builtin::IfNotZero => unreachable!(),
                 Builtin::ByteDecomposition => unreachable!(),
             },
-            Expression::Const(v, x) => Some(x.expect(&format!("{} is not an Fr element.", v))),
+            Expression::Const(v, x) => {
+                Some(x.unwrap_or_else(|| panic!("{} is not an Fr element.", v)))
+            }
             Expression::Column(handle, ..) => get(handle, i, wrap),
             _ => unreachable!(),
         };

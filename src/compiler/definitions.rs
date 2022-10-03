@@ -55,7 +55,7 @@ impl ComputationTable {
         Ok(())
     }
     pub fn has_computation_for(&self, target: &Handle) -> bool {
-        self.dependencies.keys().find(|t| *t == target).is_some()
+        self.dependencies.keys().any(|t| t == target)
     }
 }
 #[derive(Debug)]
