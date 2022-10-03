@@ -282,6 +282,7 @@ fn main() -> Result<()> {
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
             check::check(&constraints)
                 .with_context(|| format!("while checking `{}`", tracefile))?;
+            println!("{}: SUCCESS", tracefile)
         }
     }
 
