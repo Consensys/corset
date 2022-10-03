@@ -22,7 +22,7 @@ impl Pretty for Fr {
         let hex = self.into_repr().to_string();
         i64::from_str_radix(&hex[2..], 16)
             .map(|x| x.to_string())
-            .unwrap_or(hex)
+            .unwrap_or(format!("0x0{}", hex[2..].trim_start_matches('0')))
     }
 }
 
