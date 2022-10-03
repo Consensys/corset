@@ -32,16 +32,17 @@ pub struct Args {
     )]
     source: Vec<String>,
 
-    #[clap(long = "no-stdlib")]
-    no_stdlib: bool,
-
     #[clap(
-        short = 'E',
-        long = "expand",
-        help = "if true, expand INV computations",
+        short = 't',
+        long = "threads",
+        help = "number of threds to use",
+        default_value_t = 1,
         global = true
     )]
-    expand: bool,
+    threads: usize,
+
+    #[clap(long = "no-stdlib")]
+    no_stdlib: bool,
 
     #[clap(subcommand)]
     command: Commands,
@@ -164,6 +165,11 @@ fn main() -> Result<()> {
         simplelog::ColorChoice::Auto,
     )?;
 
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(args.threads)
+        .build_global()
+        .unwrap();
+
     let (ast, mut constraints) = if args.source.len() == 1
         && Path::new(&args.source[0])
             .extension()
@@ -209,9 +215,6 @@ fn main() -> Result<()> {
             columns_assignment,
             fname,
         } => {
-            if args.expand {
-                expander::expand(&mut constraints)?;
-            }
             let mut go_exporter = exporters::GoExporter {
                 constraints_filename,
                 package,
@@ -237,9 +240,6 @@ fn main() -> Result<()> {
             constraints_filename,
             columns_filename,
         } => {
-            if args.expand {
-                expander::expand(&mut constraints)?;
-            }
             let mut latex_exporter = exporters::LatexExporter {
                 constraints_filename,
                 columns_filename,
@@ -300,9 +300,6 @@ fn main() -> Result<()> {
             f.write_all("}}".as_bytes())?;
         }
         Commands::Check { tracefile } => {
-            if args.expand {
-                expander::expand(&mut constraints)?;
-            }
             let _ = compute::compute(&tracefile, &mut constraints)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
             check::check(

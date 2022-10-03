@@ -1,5 +1,6 @@
 use color_eyre::owo_colors::OwoColorize;
 use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 use std::collections::HashSet;
 use tabled::{builder::Builder, object::Columns, ModifyObject, Style};
 
@@ -158,7 +159,6 @@ pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {
     if cs.columns.is_empty() {
         return Ok(());
     }
-    let mut failed = HashSet::new();
 
     let bar = if with_bar {
         Some(
@@ -172,52 +172,60 @@ pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {
     } else {
         None
     };
+    let failed = cs
+        .constraints
+        .par_iter()
+        .inspect(|_| {
+            if let Some(b) = &bar {
+                b.inc(1)
+            }
+        })
+        .filter_map(|c| {
+            match c {
+                Constraint::Vanishes { name, domain, expr } => {
+                    if name == "INV_CONSTRAINTS" {
+                        return None;
+                    }
+                    if matches!(**expr, Expression::Void) {
+                        // warn!("Ignoring Void expression {}", name);
+                        return None;
+                    }
 
-    for c in cs.constraints.iter() {
-        if let Some(bar) = bar.as_ref() {
-            bar.inc(1);
-        }
-        match c {
-            Constraint::Vanishes { name, domain, expr } => {
-                if name == "INV_CONSTRAINTS" {
-                    continue;
-                }
-                if matches!(**expr, Expression::Void) {
-                    // warn!("Ignoring Void expression {}", name);
-                    continue;
-                }
-                if let Some(bar) = bar.as_ref() {
-                    bar.set_message(name.to_owned());
-                }
-
-                match expr.as_ref() {
-                    Expression::List(es) => {
-                        for e in es {
-                            if let Err(err) = check_constraint(e, domain, &cs.columns) {
+                    match expr.as_ref() {
+                        Expression::List(es) => {
+                            for e in es {
+                                if let Err(err) = check_constraint(e, domain, &cs.columns) {
+                                    error!("{}", err);
+                                    return Some(name.to_owned());
+                                }
+                            }
+                            None
+                        }
+                        _ => {
+                            if let Err(err) = check_constraint(expr, domain, &cs.columns) {
                                 error!("{}", err);
-                                failed.insert(name.to_owned());
-                            };
-                        }
-                    }
-                    _ => {
-                        if let Err(err) = check_constraint(expr, domain, &cs.columns) {
-                            error!("{}", err);
-                            failed.insert(name.to_owned());
+                                Some(name.to_owned())
+                            } else {
+                                None
+                            }
                         }
                     }
                 }
+                Constraint::Plookup(_, _, _) => {
+                    // warn!("Plookup validation not yet implemented");
+                    None
+                }
+                Constraint::Permutation(_name, _from, _to) => {
+                    // warn!("Permutation validation not yet implemented");
+                    None
+                }
+                Constraint::InRange(_, _e, _range) => {
+                    // warn!("Range validation not yet implemented")
+                    None
+                }
             }
-            Constraint::Plookup(_, _, _) => {
-                // warn!("Plookup validation not yet implemented");
-            }
-            Constraint::Permutation(_name, _from, _to) => {
-                // warn!("Permutation validation not yet implemented");
-            }
-            Constraint::InRange(_, _e, _range) => {
-                // warn!("Range validation not yet implemented")
-            }
-        }
-    }
+        })
+        .collect::<HashSet<_>>();
     if failed.is_empty() {
         info!("Validation successful");
         Ok(())
