@@ -92,7 +92,7 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
     }
     let max_len = r.len();
     let pad_to = (max_len + 1).next_power_of_two();
-    let padded = max_len - pad_to;
+    let padded = pad_to - max_len;
     let _255 = Fr::from_str("255").unwrap();
 
     r.cols
