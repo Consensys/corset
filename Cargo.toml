@@ -14,6 +14,7 @@ colored = "2.0"
 convert_case = "0.6"
 eyre = "0.6"
 indicatif = "0.17"
+is-terminal = "0.3"
 lazy_static = "1.4"
 log = "0.4"
 simplelog = { version = "0.12.0", features = ["paris"] }

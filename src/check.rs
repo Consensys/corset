@@ -154,31 +154,41 @@ fn check_constraint(
     }
 }
 
-pub fn check(cs: &ConstraintSet) -> Result<()> {
+pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {
     if cs.columns.is_empty() {
         return Ok(());
     }
     let mut failed = HashSet::new();
 
-    let bar = ProgressBar::new(cs.constraints.len() as u64).with_style(
-        ProgressStyle::default_bar()
-            .template("Validating {msg} {bar:50} {pos}/{len}")
-            .unwrap()
-            .progress_chars("##-"),
-    );
+    let bar = if with_bar {
+        Some(
+            ProgressBar::new(cs.constraints.len() as u64).with_style(
+                ProgressStyle::default_bar()
+                    .template("Validating {msg} {bar:40} {pos}/{len}")
+                    .unwrap()
+                    .progress_chars("##-"),
+            ),
+        )
+    } else {
+        None
+    };
 
     for c in cs.constraints.iter() {
-        bar.inc(1);
+        if let Some(bar) = bar.as_ref() {
+            bar.inc(1);
+        }
         match c {
             Constraint::Vanishes { name, domain, expr } => {
                 if name == "INV_CONSTRAINTS" {
                     continue;
                 }
                 if matches!(**expr, Expression::Void) {
-                    warn!("Ignoring Void expression {}", name);
+                    // warn!("Ignoring Void expression {}", name);
                     continue;
                 }
-                bar.set_message(name.to_owned());
+                if let Some(bar) = bar.as_ref() {
+                    bar.set_message(name.to_owned());
+                }
 
                 match expr.as_ref() {
                     Expression::List(es) => {

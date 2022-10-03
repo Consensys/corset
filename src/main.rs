@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate pest_derive;
 use clap_verbosity_flag::Verbosity;
+use is_terminal::IsTerminal;
 use log::*;
 use pairing_ce::ff::PrimeField;
 use std::io::Write;
@@ -280,8 +281,12 @@ fn main() -> Result<()> {
             }
             let _ = compute::compute(&tracefile, &mut constraints)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
-            check::check(&constraints)
-                .with_context(|| format!("while checking `{}`", tracefile))?;
+            check::check(
+                &constraints,
+                args.verbose.log_level_filter() >= log::Level::Warn
+                    && std::io::stdout().is_terminal(),
+            )
+            .with_context(|| format!("while checking `{}`", tracefile))?;
             println!("{}: SUCCESS", tracefile)
         }
     }
