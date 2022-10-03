@@ -311,7 +311,7 @@ fn main() -> Result<()> {
                     && std::io::stdout().is_terminal(),
             )
             .with_context(|| format!("while checking `{}`", tracefile))?;
-            println!("{}: SUCCESS", tracefile)
+            info!("{}: SUCCESS", tracefile)
         }
         Commands::Compile { outfile } => {
             std::fs::File::create(&outfile)
