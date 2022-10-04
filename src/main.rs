@@ -3,6 +3,7 @@ extern crate pest_derive;
 use clap_verbosity_flag::Verbosity;
 use is_terminal::IsTerminal;
 use log::*;
+use once_cell::sync::OnceCell;
 use pairing_ce::ff::PrimeField;
 use std::{io::Write, path::Path};
 
@@ -18,6 +19,13 @@ mod compute;
 mod expander;
 mod exporters;
 mod utils;
+
+#[derive(Default, Debug)]
+struct Settings {
+    pub full_trace: bool,
+}
+
+static SETTINGS: OnceCell<Settings> = OnceCell::new();
 
 #[derive(Parser)]
 #[clap(author, version)]
@@ -140,6 +148,13 @@ enum Commands {
             help = "the trace to compute & verify"
         )]
         tracefile: String,
+
+        #[clap(
+            short = 'F',
+            long = "full-trace",
+            help = "print all the module columns on error"
+        )]
+        full_trace: bool,
     },
     /// Given a set of Corset files, compile them into a single file for faster later use
     Compile {
@@ -164,6 +179,7 @@ fn main() -> Result<()> {
         simplelog::TerminalMode::Stderr,
         simplelog::ColorChoice::Auto,
     )?;
+    let mut settings: Settings = Default::default();
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(args.threads)
@@ -299,7 +315,12 @@ fn main() -> Result<()> {
             }
             f.write_all("}}".as_bytes())?;
         }
-        Commands::Check { tracefile } => {
+        Commands::Check {
+            tracefile,
+            full_trace,
+        } => {
+            settings.full_trace = full_trace;
+            SETTINGS.set(settings).unwrap();
             let _ = compute::compute(&tracefile, &mut constraints)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
             check::check(

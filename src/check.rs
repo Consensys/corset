@@ -10,17 +10,30 @@ use pairing_ce::{bn256::Fr, ff::Field};
 
 use crate::{
     column::ColumnSet,
-    compiler::{Constraint, ConstraintSet, Expression},
+    compiler::{Constraint, ConstraintSet, Expression, Handle},
     utils::*,
 };
 
 fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Result<()> {
+    const SPAN: isize = 3;
     let mut builder = Builder::default();
-    for handle in expr.dependencies() {
+    let module = expr.dependencies().iter().next().unwrap().module.clone();
+    let handles = if crate::SETTINGS.get().unwrap().full_trace {
+        columns
+            .cols
+            .get(&module)
+            .unwrap()
+            .keys()
+            .map(|name| Handle::new(&module, &name))
+            .collect::<Vec<_>>()
+    } else {
+        expr.dependencies().iter().cloned().collect::<Vec<_>>()
+    };
+    for handle in handles.into_iter() {
         builder.add_record(
             vec![handle.to_string()]
                 .into_iter()
-                .chain(((i - 5).max(0)..i + 5).map(|i| {
+                .chain(((i - SPAN).max(0)..i + SPAN).map(|i| {
                     columns
                         .get(&handle)
                         .unwrap()
@@ -31,16 +44,17 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
                 .collect::<Vec<_>>(),
         );
     }
+
     builder.set_columns(
         vec![String::new()]
             .into_iter()
-            .chain(((i - 5).max(0)..i + 5).map(|i| i.to_string()))
+            .chain(((i - SPAN).max(0)..i + SPAN).map(|i| i.to_string()))
             .collect::<Vec<_>>(),
     );
     let mut table = builder.build();
     table
         .with(
-            Columns::single(6)
+            Columns::single(SPAN as usize + 1)
                 .modify()
                 .with(|s: &str| s.red().to_string()),
         )

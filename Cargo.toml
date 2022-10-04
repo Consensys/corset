@@ -22,6 +22,7 @@ maplit = "1.0"
 names = { version = "0.12.0", default-features = false }
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
+once_cell = "1.15"
 pairing_ce = "0.28"
 pest = "2.3"
 pest_derive = "2.0"

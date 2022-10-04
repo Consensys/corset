@@ -223,6 +223,7 @@ dependencies = [
  "names",
  "num-bigint",
  "num-traits",
+ "once_cell",
  "pairing_ce",
  "pest",
  "pest_derive",
