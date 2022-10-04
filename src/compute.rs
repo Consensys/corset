@@ -90,8 +90,12 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
         return Ok(());
     }
     let max_len = r.len();
+    let binary_not_len = r
+        .cols
+        .get_mut("binary")
+        .and_then(|m| m.get("NOT"))
+        .and_then(|c| c.len());
     let pad_to = (max_len + 1).next_power_of_two();
-    let padded = pad_to - max_len;
     let _255 = Fr::from_str("255").unwrap();
 
     r.cols
@@ -107,7 +111,7 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
 
     if let Some(col) = r.cols.get_mut("binary").and_then(|m| m.get_mut("NOT")) {
         col.map(&|xs| {
-            for x in xs.iter_mut().take(padded) {
+            for x in xs.iter_mut().take(pad_to - binary_not_len.unwrap()) {
                 *x = _255;
             }
         });
