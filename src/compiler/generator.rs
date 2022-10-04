@@ -30,6 +30,16 @@ pub enum Constraint {
     Permutation(String, Vec<Handle>, Vec<Handle>),
     InRange(String, Expression, usize),
 }
+impl Constraint {
+    pub fn name(&self) -> &str {
+        match self {
+            Constraint::Vanishes { name, .. } => name,
+            Constraint::Plookup(name, ..) => name,
+            Constraint::Permutation(name, ..) => name,
+            Constraint::InRange(name, ..) => name,
+        }
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Expression {

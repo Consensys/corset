@@ -2,6 +2,7 @@ use std::{collections::HashMap, io::Write};
 
 use convert_case::{Case, Casing};
 use eyre::*;
+use itertools::Itertools;
 
 use crate::compiler::*;
 
@@ -110,6 +111,7 @@ impl GoExporter {
     fn render_consts(&self, consts: &HashMap<Handle, i64>) -> String {
         consts
             .iter()
+            .sorted_by_key(|(handle, value)| handle.to_string())
             .fold(String::new(), |mut ax, (handle, value)| {
                 ax.push_str(&format!(
                     "const {} = {}\n",
@@ -135,7 +137,7 @@ import (
 
         r += "const (\n";
         for (_module, m) in cs.columns.cols.iter() {
-            for (name, col) in m.iter() {
+            for (name, col) in m.iter().sorted_by_key(|(name, _)| name.clone()) {
                 if col.kind == Kind::Atomic {
                     r.push_str(&format!(
                         "{} column.Column = \"{}\"\n",
@@ -184,6 +186,7 @@ import (
                     Kind::Composite(_) => None,
                     Kind::Interleaved(_) => Some(format!("{},", Handle::new("", name).mangle())),
                 })
+                .sorted()
                 .collect::<Vec<_>>()
                 .join("\n")
         ));
@@ -233,6 +236,7 @@ import (
         let constraints = cs
             .constraints
             .iter()
+            .sorted_by_key(|c| c.name())
             .filter_map(|c| match c {
                 Constraint::Vanishes {
                     name,
@@ -268,6 +272,7 @@ import (
             "",
             &cs.constraints
                 .iter()
+                .sorted_by_key(|c| c.name())
                 .map(|c| {
                     match c {
                         Constraint::Vanishes { name, domain, .. } => {
