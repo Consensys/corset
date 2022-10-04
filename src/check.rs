@@ -101,14 +101,48 @@ fn check_constraint(
     domain: &Option<Vec<isize>>,
     columns: &ColumnSet<Fr>,
 ) -> Result<()> {
+    let cols_lens = expr
+        .dependencies()
+        .into_iter()
+        .map(|handle| {
+            columns
+                .get(&handle)
+                .with_context(|| eyre!("can not find column `{}`", handle))
+                .map(|c| c.len())
+        })
+        .collect::<Result<Vec<_>>>()?;
     // Early exit if all the columns are empty: the module is not triggered
-    if expr.dependencies().iter().all(|handle| {
-        columns
-            .get(handle)
-            .and_then(|col| col.len().ok_or(eyre!("")))
-            .is_err()
-    }) {
+    // Ideally, this should be an `all` rather than an `any`, but the IC
+    // pushes columns that will always be filled.
+    if cols_lens.iter().any(|l| l.is_none()) {
+        info!("Skipping constraint with partially empty columns");
         return Ok(());
+    }
+    if !cols_lens
+        .iter()
+        .all(|&l| l.unwrap_or_default() == cols_lens[0].unwrap_or_default())
+    {
+        error!(
+            "all columns are not of the same length:\n{}",
+            expr.dependencies()
+                .iter()
+                .map(|handle| format!(
+                    "\t{}: {}",
+                    handle,
+                    columns
+                        .get(handle)
+                        .unwrap()
+                        .len()
+                        .map(|x| x.to_string())
+                        .unwrap_or("nil".into())
+                ))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
+    let l = cols_lens[0].unwrap_or(0);
+    if l == 0 {
+        return Err(eyre!("empty trace, aborting"));
     }
 
     match domain {
@@ -119,33 +153,6 @@ fn check_constraint(
             Ok(())
         }
         None => {
-            let cols_lens = expr
-                .dependencies()
-                .into_iter()
-                .map(|handle| {
-                    columns
-                        .get(&handle)
-                        .and_then(|col| col.len().ok_or_else(|| eyre!("{} is void", handle)))
-                })
-                .collect::<Result<Vec<_>>>()?;
-            if !cols_lens.iter().all(|&l| l == cols_lens[0]) {
-                error!(
-                    "all columns are not of the same length:\n{}",
-                    expr.dependencies()
-                        .iter()
-                        .map(|handle| format!(
-                            "\t{}: {}",
-                            handle,
-                            columns.get(handle).unwrap().len().unwrap()
-                        ))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                );
-            }
-            let l = cols_lens[0];
-            if l == 0 {
-                return Err(eyre!("empty trace, aborting"));
-            }
             for i in 0..l as isize {
                 check_constraint_at(expr, i, Some(l), columns, false)?;
             }
