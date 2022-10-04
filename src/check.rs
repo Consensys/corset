@@ -15,7 +15,8 @@ use crate::{
 };
 
 fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Result<()> {
-    const SPAN: isize = 3;
+    let trace_span: isize = crate::SETTINGS.get().unwrap().trace_span;
+
     let mut builder = Builder::default();
     let module = expr.dependencies().iter().next().unwrap().module.clone();
     let handles = if crate::SETTINGS.get().unwrap().full_trace {
@@ -33,7 +34,7 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
         builder.add_record(
             vec![handle.to_string()]
                 .into_iter()
-                .chain(((i - SPAN).max(0)..i + SPAN).map(|i| {
+                .chain(((i - trace_span).max(0)..=i + trace_span).map(|i| {
                     columns
                         .get(&handle)
                         .unwrap()
@@ -48,13 +49,13 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
     builder.set_columns(
         vec![String::new()]
             .into_iter()
-            .chain(((i - SPAN).max(0)..i + SPAN).map(|i| i.to_string()))
+            .chain(((i - trace_span).max(0)..=i + trace_span).map(|i| i.to_string()))
             .collect::<Vec<_>>(),
     );
     let mut table = builder.build();
     table
         .with(
-            Columns::single(SPAN as usize + 1)
+            Columns::single(trace_span as usize + 1)
                 .modify()
                 .with(|s: &str| s.red().to_string()),
         )

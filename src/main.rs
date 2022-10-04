@@ -23,6 +23,7 @@ mod utils;
 #[derive(Default, Debug)]
 struct Settings {
     pub full_trace: bool,
+    pub trace_span: isize,
 }
 
 static SETTINGS: OnceCell<Settings> = OnceCell::new();
@@ -151,10 +152,13 @@ enum Commands {
 
         #[clap(
             short = 'F',
-            long = "full-trace",
+            long = "trace-full",
             help = "print all the module columns on error"
         )]
         full_trace: bool,
+
+        #[clap(short = 'S', long = "trace-span", help = "", default_value_t = 3)]
+        trace_span: isize,
     },
     /// Given a set of Corset files, compile them into a single file for faster later use
     Compile {
@@ -318,9 +322,12 @@ fn main() -> Result<()> {
         Commands::Check {
             tracefile,
             full_trace,
+            trace_span,
         } => {
             settings.full_trace = full_trace;
+            settings.trace_span = trace_span;
             SETTINGS.set(settings).unwrap();
+
             let _ = compute::compute(&tracefile, &mut constraints)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
             check::check(
