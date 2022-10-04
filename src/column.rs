@@ -98,8 +98,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
                 .insert(
                     handle.name.to_owned(),
                     Column {
-                        // value: None,
-                        value: Some(Vec::new()),
+                        value: None,
                         t,
                         kind,
                     },

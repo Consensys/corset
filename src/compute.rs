@@ -70,14 +70,13 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
             if path.len() >= 2 {
                 let module = &path[path.len() - 2];
                 let colname = &path[path.len() - 1];
-                trace!("Looking for {}.{}", module, colname);
 
                 if let Some(column) = columns
                     .cols
                     .get_mut(module)
                     .and_then(|module| module.get_mut(colname))
                 {
-                    debug!("Inserting {}.{}", module, colname);
+                    debug!("Inserting {}", Handle::new(module, colname));
                     column.set_value(parse_column(xs, column.t)?)
                 }
             }
@@ -137,19 +136,18 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintSet) -> Result<ComputeResult>
             .iter_mut()
             .map(|(name, col)| {
                 let handle = Handle::new(&module, &name);
-                (handle, col.value().unwrap_or_default())
+                (handle, col.len(), col.value().unwrap_or_default())
             })
             .collect::<Vec<_>>();
 
-        if module_columns.iter().all(|c| c.1.is_empty()) {
+        if module_columns.iter().all(|(_, len, _)| len.is_none()) {
             warn!("Module {} is empty", module);
         } else {
-            for (handle, col) in module_columns.into_iter() {
-                if col.is_empty() {
-                    return Err(eyre!("column `{}` is void", handle));
-                } else {
-                    r.columns.insert(handle.mangle(), col);
+            for (handle, len, col) in module_columns.into_iter() {
+                if len.is_none() {
+                    warn!("column `{}` is empty", handle);
                 }
+                r.columns.insert(handle.mangle(), col);
             }
         }
     }

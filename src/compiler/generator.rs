@@ -128,7 +128,8 @@ impl Expression {
                 }),
                 Builtin::Inv => args[0]
                     .eval(i, get, trace, depth + 1, true)
-                    .and_then(|x| x.inverse()),
+                    .and_then(|x| x.inverse())
+                    .or_else(|| Some(Fr::zero())),
                 Builtin::Nth => {
                     if let (Expression::ArrayColumn(h, range, _), Expression::Const(idx, _)) =
                         (&args[0], &args[1])
