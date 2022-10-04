@@ -45,7 +45,7 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
                 .with(|s: &str| s.red().to_string()),
         )
         .with(Style::blank());
-    println!("\n\n{}\n", table);
+    eprintln!("\n\n{}\n", table);
 
     let r = expr.eval(
         i,
