@@ -615,7 +615,9 @@ impl ConstraintSet {
 
     pub fn compute_all(&mut self) -> Result<()> {
         for i in 0..self.computations.iter().count() {
-            self.compute(i)?
+            if let Err(e) = self.compute(i) {
+                warn!("{:?}", e);
+            }
         }
 
         Ok(())

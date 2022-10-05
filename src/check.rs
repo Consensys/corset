@@ -130,7 +130,7 @@ fn check_constraint(
     // Ideally, this should be an `all` rather than an `any`, but the IC
     // pushes columns that will always be filled.
     if cols_lens.iter().any(|l| l.is_none()) {
-        info!("Skipping constraint with partially empty columns");
+        info!("Skipping constraint with empty columns");
         return Ok(());
     }
     if !cols_lens
