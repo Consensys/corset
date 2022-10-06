@@ -91,6 +91,18 @@ pub enum Token {
     DefunAlias(String, String),
     DefPlookup(Vec<AstNode>, Vec<AstNode>),
 }
+impl Token {
+    pub fn depth(&self) -> usize {
+        match self {
+            Token::List(xs) => {
+                let func = xs[0].as_symbol().unwrap();
+                (if func == "begin" { 0 } else { 1 })
+                    + xs.iter().map(|x| x.depth()).max().unwrap_or(0)
+            }
+            _ => 0,
+        }
+    }
+}
 const LIST_DISPLAY_THRESHOLD: usize = 4;
 impl Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -149,6 +161,9 @@ impl Debug for Token {
 }
 
 impl AstNode {
+    pub fn depth(&self) -> usize {
+        self.class.depth()
+    }
     fn column_from(args: Vec<Pair<Rule>>, src: String, lc: LinCol) -> Result<Self> {
         let mut pairs = args.into_iter();
         let name = pairs.next().unwrap().as_str();
@@ -561,7 +576,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
                 (Some(start), None, None) => (1..=start).collect(),
                 (Some(start), Some(stop), None) => (start..=stop).collect(),
                 (Some(start), Some(stop), Some(step)) => (start..=stop).step_by(step).collect(),
-                _ => unimplemented!(),
+                x => unimplemented!("{:?}", x),
             };
             Ok(AstNode {
                 class: Token::Range(range),
