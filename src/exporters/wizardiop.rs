@@ -211,8 +211,8 @@ impl WizardIOP {
             for (name, _) in m.iter() {
                 let name = Handle::new(module, name).mangle();
                 r.push_str(&format!(
-                    "{} := build.RegisterCommit(\"{}\", {})\n",
-                    name, name, SIZE
+                    "{} := build.RegisterCommit(\"{}\", SIZE)\n",
+                    name, name
                 ));
             }
         }
@@ -235,6 +235,8 @@ import (
     "github.com/consensys/accelerated-crypto-monorepo/protocol/commitment"
     "github.com/consensys/accelerated-crypto-monorepo/symbolic"
 )
+
+const SIZE = 4194304
 
 {}
 

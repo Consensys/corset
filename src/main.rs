@@ -281,32 +281,34 @@ fn main() -> Result<()> {
 
             for (i, (module, columns)) in constraints.columns.cols.iter().enumerate() {
                 for (j, (name, column)) in columns.iter().enumerate() {
-                    f.write_all(
-                        format!("\"{}\":[", Handle::new(&module, &name).mangle()).as_bytes(),
-                    )
-                    .with_context(|| format!("while writing to `{}`", &outfile))?;
+                    if let Some(value) = column.value() {
+                        f.write_all(
+                            format!("\"{}\":[", Handle::new(&module, &name).mangle()).as_bytes(),
+                        )
+                        .with_context(|| format!("while writing to `{}`", &outfile))?;
 
-                    f.write_all(
-                        column
-                            .value()
-                            .unwrap()
-                            .iter()
-                            .map(|x| {
-                                format!(
-                                    "\"0x0{}\"",
-                                    x.into_repr().to_string()[2..].trim_start_matches('0')
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                            .join(",")
-                            .as_bytes(),
-                    )
-                    .with_context(|| format!("while writing to `{}`", &outfile))?;
+                        info!("Processing {}", Handle::new(&module, &name));
+                        f.write_all(
+                            value
+                                .iter()
+                                .map(|x| {
+                                    format!(
+                                        "\"0x0{}\"",
+                                        x.into_repr().to_string()[2..].trim_start_matches('0')
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                                .join(",")
+                                .as_bytes(),
+                        )
+                        .with_context(|| format!("while writing to `{}`", &outfile))?;
 
-                    f.write_all(
-                        format!("]{}", if j < columns.len() - 1 { "," } else { "" },).as_bytes(),
-                    )
-                    .with_context(|| format!("while writing to `{}`", &outfile))?;
+                        f.write_all(
+                            format!("]{}", if j < columns.len() - 1 { "," } else { "" },)
+                                .as_bytes(),
+                        )
+                        .with_context(|| format!("while writing to `{}`", &outfile))?;
+                    }
                 }
                 f.write_all(
                     if i < constraints.columns.cols.len() - 1 {
