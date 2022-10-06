@@ -115,6 +115,7 @@ fn check_constraint(
     expr: &Expression,
     domain: &Option<Vec<isize>>,
     columns: &ColumnSet<Fr>,
+    name: &str,
 ) -> Result<()> {
     let cols_lens = expr
         .dependencies()
@@ -130,7 +131,7 @@ fn check_constraint(
     // Ideally, this should be an `all` rather than an `any`, but the IC
     // pushes columns that will always be filled.
     if cols_lens.iter().any(|l| l.is_none()) {
-        info!("Skipping constraint with empty columns");
+        info!("Skipping constraint `{}` with empty columns", name);
         return Ok(());
     }
     if !cols_lens
@@ -215,7 +216,7 @@ pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {
                     match expr.as_ref() {
                         Expression::List(es) => {
                             for e in es {
-                                if let Err(err) = check_constraint(e, domain, &cs.columns) {
+                                if let Err(err) = check_constraint(e, domain, &cs.columns, name) {
                                     error!("{}", err);
                                     return Some(name.to_owned());
                                 }
@@ -223,7 +224,7 @@ pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {
                             None
                         }
                         _ => {
-                            if let Err(err) = check_constraint(expr, domain, &cs.columns) {
+                            if let Err(err) = check_constraint(expr, domain, &cs.columns, name) {
                                 error!("{}", err);
                                 Some(name.to_owned())
                             } else {
