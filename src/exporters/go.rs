@@ -111,7 +111,7 @@ impl GoExporter {
     fn render_consts(&self, consts: &HashMap<Handle, i64>) -> String {
         consts
             .iter()
-            .sorted_by_key(|(handle, value)| handle.to_string())
+            .sorted_by_key(|(handle, _)| handle.to_string())
             .fold(String::new(), |mut ax, (handle, value)| {
                 ax.push_str(&format!(
                     "const {} = {}\n",
@@ -137,7 +137,7 @@ import (
 
         r += "const (\n";
         for (_module, m) in cs.columns.cols.iter() {
-            for (name, col) in m.iter().sorted_by_key(|(name, _)| name.clone()) {
+            for (name, col) in m.iter().sorted_by_key(|(name, _)| name.to_string()) {
                 if col.kind == Kind::Atomic {
                     r.push_str(&format!(
                         "{} column.Column = \"{}\"\n",

@@ -236,7 +236,7 @@ import (
     "github.com/consensys/accelerated-crypto-monorepo/symbolic"
 )
 
-const SIZE = 4194304
+const SIZE = {}
 
 {}
 
@@ -253,7 +253,7 @@ func Define(build *zkevm.Builder) {{
 {}
 }}
 "#,
-            &self.package, consts, columns, constraints,
+            &self.package, SIZE, consts, columns, constraints,
         );
 
         if let Some(filename) = self.out_filename.as_ref() {

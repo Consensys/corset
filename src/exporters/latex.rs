@@ -26,7 +26,7 @@ fn dollarize(s: String, in_math: bool) -> String {
         s
     }
 }
-fn textize(s: String, in_math: bool) -> String {
+fn textize(s: String, _: bool) -> String {
     format!("\\text{{{}}}", s)
 }
 
@@ -120,7 +120,7 @@ impl LatexExporter {
                     if args[3].depth() > 1 {
                         format!("\\left[{}\\right]", self.render_node(&args[3], in_maths)?)
                     } else {
-                        format!("{}", self.render_node(&args[3], in_maths)?)
+                        self.render_node(&args[3], in_maths)?
                     }
                 )),
                 "if-not-zero" => Ok(if args[2].depth() > 1 {
@@ -130,7 +130,7 @@ impl LatexExporter {
                         if args[2].depth() > 1 {
                             format!("\\left[{}\\right]", self.render_node(&args[2], in_maths)?)
                         } else {
-                            format!("{}", self.render_node(&args[2], in_maths)?)
+                            self.render_node(&args[2], in_maths)?
                         }
                     )
                 } else {
@@ -146,7 +146,7 @@ impl LatexExporter {
                     if args[2].depth() > 1 {
                         format!("\\left[{}\\right]", self.render_node(&args[2], in_maths)?)
                     } else {
-                        format!("{}", self.render_node(&args[2], in_maths)?)
+                        self.render_node(&args[2], in_maths)?
                     }
                 )),
                 "will-eq" => Ok(format!(

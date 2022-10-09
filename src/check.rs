@@ -152,7 +152,7 @@ fn check_constraint(
                         .unwrap()
                         .len()
                         .map(|x| x.to_string())
-                        .unwrap_or("nil".into())
+                        .unwrap_or_else(|| "nil".into())
                 ))
                 .collect::<Vec<_>>()
                 .join("\n")
