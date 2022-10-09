@@ -1,5 +1,6 @@
 use color_eyre::owo_colors::OwoColorize;
 use indicatif::{ProgressBar, ProgressStyle};
+use itertools::Itertools;
 use rayon::prelude::*;
 use std::collections::HashSet;
 use tabled::{builder::Builder, object::Columns, ModifyObject, Style};
@@ -26,6 +27,7 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
             .unwrap()
             .keys()
             .map(|name| Handle::new(&module, &name))
+            .sorted_by_key(|h| h.name.clone())
             .collect::<Vec<_>>()
     } else {
         expr.dependencies().iter().cloned().collect::<Vec<_>>()
