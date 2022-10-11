@@ -12,7 +12,7 @@ use pairing_ce::{bn256::Fr, ff::Field};
 use crate::{
     column::ColumnSet,
     compiler::{Constraint, ConstraintSet, Expression, Handle},
-    utils::*,
+    pretty::*,
 };
 
 fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Result<()> {

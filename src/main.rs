@@ -18,6 +18,7 @@ mod compiler;
 mod compute;
 mod expander;
 mod exporters;
+mod pretty;
 mod utils;
 
 #[derive(Default, Debug)]
@@ -329,6 +330,11 @@ fn main() -> Result<()> {
             settings.full_trace = full_trace;
             settings.trace_span = trace_span;
             SETTINGS.set(settings).unwrap();
+
+            if utils::is_file_empty(&tracefile)? {
+                warn!("`{}` is empty, exiting", tracefile);
+                return Ok(());
+            }
 
             let _ = compute::compute(&tracefile, &mut constraints)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;

@@ -17,7 +17,7 @@ use super::{common::*, Handle};
 use crate::column::{Column, ColumnSet, Computation};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
-use crate::utils::*;
+use crate::pretty::Pretty;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Constraint {
