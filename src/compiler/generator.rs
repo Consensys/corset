@@ -140,6 +140,15 @@ impl Expression {
                     .eval(i, get, trace, depth + 1, true)
                     .and_then(|x| x.inverse())
                     .or_else(|| Some(Fr::zero())),
+                Builtin::Not => {
+                    let mut r = Fr::one();
+                    if let Some(x) = args[0].eval(i, get, trace, depth + 1, wrap) {
+                        r.sub_assign(&x);
+                        Some(r)
+                    } else {
+                        None
+                    }
+                }
                 Builtin::Nth => {
                     if let (Expression::ArrayColumn(h, range, _), Expression::Const(idx, _)) =
                         (&args[0], &args[1])
@@ -310,6 +319,7 @@ pub enum Builtin {
     Shift,
     Neg,
     Inv,
+    Not,
 
     Nth,
     Begin,
@@ -323,6 +333,7 @@ impl Builtin {
     fn typing(&self, argtype: &[Type]) -> Type {
         match self {
             Builtin::Add | Builtin::Sub | Builtin::Neg | Builtin::Inv => Type::Numeric,
+            Builtin::Not => Type::Boolean,
             Builtin::Mul => {
                 if argtype.iter().all(|t| matches!(t, Type::Boolean)) {
                     Type::Boolean
@@ -376,6 +387,7 @@ impl FuncVerifier<Expression> for Builtin {
             Builtin::Mul => Arity::AtLeast(2),
             Builtin::Neg => Arity::Monadic,
             Builtin::Inv => Arity::Monadic,
+            Builtin::Not => Arity::Monadic,
             Builtin::Shift => Arity::Dyadic,
             Builtin::Begin => Arity::AtLeast(1),
             Builtin::IfZero => Arity::Between(2, 3),
@@ -396,12 +408,20 @@ impl FuncVerifier<Expression> for Builtin {
                     ))
                 }
             }
+            Builtin::Not => matches!(args[0].t(), Type::Boolean)
+                .then(|| ())
+                .ok_or(eyre!(
+                    "`{:?}` expects a boolean; found `{}` of type {:?}",
+                    &self,
+                    args[0],
+                    args[0].t()
+                )),
             Builtin::Neg | Builtin::Inv => {
                 if args.iter().all(|a| !matches!(a, Expression::List(_))) {
                     Ok(())
                 } else {
                     Err(eyre!(
-                        "`{:?}` expects a scalar argument but received a list",
+                        "`{:?}` expects scalar arguments but received a list",
                         self
                     ))
                 }
@@ -818,6 +838,17 @@ fn apply(
                         warn!("BYTEDECOMPOSITION constraints not yet implemented");
                         Ok(None)
                     }
+
+                    Builtin::Not => Ok(Some((
+                        Expression::Funcall {
+                            func: Builtin::Sub,
+                            args: vec![
+                                Expression::Const(One::one(), Some(Fr::one())),
+                                traversed_args[0].to_owned(),
+                            ],
+                        },
+                        Type::Boolean,
+                    ))),
 
                     b @ (Builtin::Add
                     | Builtin::Sub

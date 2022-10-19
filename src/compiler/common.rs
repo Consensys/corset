@@ -23,13 +23,17 @@ lazy_static::lazy_static! {
 
 
         // monadic
-        "inv" => Function{
+        "inv" => Function {
             name: "inv".into(),
             class: FunctionClass::Builtin(Builtin::Inv)
         },
-        "neg" => Function{
+        "neg" => Function {
             name: "neg".into(),
             class: FunctionClass::Builtin(Builtin::Neg)
+        },
+        "not" => Function {
+            name: "not".into(),
+            class: FunctionClass::Builtin(Builtin::Not),
         },
 
         // Dyadic
