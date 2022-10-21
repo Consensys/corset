@@ -5,6 +5,7 @@ use num_traits::cast::ToPrimitive;
 use num_traits::{One, Zero};
 use pairing_ce::bn256::Fr;
 use pairing_ce::ff::{Field, PrimeField};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -585,17 +586,14 @@ impl ConstraintSet {
             .unwrap();
 
         let values = (0..length as isize)
+            .into_par_iter()
             .map(|i| {
                 exp.eval(
                     i,
                     &mut |handle, i, _| {
-                        let col = self.get(handle).unwrap();
-                        if col.is_computed() {
-                            col.get(i, false).cloned()
-                        } else {
-                            self.compute_column(handle).unwrap();
-                            self.columns.get(handle).unwrap().get(i, false).cloned()
-                        }
+                        // All the columns are guaranteed to have been computed
+                        // at the begiinning of the function
+                        self.get(handle).unwrap().get(i, false).cloned()
                     },
                     false,
                     0,

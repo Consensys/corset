@@ -4,6 +4,7 @@ use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},
 };
+use rayon::prelude::*;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -34,7 +35,7 @@ fn validate(t: Type, x: F) -> Result<F> {
     }
 }
 fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
-    xs.iter()
+    xs.par_iter()
         .map(|x| match x {
             Value::Number(n) => Fr::from_str(&n.to_string())
                 .with_context(|| format!("while parsing `{:?}`", x))
@@ -128,6 +129,7 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintSet, do_pad: bool) -> Result<
     )?;
     info!("Done.");
 
+    // 1. Read the traces and fill the computed columns
     fill_traces(&v, vec![], &mut cs.columns)
         .with_context(|| eyre!("while reading columns from `{}`", tracefile))?;
     if do_pad {
@@ -136,8 +138,10 @@ pub fn compute(tracefile: &str, cs: &mut ConstraintSet, do_pad: bool) -> Result<
     cs.compute_all()
         .with_context(|| "while computing columns")?;
 
+    // 2. Collect the mangled columns of all modules
     let mut r = ComputeResult::default();
     for (module, columns) in cs.columns.cols.iter_mut() {
+        // Warn the user if the
         let module_columns = columns
             .iter_mut()
             .map(|(name, col)| {
