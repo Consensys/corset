@@ -5,6 +5,7 @@ use is_terminal::IsTerminal;
 use log::*;
 use once_cell::sync::OnceCell;
 use pairing_ce::ff::PrimeField;
+use rayon::prelude::*;
 use std::{io::Write, path::Path};
 
 use clap::{Parser, Subcommand};
@@ -272,26 +273,27 @@ fn main() -> Result<()> {
             let outfile = outfile.as_ref().unwrap();
 
             expander::expand(&mut constraints)?;
-            let _ = compute::compute(&tracefile, &mut constraints)
+            let _ = compute::compute(&tracefile, &mut constraints, false)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let mut f = std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?;
-            f.write_all("{\"columns\":{".as_bytes())
+            f.write_all("{\"columns\":{\n".as_bytes())
                 .with_context(|| format!("while writing to `{}`", &outfile))?;
 
             for (i, (module, columns)) in constraints.columns.cols.iter().enumerate() {
                 for (j, (name, column)) in columns.iter().enumerate() {
+                    info!("Processing {}", Handle::new(&module, &name));
                     if let Some(value) = column.value() {
                         f.write_all(
-                            format!("\"{}\":[", Handle::new(&module, &name).mangle()).as_bytes(),
-                        )
-                        .with_context(|| format!("while writing to `{}`", &outfile))?;
+                            format!("\"{}\":{{\n", Handle::new(&module, &name).mangle()).as_bytes(),
+                        )?;
 
-                        info!("Processing {}", Handle::new(&module, &name));
+                        f.write_all("\"values\":[".as_bytes())?;
+
                         f.write_all(
                             value
-                                .iter()
+                                .par_iter()
                                 .map(|x| {
                                     format!(
                                         "\"0x0{}\"",
@@ -301,24 +303,23 @@ fn main() -> Result<()> {
                                 .collect::<Vec<_>>()
                                 .join(",")
                                 .as_bytes(),
-                        )
-                        .with_context(|| format!("while writing to `{}`", &outfile))?;
+                        )?;
 
-                        f.write_all(
-                            format!("]{}", if j < columns.len() - 1 { "," } else { "" },)
-                                .as_bytes(),
-                        )
-                        .with_context(|| format!("while writing to `{}`", &outfile))?;
+                        f.write_all(b"],\n")?;
+                        if module == "binary" && name == "NOT" {
+                            f.write_all(b"\"padding_strategy\": \"prepend_with_Fr255\"")
+                        } else {
+                            f.write_all(b"\"padding_strategy\": \"prepend_with_zeros\"")
+                        }?;
+                        f.write_all(b"\n}\n")?;
+                        f.write_all(if j < columns.len() - 1 { "," } else { "" }.as_bytes())?;
                     }
                 }
-                f.write_all(
-                    if i < constraints.columns.cols.len() - 1 {
-                        ","
-                    } else {
-                        ""
-                    }
-                    .as_bytes(),
-                )?;
+                f.write_all(if i < constraints.columns.cols.len() - 1 {
+                    b","
+                } else {
+                    b""
+                })?;
             }
             f.write_all("}}".as_bytes())?;
         }
@@ -336,7 +337,7 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
-            let _ = compute::compute(&tracefile, &mut constraints)
+            let _ = compute::compute(&tracefile, &mut constraints, true)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
             check::check(
                 &constraints,
