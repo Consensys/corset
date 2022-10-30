@@ -11,6 +11,7 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
+use std::io::Write;
 use std::rc::Rc;
 
 use super::definitions::ComputationTable;
@@ -620,7 +621,7 @@ impl ConstraintSet {
         }
     }
 
-    pub fn compute(&mut self, i: usize) -> Result<()> {
+    fn compute(&mut self, i: usize) -> Result<()> {
         let comp = self.computations.get(i).unwrap().clone();
         info!("Computing `{}`", comp.target());
 
@@ -637,6 +638,54 @@ impl ConstraintSet {
                 warn!("{:?}", e);
             }
         }
+
+        Ok(())
+    }
+
+    pub fn write(&self, out: &mut impl Write) -> Result<()> {
+        out.write_all("{\"columns\":{\n".as_bytes())?;
+
+        for (i, (module, columns)) in self.columns.cols.iter().enumerate() {
+            for (j, (name, column)) in columns.iter().enumerate() {
+                info!("Processing {}", Handle::new(&module, &name));
+                if let Some(value) = column.value() {
+                    out.write_all(
+                        format!("\"{}\":{{\n", Handle::new(&module, &name).mangle()).as_bytes(),
+                    )?;
+
+                    out.write_all("\"values\":[".as_bytes())?;
+
+                    out.write_all(
+                        value
+                            .par_iter()
+                            .map(|x| {
+                                format!(
+                                    "\"0x0{}\"",
+                                    x.into_repr().to_string()[2..].trim_start_matches('0')
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .join(",")
+                            .as_bytes(),
+                    )?;
+
+                    out.write_all(b"],\n")?;
+                    if module == "binary" && name == "NOT" {
+                        out.write_all(b"\"padding_strategy\": \"prepend_with_Fr255\"")
+                    } else {
+                        out.write_all(b"\"padding_strategy\": \"prepend_with_zeros\"")
+                    }?;
+                    out.write_all(b"\n}\n")?;
+                    out.write_all(if j < columns.len() - 1 { "," } else { "" }.as_bytes())?;
+                }
+            }
+            out.write_all(if i < self.columns.cols.len() - 1 {
+                b","
+            } else {
+                b""
+            })?;
+        }
+        out.write_all("}}".as_bytes())?;
 
         Ok(())
     }

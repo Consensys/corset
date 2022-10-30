@@ -4,14 +4,10 @@ use clap_verbosity_flag::Verbosity;
 use is_terminal::IsTerminal;
 use log::*;
 use once_cell::sync::OnceCell;
-use pairing_ce::ff::PrimeField;
-use rayon::prelude::*;
 use std::{io::Write, path::Path};
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
-
-use crate::compiler::Handle;
 
 mod check;
 mod column;
@@ -278,50 +274,10 @@ fn main() -> Result<()> {
 
             let mut f = std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?;
-            f.write_all("{\"columns\":{\n".as_bytes())
+
+            constraints
+                .write(&mut f)
                 .with_context(|| format!("while writing to `{}`", &outfile))?;
-
-            for (i, (module, columns)) in constraints.columns.cols.iter().enumerate() {
-                for (j, (name, column)) in columns.iter().enumerate() {
-                    info!("Processing {}", Handle::new(&module, &name));
-                    if let Some(value) = column.value() {
-                        f.write_all(
-                            format!("\"{}\":{{\n", Handle::new(&module, &name).mangle()).as_bytes(),
-                        )?;
-
-                        f.write_all("\"values\":[".as_bytes())?;
-
-                        f.write_all(
-                            value
-                                .par_iter()
-                                .map(|x| {
-                                    format!(
-                                        "\"0x0{}\"",
-                                        x.into_repr().to_string()[2..].trim_start_matches('0')
-                                    )
-                                })
-                                .collect::<Vec<_>>()
-                                .join(",")
-                                .as_bytes(),
-                        )?;
-
-                        f.write_all(b"],\n")?;
-                        if module == "binary" && name == "NOT" {
-                            f.write_all(b"\"padding_strategy\": \"prepend_with_Fr255\"")
-                        } else {
-                            f.write_all(b"\"padding_strategy\": \"prepend_with_zeros\"")
-                        }?;
-                        f.write_all(b"\n}\n")?;
-                        f.write_all(if j < columns.len() - 1 { "," } else { "" }.as_bytes())?;
-                    }
-                }
-                f.write_all(if i < constraints.columns.cols.len() - 1 {
-                    b","
-                } else {
-                    b""
-                })?;
-            }
-            f.write_all("}}".as_bytes())?;
         }
         Commands::Check {
             tracefile,
