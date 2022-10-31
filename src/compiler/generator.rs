@@ -412,12 +412,14 @@ impl FuncVerifier<Expression> for Builtin {
             }
             Builtin::Not => matches!(args[0].t(), Type::Boolean)
                 .then(|| ())
-                .ok_or(eyre!(
-                    "`{:?}` expects a boolean; found `{}` of type {:?}",
-                    &self,
-                    args[0],
-                    args[0].t()
-                )),
+                .ok_or_else(|| {
+                    eyre!(
+                        "`{:?}` expects a boolean; found `{}` of type {:?}",
+                        &self,
+                        args[0],
+                        args[0].t()
+                    )
+                }),
             Builtin::Neg | Builtin::Inv => {
                 if args.iter().all(|a| !matches!(a, Expression::List(_))) {
                     Ok(())

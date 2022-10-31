@@ -123,7 +123,7 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
 
 pub fn compute(v: &Value, cs: &mut ConstraintSet, do_pad: bool) -> Result<ComputeResult> {
     // 1. Read the traces and fill the computed columns
-    fill_traces(&v, vec![], &mut cs.columns).with_context(|| "while reading columns")?;
+    fill_traces(v, vec![], &mut cs.columns).with_context(|| "while reading columns")?;
     if do_pad {
         pad(&mut cs.columns).with_context(|| "while padding columns")?;
     }
