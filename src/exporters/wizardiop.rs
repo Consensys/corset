@@ -113,117 +113,115 @@ fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
     }
 }
 
+fn render_constraints(constraints: &[Constraint]) -> String {
+    constraints
+        .iter()
+        .map(|constraint| match constraint {
+            Constraint::Vanishes { name, domain, expr } => {
+                render_constraint(name, domain.clone(), expr)
+            }
+            Constraint::Plookup(name, from, to) => format!(
+                "build.Inclusion(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
+                name,
+                from.iter()
+                    .map(render_expression)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                to.iter()
+                    .map(render_expression)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Constraint::Permutation(name, from, to) => format!(
+                "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
+                name.to_case(Case::Snake),
+                from.iter()
+                    .map(Handle::mangle)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                to.iter().map(Handle::mangle).collect::<Vec<_>>().join(", ")
+            ),
+            Constraint::InRange(name, from, range) => format!(
+                "build.Range(\"{}\", {}, {})",
+                name.to_case(Case::Snake),
+                render_expression(from),
+                range
+            ),
+        })
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
+fn render_constants(consts: &HashMap<Handle, i64>) -> String {
+    if consts.is_empty() {
+        String::default()
+    } else {
+        format!(
+            "const (\n{}\n)",
+            consts
+                .iter()
+                .fold(String::new(), |mut ax, (handle, value)| {
+                    ax.push_str(&format!("{} int = {}\n", handle.mangle(), value));
+                    ax
+                })
+        )
+    }
+}
+
+fn render_columns<T: Clone>(cols: &ColumnSet<T>) -> String {
+    let mut r = String::new();
+    for (module, m) in cols.cols.iter() {
+        for (name, _) in m.iter() {
+            let name = Handle::new(module, name).mangle();
+            r.push_str(&format!(
+                "{} := build.RegisterCommit(\"{}\", SIZE)\n",
+                name, name
+            ));
+        }
+    }
+
+    r
+}
+
+fn render_constraint(name: &str, domain: Option<Vec<isize>>, expr: &Expression) -> String {
+    match expr {
+        Expression::List(xs) => xs
+            .iter()
+            .enumerate()
+            .map(|(i, x)| render_constraint(&format!("{}_{}", name, i), domain.clone(), x))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ => match domain {
+            None => format!(
+                "build.GlobalConstraint(\"{}\", {})",
+                name,
+                render_expression(expr)
+            ),
+            Some(domain) => domain
+                .iter()
+                .map(|x| {
+                    format!(
+                        "build.LocalConstraint(\"{}\", {})",
+                        name,
+                        render_expression(&shift(expr, *x))
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        },
+    }
+}
+
 pub struct WizardIOP {
     pub out_filename: Option<String>,
     pub package: String,
 }
 
 impl WizardIOP {
-    fn render_constraint(name: &str, domain: Option<Vec<isize>>, expr: &Expression) -> String {
-        match expr {
-            Expression::List(xs) => xs
-                .iter()
-                .enumerate()
-                .map(|(i, x)| {
-                    Self::render_constraint(&format!("{}_{}", name, i), domain.clone(), x)
-                })
-                .collect::<Vec<_>>()
-                .join("\n"),
-            _ => match domain {
-                None => format!(
-                    "build.GlobalConstraint(\"{}\", {})",
-                    name,
-                    render_expression(expr)
-                ),
-                Some(domain) => domain
-                    .iter()
-                    .map(|x| {
-                        format!(
-                            "build.LocalConstraint(\"{}\", {})",
-                            name,
-                            render_expression(&shift(expr, *x))
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            },
-        }
-    }
-
-    fn render_constraints(constraints: &[Constraint]) -> String {
-        constraints
-            .iter()
-            .map(|constraint| match constraint {
-                Constraint::Vanishes { name, domain, expr } => {
-                    Self::render_constraint(name, domain.clone(), expr)
-                }
-                Constraint::Plookup(name, from, to) => format!(
-                    "build.Inclusion(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
-                    name,
-                    from.iter()
-                        .map(render_expression)
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    to.iter()
-                        .map(render_expression)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-                Constraint::Permutation(name, from, to) => format!(
-                    "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
-                    name.to_case(Case::Snake),
-                    from.iter()
-                        .map(Handle::mangle)
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    to.iter().map(Handle::mangle).collect::<Vec<_>>().join(", ")
-                ),
-                Constraint::InRange(name, from, range) => format!(
-                    "build.Range(\"{}\", {}, {})",
-                    name.to_case(Case::Snake),
-                    render_expression(from),
-                    range
-                ),
-            })
-            .collect::<Vec<String>>()
-            .join("\n")
-    }
-
-    fn render_constants(consts: &HashMap<Handle, i64>) -> String {
-        if consts.is_empty() {
-            String::default()
-        } else {
-            format!(
-                "const (\n{}\n)",
-                consts
-                    .iter()
-                    .fold(String::new(), |mut ax, (handle, value)| {
-                        ax.push_str(&format!("{} int = {}\n", handle.mangle(), value));
-                        ax
-                    })
-            )
-        }
-    }
-
-    fn render_columns<T: Clone>(cols: &ColumnSet<T>) -> String {
-        let mut r = String::new();
-        for (module, m) in cols.cols.iter() {
-            for (name, _) in m.iter() {
-                let name = Handle::new(module, name).mangle();
-                r.push_str(&format!(
-                    "{} := build.RegisterCommit(\"{}\", SIZE)\n",
-                    name, name
-                ));
-            }
-        }
-
-        r
-    }
-
     pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
-        let consts = Self::render_constants(&cs.constants);
-        let columns = Self::render_columns(&cs.modules);
-        let constraints = Self::render_constraints(&cs.constraints);
+        let consts = render_constants(&cs.constants);
+        let columns = render_columns(&cs.modules);
+        let constraints = render_constraints(&cs.constraints);
 
         let r = format!(
             r#"
