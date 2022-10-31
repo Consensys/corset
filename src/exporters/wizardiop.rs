@@ -5,7 +5,10 @@ use std::{collections::HashMap, io::Write};
 use convert_case::{Case, Casing};
 use eyre::*;
 
-use crate::{column::ColumnSet, compiler::*};
+use crate::{
+    column::{ColumnSet, Computation},
+    compiler::*,
+};
 
 const SIZE: usize = 4_194_304;
 
@@ -171,12 +174,33 @@ fn render_constants(consts: &HashMap<Handle, i64>) -> String {
 fn render_columns<T: Clone>(cols: &ColumnSet<T>) -> String {
     let mut r = String::new();
     for (module, m) in cols.cols.iter() {
-        for (name, _) in m.iter() {
+        for (name, c) in m.iter() {
             let name = Handle::new(module, name).mangle();
-            r.push_str(&format!(
-                "{} := build.RegisterCommit(\"{}\", SIZE)\n",
-                name, name
-            ));
+            match c.kind {
+                Kind::Atomic | Kind::Composite(_) | Kind::Phantom => {
+                    r += &format!("{} := build.RegisterCommit(\"{}\", SIZE)\n", name, name)
+                }
+                _ => (),
+            }
+        }
+    }
+    for (module, m) in cols.cols.iter() {
+        for (name, c) in m.iter() {
+            let name = Handle::new(module, name).mangle();
+            match c.kind {
+                Kind::Interleaved(ref froms) => {
+                    r += &format!(
+                        "{} := zkevm.Interleave({})\n",
+                        name,
+                        froms
+                            .iter()
+                            .map(Handle::mangle)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+                _ => (),
+            }
         }
     }
 
