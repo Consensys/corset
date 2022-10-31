@@ -21,7 +21,7 @@ use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 use crate::pretty::Pretty;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Constraint {
     Vanishes {
         name: String,
@@ -480,7 +480,7 @@ impl FuncVerifier<Expression> for Builtin {
     }
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct ConstraintSet {
     pub columns: ColumnSet<Fr>,
     pub constraints: Vec<Constraint>,

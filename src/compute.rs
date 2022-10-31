@@ -121,17 +121,9 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
     Ok(())
 }
 
-pub fn compute(tracefile: &str, cs: &mut ConstraintSet, do_pad: bool) -> Result<ComputeResult> {
-    info!("Parsing {}...", tracefile);
-    let v: Value = serde_json::from_str(
-        &std::fs::read_to_string(tracefile)
-            .with_context(|| format!("while reading `{}`", tracefile))?,
-    )?;
-    info!("Done.");
-
+pub fn compute(v: &Value, cs: &mut ConstraintSet, do_pad: bool) -> Result<ComputeResult> {
     // 1. Read the traces and fill the computed columns
-    fill_traces(&v, vec![], &mut cs.columns)
-        .with_context(|| eyre!("while reading columns from `{}`", tracefile))?;
+    fill_traces(&v, vec![], &mut cs.columns).with_context(|| "while reading columns")?;
     if do_pad {
         pad(&mut cs.columns).with_context(|| "while padding columns")?;
     }

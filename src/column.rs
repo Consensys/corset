@@ -3,7 +3,7 @@ use eyre::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Column<T: Clone> {
     value: Option<Vec<T>>,
     pub kind: Kind<()>,
@@ -42,7 +42,7 @@ impl<T: Clone> Column<T> {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct ColumnSet<T: Clone> {
     pub cols: HashMap<String, HashMap<String, Column<T>>>, // Module -> Name -> Column
 }

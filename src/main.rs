@@ -4,7 +4,11 @@ use clap_verbosity_flag::Verbosity;
 use is_terminal::IsTerminal;
 use log::*;
 use once_cell::sync::OnceCell;
-use std::{io::Write, path::Path};
+use serde_json::Value;
+use std::{
+    io::{Read, Write},
+    path::Path,
+};
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
@@ -138,6 +142,15 @@ enum Commands {
         )]
         outfile: Option<String>,
     },
+    /// Given a set of constraints, indefinitely fill the computed columns from/to an SQL table
+    ComputeLoop {
+        #[clap(long, default_value = "localhost")]
+        host: String,
+        #[clap(long, default_value = "postgres")]
+        user: String,
+        #[clap(long, default_value = "zkevm")]
+        database: String,
+    },
     /// Given a set of constraints and a filled trace, check the validity of the constraints
     Check {
         #[clap(
@@ -168,6 +181,17 @@ enum Commands {
         )]
         outfile: String,
     },
+}
+
+fn read_trace<S: AsRef<str>>(tracefile: S) -> Result<Value> {
+    let tracefile = tracefile.as_ref();
+    info!("Parsing {}...", tracefile);
+    let v: Value = serde_json::from_str(
+        &std::fs::read_to_string(tracefile)
+            .with_context(|| format!("while reading `{}`", tracefile))?,
+    )?;
+    info!("Done.");
+    Ok(v)
 }
 
 fn main() -> Result<()> {
@@ -269,7 +293,7 @@ fn main() -> Result<()> {
             let outfile = outfile.as_ref().unwrap();
 
             expander::expand(&mut constraints)?;
-            let _ = compute::compute(&tracefile, &mut constraints, false)
+            let _ = compute::compute(&read_trace(&tracefile)?, &mut constraints, false)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let mut f = std::fs::File::create(&outfile)
@@ -278,6 +302,60 @@ fn main() -> Result<()> {
             constraints
                 .write(&mut f)
                 .with_context(|| format!("while writing to `{}`", &outfile))?;
+        }
+        Commands::ComputeLoop {
+            host,
+            user,
+            database,
+        } => {
+            fn decompress(bytes: &[u8]) -> Result<String> {
+                use flate2::read::GzDecoder;
+                let mut gz = GzDecoder::new(bytes);
+                let mut s = String::new();
+                gz.read_to_string(&mut s)?;
+                Ok(s)
+            }
+
+            use flate2::write::GzEncoder;
+            use flate2::Compression;
+
+            expander::expand(&mut constraints)?;
+            let mut db = postgres::Client::connect(
+                &format!(
+                    "host={} user={} dbname={} application_name=corset",
+                    host, user, database
+                ),
+                postgres::NoTls,
+            )?;
+
+            loop {
+                let mut local_constraints = constraints.clone();
+
+                let mut tx = db.transaction()?;
+                for row in tx.query(
+                    "SELECT id, status, payload FROM blocks WHERE STATUS='to_corset' LIMIT 1 FOR UPDATE SKIP LOCKED",
+                    &[],
+                )? {
+                    let id: &str = row.get(0);
+                    let payload: &[u8] = row.get(2);
+
+                    let v: Value = serde_json::from_str(
+                        &decompress(payload).with_context(|| "while decompressing payload")?,
+                    )?;
+
+                    compute::compute(&v, &mut local_constraints, false)
+                        .with_context(|| "while computing columns")?;
+
+                    let mut e = GzEncoder::new(Vec::new(), Compression::default());
+                    local_constraints.write(&mut e)?;
+
+                    tx.execute("UPDATE blocks SET payload=$1, status='to_prover' WHERE id=$2", &[&e.finish()?, &id])
+                        .with_context(|| "while inserting back row")?;
+                }
+                tx.commit()?;
+
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
         }
         Commands::Check {
             tracefile,
@@ -293,7 +371,7 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
-            let _ = compute::compute(&tracefile, &mut constraints, true)
+            let _ = compute::compute(&read_trace(&tracefile)?, &mut constraints, true)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
             check::check(
                 &constraints,
