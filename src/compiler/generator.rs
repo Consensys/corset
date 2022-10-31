@@ -646,7 +646,8 @@ impl ConstraintSet {
         out.write_all("{\"columns\":{\n".as_bytes())?;
 
         for (i, (module, columns)) in self.columns.cols.iter().enumerate() {
-            for (j, (name, column)) in columns.iter().enumerate() {
+            let mut current_col = columns.iter().peekable();
+            while let Some((name, column)) = current_col.next() {
                 info!("Processing {}", Handle::new(&module, &name));
                 if let Some(value) = column.value() {
                     out.write_all(
@@ -676,14 +677,15 @@ impl ConstraintSet {
                         out.write_all(b"\"padding_strategy\": \"prepend_with_zeros\"")
                     }?;
                     out.write_all(b"\n}\n")?;
-                    out.write_all(if j < columns.len() - 1 { "," } else { "" }.as_bytes())?;
+                    if current_col.peek().map(|c| c.1.value()).is_some() {
+                        out.write_all(b",")?;
+                    }
                 }
             }
-            out.write_all(if i < self.columns.cols.len() - 1 {
-                b","
-            } else {
-                b""
-            })?;
+
+            if columns.values().any(|c| c.value().is_some()) && i < self.columns.cols.len() - 1 {
+                out.write_all(b",")?;
+            }
         }
         out.write_all("}}".as_bytes())?;
 
