@@ -484,18 +484,18 @@ impl FuncVerifier<Expression> for Builtin {
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct ConstraintSet {
-    pub columns: ColumnSet<Fr>,
+    pub modules: ColumnSet<Fr>,
     pub constraints: Vec<Constraint>,
     pub constants: HashMap<Handle, i64>,
     pub computations: ComputationTable,
 }
 impl ConstraintSet {
     fn get(&self, handle: &Handle) -> Result<&Column<Fr>> {
-        self.columns.get(handle)
+        self.modules.get(handle)
     }
 
     fn get_mut(&mut self, handle: &Handle) -> Result<&mut Column<Fr>> {
-        self.columns.get_mut(handle)
+        self.modules.get_mut(handle)
     }
 
     fn compute_interleaved(&mut self, target: &Handle, froms: &[Handle]) -> Result<()> {
@@ -571,7 +571,7 @@ impl ConstraintSet {
     }
 
     fn compute_composite(&mut self, target: &Handle, exp: &Expression) -> Result<()> {
-        let target_col = self.columns.get(target)?;
+        let target_col = self.modules.get(target)?;
         if target_col.is_computed() {
             return Ok(());
         }
@@ -606,7 +606,7 @@ impl ConstraintSet {
             })
             .collect::<Vec<_>>();
 
-        self.columns.get_mut(target).unwrap().set_value(values);
+        self.modules.get_mut(target).unwrap().set_value(values);
 
         Ok(())
     }
@@ -647,10 +647,10 @@ impl ConstraintSet {
     pub fn write(&self, out: &mut impl Write) -> Result<()> {
         out.write_all("{\"columns\":{\n".as_bytes())?;
 
-        for (i, (module, columns)) in self.columns.cols.iter().enumerate() {
-            let mut current_col = columns.iter().peekable();
+        for (i, (module, columns)) in self.modules.cols.iter().enumerate() {
+            let mut current_col = columns.iter().filter(|c| c.1.value().is_some()).peekable();
             while let Some((name, column)) = current_col.next() {
-                info!("Processing {}", Handle::new(&module, &name));
+                info!("Exporting {}", Handle::new(&module, &name));
                 if let Some(value) = column.value() {
                     out.write_all(
                         format!("\"{}\":{{\n", Handle::new(&module, &name).mangle()).as_bytes(),
@@ -679,14 +679,14 @@ impl ConstraintSet {
                         out.write_all(b"\"padding_strategy\": \"prepend_with_zeros\"")
                     }?;
                     out.write_all(b"\n}\n")?;
-                    if current_col.peek().map(|c| c.1.value()).is_some() {
+                    if current_col.peek().is_some() {
                         out.write_all(b",")?;
                     }
                 }
             }
 
-            if columns.values().any(|c| c.value().is_some()) && i < self.columns.cols.len() - 1 {
-                out.write_all(b",")?;
+            if columns.values().any(|c| c.value().is_some()) && i < self.modules.cols.len() - 1 {
+                out.write_all(b" , ")?;
             }
         }
         out.write_all("}}".as_bytes())?;

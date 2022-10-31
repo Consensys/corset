@@ -86,7 +86,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
 
     let r = ConstraintSet {
         constraints,
-        columns,
+        modules: columns,
         constants,
         computations,
     };

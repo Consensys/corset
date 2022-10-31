@@ -180,7 +180,7 @@ fn check_constraint(
 }
 
 pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {
-    if cs.columns.is_empty() {
+    if cs.modules.is_empty() {
         return Ok(());
     }
 
@@ -218,7 +218,7 @@ pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {
                     match expr.as_ref() {
                         Expression::List(es) => {
                             for e in es {
-                                if let Err(err) = check_constraint(e, domain, &cs.columns, name) {
+                                if let Err(err) = check_constraint(e, domain, &cs.modules, name) {
                                     error!("{}", err);
                                     return Some(name.to_owned());
                                 }
@@ -226,7 +226,7 @@ pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {
                             None
                         }
                         _ => {
-                            if let Err(err) = check_constraint(expr, domain, &cs.columns, name) {
+                            if let Err(err) = check_constraint(expr, domain, &cs.modules, name) {
                                 error!("{}", err);
                                 Some(name.to_owned())
                             } else {

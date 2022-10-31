@@ -222,7 +222,7 @@ impl WizardIOP {
 
     pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
         let consts = Self::render_constants(&cs.constants);
-        let columns = Self::render_columns(&cs.columns);
+        let columns = Self::render_columns(&cs.modules);
         let constraints = Self::render_constraints(&cs.constraints);
 
         let r = format!(

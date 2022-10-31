@@ -136,7 +136,7 @@ import (
         );
 
         r += "const (\n";
-        for (_module, m) in cs.columns.cols.iter() {
+        for (_module, m) in cs.modules.cols.iter() {
             for (name, col) in m.iter().sorted_by_key(|(name, _)| name.to_string()) {
                 if col.kind == Kind::Atomic {
                     r.push_str(&format!(
@@ -176,7 +176,7 @@ import (
         r += "var AllColumns = []column.Description{";
         r.push_str(&format!(
             "\n{}\n",
-            cs.columns
+            cs.modules
                 .cols
                 .values()
                 .flat_map(|module| module.iter())
@@ -207,7 +207,7 @@ import (
 
         r.push_str(&format!(
             "var InterleavedColumns = []column.Description{{\n{}\n}}\n",
-            cs.columns
+            cs.modules
                 .cols
                 .values()
                 .flat_map(|module| module.iter())

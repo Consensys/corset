@@ -169,16 +169,16 @@ pub fn expand(cs: &mut ConstraintSet) -> Result<()> {
     for c in cs.constraints.iter_mut() {
         match c {
             Constraint::Vanishes { expr: e, .. } => {
-                expand_inv(e, &mut cs.columns, &mut cs.computations, &mut new_cs_inv)?;
+                expand_inv(e, &mut cs.modules, &mut cs.computations, &mut new_cs_inv)?;
             }
             Constraint::Plookup(_name, parents, children) => {
                 for e in parents.iter_mut().chain(children.iter_mut()) {
-                    *e = expand_expr(e, &mut cs.columns, &mut cs.computations, &mut new_cs_exps)?;
+                    *e = expand_expr(e, &mut cs.modules, &mut cs.computations, &mut new_cs_exps)?;
                 }
             }
             Constraint::Permutation(..) => (),
             Constraint::InRange(_, e, _) => {
-                *e = expand_expr(e, &mut cs.columns, &mut cs.computations, &mut new_cs_exps)?;
+                *e = expand_expr(e, &mut cs.modules, &mut cs.computations, &mut new_cs_exps)?;
             }
         }
     }

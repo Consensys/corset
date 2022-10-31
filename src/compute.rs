@@ -53,7 +53,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
         Value::Object(map) => {
             for (k, v) in map.iter() {
                 if k == "Trace" {
-                    info!("importing {:?}", path[path.len() - 1]);
+                    info!("Importing {}", path[path.len() - 1]);
                     fill_traces(v, path.clone(), columns)?;
                 } else {
                     let mut path = path.clone();
@@ -63,10 +63,6 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
             }
             Ok(())
         }
-        Value::Null => Ok(()),
-        Value::Bool(_) => Ok(()),
-        Value::Number(_) => Ok(()),
-        Value::String(_) => Ok(()),
         Value::Array(xs) => {
             if path.len() >= 2 {
                 let module = &path[path.len() - 2];
@@ -83,6 +79,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
             }
             Ok(())
         }
+        _ => Ok(()),
     }
 }
 
@@ -123,16 +120,16 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
 
 pub fn compute(v: &Value, cs: &mut ConstraintSet, do_pad: bool) -> Result<ComputeResult> {
     // 1. Read the traces and fill the computed columns
-    fill_traces(v, vec![], &mut cs.columns).with_context(|| "while reading columns")?;
+    fill_traces(v, vec![], &mut cs.modules).with_context(|| "while reading columns")?;
     if do_pad {
-        pad(&mut cs.columns).with_context(|| "while padding columns")?;
+        pad(&mut cs.modules).with_context(|| "while padding columns")?;
     }
     cs.compute_all()
         .with_context(|| "while computing columns")?;
 
     // 2. Collect the mangled columns of all modules
     let mut r = ComputeResult::default();
-    for (module, columns) in cs.columns.cols.iter_mut() {
+    for (module, columns) in cs.modules.cols.iter_mut() {
         // Warn the user if the
         let module_columns = columns
             .iter_mut()
