@@ -135,7 +135,7 @@ enum Commands {
         tracefile: String,
 
         #[clap(
-            short = 'O',
+            short = 'o',
             long = "out",
             help = "where to write the computed trace",
             required = true
@@ -293,7 +293,7 @@ fn main() -> Result<()> {
             let outfile = outfile.as_ref().unwrap();
 
             expander::expand(&mut constraints)?;
-            let _ = compute::compute(&read_trace(&tracefile)?, &mut constraints, false)
+            compute::compute(&read_trace(&tracefile)?, &mut constraints, false)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let mut f = std::fs::File::create(&outfile)
@@ -371,7 +371,7 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
-            let _ = compute::compute(&read_trace(&tracefile)?, &mut constraints, true)
+            compute::compute(&read_trace(&tracefile)?, &mut constraints, true)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
             check::check(
                 &constraints,

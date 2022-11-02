@@ -5,9 +5,7 @@ use pairing_ce::{
     ff::{Field, PrimeField},
 };
 use rayon::prelude::*;
-use serde::Serialize;
 use serde_json::Value;
-use std::collections::HashMap;
 
 use crate::{
     column::ColumnSet,
@@ -15,11 +13,6 @@ use crate::{
 };
 
 type F = Fr;
-
-#[derive(Default, Serialize, Debug)]
-pub struct ComputeResult {
-    pub columns: HashMap<String, Vec<F>>,
-}
 
 fn validate(t: Type, x: F) -> Result<F> {
     match t {
@@ -94,7 +87,6 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
         .and_then(|m| m.get("NOT"))
         .and_then(|c| c.len());
     let pad_to = (max_len + 1).next_power_of_two();
-    let _255 = Fr::from_str("255").unwrap();
 
     r.cols
         .values_mut()
@@ -108,6 +100,7 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
         });
 
     if let Some(col) = r.cols.get_mut("binary").and_then(|m| m.get_mut("NOT")) {
+        let _255 = Fr::from_str("255").unwrap();
         col.map(&|xs| {
             for x in xs.iter_mut().take(pad_to - binary_not_len.unwrap()) {
                 *x = _255;
@@ -118,7 +111,7 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
     Ok(())
 }
 
-pub fn compute(v: &Value, cs: &mut ConstraintSet, do_pad: bool) -> Result<ComputeResult> {
+pub fn compute(v: &Value, cs: &mut ConstraintSet, do_pad: bool) -> Result<()> {
     // 1. Read the traces and fill the computed columns
     fill_traces(v, vec![], &mut cs.modules).with_context(|| "while reading columns")?;
     if do_pad {
@@ -127,28 +120,5 @@ pub fn compute(v: &Value, cs: &mut ConstraintSet, do_pad: bool) -> Result<Comput
     cs.compute_all()
         .with_context(|| "while computing columns")?;
 
-    // 2. Collect the mangled columns of all modules
-    let mut r = ComputeResult::default();
-    for (module, columns) in cs.modules.cols.iter_mut() {
-        // Warn the user if the
-        let module_columns = columns
-            .iter_mut()
-            .map(|(name, col)| {
-                let handle = Handle::new(&module, &name);
-                (handle, col.len(), col.value().unwrap_or_default())
-            })
-            .collect::<Vec<_>>();
-
-        if module_columns.iter().all(|(_, len, _)| len.is_none()) {
-            warn!("Module {} is empty", module);
-        } else {
-            for (handle, len, col) in module_columns.into_iter() {
-                if len.is_none() {
-                    warn!("column `{}` is empty", handle);
-                }
-                r.columns.insert(handle.mangle(), col);
-            }
-        }
-    }
-    Ok(r)
+    Ok(())
 }

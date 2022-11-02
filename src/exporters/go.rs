@@ -138,7 +138,7 @@ import (
         r += "const (\n";
         for (_module, m) in cs.modules.cols.iter() {
             for (name, col) in m.iter().sorted_by_key(|(name, _)| name.to_string()) {
-                if col.kind == Kind::Atomic {
+                if matches!(col.kind, Kind::Atomic) {
                     r.push_str(&format!(
                         "{} column.Column = \"{}\"\n",
                         &Handle::new("", name).mangle(),

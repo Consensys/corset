@@ -53,7 +53,7 @@ impl Debug for AstNode {
 pub enum Kind<T> {
     Atomic,
     Phantom,
-    Composite(Box<T>),
+    Composite(T),
     Interleaved(Vec<Handle>),
 }
 impl<T> Kind<T> {
@@ -61,7 +61,7 @@ impl<T> Kind<T> {
         match self {
             Kind::Atomic => Kind::Atomic,
             Kind::Phantom => Kind::Phantom,
-            Kind::Composite(_) => Kind::Composite(Default::default()),
+            Kind::Composite(_) => Kind::Composite(()),
             Kind::Interleaved(froms) => Kind::Interleaved(froms.clone()),
         }
     }
@@ -79,7 +79,7 @@ pub enum Token {
     DefModule(String),
     DefConsts(Vec<(String, BigInt)>),
     DefColumns(Vec<AstNode>),
-    DefColumn(String, Type, Kind<AstNode>),
+    DefColumn(String, Type, Kind<Box<AstNode>>),
     DefSort(Vec<AstNode>, Vec<AstNode>),
 
     DefInrange(Box<AstNode>, usize),

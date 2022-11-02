@@ -50,7 +50,7 @@ pub enum Expression {
         args: Vec<Expression>,
     },
     Const(BigInt, Option<Fr>),
-    Column(Handle, Type, Kind<Expression>), // Module Name Type Kind
+    Column(Handle, Type, Kind<Box<Expression>>), // Module Name Type Kind
     ArrayColumn(Handle, Vec<usize>, Type),
     List(Vec<Expression>),
     Void,
