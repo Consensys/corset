@@ -55,8 +55,11 @@ impl ComputationTable {
         }
         Ok(())
     }
-    pub fn has_computation_for(&self, target: &Handle) -> bool {
-        self.dependencies.keys().any(|t| t == target)
+    pub fn computation_for(&self, target: &Handle) -> Option<&Computation> {
+        self.dependencies
+            .iter()
+            .find(|(k, _)| *k == target)
+            .map(|x| &self.computations[*x.1])
     }
 }
 #[derive(Debug)]

@@ -644,17 +644,55 @@ impl ConstraintSet {
         Ok(())
     }
 
+    // The padding value is 0 for atomic columns.
+    // However, it has to be computed for computed columns.
+    fn padding_value_for(&self, h: &Handle) -> String {
+        match &self.get(h).unwrap().kind {
+            Kind::Atomic | Kind::Interleaved(_) | Kind::Phantom => {
+                if *h == Handle::new("binary", "NOT") {
+                    Fr::from_str("255").unwrap()
+                } else {
+                    Fr::zero()
+                }
+            }
+            Kind::Composite(_) => {
+                if let Some(comp) = self.computations.computation_for(h) {
+                    match comp {
+                        Computation::Composite { exp, .. } => exp
+                            .eval(
+                                0,
+                                &mut |h, _, _| {
+                                    Some(if *h == Handle::new("binary", "NOT") {
+                                        Fr::from_str("255").unwrap()
+                                    } else {
+                                        Fr::zero()
+                                    })
+                                },
+                                false,
+                                0,
+                                false,
+                            )
+                            .unwrap(),
+                        _ => unreachable!(),
+                    }
+                } else {
+                    todo!()
+                }
+            }
+        }
+        .pretty()
+    }
+
     pub fn write(&self, out: &mut impl Write) -> Result<()> {
         out.write_all("{\"columns\":{\n".as_bytes())?;
 
         for (i, (module, columns)) in self.modules.cols.iter().enumerate() {
             let mut current_col = columns.iter().filter(|c| c.1.value().is_some()).peekable();
             while let Some((name, column)) = current_col.next() {
-                info!("Exporting {}", Handle::new(&module, &name));
+                let handle = Handle::new(&module, &name);
+                info!("Processing {}", &handle);
                 if let Some(value) = column.value() {
-                    out.write_all(
-                        format!("\"{}\":{{\n", Handle::new(&module, &name).mangle()).as_bytes(),
-                    )?;
+                    out.write_all(format!("\"{}\":{{\n", handle.mangle()).as_bytes())?;
 
                     out.write_all("\"values\":[".as_bytes())?;
 
@@ -673,11 +711,14 @@ impl ConstraintSet {
                     )?;
 
                     out.write_all(b"],\n")?;
-                    if module == "binary" && name == "NOT" {
-                        out.write_all(b"\"padding_strategy\": \"prepend_with_Fr255\"")
-                    } else {
-                        out.write_all(b"\"padding_strategy\": \"prepend_with_zeros\"")
-                    }?;
+                    let padding_value = self.padding_value_for(&handle);
+                    out.write_all(
+                        format!(
+                            "\"padding_strategy\": {{\"action\": \"prepend\", \"value\": \"{}\"}}",
+                            dbg!(padding_value)
+                        )
+                        .as_bytes(),
+                    )?;
                     out.write_all(b"\n}\n")?;
                     if current_col.peek().is_some() {
                         out.write_all(b",")?;
