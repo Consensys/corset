@@ -95,11 +95,7 @@ impl GoExporter {
             Builtin::Shift => Ok(format!(
                 "({}).Shift({})",
                 self.render_node(&args[0])?,
-                if let Expression::Const(x, _) = &args[1] {
-                    x
-                } else {
-                    unreachable!()
-                }
+                &args[1].pure_eval(),
             )),
             x => {
                 unimplemented!("{:?}", x)

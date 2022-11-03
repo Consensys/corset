@@ -65,14 +65,13 @@ impl Expression {
                 if Zero::is_zero(x) || One::is_one(x) {
                     Type::Boolean
                 } else {
-                    Type::Numeric
+                    Type::Value
                 }
             }
             Expression::Column(_, t, _) => *t,
             Expression::ArrayColumn(_, _, t) => *t,
             Expression::List(xs) => xs.iter().map(|x| x.t()).max().unwrap(),
             Expression::Void => Type::Void,
-            // Expression::Permutation(..) => Type::Void,
         }
     }
 
@@ -84,6 +83,34 @@ impl Expression {
                 _ => None,
             })
             .collect()
+    }
+
+    /// Evaluate a compile-time known value
+    pub fn pure_eval(&self) -> BigInt {
+        match self {
+            Expression::Funcall { func, args } => match func {
+                Builtin::Add => {
+                    let args = args.iter().map(|x| x.pure_eval()).collect::<Vec<_>>();
+                    args.iter().fold(BigInt::zero(), |ax, x| ax + x)
+                }
+                Builtin::Sub => {
+                    let args = args.iter().map(|x| x.pure_eval()).collect::<Vec<_>>();
+                    let mut ax = args[0].to_owned();
+                    for x in args[1..].iter() {
+                        ax -= x
+                    }
+                    ax
+                }
+                Builtin::Mul => {
+                    let args = args.iter().map(|x| x.pure_eval()).collect::<Vec<_>>();
+                    args.iter().fold(BigInt::one(), |ax, x| ax * x)
+                }
+                Builtin::Neg => -args[0].pure_eval(),
+                _ => unreachable!(),
+            },
+            Expression::Const(v, _) => v.to_owned(),
+            _ => unreachable!(),
+        }
     }
 
     pub fn eval(
@@ -128,11 +155,8 @@ impl Expression {
                     }))
                 }
                 Builtin::Shift => {
-                    if let Expression::Const(ii, _) = &args[1] {
-                        args[0].eval(i + ii.to_isize().unwrap(), get, false, depth + 1, false)
-                    } else {
-                        unreachable!()
-                    }
+                    let shift = args[1].pure_eval().to_isize().unwrap();
+                    args[0].eval(i + shift, get, false, depth + 1, false)
                 }
                 Builtin::Neg => args[0].eval(i, get, trace, depth + 1, true).map(|mut x| {
                     x.negate();
@@ -334,15 +358,15 @@ pub enum Builtin {
 impl Builtin {
     fn typing(&self, argtype: &[Type]) -> Type {
         match self {
-            Builtin::Add | Builtin::Sub | Builtin::Neg | Builtin::Inv => Type::Numeric,
-            Builtin::Not => Type::Boolean,
-            Builtin::Mul => {
-                if argtype.iter().all(|t| matches!(t, Type::Boolean)) {
-                    Type::Boolean
-                } else {
-                    Type::Numeric
+            Builtin::Add | Builtin::Sub | Builtin::Neg | Builtin::Inv => {
+                // Boolean is a corner case, as it is not stable under these operations
+                match *argtype.iter().max().unwrap() {
+                    Type::Boolean => Type::Numeric,
+                    x => x,
                 }
             }
+            Builtin::Not => Type::Boolean,
+            Builtin::Mul => *argtype.iter().max().unwrap(),
             Builtin::IfZero | Builtin::IfNotZero => {
                 std::cmp::max(argtype[1], *argtype.get(2).unwrap_or(&Type::Boolean))
             }
@@ -431,13 +455,11 @@ impl FuncVerifier<Expression> for Builtin {
                 }
             }
             Builtin::Shift => {
-                if matches!(&args[0], Expression::Column(..))
-                    && matches!(&args[1], Expression::Const(x, _) if !Zero::is_zero(x))
-                {
+                if matches!(&args[0], Expression::Column(..)) && args[1].t() == Type::Value {
                     Ok(())
                 } else {
                     Err(eyre!(
-                        "`{:?}` expects a COLUMN and a non-null INTEGER but received {:?}",
+                        "`{:?}` expects a COLUMN and a VALUE but received {:?}",
                         self,
                         args
                     ))

@@ -5,10 +5,7 @@ use std::{collections::HashMap, io::Write};
 use convert_case::{Case, Casing};
 use eyre::*;
 
-use crate::{
-    column::{ColumnSet, Computation},
-    compiler::*,
-};
+use crate::{column::ColumnSet, compiler::*};
 
 const SIZE: usize = 4_194_304;
 
@@ -16,17 +13,13 @@ fn shift(e: &Expression, i: isize) -> Expression {
     match e {
         Expression::Funcall { func, args } => match func {
             Builtin::Shift => {
-                if let Expression::Const(j, _) = &args[1] {
-                    let value = BigInt::from(i) + j;
-                    Expression::Funcall {
-                        func: Builtin::Shift,
-                        args: vec![
-                            args[0].clone(),
-                            Expression::Const(value.clone(), Fr::from_str(&value.to_string())),
-                        ],
-                    }
-                } else {
-                    unreachable!()
+                let value = args[1].pure_eval() + i;
+                Expression::Funcall {
+                    func: Builtin::Shift,
+                    args: vec![
+                        args[0].clone(),
+                        Expression::Const(value.clone(), Fr::from_str(&value.to_string())),
+                    ],
                 }
             }
             _ => Expression::Funcall {
@@ -100,15 +93,7 @@ fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
                 Expression::Column(handle, ..) => handle.mangle(),
                 _ => unreachable!(),
             };
-            format!(
-                "({}).Shift({}).AsVariable()",
-                leaf,
-                if let Expression::Const(x, _) = &args[1] {
-                    x
-                } else {
-                    unreachable!()
-                }
-            )
+            format!("({}).Shift({}).AsVariable()", leaf, args[1].pure_eval(),)
         }
         x => {
             unimplemented!("{:?}", x)

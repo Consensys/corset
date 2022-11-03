@@ -173,16 +173,27 @@ impl FuncVerifier<AstNode> for Form {
 /// The type of a column in the IR
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Type {
+    /// A general column
     Numeric,
+    /// A boolean column
     Boolean,
+    /// A value that could be compile-known
+    Value,
+    /// Bottom
     Void,
 }
 
+/// The ordering relation is used as a subtyping lattice
+/// Void < { Boolean, Numeric } < Numeric
 impl std::cmp::Ord for Type {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             (Type::Numeric, Type::Boolean) => Ordering::Greater,
             (Type::Boolean, Type::Numeric) => Ordering::Less,
+
+            (Type::Numeric, Type::Value) => Ordering::Greater,
+            (Type::Value, Type::Numeric) => Ordering::Less,
+
             _ => Ordering::Equal,
         }
     }
