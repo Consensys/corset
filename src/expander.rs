@@ -4,7 +4,7 @@ use pairing_ce::{bn256::Fr, ff::Field};
 use crate::{
     column::{ColumnSet, Computation},
     compiler::{
-        Builtin, ComputationTable, Constraint, ConstraintSet, Expression, Handle, Kind, Type,
+        Builtin, ComputationTable, Constraint, ConstraintSet, Expression, Handle, Kind, Magma, Type,
     },
 };
 use eyre::*;
@@ -32,7 +32,7 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &Handl
                             x_expr.clone(),
                             Expression::Column(
                                 inv_x_col.clone(),
-                                Type::Numeric,
+                                Type::Column(Magma::Integer),
                                 Kind::Composite(Box::new(Expression::Funcall {
                                     func: Builtin::Inv,
                                     args: vec![x_expr.clone()],
@@ -50,7 +50,7 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &Handl
         args: vec![
             Expression::Column(
                 inv_x_col.clone(),
-                Type::Numeric,
+                Type::Column(Magma::Integer),
                 Kind::Composite(Box::new(Expression::Funcall {
                     func: Builtin::Inv,
                     args: vec![x_expr.clone()],
@@ -65,7 +65,7 @@ fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &Handl
                             x_expr.clone(),
                             Expression::Column(
                                 inv_x_col.clone(),
-                                Type::Numeric,
+                                Type::Column(Magma::Integer),
                                 Kind::Composite(Box::new(Expression::Funcall {
                                     func: Builtin::Inv,
                                     args: vec![x_expr.clone()],
@@ -87,7 +87,7 @@ fn validate_computation(cs: &mut Vec<Expression>, x_expr: &Expression, x_col: &H
             x_expr.clone(),
             Expression::Column(
                 x_col.to_owned(),
-                Type::Numeric,
+                Type::Column(Magma::Integer),
                 Kind::Composite(Box::new(x_expr.clone())),
             ),
         ],
@@ -121,7 +121,12 @@ fn expand_inv<T: Clone + Ord>(
                     Handle::new(RESERVED_MODULE, expression_to_name(inverted, "INV"));
                 if cols.get(&inverted_handle).is_err() {
                     validate_inv(new_cs, inverted, &inverted_handle);
-                    cols.insert_column(&inverted_handle, Type::Numeric, Kind::Composite(()), true)?;
+                    cols.insert_column(
+                        &inverted_handle,
+                        Type::Column(Magma::Integer),
+                        Kind::Composite(()),
+                        true,
+                    )?;
                     comps.insert(
                         &inverted_handle,
                         Computation::Composite {
@@ -130,7 +135,11 @@ fn expand_inv<T: Clone + Ord>(
                         },
                     )?;
                 }
-                *e = Expression::Column(inverted_handle.clone(), Type::Numeric, Kind::Atomic)
+                *e = Expression::Column(
+                    inverted_handle.clone(),
+                    Type::Column(Magma::Integer),
+                    Kind::Atomic,
+                )
             }
             Ok(())
         }
@@ -149,7 +158,12 @@ fn expand_expr<T: Clone + Ord>(
         e => {
             let new_handle = Handle::new(RESERVED_MODULE, expression_to_name(e, "EXPAND"));
             validate_computation(new_cs, e, &new_handle);
-            cols.insert_column(&new_handle, Type::Numeric, Kind::Phantom, true)?;
+            cols.insert_column(
+                &new_handle,
+                Type::Column(Magma::Integer),
+                Kind::Phantom,
+                true,
+            )?;
 
             let _ = comps.insert(
                 &new_handle,
@@ -158,7 +172,11 @@ fn expand_expr<T: Clone + Ord>(
                     exp: e.clone(),
                 },
             );
-            Ok(Expression::Column(new_handle, Type::Numeric, Kind::Phantom))
+            Ok(Expression::Column(
+                new_handle,
+                Type::Column(Magma::Integer),
+                Kind::Phantom,
+            ))
         }
     }
 }

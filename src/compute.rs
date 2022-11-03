@@ -15,16 +15,14 @@ use crate::{
 type F = Fr;
 
 fn validate(t: Type, x: F) -> Result<F> {
-    match t {
-        Type::Boolean => {
-            if x.is_zero() || x == F::one() {
-                Ok(x)
-            } else {
-                Err(eyre!("expected bool, found {}", x))
-            }
+    if t.is_bool() {
+        if x.is_zero() || x == F::one() {
+            Ok(x)
+        } else {
+            Err(eyre!("expected bool, found {}", x))
         }
-        Type::Numeric => Ok(x),
-        _ => unreachable!(),
+    } else {
+        Ok(x)
     }
 }
 fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {

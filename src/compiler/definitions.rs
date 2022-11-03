@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use super::common::BUILTINS;
 use super::generator::{Defined, Expression, Function, FunctionClass};
-use super::{Handle, Type};
+use super::{Handle, Magma, Type};
 use crate::column::Computation;
 use crate::compiler::parser::*;
 
@@ -270,9 +270,9 @@ impl SymbolTable {
 
     pub fn insert_constant(&mut self, handle: &Handle, value: BigInt) -> Result<()> {
         let t = if Zero::is_zero(&value) || One::is_one(&value) {
-            Type::Boolean
+            Type::Scalar(Magma::Boolean)
         } else {
-            Type::Numeric
+            Type::Scalar(Magma::Integer)
         };
         if self.symbols.contains_key(handle) {
             Err(eyre!(
@@ -392,7 +392,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                                 &to_handle,
                                 Expression::Column(
                                     Handle::new(&module, to),
-                                    Type::Numeric,
+                                    Type::Column(Magma::Integer),
                                     Kind::Phantom,
                                 ),
                             )

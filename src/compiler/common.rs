@@ -173,39 +173,90 @@ impl FuncVerifier<AstNode> for Form {
 /// The type of a column in the IR
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Type {
-    /// A general column
-    Numeric,
-    /// A boolean column
-    Boolean,
-    /// A value that could be compile-known
-    Value,
-    /// Bottom
     Void,
+    Column(Magma),
+    Scalar(Magma),
 }
-
-/// The ordering relation is used as a subtyping lattice
-/// Void < { Boolean, Numeric } < Numeric
-impl std::cmp::Ord for Type {
-    fn cmp(&self, other: &Self) -> Ordering {
+impl Type {
+    pub fn SUPREMUM() -> Self {
+        Type::Column(Magma::SUPREMUM())
+    }
+    pub fn INFIMUM() -> Self {
+        Type::Void
+    }
+    pub fn same_scale(&self, new: Magma) -> Self {
+        match self {
+            Type::Void => todo!(),
+            Type::Column(_) => Type::Column(new),
+            Type::Scalar(_) => Type::Scalar(new),
+        }
+    }
+    pub fn is_bool(&self) -> bool {
+        match self {
+            Type::Void => false,
+            Type::Column(x) => matches!(x, Magma::Boolean),
+            Type::Scalar(x) => matches!(x, Magma::Boolean),
+        }
+    }
+    pub fn is_scalar(&self) -> bool {
+        matches!(self, Type::Scalar(_))
+    }
+    pub fn is_column(&self) -> bool {
+        matches!(self, Type::Column(_))
+    }
+    pub fn min(&self, other: &Self) -> Self {
+        other.max(self)
+    }
+    pub fn max(&self, other: &Self) -> Self {
         match (self, other) {
-            (Type::Numeric, Type::Boolean) => Ordering::Greater,
-            (Type::Boolean, Type::Numeric) => Ordering::Less,
-
-            (Type::Numeric, Type::Value) => Ordering::Greater,
-            (Type::Value, Type::Numeric) => Ordering::Less,
-
-            _ => Ordering::Equal,
+            (Type::Void, Type::Void) => Type::Void,
+            (Type::Void, _) => other.clone(),
+            (Type::Column(_), Type::Void) => self.clone(),
+            (Type::Column(x), Type::Column(y)) => Type::Column(x.max(y).to_owned()),
+            (Type::Column(x), Type::Scalar(y)) => Type::Column(x.max(y).to_owned()),
+            (Type::Scalar(_), Type::Void) => self.clone(),
+            (Type::Scalar(x), Type::Column(y)) => Type::Column(x.max(y).to_owned()),
+            (Type::Scalar(x), Type::Scalar(y)) => Type::Scalar(x.max(y).to_owned()),
+        }
+    }
+}
+impl std::cmp::PartialOrd for Type {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Type::Void, Type::Void) => Some(Ordering::Equal),
+            (Type::Void, _) => Some(Ordering::Less),
+            (Type::Column(_), Type::Void) => Some(Ordering::Greater),
+            (Type::Column(x), Type::Column(y)) => Some(x.cmp(y)),
+            (Type::Column(_), Type::Scalar(_)) => None,
+            (Type::Scalar(_), Type::Void) => Some(Ordering::Greater),
+            (Type::Scalar(_), Type::Column(_)) => None,
+            (Type::Scalar(x), Type::Scalar(y)) => Some(x.cmp(y)),
         }
     }
 }
 
-impl std::cmp::PartialOrd for Type {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Magma {
+    Boolean,
+    Integer,
+}
+impl std::cmp::Ord for Magma {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+impl std::cmp::PartialOrd for Magma {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (Type::Numeric, Type::Boolean) => Some(Ordering::Greater),
-            (Type::Boolean, Type::Numeric) => Some(Ordering::Less),
+            (Magma::Integer, Magma::Boolean) => Some(Ordering::Greater),
+            (Magma::Boolean, Magma::Integer) => Some(Ordering::Less),
             _ => Some(Ordering::Equal),
         }
+    }
+}
+impl Magma {
+    pub fn SUPREMUM() -> Self {
+        Magma::Integer
     }
 }
 

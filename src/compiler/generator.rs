@@ -63,14 +63,17 @@ impl Expression {
             }
             Expression::Const(ref x, _) => {
                 if Zero::is_zero(x) || One::is_one(x) {
-                    Type::Boolean
+                    Type::Scalar(Magma::Boolean)
                 } else {
-                    Type::Value
+                    Type::Scalar(Magma::Integer)
                 }
             }
             Expression::Column(_, t, _) => *t,
             Expression::ArrayColumn(_, _, t) => *t,
-            Expression::List(xs) => xs.iter().map(|x| x.t()).max().unwrap(),
+            Expression::List(xs) => xs
+                .iter()
+                .map(Expression::t)
+                .fold(Type::INFIMUM(), |a, b| a.max(&b)),
             Expression::Void => Type::Void,
         }
     }
@@ -246,18 +249,6 @@ impl Expression {
         _flatten(self, &mut r);
         r
     }
-    // pub fn fold<T: Clone>(&self, ax: T, f: &dyn Fn(T, &Expression) -> T) -> T {
-    //     match self {
-    //         Expression::List(xs) => {
-    //             let mut ax = ax.clone();
-    //             for x in xs {
-    //                 ax = x.fold(ax, f);
-    //             }
-    //             ax
-    //         }
-    //         x => f(ax, x.fold(ax, f)),
-    //     }
-    // }
     pub fn flat_fold<T>(&self, f: &dyn Fn(&Expression) -> T) -> Vec<T> {
         let mut ax = vec![];
         match self {
@@ -360,17 +351,18 @@ impl Builtin {
         match self {
             Builtin::Add | Builtin::Sub | Builtin::Neg | Builtin::Inv => {
                 // Boolean is a corner case, as it is not stable under these operations
-                match *argtype.iter().max().unwrap() {
-                    Type::Boolean => Type::Numeric,
+                match argtype.iter().fold(Type::INFIMUM(), |a, b| a.max(b)) {
+                    Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::Integer),
+                    Type::Column(Magma::Boolean) => Type::Column(Magma::Integer),
                     x => x,
                 }
             }
-            Builtin::Not => Type::Boolean,
-            Builtin::Mul => *argtype.iter().max().unwrap(),
+            Builtin::Not => argtype[0].same_scale(Magma::Boolean),
+            Builtin::Mul => argtype.iter().fold(Type::INFIMUM(), |a, b| a.max(b)),
             Builtin::IfZero | Builtin::IfNotZero => {
-                std::cmp::max(argtype[1], *argtype.get(2).unwrap_or(&Type::Boolean))
+                argtype[1].max(argtype.get(2).unwrap_or(&Type::Column(Magma::Boolean)))
             }
-            Builtin::Begin => *argtype.iter().max().unwrap(),
+            Builtin::Begin => argtype.iter().fold(Type::INFIMUM(), |a, b| a.max(b)),
             Builtin::Shift | Builtin::Nth => argtype[0],
             Builtin::ByteDecomposition => Type::Void,
         }
@@ -434,16 +426,14 @@ impl FuncVerifier<Expression> for Builtin {
                     ))
                 }
             }
-            Builtin::Not => matches!(args[0].t(), Type::Boolean)
-                .then(|| ())
-                .ok_or_else(|| {
-                    eyre!(
-                        "`{:?}` expects a boolean; found `{}` of type {:?}",
-                        &self,
-                        args[0],
-                        args[0].t()
-                    )
-                }),
+            Builtin::Not => args[0].t().is_bool().then(|| ()).ok_or_else(|| {
+                eyre!(
+                    "`{:?}` expects a boolean; found `{}` of type {:?}",
+                    &self,
+                    args[0],
+                    args[0].t()
+                )
+            }),
             Builtin::Neg | Builtin::Inv => {
                 if args.iter().all(|a| !matches!(a, Expression::List(_))) {
                     Ok(())
@@ -455,7 +445,7 @@ impl FuncVerifier<Expression> for Builtin {
                 }
             }
             Builtin::Shift => {
-                if matches!(&args[0], Expression::Column(..)) && args[1].t() == Type::Value {
+                if args[0].t().is_column() && args[1].t().is_scalar() {
                     Ok(())
                 } else {
                     Err(eyre!(
@@ -775,7 +765,7 @@ fn apply_form(
                 (&args[0].class, &args[1].class, &args[2])
             {
                 let mut l = vec![];
-                let mut t = Type::Boolean;
+                let mut t = Type::INFIMUM();
                 for i in is {
                     let new_ctx = SymbolTable::derived(ctx.clone());
                     new_ctx.borrow_mut().insert_symbol(
@@ -785,7 +775,7 @@ fn apply_form(
 
                     let (r, to) = reduce(&body.clone(), new_ctx, module)?.unwrap();
                     l.push(r);
-                    t = t.max(to)
+                    t = t.max(&to)
                 }
 
                 Ok(Some((Expression::List(l), t)))
@@ -836,14 +826,16 @@ fn apply(
                                 }
                             },
                         )),
-                        *traversed_args_t.iter().max().unwrap(),
+                        traversed_args_t
+                            .iter()
+                            .fold(Type::INFIMUM(), |a, b| a.max(b)),
                     ))),
 
                     b @ (Builtin::IfZero | Builtin::IfNotZero) => {
                         let conds = {
                             let cond_not_zero = cond.clone();
                             // If the condition is binary, cond_zero = 1 - x...
-                            let cond_zero = if matches!(traversed_args_t[0], Type::Boolean) {
+                            let cond_zero = if traversed_args_t[0].is_bool() {
                                 Expression::Funcall {
                                     func: Builtin::Sub,
                                     args: vec![
@@ -878,7 +870,9 @@ fn apply(
                         };
 
                         // Order the then/else blocks
-                        let t = traversed_args_t.iter().max().unwrap();
+                        let t = traversed_args_t
+                            .iter()
+                            .fold(Type::INFIMUM(), |a, b| a.max(b));
                         let then_else = vec![traversed_args.get(1), traversed_args.get(2)]
                             .into_iter()
                             .enumerate()
@@ -912,9 +906,9 @@ fn apply(
                             .flatten()
                             .collect::<Vec<_>>();
                         if then_else.len() == 1 {
-                            Ok(Some((then_else[0].clone(), *t)))
+                            Ok(Some((then_else[0].clone(), t)))
                         } else {
-                            Ok(Some((Expression::List(then_else), *t)))
+                            Ok(Some((Expression::List(then_else), t)))
                         }
                     }
 
@@ -961,7 +955,7 @@ fn apply(
                                 traversed_args[0].to_owned(),
                             ],
                         },
-                        Type::Boolean,
+                        traversed_args[0].t().same_scale(Magma::Boolean),
                     ))),
 
                     b @ (Builtin::Add
@@ -1007,9 +1001,9 @@ fn reduce(
         Token::Value(x) => Ok(Some((
             Expression::Const(x.clone(), Fr::from_str(&x.to_string())),
             if *x >= Zero::zero() && *x <= One::one() {
-                Type::Boolean
+                Type::Scalar(Magma::Boolean)
             } else {
-                Type::Numeric
+                Type::Scalar(Magma::Integer)
             },
         ))),
         Token::Symbol(name) => Ok(Some(

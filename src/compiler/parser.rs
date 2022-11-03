@@ -7,7 +7,7 @@ use std::fmt;
 use std::fmt::Debug;
 
 use super::common::Type;
-use super::Handle;
+use super::{Handle, Magma};
 
 #[derive(Parser)]
 #[grammar = "corset.pest"]
@@ -168,7 +168,7 @@ impl AstNode {
         let mut pairs = args.into_iter();
         let name = pairs.next().unwrap().as_str();
 
-        let mut t = Type::Numeric;
+        let mut t = Type::Column(Magma::Integer);
         let mut range = None;
         let mut kind = Kind::Atomic;
 
@@ -191,8 +191,8 @@ impl AstNode {
                             ));
                         }
                     }
-                    ":NATURAL" => t = Type::Numeric,
-                    ":BOOLEAN" => t = Type::Boolean,
+                    ":NATURAL" => t = Type::Column(Magma::Integer),
+                    ":BOOLEAN" => t = Type::Column(Magma::Boolean),
                     ":COMP" => {
                         let n = pairs.next().map(rec_parse);
                         if let Some(Ok(AstNode {
@@ -595,8 +595,8 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
         }),
         Rule::typing => Ok(AstNode {
             class: Token::Type(match pair.as_str() {
-                "NATURAL" => Type::Numeric,
-                "BOOLEAN" => Type::Boolean,
+                "NATURAL" => Type::Column(Magma::Integer),
+                "BOOLEAN" => Type::Column(Magma::Boolean),
                 _ => unreachable!(),
             }),
             src,
