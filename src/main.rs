@@ -148,6 +148,8 @@ enum Commands {
         host: String,
         #[clap(long, default_value = "postgres")]
         user: String,
+        #[clap(long)]
+        password: Option<String>,
         #[clap(long, default_value = "zkevm")]
         database: String,
     },
@@ -306,6 +308,7 @@ fn main() -> Result<()> {
         Commands::ComputeLoop {
             host,
             user,
+            password,
             database,
         } => {
             fn decompress(bytes: &[u8]) -> Result<String> {
@@ -322,12 +325,16 @@ fn main() -> Result<()> {
             expander::expand(&mut constraints)?;
             let mut db = postgres::Client::connect(
                 &format!(
-                    "host={} user={} dbname={} application_name=corset",
-                    host, user, database
+                    "postgres://{}{}@{}/{}",
+                    user,
+                    password.map(|p| format!(":{}", p)).unwrap_or_default(),
+                    host,
+                    database
                 ),
                 postgres::NoTls,
             )?;
 
+            info!("Initiating waiting loop");
             loop {
                 let mut local_constraints = constraints.clone();
 
@@ -338,6 +345,7 @@ fn main() -> Result<()> {
                 )? {
                     let id: &str = row.get(0);
                     let payload: &[u8] = row.get(2);
+                    info!("Processing {}", id);
 
                     let v: Value = serde_json::from_str(
                         &decompress(payload).with_context(|| "while decompressing payload")?,
