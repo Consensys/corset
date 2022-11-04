@@ -5,10 +5,7 @@ use is_terminal::IsTerminal;
 use log::*;
 use once_cell::sync::OnceCell;
 use serde_json::Value;
-use std::{
-    io::{Read, Write},
-    path::Path,
-};
+use std::{io::Write, path::Path};
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
@@ -141,6 +138,17 @@ enum Commands {
             required = true
         )]
         outfile: Option<String>,
+    },
+    /// Given a set of constraints, indefinitely check the traces from an SQL table
+    CheckLoop {
+        #[clap(long, default_value = "localhost")]
+        host: String,
+        #[clap(long, default_value = "postgres")]
+        user: String,
+        #[clap(long)]
+        password: Option<String>,
+        #[clap(long, default_value = "zkevm")]
+        database: String,
     },
     /// Given a set of constraints, indefinitely fill the computed columns from/to an SQL table
     ComputeLoop {
@@ -295,8 +303,12 @@ fn main() -> Result<()> {
             let outfile = outfile.as_ref().unwrap();
 
             expander::expand(&mut constraints)?;
-            compute::compute(&read_trace(&tracefile)?, &mut constraints, false)
-                .with_context(|| format!("while computing from `{}`", tracefile))?;
+            compute::compute(
+                &read_trace(&tracefile)?,
+                &mut constraints,
+                compute::PaddingStrategy::None,
+            )
+            .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let mut f = std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?;
@@ -311,28 +323,52 @@ fn main() -> Result<()> {
             password,
             database,
         } => {
-            fn decompress(bytes: &[u8]) -> Result<String> {
-                use flate2::read::GzDecoder;
-                let mut gz = GzDecoder::new(bytes);
-                let mut s = String::new();
-                gz.read_to_string(&mut s)?;
-                Ok(s)
-            }
-
             use flate2::write::GzEncoder;
             use flate2::Compression;
 
             expander::expand(&mut constraints)?;
-            let mut db = postgres::Client::connect(
-                &format!(
-                    "postgres://{}{}@{}/{}",
-                    user,
-                    password.map(|p| format!(":{}", p)).unwrap_or_default(),
-                    host,
-                    database
-                ),
-                postgres::NoTls,
-            )?;
+            let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
+
+            loop {
+                let mut local_constraints = constraints.clone();
+
+                let mut tx = db.transaction()?;
+                for row in tx.query(
+                    "SELECT id, status, payload FROM blocks WHERE STATUS='to_corset' LIMIT 1 FOR UPDATE SKIP LOCKED",
+                    &[],
+                )? {
+                    let id: &str = row.get(0);
+                    let payload: &[u8] = row.get(2);
+                    info!("Processing {}", id);
+
+                    let v: Value = serde_json::from_str(
+                        &utils::decompress(payload).with_context(|| "while decompressing payload")?,
+                    )?;
+
+                    compute::compute(&v, &mut local_constraints, compute::PaddingStrategy::None)
+                        .with_context(|| "while computing columns")?;
+
+                    let mut e = GzEncoder::new(Vec::new(), Compression::default());
+                    local_constraints.write(&mut e)?;
+
+                    tx.execute("UPDATE blocks SET payload=$1, status='to_prover' WHERE id=$2", &[&e.finish()?, &id])
+                        .with_context(|| "while inserting back row")?;
+                }
+                tx.commit()?;
+
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        }
+        Commands::CheckLoop {
+            host,
+            user,
+            password,
+            database,
+        } => {
+            use flate2::write::GzEncoder;
+            use flate2::Compression;
+
+            let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
 
             info!("Initiating waiting loop");
             loop {
@@ -348,10 +384,10 @@ fn main() -> Result<()> {
                     info!("Processing {}", id);
 
                     let v: Value = serde_json::from_str(
-                        &decompress(payload).with_context(|| "while decompressing payload")?,
+                        &utils::decompress(payload).with_context(|| "while decompressing payload")?,
                     )?;
 
-                    compute::compute(&v, &mut local_constraints, false)
+                    compute::compute(&v, &mut local_constraints, compute::PaddingStrategy::None)
                         .with_context(|| "while computing columns")?;
 
                     let mut e = GzEncoder::new(Vec::new(), Compression::default());
@@ -379,8 +415,12 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
-            compute::compute(&read_trace(&tracefile)?, &mut constraints, true)
-                .with_context(|| format!("while expanding `{}`", tracefile))?;
+            compute::compute(
+                &read_trace(&tracefile)?,
+                &mut constraints,
+                compute::PaddingStrategy::OneLine,
+            )
+            .with_context(|| format!("while expanding `{}`", tracefile))?;
             check::check(
                 &constraints,
                 args.verbose.log_level_filter() >= log::Level::Warn

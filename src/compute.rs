@@ -74,17 +74,27 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
     }
 }
 
-fn pad(r: &mut ColumnSet<F>) -> Result<()> {
-    if r.is_empty() {
+pub enum PaddingStrategy {
+    Full,
+    OneLine,
+    None,
+}
+fn pad(r: &mut ColumnSet<F>, s: PaddingStrategy) -> Result<()> {
+    if matches!(s, PaddingStrategy::None) || r.is_empty() {
         return Ok(());
     }
+
     let max_len = r.len();
     let binary_not_len = r
         .cols
         .get_mut("binary")
         .and_then(|m| m.get("NOT"))
         .and_then(|c| c.len());
-    let pad_to = (max_len + 1).next_power_of_two();
+    let pad_to = match s {
+        PaddingStrategy::Full => (max_len + 1).next_power_of_two(),
+        PaddingStrategy::OneLine => max_len + 1,
+        PaddingStrategy::None => unreachable!(),
+    };
 
     r.cols
         .values_mut()
@@ -109,12 +119,10 @@ fn pad(r: &mut ColumnSet<F>) -> Result<()> {
     Ok(())
 }
 
-pub fn compute(v: &Value, cs: &mut ConstraintSet, do_pad: bool) -> Result<()> {
+pub fn compute(v: &Value, cs: &mut ConstraintSet, padding_strategy: PaddingStrategy) -> Result<()> {
     // 1. Read the traces and fill the computed columns
     fill_traces(v, vec![], &mut cs.modules).with_context(|| "while reading columns")?;
-    if do_pad {
-        pad(&mut cs.modules).with_context(|| "while padding columns")?;
-    }
+    pad(&mut cs.modules, padding_strategy).with_context(|| "while padding columns")?;
     cs.compute_all()
         .with_context(|| "while computing columns")?;
 
