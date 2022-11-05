@@ -264,19 +264,34 @@ impl Magma {
 pub struct Handle {
     pub module: String,
     pub name: String,
+    pub id: Option<usize>,
 }
 impl Handle {
     pub fn new<S1: AsRef<str>, S2: AsRef<str>>(module: S1, name: S2) -> Self {
         Handle {
             module: module.as_ref().to_owned(),
             name: name.as_ref().to_owned(),
+            id: None,
         }
+    }
+
+    pub fn with_id<S1: AsRef<str>, S2: AsRef<str>>(module: S1, name: S2, id: usize) -> Self {
+        Handle {
+            module: module.as_ref().to_owned(),
+            name: name.as_ref().to_owned(),
+            id: Some(id),
+        }
+    }
+
+    pub fn set_id(&mut self, i: usize) {
+        self.id = Some(i)
     }
 
     pub fn ith(&self, i: usize) -> Handle {
         Handle {
             module: self.module.clone(),
             name: format!("{}{}{}", self.name, ARRAY_SEPARATOR, i),
+            id: self.id,
         }
     }
 
@@ -313,7 +328,7 @@ impl Handle {
 }
 impl std::fmt::Debug for Handle {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}::{}", self.module, self.name)
+        write!(f, "{}::{}/{:?}", self.module, self.name, self.id)
     }
 }
 impl std::fmt::Display for Handle {

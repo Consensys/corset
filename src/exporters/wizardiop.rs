@@ -158,34 +158,31 @@ fn render_constants(consts: &HashMap<Handle, i64>) -> String {
 
 fn render_columns<T: Clone>(cols: &ColumnSet<T>) -> String {
     let mut r = String::new();
-    for (module, m) in cols.cols.iter() {
-        for (name, c) in m.iter() {
-            let name = Handle::new(module, name).mangle();
-            match c.kind {
-                Kind::Atomic | Kind::Composite(_) | Kind::Phantom => {
-                    r += &format!("{} := build.RegisterCommit(\"{}\", SIZE)\n", name, name)
-                }
-                _ => (),
+    for (handle, column) in cols.iter() {
+        match column.kind {
+            Kind::Atomic | Kind::Composite(_) | Kind::Phantom => {
+                r += &format!(
+                    "{} := build.RegisterCommit(\"{}\", SIZE)\n",
+                    handle.name, handle.name
+                )
             }
+            _ => (),
         }
     }
-    for (module, m) in cols.cols.iter() {
-        for (name, c) in m.iter() {
-            let name = Handle::new(module, name).mangle();
-            match c.kind {
-                Kind::Interleaved(ref froms) => {
-                    r += &format!(
-                        "{} := zkevm.Interleave({})\n",
-                        name,
-                        froms
-                            .iter()
-                            .map(Handle::mangle)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    );
-                }
-                _ => (),
+    for (handle, column) in cols.iter() {
+        match column.kind {
+            Kind::Interleaved(ref froms) => {
+                r += &format!(
+                    "{} := zkevm.Interleave({})\n",
+                    handle.mangle(),
+                    froms
+                        .iter()
+                        .map(Handle::mangle)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
             }
+            _ => (),
         }
     }
 

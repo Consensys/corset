@@ -98,6 +98,10 @@ impl SymbolTable {
         self.symbols.iter()
     }
 
+    pub fn symbols_mut(&mut self) -> impl Iterator<Item = (&Handle, &mut (Symbol, Type))> {
+        self.symbols.iter_mut()
+    }
+
     fn _resolve_symbol(
         &mut self,
         handle: &Handle,

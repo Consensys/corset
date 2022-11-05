@@ -58,12 +58,9 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
             if path.len() >= 2 {
                 let module = &path[path.len() - 2];
                 let colname = &path[path.len() - 1];
+                let handle = Handle::new(module, colname);
 
-                if let Some(column) = columns
-                    .cols
-                    .get_mut(module)
-                    .and_then(|module| module.get_mut(colname))
-                {
+                if let Some(column) = columns.by_handle_mut(&handle) {
                     debug!("Inserting {}", Handle::new(module, colname));
                     column.set_value(parse_column(xs, column.t)?)
                 }
@@ -86,9 +83,7 @@ fn pad(r: &mut ColumnSet<F>, s: PaddingStrategy) -> Result<()> {
 
     let max_len = r.len();
     let binary_not_len = r
-        .cols
-        .get_mut("binary")
-        .and_then(|m| m.get("NOT"))
+        .by_handle(&Handle::new("binary", "NOT"))
         .and_then(|c| c.len());
     let pad_to = match s {
         PaddingStrategy::Full => (max_len + 1).next_power_of_two(),
@@ -96,18 +91,15 @@ fn pad(r: &mut ColumnSet<F>, s: PaddingStrategy) -> Result<()> {
         PaddingStrategy::None => unreachable!(),
     };
 
-    r.cols
-        .values_mut()
-        .flat_map(|module| module.values_mut())
-        .for_each(|x| {
-            x.map(&|xs| {
-                xs.reverse();
-                xs.resize(pad_to, Fr::zero());
-                xs.reverse();
-            })
-        });
+    r.columns_mut().for_each(|x| {
+        x.map(&|xs| {
+            xs.reverse();
+            xs.resize(pad_to, Fr::zero());
+            xs.reverse();
+        })
+    });
 
-    if let Some(col) = r.cols.get_mut("binary").and_then(|m| m.get_mut("NOT")) {
+    if let Some(col) = r.by_handle_mut(&Handle::new("binary", "NOT")) {
         let _255 = Fr::from_str("255").unwrap();
         col.map(&|xs| {
             for x in xs.iter_mut().take(pad_to - binary_not_len.unwrap()) {
@@ -120,7 +112,6 @@ fn pad(r: &mut ColumnSet<F>, s: PaddingStrategy) -> Result<()> {
 }
 
 pub fn compute(v: &Value, cs: &mut ConstraintSet, padding_strategy: PaddingStrategy) -> Result<()> {
-    // 1. Read the traces and fill the computed columns
     fill_traces(v, vec![], &mut cs.modules).with_context(|| "while reading columns")?;
     pad(&mut cs.modules, padding_strategy).with_context(|| "while padding columns")?;
     cs.compute_all()

@@ -41,6 +41,20 @@ impl Constraint {
             Constraint::InRange(name, ..) => name,
         }
     }
+
+    pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut Handle)) {
+        match self {
+            Constraint::Vanishes { expr, .. } => expr.add_id_to_handles(set_id),
+            Constraint::Plookup(_, xs, ys) => xs
+                .iter_mut()
+                .chain(ys.iter_mut())
+                .for_each(|e| e.add_id_to_handles(set_id)),
+            Constraint::Permutation(_, hs1, hs2) => {
+                hs1.iter_mut().chain(hs2.iter_mut()).for_each(|h| set_id(h))
+            }
+            Constraint::InRange(_, _, _) => {}
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -75,6 +89,19 @@ impl Expression {
                 .map(Expression::t)
                 .fold(Type::INFIMUM(), |a, b| a.max(&b)),
             Expression::Void => Type::Void,
+        }
+    }
+
+    pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut Handle)) {
+        match self {
+            Expression::Funcall { args, .. } => {
+                args.iter_mut().for_each(|e| e.add_id_to_handles(set_id))
+            }
+
+            Expression::Column(handle, _, _) => set_id(handle),
+            Expression::List(xs) => xs.iter_mut().for_each(|x| x.add_id_to_handles(set_id)),
+
+            Expression::ArrayColumn(_, _, _) | Expression::Const(_, _) | Expression::Void => {}
         }
     }
 
@@ -124,7 +151,7 @@ impl Expression {
         depth: usize,
         wrap: bool,
     ) -> Option<Fr> {
-        let r = match self {
+        match self {
             Expression::Funcall { func, args } => match func {
                 Builtin::Add => {
                     let args = args
@@ -189,14 +216,7 @@ impl Expression {
                                 h.module, h.name, idx
                             );
                         }
-                        get(
-                            &Handle {
-                                module: h.module.to_owned(),
-                                name: format!("{}_{}", h.name, idx),
-                            },
-                            i,
-                            wrap,
-                        )
+                        get(&h.ith(idx), i, wrap)
                     } else {
                         unreachable!()
                     }
@@ -211,18 +231,17 @@ impl Expression {
             }
             Expression::Column(handle, ..) => get(handle, i, wrap),
             _ => unreachable!(),
-        };
-        if trace && !matches!(self, Expression::Const(..)) {
-            eprintln!(
-                "{:70} <- {}[{}]",
-                r.as_ref()
-                    .map(Pretty::pretty)
-                    .unwrap_or_else(|| "nil".to_owned()),
-                self,
-                i
-            );
         }
-        r
+        // if trace && !matches!(self, Expression::Const(..)) {
+        //     eprintln!(
+        //         "{:70} <- {}[{}]",
+        //         r.as_ref()
+        //             .map(Pretty::pretty)
+        //             .unwrap_or_else(|| "nil".to_owned()),
+        //         self,
+        //         i
+        //     );
+        // }
     }
 
     pub fn leaves(&self) -> Vec<Expression> {
@@ -608,7 +627,9 @@ impl ConstraintSet {
                     &mut |handle, i, _| {
                         // All the columns are guaranteed to have been computed
                         // at the begiinning of the function
-                        self.get(handle).unwrap().get(i, false).cloned()
+                        self.modules._cols[handle.id.unwrap()]
+                            .get(i, false)
+                            .cloned()
                     },
                     false,
                     0,
@@ -696,11 +717,18 @@ impl ConstraintSet {
     }
 
     pub fn write(&self, out: &mut impl Write) -> Result<()> {
+        // TODO encode the padding strategy behavior
+        // serde_json::to_writer(out, self).with_context(|| "while serializing to JSON")
+
         out.write_all("{\"columns\":{\n".as_bytes())?;
 
         for (i, (module, columns)) in self.modules.cols.iter().enumerate() {
-            let mut current_col = columns.iter().filter(|c| c.1.value().is_some()).peekable();
-            while let Some((name, column)) = current_col.next() {
+            let mut current_col = columns
+                .iter()
+                .filter(|c| self.modules._cols[*c.1].value().is_some())
+                .peekable();
+            while let Some((name, &i)) = current_col.next() {
+                let column = &self.modules._cols[i];
                 let handle = Handle::new(&module, &name);
                 info!("Processing {}", &handle);
                 if let Some(value) = column.value() {
@@ -738,7 +766,11 @@ impl ConstraintSet {
                 }
             }
 
-            if columns.values().any(|c| c.value().is_some()) && i < self.modules.cols.len() - 1 {
+            if columns
+                .values()
+                .any(|i| self.modules._cols[*i].value().is_some())
+                && i < self.modules.cols.len() - 1
+            {
                 out.write_all(b" , ")?;
             }
         }
@@ -922,10 +954,10 @@ fn apply(
                                     if range.contains(&x) {
                                         Ok(Some((
                                             Expression::Column(
-                                                Handle {
-                                                    module: module.to_owned(),
-                                                    name: format!("{}_{}", handle.name, i),
-                                                },
+                                                Handle::new(
+                                                    module.to_owned(),
+                                                    format!("{}_{}", handle.name, i),
+                                                ),
                                                 *t,
                                                 Kind::Atomic,
                                             ),
@@ -1116,16 +1148,10 @@ fn reduce_toplevel(
         Token::DefSort(to, from) => Ok(Some(Constraint::Permutation(
             names::Generator::default().next().unwrap(),
             from.iter()
-                .map(|f| Handle {
-                    module: module.clone(),
-                    name: f.as_symbol().unwrap(),
-                })
+                .map(|f| Handle::new(module.clone(), f.as_symbol().unwrap()))
                 .collect::<Vec<_>>(),
             to.iter()
-                .map(|f| Handle {
-                    module: module.clone(),
-                    name: f.as_symbol().unwrap(),
-                })
+                .map(|f| Handle::new(&module, f.as_symbol().unwrap()))
                 .collect::<Vec<_>>(),
         ))),
         _ => unreachable!("{:?}", e.src),

@@ -132,16 +132,14 @@ import (
         );
 
         r += "const (\n";
-        for (_module, m) in cs.modules.cols.iter() {
-            for (name, col) in m.iter().sorted_by_key(|(name, _)| name.to_string()) {
-                if matches!(col.kind, Kind::Atomic) {
-                    r.push_str(&format!(
-                        "{} column.Column = \"{}\"\n",
-                        &Handle::new("", name).mangle(),
-                        &Handle::new("", name).mangle(),
-                    ))
-                };
-            }
+        for (handle, col) in cs.modules.iter() {
+            if matches!(col.kind, Kind::Atomic) {
+                r.push_str(&format!(
+                    "{} column.Column = \"{}\"\n",
+                    handle.mangle_no_module(),
+                    handle.mangle_no_module(),
+                ))
+            };
         }
         r += ")\n\n";
 
@@ -173,14 +171,12 @@ import (
         r.push_str(&format!(
             "\n{}\n",
             cs.modules
-                .cols
-                .values()
-                .flat_map(|module| module.iter())
-                .filter_map(|(name, col)| match col.kind {
-                    Kind::Atomic => Some(format!("{},", Handle::new("", name).mangle())),
+                .iter()
+                .filter_map(|(handle, col)| match col.kind {
+                    Kind::Atomic => Some(format!("{},", handle.mangle_no_module())),
                     Kind::Phantom => None,
                     Kind::Composite(_) => None,
-                    Kind::Interleaved(_) => Some(format!("{},", Handle::new("", name).mangle())),
+                    Kind::Interleaved(_) => Some(format!("{},", handle.mangle_no_module())),
                 })
                 .sorted()
                 .collect::<Vec<_>>()
@@ -204,14 +200,12 @@ import (
         r.push_str(&format!(
             "var InterleavedColumns = []column.Description{{\n{}\n}}\n",
             cs.modules
-                .cols
-                .values()
-                .flat_map(|module| module.iter())
-                .filter_map(|(name, col)| match col.kind {
+                .iter()
+                .filter_map(|(handle, col)| match col.kind {
                     Kind::Atomic => None,
                     Kind::Phantom => None,
                     Kind::Composite(_) => None,
-                    Kind::Interleaved(_) => Some(format!("{},", Handle::new("", name).mangle())),
+                    Kind::Interleaved(_) => Some(format!("{},", handle.mangle_no_module())),
                 })
                 .collect::<Vec<_>>()
                 .join("\n")

@@ -30,29 +30,18 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         asts.push((name, ast));
     }
 
-    let constraints = asts
-        .iter()
-        .map(|(name, ast)| {
-            generator::pass(ast, ctx.clone())
-                .with_context(|| eyre!("compiling constraints in `{}`", name))
-        })
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
-        .flatten()
-        .collect();
-
     let mut columns: ColumnSet<pairing_ce::bn256::Fr> = Default::default();
     let mut constants: HashMap<Handle, i64> = Default::default();
     let mut computations = ctx.borrow().computation_table.clone();
-    for s in ctx.borrow().symbols() {
-        match &s.1 .0 {
+    for s in ctx.borrow_mut().symbols_mut() {
+        match &mut s.1 .0 {
             Symbol::Alias(_) => {}
-            Symbol::Final(symbol, used) => {
-                if !used {
+            Symbol::Final(ref mut symbol, used) => {
+                if !*used {
                     warn!("{} unused", symbol);
                 }
                 match symbol {
-                    Expression::Column(handle, t, k) => {
+                    Expression::Column(ref mut handle, t, k) => {
                         columns.insert_column(handle, *t, k.to_nil(), ALLOW_DUP)?;
                         match k {
                             Kind::Atomic | Kind::Phantom => (),
@@ -73,9 +62,9 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                         }
                     }
                     Expression::ArrayColumn(handle, range, t) => {
-                        columns.insert_array(handle, range, *t, ALLOW_DUP)?
+                        columns.insert_array(&handle, &range, *t, ALLOW_DUP)?
                     }
-                    Expression::Const(x, _) => {
+                    Expression::Const(ref x, _) => {
                         constants.insert(s.0.to_owned(), x.try_into().unwrap());
                     }
                     x => todo!("{:?}", x),
@@ -83,6 +72,19 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
             }
         }
     }
+    let mut constraints = asts
+        .iter()
+        .map(|(name, ast)| {
+            generator::pass(ast, ctx.clone())
+                .with_context(|| eyre!("compiling constraints in `{}`", name))
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    constraints
+        .iter_mut()
+        .for_each(|x| x.add_id_to_handles(&|h| h.set_id(columns.id_of(h))));
 
     let r = ConstraintSet {
         constraints,

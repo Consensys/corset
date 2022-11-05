@@ -44,7 +44,44 @@ impl<T: Clone> Column<T> {
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct ColumnSet<T: Clone> {
-    pub cols: HashMap<String, HashMap<String, Column<T>>>, // Module -> Name -> Column
+    pub _cols: Vec<Column<T>>,
+    pub cols: HashMap<String, HashMap<String, usize>>, // Module -> Name -> Column
+}
+
+impl<T: Clone> ColumnSet<T> {
+    pub fn id_of(&self, handle: &Handle) -> usize {
+        *self
+            .cols
+            .get(&handle.module)
+            .and_then(|m| m.get(&handle.name))
+            .unwrap()
+    }
+
+    pub fn by_handle(&self, handle: &Handle) -> Option<&Column<T>> {
+        self.cols
+            .get(&handle.module)
+            .and_then(|m| m.get(&handle.name))
+            .and_then(|i| self._cols.get(*i))
+    }
+
+    pub fn by_handle_mut(&mut self, handle: &Handle) -> Option<&mut Column<T>> {
+        self.cols
+            .get(&handle.module)
+            .and_then(|m| m.get(&handle.name))
+            .and_then(|i| self._cols.get_mut(*i))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (Handle, &Column<T>)> {
+        self.cols.iter().flat_map(|(module, columns)| {
+            columns
+                .iter()
+                .map(|(name, i)| (Handle::new(module.to_owned(), name), &self._cols[*i]))
+        })
+    }
+
+    pub fn columns_mut(&mut self) -> impl Iterator<Item = &mut Column<T>> {
+        self._cols.iter_mut()
+    }
 }
 
 impl<T: Ord + Clone> ColumnSet<T> {
@@ -60,6 +97,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
                     handle.module
                 )
             })
+            .and_then(|i| Ok(&self._cols[*i]))
     }
 
     pub fn get_mut(&mut self, handle: &Handle) -> Result<&mut Column<T>> {
@@ -74,6 +112,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
                     handle.module
                 )
             })
+            .and_then(|i| Ok(&mut self._cols[*i]))
     }
 
     pub fn insert_column(
@@ -82,7 +121,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
         t: Type,
         kind: Kind<()>,
         allow_dup: bool,
-    ) -> Result<()> {
+    ) -> Result<usize> {
         if self
             .cols
             .get(&handle.module)
@@ -92,18 +131,17 @@ impl<T: Ord + Clone> ColumnSet<T> {
         {
             Err(eyre!("`{}` already exists", handle))
         } else {
+            let i = self._cols.len();
+            self._cols.push(Column {
+                value: None,
+                t,
+                kind,
+            });
             self.cols
                 .entry(handle.module.to_owned())
                 .or_default()
-                .insert(
-                    handle.name.to_owned(),
-                    Column {
-                        value: None,
-                        t,
-                        kind,
-                    },
-                );
-            Ok(())
+                .insert(handle.name.to_owned(), i);
+            Ok(i)
         }
     }
 
@@ -115,16 +153,15 @@ impl<T: Ord + Clone> ColumnSet<T> {
         allow_dup: bool,
     ) -> Result<()> {
         for i in range.iter() {
-            self.insert_column(&handle.ith(*i), t, Kind::Atomic, allow_dup)?
+            self.insert_column(&handle.ith(*i), t, Kind::Atomic, allow_dup)?;
         }
         Ok(())
     }
 
     pub fn len(&self) -> usize {
         let lens = self
-            .cols
-            .values()
-            .flat_map(|m| m.values())
+            ._cols
+            .iter()
             .filter_map(|c| c.len())
             .collect::<Vec<_>>();
 
@@ -142,7 +179,18 @@ impl<T: Ord + Clone> ColumnSet<T> {
 
 impl<T: Clone> std::convert::From<HashMap<String, HashMap<String, Column<T>>>> for ColumnSet<T> {
     fn from(x: HashMap<String, HashMap<String, Column<T>>>) -> Self {
-        ColumnSet { cols: x }
+        let mut r = ColumnSet {
+            cols: Default::default(),
+            _cols: Vec::with_capacity(x.values().flat_map(|y| y.values()).count()),
+        };
+        for (module, columns) in x.into_iter() {
+            for (name, column) in columns.into_iter() {
+                let i = r._cols.len();
+                r._cols.push(column);
+                r.cols.entry(module.to_owned()).or_default().insert(name, i);
+            }
+        }
+        r
     }
 }
 

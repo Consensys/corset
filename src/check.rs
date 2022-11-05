@@ -98,7 +98,7 @@ fn check_constraint_at(
 ) -> Result<()> {
     let r = expr.eval(
         i,
-        &mut |handle, i, wrap| columns.get(handle).unwrap().get(i, wrap).cloned(),
+        &mut |handle, i, wrap| columns._cols[handle.id.unwrap()].get(i, wrap).cloned(),
         false,
         0,
         true,
