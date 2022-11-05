@@ -154,35 +154,25 @@ impl Expression {
         match self {
             Expression::Funcall { func, args } => match func {
                 Builtin::Add => {
-                    let args = args
-                        .iter()
-                        .map(|x| x.eval(i, get, trace, depth + 1, wrap))
-                        .collect::<Option<Vec<_>>>()?;
-                    Some(args.iter().fold(Fr::zero(), |mut ax, x| {
-                        ax.add_assign(x);
-                        ax
-                    }))
+                    let mut ax = Fr::zero();
+                    for arg in args.iter() {
+                        ax.add_assign(&arg.eval(i, get, trace, depth + 1, wrap)?)
+                    }
+                    Some(ax)
                 }
                 Builtin::Sub => {
-                    let args = args
-                        .iter()
-                        .map(|x| x.eval(i, get, trace, depth + 1, wrap))
-                        .collect::<Option<Vec<_>>>()?;
-                    let mut ax = args[0];
-                    for x in args[1..].iter() {
-                        ax.sub_assign(x)
+                    let mut ax = args[0].eval(i, get, trace, depth + 1, wrap)?;
+                    for arg in args.iter().skip(1) {
+                        ax.sub_assign(&arg.eval(i, get, trace, depth + 1, wrap)?)
                     }
                     Some(ax)
                 }
                 Builtin::Mul => {
-                    let args = args
-                        .iter()
-                        .map(|x| x.eval(i, get, trace, depth + 1, wrap))
-                        .collect::<Option<Vec<_>>>()?;
-                    Some(args.iter().fold(Fr::one(), |mut ax, x| {
-                        ax.mul_assign(x);
-                        ax
-                    }))
+                    let mut ax = Fr::one();
+                    for arg in args.iter() {
+                        ax.mul_assign(&arg.eval(i, get, trace, depth + 1, wrap)?)
+                    }
+                    Some(ax)
                 }
                 Builtin::Shift => {
                     let shift = args[1].pure_eval().to_isize().unwrap();
@@ -211,10 +201,7 @@ impl Expression {
                     {
                         let idx = idx.to_usize().unwrap();
                         if !range.contains(&idx) {
-                            panic!(
-                                "trying to access `{}.{}` ad index `{}`",
-                                h.module, h.name, idx
-                            );
+                            panic!("trying to access `{}` ad index `{}`", h, idx);
                         }
                         get(&h.ith(idx), i, wrap)
                     } else {
@@ -503,7 +490,7 @@ impl FuncVerifier<Expression> for Builtin {
                     Ok(())
                 } else {
                     Err(eyre!(
-                        "`{:?}` expects COLUMN ELEM_SIZE CHUNK_COUT but received {:?}",
+                        "`{:?}` expects COLUMN ELEM_SIZE ELEM_COUNT but received {:?}",
                         self,
                         args
                     ))
@@ -755,7 +742,7 @@ impl ConstraintSet {
                     out.write_all(
                         format!(
                             "\"padding_strategy\": {{\"action\": \"prepend\", \"value\": \"{}\"}}",
-                            dbg!(padding_value)
+                            padding_value
                         )
                         .as_bytes(),
                     )?;
