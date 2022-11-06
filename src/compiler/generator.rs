@@ -542,14 +542,17 @@ impl ConstraintSet {
         {
             return Err(eyre!("interleaving columns of incoherent lengths"));
         }
-        let len = self.get(&froms[0])?.len().unwrap();
 
-        let mut values = Vec::new();
-        for i in 0..len as isize {
-            for from in froms.iter() {
-                values.push(*self.get(from).unwrap().get(i, false).unwrap());
-            }
-        }
+        let len = self.get(&froms[0])?.len().unwrap();
+        let count = froms.len();
+        let values = (0..(len * count))
+            .into_par_iter()
+            .map(|k| {
+                let i = k / count;
+                let j = k % count;
+                *self.get(&froms[j]).unwrap().get(i as isize, false).unwrap()
+            })
+            .collect::<Vec<_>>();
 
         self.get_mut(target)?.set_value(values);
 
