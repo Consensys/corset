@@ -1,4 +1,4 @@
-use cached::{Cached, SizedCache};
+use cached::SizedCache;
 use color_eyre::owo_colors::OwoColorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;

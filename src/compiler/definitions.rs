@@ -94,6 +94,7 @@ impl SymbolTable {
         }))
     }
 
+    #[allow(dead_code)]
     pub fn symbols(&self) -> impl Iterator<Item = (&Handle, &(Symbol, Type))> {
         self.symbols.iter()
     }

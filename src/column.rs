@@ -75,7 +75,7 @@ impl<T: Clone> ColumnSet<T> {
         self.cols.iter().flat_map(|(module, columns)| {
             columns
                 .iter()
-                .map(|(name, i)| (Handle::new(module.to_owned(), name), &self._cols[*i]))
+                .map(|(name, i)| (Handle::new(module.clone(), name), &self._cols[*i]))
         })
     }
 
@@ -97,7 +97,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
                     handle.module
                 )
             })
-            .and_then(|i| Ok(&self._cols[*i]))
+            .map(|i| &self._cols[*i])
     }
 
     pub fn get_mut(&mut self, handle: &Handle) -> Result<&mut Column<T>> {
@@ -112,7 +112,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
                     handle.module
                 )
             })
-            .and_then(|i| Ok(&mut self._cols[*i]))
+            .map(|i| &mut self._cols[*i])
     }
 
     pub fn insert_column(

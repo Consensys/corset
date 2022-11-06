@@ -88,7 +88,7 @@ impl Expression {
             Expression::List(xs) => xs
                 .iter()
                 .map(Expression::t)
-                .fold(Type::INFIMUM(), |a, b| a.max(&b)),
+                .fold(Type::INFIMUM, |a, b| a.max(&b)),
             Expression::Void => Type::Void,
         }
     }
@@ -191,9 +191,7 @@ impl Expression {
                     if let Some(ref mut rcache) = cache {
                         x.map(|x| {
                             rcache
-                                .cache_get_or_set_with(x, || {
-                                    x.inverse().unwrap_or_else(|| Fr::zero())
-                                })
+                                .cache_get_or_set_with(x, || x.inverse().unwrap_or_else(Fr::zero))
                                 .to_owned()
                         })
                     } else {
@@ -371,18 +369,18 @@ impl Builtin {
         match self {
             Builtin::Add | Builtin::Sub | Builtin::Neg | Builtin::Inv => {
                 // Boolean is a corner case, as it is not stable under these operations
-                match argtype.iter().fold(Type::INFIMUM(), |a, b| a.max(b)) {
+                match argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)) {
                     Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::Integer),
                     Type::Column(Magma::Boolean) => Type::Column(Magma::Integer),
                     x => x,
                 }
             }
             Builtin::Not => argtype[0].same_scale(Magma::Boolean),
-            Builtin::Mul => argtype.iter().fold(Type::INFIMUM(), |a, b| a.max(b)),
+            Builtin::Mul => argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)),
             Builtin::IfZero | Builtin::IfNotZero => {
                 argtype[1].max(argtype.get(2).unwrap_or(&Type::Column(Magma::Boolean)))
             }
-            Builtin::Begin => argtype.iter().fold(Type::INFIMUM(), |a, b| a.max(b)),
+            Builtin::Begin => argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)),
             Builtin::Shift | Builtin::Nth => argtype[0],
             Builtin::ByteDecomposition => Type::Void,
         }
@@ -800,7 +798,7 @@ fn apply_form(
                 (&args[0].class, &args[1].class, &args[2])
             {
                 let mut l = vec![];
-                let mut t = Type::INFIMUM();
+                let mut t = Type::INFIMUM;
                 for i in is {
                     let new_ctx = SymbolTable::derived(ctx.clone());
                     new_ctx.borrow_mut().insert_symbol(
@@ -861,9 +859,7 @@ fn apply(
                                 }
                             },
                         )),
-                        traversed_args_t
-                            .iter()
-                            .fold(Type::INFIMUM(), |a, b| a.max(b)),
+                        traversed_args_t.iter().fold(Type::INFIMUM, |a, b| a.max(b)),
                     ))),
 
                     b @ (Builtin::IfZero | Builtin::IfNotZero) => {
@@ -905,9 +901,7 @@ fn apply(
                         };
 
                         // Order the then/else blocks
-                        let t = traversed_args_t
-                            .iter()
-                            .fold(Type::INFIMUM(), |a, b| a.max(b));
+                        let t = traversed_args_t.iter().fold(Type::INFIMUM, |a, b| a.max(b));
                         let then_else = vec![traversed_args.get(1), traversed_args.get(2)]
                             .into_iter()
                             .enumerate()
@@ -958,7 +952,7 @@ fn apply(
                                         Ok(Some((
                                             Expression::Column(
                                                 Handle::new(
-                                                    module.to_owned(),
+                                                    module,
                                                     format!("{}_{}", handle.name, i),
                                                 ),
                                                 *t,

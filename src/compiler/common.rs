@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use eyre::*;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -178,12 +179,9 @@ pub enum Type {
     Scalar(Magma),
 }
 impl Type {
-    pub fn SUPREMUM() -> Self {
-        Type::Column(Magma::SUPREMUM())
-    }
-    pub fn INFIMUM() -> Self {
-        Type::Void
-    }
+    pub const SUPREMUM: Self = Type::Column(Magma::SUPREMUM);
+    pub const INFIMUM: Self = Type::Void;
+
     pub fn same_scale(&self, new: Magma) -> Self {
         match self {
             Type::Void => todo!(),
@@ -210,11 +208,11 @@ impl Type {
     pub fn max(&self, other: &Self) -> Self {
         match (self, other) {
             (Type::Void, Type::Void) => Type::Void,
-            (Type::Void, _) => other.clone(),
-            (Type::Column(_), Type::Void) => self.clone(),
+            (Type::Void, _) => *other,
+            (Type::Column(_), Type::Void) => *self,
             (Type::Column(x), Type::Column(y)) => Type::Column(x.max(y).to_owned()),
             (Type::Column(x), Type::Scalar(y)) => Type::Column(x.max(y).to_owned()),
-            (Type::Scalar(_), Type::Void) => self.clone(),
+            (Type::Scalar(_), Type::Void) => *self,
             (Type::Scalar(x), Type::Column(y)) => Type::Column(x.max(y).to_owned()),
             (Type::Scalar(x), Type::Scalar(y)) => Type::Scalar(x.max(y).to_owned()),
         }
@@ -255,9 +253,7 @@ impl std::cmp::PartialOrd for Magma {
     }
 }
 impl Magma {
-    pub fn SUPREMUM() -> Self {
-        Magma::Integer
-    }
+    const SUPREMUM: Self = Magma::Integer;
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

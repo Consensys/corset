@@ -170,19 +170,16 @@ fn render_columns<T: Clone>(cols: &ColumnSet<T>) -> String {
         }
     }
     for (handle, column) in cols.iter() {
-        match column.kind {
-            Kind::Interleaved(ref froms) => {
-                r += &format!(
-                    "{} := zkevm.Interleave({})\n",
-                    handle.mangle(),
-                    froms
-                        .iter()
-                        .map(Handle::mangle)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
-            }
-            _ => (),
+        if let Kind::Interleaved(ref froms) = column.kind {
+            r += &format!(
+                "{} := zkevm.Interleave({})\n",
+                handle.mangle(),
+                froms
+                    .iter()
+                    .map(Handle::mangle)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
     }
 
