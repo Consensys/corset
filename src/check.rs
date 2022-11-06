@@ -1,3 +1,4 @@
+use cached::{Cached, SizedCache};
 use color_eyre::owo_colors::OwoColorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
@@ -76,6 +77,7 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
         true,
         0,
         true,
+        &mut None,
     );
 
     Err(eyre!(
@@ -95,6 +97,7 @@ fn check_constraint_at(
     l: Option<usize>,
     columns: &ColumnSet<Fr>,
     fail_on_oob: bool,
+    cache: &mut Option<SizedCache<Fr, Fr>>,
 ) -> Result<()> {
     let r = expr.eval(
         i,
@@ -102,6 +105,7 @@ fn check_constraint_at(
         false,
         0,
         true,
+        cache,
     );
     if let Some(r) = r {
         if !r.is_zero() {
@@ -163,20 +167,20 @@ fn check_constraint(
         return Err(eyre!("empty trace, aborting"));
     }
 
+    let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
     match domain {
         Some(is) => {
             for i in is {
-                check_constraint_at(expr, *i, None, columns, true)?;
+                check_constraint_at(expr, *i, None, columns, true, &mut cache)?;
             }
-            Ok(())
         }
         None => {
             for i in 0..l as isize {
-                check_constraint_at(expr, i, Some(l), columns, false)?;
+                check_constraint_at(expr, i, Some(l), columns, false, &mut cache)?;
             }
-            Ok(())
         }
-    }
+    };
+    Ok(())
 }
 
 pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {

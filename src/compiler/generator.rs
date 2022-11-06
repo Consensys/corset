@@ -1,3 +1,4 @@
+use cached::Cached;
 use eyre::*;
 use log::*;
 use num_bigint::BigInt;
@@ -150,45 +151,58 @@ impl Expression {
         trace: bool,
         depth: usize,
         wrap: bool,
+        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
     ) -> Option<Fr> {
         match self {
             Expression::Funcall { func, args } => match func {
                 Builtin::Add => {
                     let mut ax = Fr::zero();
                     for arg in args.iter() {
-                        ax.add_assign(&arg.eval(i, get, trace, depth + 1, wrap)?)
+                        ax.add_assign(&arg.eval(i, get, trace, depth + 1, wrap, cache)?)
                     }
                     Some(ax)
                 }
                 Builtin::Sub => {
-                    let mut ax = args[0].eval(i, get, trace, depth + 1, wrap)?;
+                    let mut ax = args[0].eval(i, get, trace, depth + 1, wrap, cache)?;
                     for arg in args.iter().skip(1) {
-                        ax.sub_assign(&arg.eval(i, get, trace, depth + 1, wrap)?)
+                        ax.sub_assign(&arg.eval(i, get, trace, depth + 1, wrap, cache)?)
                     }
                     Some(ax)
                 }
                 Builtin::Mul => {
                     let mut ax = Fr::one();
                     for arg in args.iter() {
-                        ax.mul_assign(&arg.eval(i, get, trace, depth + 1, wrap)?)
+                        ax.mul_assign(&arg.eval(i, get, trace, depth + 1, wrap, cache)?)
                     }
                     Some(ax)
                 }
                 Builtin::Shift => {
                     let shift = args[1].pure_eval().to_isize().unwrap();
-                    args[0].eval(i + shift, get, false, depth + 1, false)
+                    args[0].eval(i + shift, get, false, depth + 1, false, cache)
                 }
-                Builtin::Neg => args[0].eval(i, get, trace, depth + 1, true).map(|mut x| {
-                    x.negate();
-                    x
-                }),
-                Builtin::Inv => args[0]
-                    .eval(i, get, trace, depth + 1, true)
-                    .and_then(|x| x.inverse())
-                    .or_else(|| Some(Fr::zero())),
+                Builtin::Neg => args[0]
+                    .eval(i, get, trace, depth + 1, true, cache)
+                    .map(|mut x| {
+                        x.negate();
+                        x
+                    }),
+                Builtin::Inv => {
+                    let x = args[0].eval(i, get, trace, depth + 1, true, cache);
+                    if let Some(ref mut rcache) = cache {
+                        x.map(|x| {
+                            rcache
+                                .cache_get_or_set_with(x, || {
+                                    x.inverse().unwrap_or_else(|| Fr::zero())
+                                })
+                                .to_owned()
+                        })
+                    } else {
+                        x.and_then(|x| x.inverse()).or_else(|| Some(Fr::zero()))
+                    }
+                }
                 Builtin::Not => {
                     let mut r = Fr::one();
-                    if let Some(x) = args[0].eval(i, get, trace, depth + 1, wrap) {
+                    if let Some(x) = args[0].eval(i, get, trace, depth + 1, wrap, cache) {
                         r.sub_assign(&x);
                         Some(r)
                     } else {
@@ -621,6 +635,7 @@ impl ConstraintSet {
                     false,
                     0,
                     false,
+                    &mut None,
                 )
                 .unwrap_or_else(Fr::zero)
             })
@@ -691,6 +706,7 @@ impl ConstraintSet {
                                 false,
                                 0,
                                 false,
+                                &mut None,
                             )
                             .unwrap(),
                         _ => unreachable!(),
