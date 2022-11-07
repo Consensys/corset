@@ -12,7 +12,7 @@ use pairing_ce::{bn256::Fr, ff::Field};
 
 use crate::{
     column::ColumnSet,
-    compiler::{Constraint, ConstraintSet, Expression, Handle},
+    compiler::{Constraint, ConstraintSet, EvalSettings, Expression, Handle},
     pretty::*,
 };
 
@@ -65,21 +65,18 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
         .with(Style::blank());
     eprintln!("\n\n{}\n", table);
 
-    // let r = expr.eval(
-    //     i,
-    //     &mut |handle, i, wrap| {
-    //         columns
-    //             .get(handle)
-    //             .ok()
-    //             .and_then(|c| c.get(i, wrap))
-    //             .cloned()
-    //     },
-    //     true,
-    //     0,
-    //     true,
-    //     &mut None,
-    // );
-    let r = Some(Fr::zero());
+    let r = expr.eval(
+        i,
+        &mut |handle, i, wrap| {
+            columns
+                .get(handle)
+                .ok()
+                .and_then(|c| c.get(i, wrap))
+                .cloned()
+        },
+        &mut None,
+        &EvalSettings::new().trace(true),
+    );
 
     Err(eyre!(
         "{}|{}{}\n -> {}",
@@ -100,11 +97,11 @@ fn check_constraint_at(
     fail_on_oob: bool,
     cache: &mut Option<SizedCache<Fr, Fr>>,
 ) -> Result<()> {
-    let r = expr.check(
+    let r = expr.eval(
         i,
         &mut |handle, i, wrap| columns._cols[handle.id.unwrap()].get(i, wrap).cloned(),
-        true,
         cache,
+        &Default::default(),
     );
     if let Some(r) = r {
         if !r.is_zero() {

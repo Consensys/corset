@@ -67,6 +67,30 @@ impl Constraint {
     }
 }
 
+pub struct EvalSettings {
+    pub trace: bool,
+    pub wrap: bool,
+}
+impl Default for EvalSettings {
+    fn default() -> Self {
+        EvalSettings {
+            trace: false,
+            wrap: true,
+        }
+    }
+}
+impl EvalSettings {
+    pub fn new() -> Self {
+        Default::default()
+    }
+    pub fn trace(self, trace: bool) -> Self {
+        EvalSettings { trace, ..self }
+    }
+    pub fn wrap(self, wrap: bool) -> Self {
+        EvalSettings { wrap, ..self }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Expression {
     Funcall {
@@ -166,158 +190,54 @@ impl Expression {
         }
     }
 
-    /// Compared to `eval`, check may use shortcuts to decide whether an expression vanishes to 0,
-    /// without necessary executing all computations.
-    pub fn check(
-        &self,
-        i: isize,
-        get: &mut dyn FnMut(&Handle, isize, bool) -> Option<Fr>,
-        wrap: bool,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
-    ) -> Option<Fr> {
-        match self {
-            Expression::Funcall { func, args } => match func {
-                Builtin::Add => {
-                    let mut ax = Fr::zero();
-                    for arg in args.iter() {
-                        ax.add_assign(&arg.check(i, get, wrap, cache)?)
-                    }
-                    Some(ax)
-                }
-                Builtin::Sub => {
-                    let mut ax = args[0].check(i, get, wrap, cache)?;
-                    for arg in args.iter().skip(1) {
-                        ax.sub_assign(&arg.check(i, get, wrap, cache)?)
-                    }
-                    Some(ax)
-                }
-                Builtin::Mul => {
-                    let mut ax = Fr::one();
-                    for arg in args.iter() {
-                        ax.mul_assign(&arg.check(i, get, wrap, cache)?)
-                    }
-                    Some(ax)
-                }
-                Builtin::Shift => {
-                    let shift = args[1].pure_eval().to_isize().unwrap();
-                    args[0].check(i + shift, get, false, cache)
-                }
-                Builtin::Neg => args[0].check(i, get, true, cache).map(|mut x| {
-                    x.negate();
-                    x
-                }),
-                Builtin::Inv => {
-                    let x = args[0].check(i, get, true, cache);
-                    if let Some(ref mut rcache) = cache {
-                        x.map(|x| {
-                            rcache
-                                .cache_get_or_set_with(x, || x.inverse().unwrap_or_else(Fr::zero))
-                                .to_owned()
-                        })
-                    } else {
-                        x.and_then(|x| x.inverse()).or_else(|| Some(Fr::zero()))
-                    }
-                }
-                Builtin::Not => {
-                    let mut r = Fr::one();
-                    if let Some(x) = args[0].check(i, get, wrap, cache) {
-                        r.sub_assign(&x);
-                        Some(r)
-                    } else {
-                        None
-                    }
-                }
-                Builtin::Nth => {
-                    if let (Expression::ArrayColumn(h, range, _), Expression::Const(idx, _)) =
-                        (&args[0], &args[1])
-                    {
-                        let idx = idx.to_usize().unwrap();
-                        if !range.contains(&idx) {
-                            panic!("trying to access `{}` ad index `{}`", h, idx);
-                        }
-                        get(&h.ith(idx), i, wrap)
-                    } else {
-                        unreachable!()
-                    }
-                }
-                Builtin::Begin => unreachable!(),
-                Builtin::IfZero => {
-                    if args[0].check(i, get, wrap, cache)?.is_zero() {
-                        args[1].check(i, get, wrap, cache)
-                    } else {
-                        args.get(2)
-                            .map(|x| x.check(i, get, wrap, cache))
-                            .unwrap_or_else(|| Some(Fr::zero()))
-                    }
-                }
-                Builtin::IfNotZero => {
-                    if !args[0].check(i, get, wrap, cache)?.is_zero() {
-                        args[1].check(i, get, wrap, cache)
-                    } else {
-                        args.get(2)
-                            .map(|x| x.check(i, get, wrap, cache))
-                            .unwrap_or_else(|| Some(Fr::zero()))
-                    }
-                }
-                Builtin::ByteDecomposition => unreachable!(),
-            },
-            Expression::Const(v, x) => {
-                Some(x.unwrap_or_else(|| panic!("{} is not an Fr element.", v)))
-            }
-            Expression::Column(handle, ..) => get(handle, i, wrap),
-            Expression::List(xs) => xs
-                .iter()
-                .filter_map(|x| x.check(i, get, wrap, cache))
-                .find(|x| !x.is_zero())
-                .or_else(|| Some(Fr::zero())),
-            _ => unreachable!(),
-        }
-    }
-
     pub fn eval(
         &self,
         i: isize,
         get: &mut dyn FnMut(&Handle, isize, bool) -> Option<Fr>,
-        trace: bool,
-        depth: usize,
-        wrap: bool,
         cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        settings: &EvalSettings,
     ) -> Option<Fr> {
-        match self {
+        let r = match self {
             Expression::Funcall { func, args } => match func {
                 Builtin::Add => {
                     let mut ax = Fr::zero();
                     for arg in args.iter() {
-                        ax.add_assign(&arg.eval(i, get, trace, depth + 1, wrap, cache)?)
+                        ax.add_assign(&arg.eval(i, get, cache, settings)?)
                     }
                     Some(ax)
                 }
                 Builtin::Sub => {
-                    let mut ax = args[0].eval(i, get, trace, depth + 1, wrap, cache)?;
+                    let mut ax = args[0].eval(i, get, cache, settings)?;
                     for arg in args.iter().skip(1) {
-                        ax.sub_assign(&arg.eval(i, get, trace, depth + 1, wrap, cache)?)
+                        ax.sub_assign(&arg.eval(i, get, cache, settings)?)
                     }
                     Some(ax)
                 }
                 Builtin::Mul => {
                     let mut ax = Fr::one();
                     for arg in args.iter() {
-                        ax.mul_assign(&arg.eval(i, get, trace, depth + 1, wrap, cache)?)
+                        ax.mul_assign(&arg.eval(i, get, cache, settings)?)
                     }
                     Some(ax)
                 }
                 Builtin::Shift => {
                     let shift = args[1].pure_eval().to_isize().unwrap();
-                    args[0].eval(i + shift, get, false, depth + 1, false, cache)
+                    args[0].eval(
+                        i + shift,
+                        get,
+                        cache,
+                        &EvalSettings {
+                            wrap: false,
+                            ..*settings
+                        },
+                    )
                 }
-                Builtin::Neg => args[0]
-                    .eval(i, get, trace, depth + 1, true, cache)
-                    .map(|mut x| {
-                        x.negate();
-                        x
-                    }),
+                Builtin::Neg => args[0].eval(i, get, cache, settings).map(|mut x| {
+                    x.negate();
+                    x
+                }),
                 Builtin::Inv => {
-                    let x = args[0].eval(i, get, trace, depth + 1, true, cache);
+                    let x = args[0].eval(i, get, cache, settings);
                     if let Some(ref mut rcache) = cache {
                         x.map(|x| {
                             rcache
@@ -330,7 +250,7 @@ impl Expression {
                 }
                 Builtin::Not => {
                     let mut r = Fr::one();
-                    if let Some(x) = args[0].eval(i, get, trace, depth + 1, wrap, cache) {
+                    if let Some(x) = args[0].eval(i, get, cache, settings) {
                         r.sub_assign(&x);
                         Some(r)
                     } else {
@@ -345,30 +265,27 @@ impl Expression {
                         if !range.contains(&idx) {
                             panic!("trying to access `{}` ad index `{}`", h, idx);
                         }
-                        get(&h.ith(idx), i, wrap)
+                        get(&h.ith(idx), i, settings.wrap)
                     } else {
                         unreachable!()
                     }
                 }
                 Builtin::Begin => unreachable!(),
                 Builtin::IfZero => {
-                    if args[0].eval(i, get, trace, depth, wrap, cache)?.is_zero() {
-                        args[1].eval(i, get, trace, depth, wrap, cache)
+                    if args[0].eval(i, get, cache, settings)?.is_zero() {
+                        args[1].eval(i, get, cache, settings)
                     } else {
                         args.get(2)
-                            .map(|x| x.eval(i, get, trace, depth, wrap, cache))
+                            .map(|x| x.eval(i, get, cache, settings))
                             .unwrap_or_else(|| Some(Fr::zero()))
                     }
                 }
                 Builtin::IfNotZero => {
-                    if !args[0]
-                        .eval(i, get, trace, depth + 1, wrap, cache)?
-                        .is_zero()
-                    {
-                        args[1].eval(i, get, trace, depth + 1, wrap, cache)
+                    if !args[0].eval(i, get, cache, settings)?.is_zero() {
+                        args[1].eval(i, get, cache, settings)
                     } else {
                         args.get(2)
-                            .map(|x| x.eval(i, get, trace, depth + 1, wrap, cache))
+                            .map(|x| x.eval(i, get, cache, settings))
                             .unwrap_or_else(|| Some(Fr::zero()))
                     }
                 }
@@ -377,19 +294,25 @@ impl Expression {
             Expression::Const(v, x) => {
                 Some(x.unwrap_or_else(|| panic!("{} is not an Fr element.", v)))
             }
-            Expression::Column(handle, ..) => get(handle, i, wrap),
+            Expression::Column(handle, ..) => get(handle, i, settings.wrap),
+            Expression::List(xs) => xs
+                .iter()
+                .filter_map(|x| x.eval(i, get, cache, settings))
+                .find(|x| !x.is_zero())
+                .or_else(|| Some(Fr::zero())),
             x => unreachable!("{:?}", x),
+        };
+        if settings.trace && !matches!(self, Expression::Const(..)) {
+            eprintln!(
+                "{:70} <- {}[{}]",
+                r.as_ref()
+                    .map(Pretty::pretty)
+                    .unwrap_or_else(|| "nil".to_owned()),
+                self,
+                i
+            );
         }
-        // if trace && !matches!(self, Expression::Const(..)) {
-        //     eprintln!(
-        //         "{:70} <- {}[{}]",
-        //         r.as_ref()
-        //             .map(Pretty::pretty)
-        //             .unwrap_or_else(|| "nil".to_owned()),
-        //         self,
-        //         i
-        //     );
-        // }
+        r
     }
 
     pub fn leaves(&self) -> Vec<Expression> {
@@ -782,10 +705,11 @@ impl ConstraintSet {
                             .get(i, false)
                             .cloned()
                     },
-                    false,
-                    0,
-                    false,
                     &mut None,
+                    &EvalSettings {
+                        trace: false,
+                        wrap: false,
+                    },
                 )
                 .unwrap_or_else(Fr::zero)
             })
@@ -853,10 +777,11 @@ impl ConstraintSet {
                                         Fr::zero()
                                     })
                                 },
-                                false,
-                                0,
-                                false,
                                 &mut None,
+                                &EvalSettings {
+                                    trace: false,
+                                    wrap: false,
+                                },
                             )
                             .unwrap(),
                         _ => unreachable!(),

@@ -8,7 +8,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use common::*;
 pub use definitions::ComputationTable;
-pub use generator::{Builtin, Constraint, ConstraintSet, Expression};
+pub use generator::{Builtin, Constraint, ConstraintSet, EvalSettings, Expression};
 pub use parser::{Ast, AstNode, Kind, Token};
 
 mod common;
