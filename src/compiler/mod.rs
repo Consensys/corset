@@ -2,6 +2,7 @@ use self::definitions::Symbol;
 use crate::column::{ColumnSet, Computation};
 use definitions::SymbolTable;
 use eyre::*;
+use itertools::Itertools;
 use log::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -81,6 +82,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .flatten()
+        .sorted_by_cached_key(|x| -(x.size() as isize))
         .collect::<Vec<_>>();
     constraints
         .iter_mut()

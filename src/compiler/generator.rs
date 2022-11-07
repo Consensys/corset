@@ -56,6 +56,15 @@ impl Constraint {
             Constraint::InRange(_, _, _) => {}
         }
     }
+
+    pub(crate) fn size(&self) -> usize {
+        match self {
+            Constraint::Vanishes { expr, .. } => expr.size(),
+            Constraint::Plookup(_, _, _) => 1,
+            Constraint::Permutation(_, _, _) => 1,
+            Constraint::InRange(_, _, _) => 1,
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -90,6 +99,19 @@ impl Expression {
                 .map(Expression::t)
                 .fold(Type::INFIMUM, |a, b| a.max(&b)),
             Expression::Void => Type::Void,
+        }
+    }
+
+    pub fn size(&self) -> usize {
+        match self {
+            Expression::Funcall { args, .. } => {
+                1 + args.iter().map(Expression::size).sum::<usize>()
+            }
+            Expression::Const(_, _) => 0,
+            Expression::Column(_, _, _) => 1,
+            Expression::ArrayColumn(_, _, _) => 0,
+            Expression::List(xs) => xs.iter().map(Expression::size).sum::<usize>(),
+            Expression::Void => 0,
         }
     }
 

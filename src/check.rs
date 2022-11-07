@@ -203,6 +203,7 @@ pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {
     let failed = cs
         .constraints
         .par_iter()
+        .with_max_len(1)
         .inspect(|_| {
             if let Some(b) = &bar {
                 b.inc(1)
