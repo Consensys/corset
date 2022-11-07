@@ -178,6 +178,9 @@ enum Commands {
         )]
         full_trace: bool,
 
+        #[clap(long = "only", help = "only check these constraints")]
+        only: Option<Vec<String>>,
+
         #[clap(short = 'S', long = "trace-span", help = "", default_value_t = 3)]
         trace_span: isize,
     },
@@ -407,6 +410,7 @@ fn main() -> Result<()> {
             tracefile,
             full_trace,
             trace_span,
+            only,
         } => {
             settings.full_trace = full_trace;
             settings.trace_span = trace_span;
@@ -423,8 +427,10 @@ fn main() -> Result<()> {
                 compute::PaddingStrategy::OneLine,
             )
             .with_context(|| format!("while expanding `{}`", tracefile))?;
+
             check::check(
                 &constraints,
+                &only,
                 args.verbose.log_level_filter() >= log::Level::Warn
                     && std::io::stdout().is_terminal(),
             )

@@ -179,7 +179,7 @@ fn check_constraint(
     Ok(())
 }
 
-pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {
+pub fn check(cs: &ConstraintSet, only: &Option<Vec<String>>, with_bar: bool) -> Result<()> {
     if cs.modules.is_empty() {
         return Ok(());
     }
@@ -200,6 +200,11 @@ pub fn check(cs: &ConstraintSet, with_bar: bool) -> Result<()> {
         .constraints
         .par_iter()
         .with_max_len(1)
+        .filter(|c| {
+            only.as_ref()
+                .map(|o| o.contains(&c.name().to_string()))
+                .unwrap_or(true)
+        })
         .inspect(|_| {
             if let Some(b) = &bar {
                 b.inc(1)
