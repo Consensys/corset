@@ -65,20 +65,21 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
         .with(Style::blank());
     eprintln!("\n\n{}\n", table);
 
-    let r = expr.eval(
-        i,
-        &mut |handle, i, wrap| {
-            columns
-                .get(handle)
-                .ok()
-                .and_then(|c| c.get(i, wrap))
-                .cloned()
-        },
-        true,
-        0,
-        true,
-        &mut None,
-    );
+    // let r = expr.eval(
+    //     i,
+    //     &mut |handle, i, wrap| {
+    //         columns
+    //             .get(handle)
+    //             .ok()
+    //             .and_then(|c| c.get(i, wrap))
+    //             .cloned()
+    //     },
+    //     true,
+    //     0,
+    //     true,
+    //     &mut None,
+    // );
+    let r = Some(Fr::zero());
 
     Err(eyre!(
         "{}|{}{}\n -> {}",
@@ -99,11 +100,9 @@ fn check_constraint_at(
     fail_on_oob: bool,
     cache: &mut Option<SizedCache<Fr, Fr>>,
 ) -> Result<()> {
-    let r = expr.eval(
+    let r = expr.check(
         i,
         &mut |handle, i, wrap| columns._cols[handle.id.unwrap()].get(i, wrap).cloned(),
-        false,
-        0,
         true,
         cache,
     );
