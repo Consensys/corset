@@ -1,11 +1,16 @@
 #[macro_use]
 extern crate pest_derive;
 use clap_verbosity_flag::Verbosity;
+use flate2::read::GzDecoder;
 use is_terminal::IsTerminal;
 use log::*;
 use once_cell::sync::OnceCell;
 use serde_json::Value;
-use std::{io::Write, path::Path};
+use std::{
+    fs::File,
+    io::{BufReader, Seek, Write},
+    path::Path,
+};
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::*;
@@ -199,11 +204,17 @@ enum Commands {
 fn read_trace<S: AsRef<str>>(tracefile: S) -> Result<Value> {
     let tracefile = tracefile.as_ref();
     info!("Parsing {}...", tracefile);
-    let v: Value = serde_json::from_str(
-        &std::fs::read_to_string(tracefile)
-            .with_context(|| format!("while reading `{}`", tracefile))?,
-    )?;
-    info!("Done.");
+    let mut f = File::open(tracefile).with_context(|| format!("while opening `{}`", tracefile))?;
+
+    let gz = GzDecoder::new(BufReader::new(&f));
+    let v: Value = match gz.header() {
+        Some(_) => serde_json::from_reader(gz),
+        None => {
+            f.rewind()?;
+            serde_json::from_reader(BufReader::new(&f))
+        }
+    }
+    .with_context(|| format!("while reading `{}`", tracefile))?;
     Ok(v)
 }
 
@@ -258,8 +269,6 @@ fn main() -> Result<()> {
         }
         compiler::make(inputs.as_slice())?
     };
-
-    info!("Done.");
 
     match args.command {
         Commands::Go {
