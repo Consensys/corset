@@ -98,6 +98,100 @@ fn expression_to_name(e: &Expression, prefix: &str) -> String {
     format!("{}_{}", prefix, e).replace(' ', "_")
 }
 
+fn do_expand_ifs(e: &mut Expression) {
+    match e {
+        Expression::List(es) => {
+            for e in es.iter_mut() {
+                do_expand_ifs(e);
+            }
+            ()
+        }
+        Expression::Funcall { func, args, .. } => {
+            for e in args.iter_mut() {
+                do_expand_ifs(e);
+            }
+            if matches!(func, Builtin::IfZero | Builtin::IfNotZero) {
+                let cond = args[0].clone();
+                let conds = {
+                    let cond_not_zero = cond.clone();
+                    // If the condition is binary, cond_zero = 1 - x...
+                    let cond_zero = if args[0].t().is_bool() {
+                        Expression::Funcall {
+                            func: Builtin::Sub,
+                            args: vec![Expression::Const(One::one(), Some(Fr::one())), cond],
+                        }
+                    } else {
+                        // ...otherwise, cond_zero = 1 - x.INV(x)
+                        Expression::Funcall {
+                            func: Builtin::Sub,
+                            args: vec![
+                                Expression::Const(One::one(), Some(Fr::one())),
+                                Expression::Funcall {
+                                    func: Builtin::Mul,
+                                    args: vec![
+                                        cond.clone(),
+                                        Expression::Funcall {
+                                            func: Builtin::Inv,
+                                            args: vec![cond],
+                                        },
+                                    ],
+                                },
+                            ],
+                        }
+                    };
+                    match func {
+                        Builtin::IfZero => [cond_zero, cond_not_zero],
+                        Builtin::IfNotZero => [cond_not_zero, cond_zero],
+                        _ => unreachable!(),
+                    }
+                };
+
+                // Order the then/else blocks
+                let then_else = vec![args.get(1), args.get(2)]
+                    .into_iter()
+                    .enumerate()
+                    // Only keep the non-empty branches
+                    .filter_map(|(i, ex)| ex.map(|ex| (i, ex)))
+                    // Ensure branches are wrapped in in lists
+                    .map(|(i, ex)| {
+                        (
+                            i,
+                            match ex {
+                                Expression::List(_) => ex.clone(),
+                                ex => Expression::List(vec![ex.clone()]),
+                            },
+                        )
+                    })
+                    // Map the corresponding then/else operations on the branches
+                    .flat_map(|(i, exs)| {
+                        if let Expression::List(exs) = exs {
+                            exs.into_iter()
+                                .map(|ex: Expression| {
+                                    ex.flat_fold(&|ex| Expression::Funcall {
+                                        func: Builtin::Mul,
+                                        args: vec![conds[i].clone(), ex.clone()],
+                                    })
+                                })
+                                .collect::<Vec<_>>()
+                        } else {
+                            unreachable!()
+                        }
+                    })
+                    .flatten()
+                    .collect::<Vec<_>>();
+                *e = if then_else.len() == 1 {
+                    then_else[0].clone()
+                } else {
+                    Expression::List(then_else)
+                };
+            }
+        }
+        _ => (),
+    }
+}
+
+/// For all Builtin::Inv encountered, create a new column and the associated constraints
+/// pre-computing and proving the inverted column.
 fn expand_inv<T: Clone + Ord>(
     e: &mut Expression,
     cols: &mut ColumnSet<T>,
@@ -177,6 +271,17 @@ fn expand_expr<T: Clone + Ord>(
                 Type::Column(Magma::Integer),
                 Kind::Phantom,
             ))
+        }
+    }
+}
+
+pub fn expand_ifs(cs: &mut ConstraintSet) {
+    for c in cs.constraints.iter_mut() {
+        match c {
+            Constraint::Vanishes { expr: e, .. } => {
+                do_expand_ifs(e); // Ifs create Inv and must be expanded first
+            }
+            _ => (),
         }
     }
 }

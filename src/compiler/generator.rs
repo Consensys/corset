@@ -98,7 +98,7 @@ pub enum Expression {
         args: Vec<Expression>,
     },
     Const(BigInt, Option<Fr>),
-    Column(Handle, Type, Kind<Box<Expression>>), // Module Name Type Kind
+    Column(Handle, Type, Kind<Box<Expression>>),
     ArrayColumn(Handle, Vec<usize>, Type),
     List(Vec<Expression>),
     Void,
@@ -920,7 +920,6 @@ fn apply(
                 let traversed_args = b
                     .validate_args(traversed_args)
                     .with_context(|| eyre!("validating call to `{}`", f.name))?;
-                let cond = traversed_args[0].clone();
                 match b {
                     Builtin::Begin => Ok(Some((
                         Expression::List(traversed_args.into_iter().fold(
@@ -939,94 +938,13 @@ fn apply(
                         traversed_args_t.iter().fold(Type::INFIMUM, |a, b| a.max(b)),
                     ))),
 
-                    b @ (Builtin::IfZero | Builtin::IfNotZero) => {
-                        if false {
-                            let conds = {
-                                let cond_not_zero = cond.clone();
-                                // If the condition is binary, cond_zero = 1 - x...
-                                let cond_zero = if traversed_args_t[0].is_bool() {
-                                    Expression::Funcall {
-                                        func: Builtin::Sub,
-                                        args: vec![
-                                            Expression::Const(One::one(), Some(Fr::one())),
-                                            cond,
-                                        ],
-                                    }
-                                } else {
-                                    // ...otherwise, cond_zero = 1 - x.INV(x)
-                                    Expression::Funcall {
-                                        func: Builtin::Sub,
-                                        args: vec![
-                                            Expression::Const(One::one(), Some(Fr::one())),
-                                            Expression::Funcall {
-                                                func: Builtin::Mul,
-                                                args: vec![
-                                                    cond.clone(),
-                                                    Expression::Funcall {
-                                                        func: Builtin::Inv,
-                                                        args: vec![cond],
-                                                    },
-                                                ],
-                                            },
-                                        ],
-                                    }
-                                };
-                                match b {
-                                    Builtin::IfZero => [cond_zero, cond_not_zero],
-                                    Builtin::IfNotZero => [cond_not_zero, cond_zero],
-                                    _ => unreachable!(),
-                                }
-                            };
-
-                            // Order the then/else blocks
-                            let t = traversed_args_t.iter().fold(Type::INFIMUM, |a, b| a.max(b));
-                            let then_else = vec![traversed_args.get(1), traversed_args.get(2)]
-                                .into_iter()
-                                .enumerate()
-                                // Only keep the non-empty branches
-                                .filter_map(|(i, ex)| ex.map(|ex| (i, ex)))
-                                // Ensure branches are wrapped in in lists
-                                .map(|(i, ex)| {
-                                    (
-                                        i,
-                                        match ex {
-                                            Expression::List(_) => ex.clone(),
-                                            ex => Expression::List(vec![ex.clone()]),
-                                        },
-                                    )
-                                })
-                                // Map the corresponding then/else operations on the branches
-                                .flat_map(|(i, exs)| {
-                                    if let Expression::List(exs) = exs {
-                                        exs.into_iter()
-                                            .map(|ex: Expression| {
-                                                ex.flat_fold(&|ex| Expression::Funcall {
-                                                    func: Builtin::Mul,
-                                                    args: vec![conds[i].clone(), ex.clone()],
-                                                })
-                                            })
-                                            .collect::<Vec<_>>()
-                                    } else {
-                                        unreachable!()
-                                    }
-                                })
-                                .flatten()
-                                .collect::<Vec<_>>();
-                            if then_else.len() == 1 {
-                                Ok(Some((then_else[0].clone(), t)))
-                            } else {
-                                Ok(Some((Expression::List(then_else), t)))
-                            }
-                        } else {
-                            Ok(Some((
-                                Expression::Funcall {
-                                    func: *b,
-                                    args: traversed_args,
-                                },
-                                b.typing(&traversed_args_t),
-                            )))
-                        }
-                    }
+                    b @ (Builtin::IfZero | Builtin::IfNotZero) => Ok(Some((
+                        Expression::Funcall {
+                            func: *b,
+                            args: traversed_args,
+                        },
+                        b.typing(&traversed_args_t),
+                    ))),
 
                     Builtin::Nth => {
                         if let (Expression::ArrayColumn(handle, ..), Expression::Const(i, _)) =
