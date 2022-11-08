@@ -425,12 +425,12 @@ fn main() -> Result<()> {
                         Ok(_) => {
                             if remove {
                                 tx.execute("DELETE FROM blocks WHERE id=$1", &[&id])
-                                    .with_context(|| "while inserting back row")?;
+                                    .with_context(|| "while inserting successful back row")?;
                             }
                         },
                         Err(_) => {
-                            tx.execute("UPDATE blocks SET status='failed' WHERE id=$2", &[&id])
-                                .with_context(|| "while inserting back row")?;
+                            tx.execute("UPDATE blocks SET status='failed' WHERE id=$1", &[&id])
+                                .with_context(|| "while inserting failed back row")?;
                         },
                     }
 
