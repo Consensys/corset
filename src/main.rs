@@ -48,7 +48,7 @@ pub struct Args {
     #[clap(
         short = 't',
         long = "threads",
-        help = "number of threds to use",
+        help = "number of threads to use",
         default_value_t = 1,
         global = true
     )]
@@ -145,6 +145,7 @@ enum Commands {
         outfile: Option<String>,
     },
     /// Given a set of constraints, indefinitely check the traces from an SQL table
+    #[cfg(feature = "postgres")]
     CheckLoop {
         #[clap(long, default_value = "localhost")]
         host: String,
@@ -158,6 +159,7 @@ enum Commands {
         remove: bool,
     },
     /// Given a set of constraints, indefinitely fill the computed columns from/to an SQL table
+    #[cfg(feature = "postgres")]
     ComputeLoop {
         #[clap(long, default_value = "localhost")]
         host: String,
@@ -254,22 +256,26 @@ fn main() -> Result<()> {
             .with_context(|| eyre!("while parsing `{}`", &args.source[0]))?,
         )
     } else {
-        info!("Parsing Corset source files...");
-        let mut inputs = vec![];
-        if !args.no_stdlib {
-            inputs.push(("stdlib", include_str!("stdlib.lisp").to_owned()));
-        }
-        for f in args.source.iter() {
-            if std::path::Path::new(&f).is_file() {
-                inputs.push((
-                    f.as_str(),
-                    std::fs::read_to_string(f).with_context(|| eyre!("reading `{}`", f))?,
-                ));
-            } else {
-                inputs.push(("Immediate expression", f.into()));
+        if false {
+            todo!()
+        } else {
+            info!("Parsing Corset source files...");
+            let mut inputs = vec![];
+            if !args.no_stdlib {
+                inputs.push(("stdlib", include_str!("stdlib.lisp").to_owned()));
             }
+            for f in args.source.iter() {
+                if std::path::Path::new(&f).is_file() {
+                    inputs.push((
+                        f.as_str(),
+                        std::fs::read_to_string(f).with_context(|| eyre!("reading `{}`", f))?,
+                    ));
+                } else {
+                    inputs.push(("Immediate expression", f.into()));
+                }
+            }
+            compiler::make(inputs.as_slice())?
         }
-        compiler::make(inputs.as_slice())?
     };
 
     match args.command {
@@ -333,6 +339,7 @@ fn main() -> Result<()> {
                 .write(&mut f)
                 .with_context(|| format!("while writing to `{}`", &outfile))?;
         }
+        #[cfg(feature = "postgres")]
         Commands::ComputeLoop {
             host,
             user,
@@ -375,6 +382,7 @@ fn main() -> Result<()> {
                 std::thread::sleep(std::time::Duration::from_secs(1));
             }
         }
+        #[cfg(feature = "postgres")]
         Commands::CheckLoop {
             host,
             user,

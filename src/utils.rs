@@ -1,4 +1,5 @@
 use eyre::*;
+#[cfg(feature = "postgres")]
 use postgres::Client;
 use std::io::Read;
 
@@ -16,6 +17,7 @@ pub fn decompress(bytes: &[u8]) -> Result<String> {
     Ok(s)
 }
 
+#[cfg(feature = "postgres")]
 pub fn connect_to_db(
     user: &str,
     password: &Option<String>,
