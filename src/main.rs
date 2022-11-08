@@ -382,8 +382,8 @@ fn main() -> Result<()> {
             database,
             remove,
         } => {
-            use flate2::write::GzEncoder;
-            use flate2::Compression;
+            settings.full_trace = false;
+            SETTINGS.set(settings).unwrap();
 
             let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
 
