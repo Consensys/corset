@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
+#[cfg(feature = "interactive")]
 use pest::{iterators::Pair, Parser};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -9,6 +10,7 @@ use std::fmt::Debug;
 use super::common::Type;
 use super::{Handle, Magma};
 
+#[cfg(feature = "interactive")]
 #[derive(Parser)]
 #[grammar = "corset.pest"]
 struct CorsetParser;
@@ -164,6 +166,7 @@ impl AstNode {
     pub fn depth(&self) -> usize {
         self.class.depth()
     }
+    #[cfg(feature = "interactive")]
     fn column_from(args: Vec<Pair<Rule>>, src: String, lc: LinCol) -> Result<Self> {
         let mut pairs = args.into_iter();
         let name = pairs.next().unwrap().as_str();
@@ -485,6 +488,7 @@ impl AstNode {
     }
 }
 
+#[cfg(feature = "interactive")]
 fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
     let lc = pair.as_span().start_pos().line_col();
     let src = pair.as_str().to_owned();
@@ -616,6 +620,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
     }
 }
 
+#[cfg(feature = "interactive")]
 pub fn parse(source: &str) -> Result<Ast> {
     let mut ast = Ast { exprs: vec![] };
 

@@ -1,7 +1,7 @@
 use self::definitions::Symbol;
 use crate::column::{ColumnSet, Computation};
-use definitions::SymbolTable;
 use anyhow::*;
+use definitions::SymbolTable;
 use itertools::Itertools;
 use log::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -20,6 +20,7 @@ const MAIN_MODULE: &str = "MAIN";
 
 const ALLOW_DUP: bool = true;
 
+#[cfg(feature = "interactive")]
 pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, ConstraintSet)> {
     let mut asts = vec![];
     let ctx = Rc::new(RefCell::new(SymbolTable::new_root()));

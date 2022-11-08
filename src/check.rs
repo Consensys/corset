@@ -1,5 +1,6 @@
 use cached::SizedCache;
 use colored::Colorize;
+#[cfg(feature = "interactive")]
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use rayon::prelude::*;
@@ -184,15 +185,18 @@ pub fn check(cs: &ConstraintSet, only: &Option<Vec<String>>, with_bar: bool) -> 
         return Ok(());
     }
 
+    #[cfg(feature = "interactive")]
     let bar = if with_bar {
-        Some(
-            ProgressBar::new(cs.constraints.len() as u64).with_style(
-                ProgressStyle::default_bar()
-                    .template("Validating {msg} {bar:40} {pos}/{len}")
-                    .unwrap()
-                    .progress_chars("##-"),
-            ),
-        )
+        {
+            Some(
+                ProgressBar::new(cs.constraints.len() as u64).with_style(
+                    ProgressStyle::default_bar()
+                        .template("Validating {msg} {bar:40} {pos}/{len}")
+                        .unwrap()
+                        .progress_chars("##-"),
+                ),
+            )
+        }
     } else {
         None
     };
@@ -206,8 +210,11 @@ pub fn check(cs: &ConstraintSet, only: &Option<Vec<String>>, with_bar: bool) -> 
                 .unwrap_or(true)
         })
         .inspect(|_| {
-            if let Some(b) = &bar {
-                b.inc(1)
+            #[cfg(feature = "interactive")]
+            {
+                if let Some(b) = &bar {
+                    b.inc(1)
+                }
             }
         })
         .filter_map(|c| {

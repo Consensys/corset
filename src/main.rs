@@ -1,4 +1,5 @@
 #[macro_use]
+#[cfg(feature = "interactive")]
 extern crate pest_derive;
 use flate2::read::GzDecoder;
 use is_terminal::IsTerminal;
@@ -11,7 +12,7 @@ use std::{
     path::Path,
 };
 
-use anyhow::*;
+use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
 mod check;
@@ -249,9 +250,8 @@ fn main() -> Result<()> {
             .with_context(|| anyhow!("while parsing `{}`", &args.source[0]))?,
         )
     } else {
-        if false {
-            todo!()
-        } else {
+        #[cfg(feature = "interactive")]
+        {
             info!("Parsing Corset source files...");
             let mut inputs = vec![];
             if !args.no_stdlib {
@@ -268,6 +268,11 @@ fn main() -> Result<()> {
                 }
             }
             compiler::make(inputs.as_slice())?
+        }
+
+        #[cfg(not(feature = "interactive"))]
+        {
+            panic!("Compile Corset with the `interactive` feature to enable the compiler")
         }
     };
 
