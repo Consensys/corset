@@ -411,13 +411,13 @@ fn main() -> Result<()> {
 
                     compute::compute(
                         &v,
-                        &mut constraints,
+                        &mut local_constraints,
                         compute::PaddingStrategy::OneLine,
                     )
                         .with_context(|| format!("while expanding from {}", id))?;
 
                     match check::check(
-                        &constraints,
+                        &local_constraints,
                         &None,
                         args.verbose.log_level_filter() >= log::Level::Warn
                             && std::io::stdout().is_terminal(),
