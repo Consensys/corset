@@ -8,7 +8,7 @@ use once_cell::sync::OnceCell;
 use serde_json::Value;
 use std::{
     fs::File,
-    io::{BufReader, Seek, Write},
+    io::{BufReader, Cursor, Seek, Write},
     path::Path,
 };
 
@@ -154,6 +154,8 @@ enum Commands {
         password: Option<String>,
         #[clap(long, default_value = "zkevm")]
         database: String,
+        #[clap(long = "rm", help = "remove succesully validated blocks")]
+        remove: bool,
     },
     /// Given a set of constraints, indefinitely fill the computed columns from/to an SQL table
     ComputeLoop {
@@ -378,6 +380,7 @@ fn main() -> Result<()> {
             user,
             password,
             database,
+            remove,
         } => {
             use flate2::write::GzEncoder;
             use flate2::Compression;
@@ -397,18 +400,47 @@ fn main() -> Result<()> {
                     let payload: &[u8] = row.get(2);
                     info!("Processing {}", id);
 
-                    let v: Value = serde_json::from_str(
-                        &utils::decompress(payload).with_context(|| "while decompressing payload")?,
-                    )?;
+                    let gz = GzDecoder::new(Cursor::new(&payload));
+                    let v: Value = match gz.header() {
+                        Some(_) => serde_json::from_reader(gz),
+                        None => {
+                            serde_json::from_reader(Cursor::new(&payload))
+                        }
+                    }
+                    .with_context(|| format!("while reading payload from {}", id))?;
 
-                    compute::compute(&v, &mut local_constraints, compute::PaddingStrategy::None)
-                        .with_context(|| "while computing columns")?;
+                    compute::compute(
+                        &v,
+                        &mut constraints,
+                        compute::PaddingStrategy::OneLine,
+                    )
+                        .with_context(|| format!("while expanding from {}", id))?;
 
-                    let mut e = GzEncoder::new(Vec::new(), Compression::default());
-                    local_constraints.write(&mut e)?;
+                    match check::check(
+                        &constraints,
+                        &None,
+                        args.verbose.log_level_filter() >= log::Level::Warn
+                            && std::io::stdout().is_terminal(),
+                    ) {
+                        Ok(_) => {
+                            if remove {
+                                tx.execute("DELETE FROM blocks WHERE id=$1", &[&id])
+                                    .with_context(|| "while inserting back row")?;
+                            } else {
+                                compute::compute(&v, &mut local_constraints, compute::PaddingStrategy::None)
+                                    .with_context(|| "while computing columns")?;
+                                let mut e = GzEncoder::new(Vec::new(), Compression::default());
+                                local_constraints.write(&mut e)?;
+                                tx.execute("UPDATE blocks SET payload=$1, status='to_prover' WHERE id=$2", &[&e.finish()?, &id])
+                                    .with_context(|| "while inserting back row")?;
+                            }
+                        },
+                        Err(_) => {
+                            tx.execute("UPDATE blocks SET status='failed' WHERE id=$2", &[&id])
+                                .with_context(|| "while inserting back row")?;
+                        },
+                    }
 
-                    tx.execute("UPDATE blocks SET payload=$1, status='to_prover' WHERE id=$2", &[&e.finish()?, &id])
-                        .with_context(|| "while inserting back row")?;
                 }
                 tx.commit()?;
 
