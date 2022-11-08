@@ -426,13 +426,6 @@ fn main() -> Result<()> {
                             if remove {
                                 tx.execute("DELETE FROM blocks WHERE id=$1", &[&id])
                                     .with_context(|| "while inserting back row")?;
-                            } else {
-                                compute::compute(&v, &mut local_constraints, compute::PaddingStrategy::None)
-                                    .with_context(|| "while computing columns")?;
-                                let mut e = GzEncoder::new(Vec::new(), Compression::default());
-                                local_constraints.write(&mut e)?;
-                                tx.execute("UPDATE blocks SET payload=$1, status='to_prover' WHERE id=$2", &[&e.finish()?, &id])
-                                    .with_context(|| "while inserting back row")?;
                             }
                         },
                         Err(_) => {
