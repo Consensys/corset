@@ -1,5 +1,5 @@
 use crate::compiler::{Expression, Handle, Kind, Type};
-use eyre::*;
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -88,10 +88,10 @@ impl<T: Ord + Clone> ColumnSet<T> {
     pub fn get(&self, handle: &Handle) -> Result<&Column<T>> {
         self.cols
             .get(&handle.module)
-            .ok_or_else(|| eyre!("module `{}` unknwown", handle.module))?
+            .ok_or_else(|| anyhow!("module `{}` unknwown", handle.module))?
             .get(&handle.name)
             .ok_or_else(|| {
-                eyre!(
+                anyhow!(
                     "column `{}` not found in module `{}`",
                     handle.name,
                     handle.module
@@ -103,10 +103,10 @@ impl<T: Ord + Clone> ColumnSet<T> {
     pub fn get_mut(&mut self, handle: &Handle) -> Result<&mut Column<T>> {
         self.cols
             .get_mut(&handle.module)
-            .ok_or_else(|| eyre!("module `{}` unknwown", handle.module))?
+            .ok_or_else(|| anyhow!("module `{}` unknwown", handle.module))?
             .get_mut(&handle.name)
             .ok_or_else(|| {
-                eyre!(
+                anyhow!(
                     "column `{}` not found in module `{}`",
                     handle.name,
                     handle.module
@@ -129,7 +129,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
             .unwrap_or(false)
             && !allow_dup
         {
-            Err(eyre!("`{}` already exists", handle))
+            Err(anyhow!("`{}` already exists", handle))
         } else {
             let i = self._cols.len();
             self._cols.push(Column {

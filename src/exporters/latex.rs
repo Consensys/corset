@@ -1,5 +1,5 @@
 use crate::compiler::{Ast, AstNode, Token};
-use color_eyre::eyre::*;
+use anyhow::{Context, Result};
 use convert_case::{Case, Casing};
 
 use std::{cell::RefCell, io::Write, rc::Rc};

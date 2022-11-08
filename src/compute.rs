@@ -1,4 +1,4 @@
-use eyre::*;
+use anyhow::{anyhow, Context, Result};
 use log::*;
 use pairing_ce::{
     bn256::Fr,
@@ -19,7 +19,7 @@ fn validate(t: Type, x: F) -> Result<F> {
         if x.is_zero() || x == F::one() {
             Ok(x)
         } else {
-            Err(eyre!("expected bool, found {}", x))
+            Err(anyhow!("expected bool, found {}", x))
         }
     } else {
         Ok(x)
@@ -34,7 +34,7 @@ fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
             Value::String(s) => Fr::from_str(s)
                 .with_context(|| format!("while parsing `{:?}`", x))
                 .and_then(|x| validate(t, x)),
-            _ => Err(eyre!("expected numeric value, found `{}`", x)),
+            _ => Err(anyhow!("expected numeric value, found `{}`", x)),
         })
         .collect()
 }

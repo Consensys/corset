@@ -3,7 +3,7 @@ use pairing_ce::{bn256::Fr, ff::PrimeField};
 use std::{collections::HashMap, io::Write};
 
 use convert_case::{Case, Casing};
-use eyre::*;
+use anyhow::*;
 
 use crate::{column::ColumnSet, compiler::*};
 

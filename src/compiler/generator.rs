@@ -1,5 +1,5 @@
 use cached::Cached;
-use eyre::*;
+use anyhow::*;
 use log::*;
 use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
@@ -510,14 +510,14 @@ impl FuncVerifier<Expression> for Builtin {
                 if args.iter().all(|a| !matches!(a, Expression::List(_))) {
                     Ok(())
                 } else {
-                    Err(eyre!(
+                    Err(anyhow!(
                         "`{:?}` expects scalar arguments but received a list",
                         f,
                     ))
                 }
             }
             Builtin::Not => args[0].t().is_bool().then(|| ()).ok_or_else(|| {
-                eyre!(
+                anyhow!(
                     "`{:?}` expects a boolean; found `{}` of type {:?}",
                     &self,
                     args[0],
@@ -528,7 +528,7 @@ impl FuncVerifier<Expression> for Builtin {
                 if args.iter().all(|a| !matches!(a, Expression::List(_))) {
                     Ok(())
                 } else {
-                    Err(eyre!(
+                    Err(anyhow!(
                         "`{:?}` expects scalar arguments but received a list",
                         self
                     ))
@@ -538,7 +538,7 @@ impl FuncVerifier<Expression> for Builtin {
                 if args[0].t().is_column() && args[1].t().is_scalar() {
                     Ok(())
                 } else {
-                    Err(eyre!(
+                    Err(anyhow!(
                         "`{:?}` expects a COLUMN and a VALUE but received {:?}",
                         self,
                         args
@@ -551,7 +551,7 @@ impl FuncVerifier<Expression> for Builtin {
                 {
                     Ok(())
                 } else {
-                    Err(eyre!(
+                    Err(anyhow!(
                         "`{:?}` expects [SYMBOL CONST] but received {:?}",
                         self,
                         args
@@ -562,7 +562,7 @@ impl FuncVerifier<Expression> for Builtin {
                 if !matches!(args[0], Expression::List(_)) {
                     Ok(())
                 } else {
-                    Err(eyre!("`{:?}` expects an expression as its condition", self))
+                    Err(anyhow!("`{:?}` expects an expression as its condition", self))
                 }
             }
             Builtin::Begin => Ok(()),
@@ -573,7 +573,7 @@ impl FuncVerifier<Expression> for Builtin {
                 {
                     Ok(())
                 } else {
-                    Err(eyre!(
+                    Err(anyhow!(
                         "`{:?}` expects COLUMN ELEM_SIZE ELEM_COUNT but received {:?}",
                         self,
                         args
@@ -612,7 +612,7 @@ impl ConstraintSet {
             .windows(2)
             .all(|w| w[0] == w[1])
         {
-            return Err(eyre!("interleaving columns of incoherent lengths"));
+            return Err(anyhow!("interleaving columns of incoherent lengths"));
         }
 
         let len = self.get(&froms[0])?.len().unwrap();
@@ -642,7 +642,7 @@ impl ConstraintSet {
             .collect::<Vec<_>>();
 
         if !from_cols.windows(2).all(|w| w[0].len() == w[1].len()) {
-            return Err(eyre!("sorted columns of incoherent lengths"));
+            return Err(anyhow!("sorted columns of incoherent lengths"));
         }
         let len = from_cols[0].len().unwrap();
 
@@ -727,7 +727,7 @@ impl ConstraintSet {
             self.compute(
                 self.computations
                     .dep(target)
-                    .ok_or_else(|| eyre!("No computations found for `{}`", target))?,
+                    .ok_or_else(|| anyhow!("No computations found for `{}`", target))?,
             )
         }
     }
@@ -867,7 +867,7 @@ fn apply_form(
 ) -> Result<Option<(Expression, Type)>> {
     let args = f
         .validate_args(args.to_vec())
-        .with_context(|| eyre!("evaluating call to {:?}", f))?;
+        .with_context(|| anyhow!("evaluating call to {:?}", f))?;
 
     match f {
         Form::For => {
@@ -919,7 +919,7 @@ fn apply(
             FunctionClass::Builtin(b) => {
                 let traversed_args = b
                     .validate_args(traversed_args)
-                    .with_context(|| eyre!("validating call to `{}`", f.name))?;
+                    .with_context(|| anyhow!("validating call to `{}`", f.name))?;
                 match b {
                     Builtin::Begin => Ok(Some((
                         Expression::List(traversed_args.into_iter().fold(
@@ -966,7 +966,7 @@ fn apply(
                                             *t,
                                         )))
                                     } else {
-                                        Err(eyre!("tried to access `{:?}` at index {}", array, x))
+                                        Err(anyhow!("tried to access `{:?}` at index {}", array, x))
                                     }
                                 }
                                 _ => unimplemented!(),
@@ -1010,7 +1010,7 @@ fn apply(
             FunctionClass::UserDefined(b @ Defined { args: f_args, body }) => {
                 let traversed_args = b
                     .validate_args(traversed_args)
-                    .with_context(|| eyre!("validating call to `{}`", f.name))?;
+                    .with_context(|| anyhow!("validating call to `{}`", f.name))?;
                 let new_ctx = SymbolTable::derived(ctx);
                 for (i, f_arg) in f_args.iter().enumerate() {
                     new_ctx
@@ -1051,11 +1051,11 @@ fn reduce(
                 let func = ctx
                     .borrow()
                     .resolve_function(verb)
-                    .with_context(|| eyre!("resolving function `{}`", verb))?;
+                    .with_context(|| anyhow!("resolving function `{}`", verb))?;
 
                 apply(&func, &args[1..], ctx, module)
             } else {
-                Err(eyre!("Not a function: {:?}", args[0]))
+                Err(anyhow!("Not a function: {:?}", args[0]))
             }
         }
 
@@ -1141,7 +1141,7 @@ fn reduce_toplevel(
         }
 
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
-            Err(eyre!("Unexpected top-level form: {:?}", e))
+            Err(anyhow!("Unexpected top-level form: {:?}", e))
         }
 
         Token::Defun(..) | Token::DefAliases(_) | Token::DefunAlias(..) | Token::DefConsts(_) => {

@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use eyre::*;
+use anyhow::*;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -126,7 +126,7 @@ impl Arity {
             Arity::Between(x, y) => l >= *x && l <= *y,
         }
         .then(|| ())
-        .ok_or_else(|| eyre!(self.make_error(l)))
+        .ok_or_else(|| anyhow!(self.make_error(l)))
     }
 }
 pub trait FuncVerifier<T> {
@@ -160,7 +160,7 @@ impl FuncVerifier<AstNode> for Form {
                 {
                     Ok(())
                 } else {
-                    Err(eyre!(
+                    Err(anyhow!(
                         "`{:?}` expects [SYMBOL VALUE] but received {:?}",
                         self,
                         args

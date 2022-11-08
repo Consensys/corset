@@ -1,6 +1,5 @@
 #[macro_use]
 extern crate pest_derive;
-use clap_verbosity_flag::Verbosity;
 use flate2::read::GzDecoder;
 use is_terminal::IsTerminal;
 use log::*;
@@ -8,12 +7,12 @@ use once_cell::sync::OnceCell;
 use serde_json::Value;
 use std::{
     fs::File,
-    io::{BufReader, Cursor, Seek, Write},
+    io::{BufReader, Seek, Write},
     path::Path,
 };
 
+use anyhow::*;
 use clap::{Parser, Subcommand};
-use color_eyre::eyre::*;
 
 mod check;
 mod column;
@@ -33,19 +32,18 @@ struct Settings {
 static SETTINGS: OnceCell<Settings> = OnceCell::new();
 
 #[derive(Parser)]
-#[clap(author, version)]
-#[clap(propagate_version = true)]
+#[command(author, version, propagate_version = true)]
 pub struct Args {
     #[clap(flatten)]
-    verbose: Verbosity,
+    verbose: clap_verbosity_flag::Verbosity,
 
-    #[clap(
+    #[arg(
         help = "Either a file or a string containing the Corset code to process",
         global = true
     )]
     source: Vec<String>,
 
-    #[clap(
+    #[arg(
         short = 't',
         long = "threads",
         help = "number of threads to use",
@@ -54,10 +52,10 @@ pub struct Args {
     )]
     threads: usize,
 
-    #[clap(long = "no-stdlib")]
+    #[arg(long = "no-stdlib")]
     no_stdlib: bool,
 
-    #[clap(subcommand)]
+    #[command(subcommand)]
     command: Commands,
 }
 
@@ -65,35 +63,34 @@ pub struct Args {
 enum Commands {
     /// Produce a Go-based constraint system
     Go {
-        #[clap(
+        #[arg(
             short = 'C',
             long = "columns",
             help = "whether to render columns definition"
         )]
         render_columns: bool,
 
-        #[clap(
+        #[arg(
             short = 'o',
             long = "constraints-file",
             help = "where to render the constraints"
         )]
         constraints_filename: Option<String>,
 
-        #[clap(long = "columns-file", help = "where to render the columns")]
+        #[arg(long = "columns-file", help = "where to render the columns")]
         columns_filename: Option<String>,
 
-        #[clap(long = "assignment", default_value = "CE")]
+        #[arg(long = "assignment", default_value = "CE")]
         columns_assignment: String,
 
-        #[clap(
+        #[arg(
             short = 'F',
             long = "function-name",
-            value_parser,
             help = "The name of the function to be generated"
         )]
         fname: String,
 
-        #[clap(
+        #[arg(
             short = 'P',
             long = "package",
             required = true,
@@ -103,10 +100,10 @@ enum Commands {
     },
     /// Produce a WizardIOP constraint system
     WizardIOP {
-        #[clap(short = 'o', long = "out", help = "where to render the constraints")]
+        #[arg(short = 'o', long = "out", help = "where to render the constraints")]
         out_filename: Option<String>,
 
-        #[clap(
+        #[arg(
             short = 'P',
             long = "package",
             required = true,
@@ -116,19 +113,19 @@ enum Commands {
     },
     /// Produce a LaTeX file describing the constraints
     Latex {
-        #[clap(
+        #[arg(
             short = 'o',
             long = "constraints-file",
             help = "where to render the constraints"
         )]
         constraints_filename: Option<String>,
 
-        #[clap(long = "columns-file", help = "where to render the columns")]
+        #[arg(long = "columns-file", help = "where to render the columns")]
         columns_filename: Option<String>,
     },
     /// Given a set of constraints and a trace file, fill the computed columns
     Compute {
-        #[clap(
+        #[arg(
             short = 'T',
             long = "trace",
             required = true,
@@ -136,7 +133,7 @@ enum Commands {
         )]
         tracefile: String,
 
-        #[clap(
+        #[arg(
             short = 'o',
             long = "out",
             help = "where to write the computed trace",
@@ -147,32 +144,32 @@ enum Commands {
     /// Given a set of constraints, indefinitely check the traces from an SQL table
     #[cfg(feature = "postgres")]
     CheckLoop {
-        #[clap(long, default_value = "localhost")]
+        #[arg(long, default_value = "localhost")]
         host: String,
-        #[clap(long, default_value = "postgres")]
+        #[arg(long, default_value = "postgres")]
         user: String,
-        #[clap(long)]
+        #[arg(long)]
         password: Option<String>,
-        #[clap(long, default_value = "zkevm")]
+        #[arg(long, default_value = "zkevm")]
         database: String,
-        #[clap(long = "rm", help = "remove succesully validated blocks")]
+        #[arg(long = "rm", help = "remove succesully validated blocks")]
         remove: bool,
     },
     /// Given a set of constraints, indefinitely fill the computed columns from/to an SQL table
     #[cfg(feature = "postgres")]
     ComputeLoop {
-        #[clap(long, default_value = "localhost")]
+        #[arg(long, default_value = "localhost")]
         host: String,
-        #[clap(long, default_value = "postgres")]
+        #[arg(long, default_value = "postgres")]
         user: String,
-        #[clap(long)]
+        #[arg(long)]
         password: Option<String>,
-        #[clap(long, default_value = "zkevm")]
+        #[arg(long, default_value = "zkevm")]
         database: String,
     },
     /// Given a set of constraints and a filled trace, check the validity of the constraints
     Check {
-        #[clap(
+        #[arg(
             short = 'T',
             long = "trace",
             required = true,
@@ -180,22 +177,22 @@ enum Commands {
         )]
         tracefile: String,
 
-        #[clap(
+        #[arg(
             short = 'F',
             long = "trace-full",
             help = "print all the module columns on error"
         )]
         full_trace: bool,
 
-        #[clap(long = "only", help = "only check these constraints")]
+        #[arg(long = "only", help = "only check these constraints")]
         only: Option<Vec<String>>,
 
-        #[clap(short = 'S', long = "trace-span", help = "", default_value_t = 3)]
+        #[arg(short = 'S', long = "trace-span", help = "", default_value_t = 3)]
         trace_span: isize,
     },
     /// Given a set of Corset files, compile them into a single file for faster later use
     Compile {
-        #[clap(
+        #[arg(
             short = 'o',
             long = "out",
             required = true,
@@ -224,15 +221,11 @@ fn read_trace<S: AsRef<str>>(tracefile: S) -> Result<Value> {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    color_eyre::install()?;
-    simplelog::TermLogger::init(
-        args.verbose.log_level_filter(),
-        simplelog::ConfigBuilder::new()
-            .set_time_level(simplelog::LevelFilter::Off)
-            .build(),
-        simplelog::TerminalMode::Stderr,
-        simplelog::ColorChoice::Auto,
-    )?;
+    stderrlog::new()
+        .verbosity(args.verbose.log_level_filter())
+        .quiet(args.verbose.is_silent())
+        .init()
+        .unwrap();
     let mut settings: Settings = Default::default();
 
     rayon::ThreadPoolBuilder::new()
@@ -251,9 +244,9 @@ fn main() -> Result<()> {
             Vec::new(),
             ron::from_str(
                 &std::fs::read_to_string(&args.source[0])
-                    .with_context(|| eyre!("while reading `{}`", &args.source[0]))?,
+                    .with_context(|| anyhow!("while reading `{}`", &args.source[0]))?,
             )
-            .with_context(|| eyre!("while parsing `{}`", &args.source[0]))?,
+            .with_context(|| anyhow!("while parsing `{}`", &args.source[0]))?,
         )
     } else {
         if false {
@@ -268,7 +261,7 @@ fn main() -> Result<()> {
                 if std::path::Path::new(&f).is_file() {
                     inputs.push((
                         f.as_str(),
-                        std::fs::read_to_string(f).with_context(|| eyre!("reading `{}`", f))?,
+                        std::fs::read_to_string(f).with_context(|| anyhow!("reading `{}`", f))?,
                     ));
                 } else {
                     inputs.push(("Immediate expression", f.into()));
@@ -390,7 +383,6 @@ fn main() -> Result<()> {
             database,
             remove,
         } => {
-            settings.full_trace = false;
             SETTINGS.set(settings).unwrap();
 
             let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
@@ -408,11 +400,11 @@ fn main() -> Result<()> {
                     let payload: &[u8] = row.get(2);
                     info!("Processing {}", id);
 
-                    let gz = GzDecoder::new(Cursor::new(&payload));
+                    let gz = GzDecoder::new(std::io::Cursor::new(&payload));
                     let v: Value = match gz.header() {
                         Some(_) => serde_json::from_reader(gz),
                         None => {
-                            serde_json::from_reader(Cursor::new(&payload))
+                            serde_json::from_reader(std::io::Cursor::new(&payload))
                         }
                     }
                     .with_context(|| format!("while reading payload from {}", id))?;

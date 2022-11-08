@@ -1,4 +1,5 @@
-use eyre::*;
+use anyhow::*;
+use colored::Colorize;
 use log::*;
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
@@ -37,7 +38,7 @@ impl ComputationTable {
     }
     pub fn insert(&mut self, target: &Handle, computation: Computation) -> Result<()> {
         if self.dependencies.contains_key(target) {
-            return Err(eyre!(
+            return Err(anyhow!(
                 "`{}` already present as a computation target",
                 target
             ));
@@ -109,7 +110,7 @@ impl SymbolTable {
         ax: &mut HashSet<Handle>,
     ) -> Result<(Expression, Type)> {
         if ax.contains(handle) {
-            Err(eyre!("Circular definitions found for {}", handle))
+            Err(anyhow!("Circular definitions found for {}", handle))
         } else {
             ax.insert(handle.to_owned());
             // Ugly, but required for borrowing reasons
@@ -122,10 +123,10 @@ impl SymbolTable {
                         Ok((constraint.clone(), *t))
                     }
                     None => self.parent.as_ref().map_or(
-                        Err(eyre!(
+                        Err(anyhow!(
                             "Column `{}` unknown in module `{}`",
-                            handle.name,
-                            handle.module
+                            handle.name.red(),
+                            handle.module.blue()
                         )),
                         |parent| parent.borrow_mut().resolve_symbol(handle),
                     ),
@@ -142,7 +143,7 @@ impl SymbolTable {
         ax: &mut HashSet<Handle>,
     ) -> Result<()> {
         if ax.contains(handle) {
-            Err(eyre!("Circular definitions found for {}", handle))
+            Err(anyhow!("Circular definitions found for {}", handle))
         } else {
             ax.insert(handle.to_owned());
             // Ugly, but required for borrowing reasons
@@ -155,10 +156,10 @@ impl SymbolTable {
                         Ok(())
                     }
                     None => self.parent.as_ref().map_or(
-                        Err(eyre!(
+                        Err(anyhow!(
                             "Column `{}` unknown in module `{}`",
-                            handle.name,
-                            handle.module
+                            handle.name.red(),
+                            handle.module.blue()
                         )),
                         |parent| parent.borrow_mut().edit_symbol(handle, f),
                     ),
@@ -170,7 +171,7 @@ impl SymbolTable {
 
     fn _resolve_function(&self, name: &str, ax: &mut HashSet<String>) -> Result<Function> {
         if ax.contains(name) {
-            Err(eyre!("Circular definitions found for {}", name))
+            Err(anyhow!("Circular definitions found for {}", name.red()))
         } else {
             ax.insert(name.into());
             match self.funcs.get(name) {
@@ -179,12 +180,10 @@ impl SymbolTable {
                     ..
                 }) => self._resolve_function(to, ax),
                 Some(f) => Ok(f.to_owned()),
-                None => self
-                    .parent
-                    .as_ref()
-                    .map_or(Err(eyre!("Function `{}` unknown", name)), |parent| {
-                        parent.borrow().resolve_function(name)
-                    }),
+                None => self.parent.as_ref().map_or(
+                    Err(anyhow!("Function `{}` unknown", name.red())),
+                    |parent| parent.borrow().resolve_function(name),
+                ),
             }
         }
     }
@@ -201,19 +200,18 @@ impl SymbolTable {
         self.constraints
             .entry(module.into())
             .or_default()
-            .insert(name.to_owned());
-        Ok(())
-        // .then(|| ())
-        // .ok_or_else(|| eyre!("Constraint `{}` already defined", name))
+            .insert(name.to_owned())
+            .then(|| ())
+            .ok_or_else(|| anyhow!("Constraint `{}` already defined", name))
     }
 
     pub fn insert_symbol(&mut self, handle: &Handle, e: Expression) -> Result<()> {
         let t = e.t();
         if self.symbols.contains_key(handle) {
-            Err(eyre!(
+            Err(anyhow!(
                 "column `{}` already exists in module `{}`",
-                handle.name,
-                handle.module
+                handle.name.red(),
+                handle.module.blue()
             ))
         } else {
             self.symbols
@@ -224,7 +222,7 @@ impl SymbolTable {
 
     pub fn insert_func(&mut self, f: Function) -> Result<()> {
         if self.funcs.contains_key(&f.name) {
-            Err(eyre!("function `{}` already defined", &f.name))
+            Err(anyhow!("function `{}` already defined", &f.name.red()))
         } else {
             self.funcs.insert(f.name.clone(), f);
             Ok(())
@@ -233,7 +231,7 @@ impl SymbolTable {
 
     pub fn insert_alias(&mut self, from: &Handle, to: &Handle) -> Result<()> {
         if self.symbols.contains_key(from) {
-            Err(eyre!("`{}` already exists", from))
+            Err(anyhow!("`{}` already exists", from))
         } else {
             self.symbols
                 .insert(from.to_owned(), (Symbol::Alias(to.to_owned()), Type::Void));
@@ -243,10 +241,10 @@ impl SymbolTable {
 
     pub fn insert_funalias(&mut self, from: &str, to: &str) -> Result<()> {
         if self.funcs.contains_key(from) {
-            Err(eyre!(
+            Err(anyhow!(
                 "`{}` already exists: {} -> {:?}",
-                from,
-                to,
+                from.red(),
+                to.magenta(),
                 self.funcs[from]
             ))
         } else {
@@ -280,10 +278,10 @@ impl SymbolTable {
             Type::Scalar(Magma::Integer)
         };
         if self.symbols.contains_key(handle) {
-            Err(eyre!(
+            Err(anyhow!(
                 "`{}` already exists in `{}`",
-                handle.name,
-                handle.module
+                handle.name.red(),
+                handle.module.blue()
             ))
         } else {
             self.symbols.insert(
@@ -366,7 +364,7 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
         }
         Token::DefSort(tos, froms) => {
             if tos.len() != froms.len() {
-                return Err(eyre!(
+                return Err(anyhow!(
                     "cardinality mismatch in permutation declaration: {:?} vs. {:?}",
                     tos,
                     froms
@@ -406,8 +404,12 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                         _tos.push(to_handle);
                     }
                     _ => {
-                        return Err(eyre!("expected symbol, found `{:?}, {:?}`", pair.0, pair.1))
-                            .with_context(|| "while defining permutation")
+                        return Err(anyhow!(
+                            "expected symbol, found `{:?}, {:?}`",
+                            pair.0,
+                            pair.1
+                        ))
+                        .with_context(|| "while defining permutation")
                     }
                 }
             }
@@ -434,11 +436,11 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
         Token::DefAlias(from, to) => ctx
             .borrow_mut()
             .insert_alias(&Handle::new(&module, from), &Handle::new(&module, to))
-            .with_context(|| eyre!("defining {} -> {}", from, to)),
+            .with_context(|| anyhow!("defining {} -> {}", from, to)),
         Token::DefunAlias(from, to) => ctx
             .borrow_mut()
             .insert_funalias(from, to)
-            .with_context(|| eyre!("defining {} -> {}", from, to)),
+            .with_context(|| anyhow!("defining {} -> {}", from, to)),
     }
 }
 

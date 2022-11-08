@@ -1,4 +1,4 @@
-use color_eyre::eyre::*;
+use anyhow::{anyhow, Context, Result};
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use pest::{iterators::Pair, Parser};
@@ -184,7 +184,7 @@ impl AstNode {
                         {
                             range = Some(r);
                         } else {
-                            return Err(eyre!(
+                            return Err(anyhow!(
                                 "expected RANGE, found `{}`",
                                 n.map(|n| format!("{:?}", n.unwrap().class))
                                     .unwrap_or_else(|| "nothing".to_string())
@@ -202,7 +202,7 @@ impl AstNode {
                         {
                             kind = Kind::Composite(Box::new(n.unwrap().unwrap()))
                         } else {
-                            return Err(eyre!(
+                            return Err(anyhow!(
                                 ":COMP expects FORM, found `{}`",
                                 n.map(|n| format!("{:?}", n.unwrap().class))
                                     .unwrap_or_else(|| "nothing".to_string())
@@ -226,7 +226,7 @@ impl AstNode {
                                 )
                             }) {
                                 if kind != Kind::Atomic {
-                                    return Err(eyre!(
+                                    return Err(anyhow!(
                                         "`{}` can not be interleaved; is already {:?}",
                                         name,
                                         kind
@@ -240,13 +240,13 @@ impl AstNode {
                                     );
                                 }
                             } else {
-                                return Err(eyre!(
+                                return Err(anyhow!(
                                     ":INTERLEAVED expects (SYMBOLS...), found `{:?}`",
                                     p
                                 ));
                             }
                         } else {
-                            return Err(eyre!(
+                            return Err(anyhow!(
                                 ":INTERLEAVED expects (SYMBOLS...), found `{:?}`",
                                 p
                             ));
@@ -255,14 +255,14 @@ impl AstNode {
                     x => unreachable!("{:?}", x),
                 },
                 _ => {
-                    return Err(eyre!("expected :KEYWORD, found `{}`", x.as_str()));
+                    return Err(anyhow!("expected :KEYWORD, found `{}`", x.as_str()));
                 }
             }
         }
 
         if let Some(range) = range {
             if kind != Kind::Atomic {
-                Err(eyre!("array columns must be atomic"))
+                Err(anyhow!("array columns must be atomic"))
             } else {
                 Ok(AstNode {
                     class: Token::DefArrayColumn(name.into(), range, t),
@@ -283,7 +283,7 @@ impl AstNode {
         match tokens.get(0) {
             Some(Token::Symbol(defkw)) if defkw == "defconst" => {
                 if tokens.len() % 2 != 1 {
-                    return Err(eyre!("DEFCONST expects an even number of arguments"));
+                    return Err(anyhow!("DEFCONST expects an even number of arguments"));
                 } else {
                     Ok(AstNode {
                         class: Token::DefConsts(
@@ -293,7 +293,7 @@ impl AstNode {
                                     (Token::Symbol(name), Token::Value(x)) => {
                                         Ok((name.to_owned(), x.to_owned()))
                                     }
-                                    _ => Err(eyre!(
+                                    _ => Err(anyhow!(
                                         "DEFCONST expects (SYMBOL VALUE); received {:?}",
                                         &tokens[1..]
                                     )),
@@ -336,7 +336,7 @@ impl AstNode {
                             lc,
                         })
                     }
-                    _ => Err(eyre!(
+                    _ => Err(anyhow!(
                         "DEFUN expects ((SYMBOL SYMBOL*) FORM); received {:?}",
                         &tokens[1..]
                     )),
@@ -387,7 +387,7 @@ impl AstNode {
                             lc,
                         })
                     }
-                    _ => Err(eyre!(
+                    _ => Err(anyhow!(
                         "DEFCONSTRAINT expects (NAME DOMAIN (EXP)); received {:?}",
                         &tokens[1..]
                     )),
@@ -396,7 +396,7 @@ impl AstNode {
 
             Some(Token::Symbol(defkw)) if defkw == "defalias" => {
                 if tokens.len() % 2 != 1 {
-                    Err(eyre!("DEFALIAS expects an even number of arguments"))
+                    Err(anyhow!("DEFALIAS expects an even number of arguments"))
                 } else if tokens.iter().skip(1).all(|x| matches!(x, Token::Symbol(_))) {
                     let mut defs = vec![];
                     for pair in tokens[1..].chunks(2) {
@@ -414,7 +414,7 @@ impl AstNode {
                         lc,
                     })
                 } else {
-                    Err(eyre!(
+                    Err(anyhow!(
                         "DEFALIAS expects (SYMBOL SYMBOL)*; received {:?}",
                         &tokens[1..]
                     ))
@@ -428,7 +428,7 @@ impl AstNode {
                         src: src.into(),
                         lc,
                     }),
-                    _ => Err(eyre!(
+                    _ => Err(anyhow!(
                         "DEFUNALIAS expects (SYMBOL SYMBOL); received {:?}",
                         &tokens[1..]
                     )),
@@ -442,7 +442,7 @@ impl AstNode {
                         src: src.into(),
                         lc,
                     }),
-                    _ => Err(eyre!(
+                    _ => Err(anyhow!(
                         "DEFPLOOKUP expects (PARENT:LIST CHILD:LIST); received {:?}",
                         &tokens[1..]
                     )),
@@ -459,7 +459,7 @@ impl AstNode {
                         src: src.into(),
                         lc,
                     }),
-                    _ => Err(eyre!(
+                    _ => Err(anyhow!(
                         "DEFINRANGE expects (EXPRESSION RANGE); received {:?}",
                         &tokens[1..]
                     )),
@@ -473,7 +473,7 @@ impl AstNode {
                         src: src.into(),
                         lc,
                     }),
-                    _ => Err(eyre!(
+                    _ => Err(anyhow!(
                         "DEFPERMUTATION expects (TO:LIST FROM:LIST SORTERS:LIST); received {:?}",
                         &tokens[1..]
                     )),
@@ -498,7 +498,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
                 .map(rec_parse)
                 .collect::<Result<Vec<_>>>()?;
 
-            Ok(AstNode::def_from(args, &src, lc).with_context(|| eyre!("parsing `{}`", &src))?)
+            Ok(AstNode::def_from(args, &src, lc).with_context(|| anyhow!("parsing `{}`", &src))?)
         }
         Rule::list => {
             let args = pair

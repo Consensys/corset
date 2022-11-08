@@ -1,7 +1,7 @@
 use std::{collections::HashMap, io::Write};
 
 use convert_case::{Case, Casing};
-use eyre::*;
+use anyhow::*;
 use itertools::Itertools;
 
 use crate::compiler::*;

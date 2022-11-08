@@ -7,20 +7,18 @@ authors = [ "Franklin Delehelle <franklin.delehelle@consensys.net>" ]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1"
 cached = { version = "0.40", default-features = false }
-clap = { version = "3.2", features = ["derive"] }
-clap-verbosity-flag = "1.0"
-color-eyre = { version = "0.6", default-features = false }
+clap = { version = "4", features = ["derive", "wrap_help"] }
+clap-verbosity-flag = "2"
 colored = "2.0"
 convert_case = "0.6"
-eyre = "0.6"
 flate2 = "1"
 indicatif = "0.17"
 is-terminal = "0.4"
 itertools = "0.10"
 lazy_static = "1.4"
 log = "0.4"
-simplelog = { version = "0.12.0", features = ["paris"] }
 maplit = "1.0"
 names = { version = "0.12.0", default-features = false }
 num-bigint = { version = "0.4", features = ["serde"] }
@@ -32,9 +30,9 @@ pest_derive = "2.4"
 postgres = { version = "0.19", optional = true }
 rayon = "1.5"
 ron = "0.8"
+stderrlog = { version = "0.5", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
-tabled = { version = "0.9", default-features = false }
 
 [features]
 postgres = [ "dep:postgres" ]

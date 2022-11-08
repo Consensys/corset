@@ -1,11 +1,11 @@
-use eyre::*;
+use anyhow::*;
 #[cfg(feature = "postgres")]
 use postgres::Client;
 use std::io::Read;
 
 pub fn is_file_empty(f: &str) -> Result<bool> {
     std::fs::metadata(&f)
-        .with_context(|| eyre!("unable to read metadata of `{}`", f))
+        .with_context(|| anyhow!("unable to read metadata of `{}`", f))
         .map(|f| f.len() == 0)
 }
 

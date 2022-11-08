@@ -1,7 +1,7 @@
 use self::definitions::Symbol;
 use crate::column::{ColumnSet, Computation};
 use definitions::SymbolTable;
-use eyre::*;
+use anyhow::*;
 use itertools::Itertools;
 use log::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -25,9 +25,9 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
     let ctx = Rc::new(RefCell::new(SymbolTable::new_root()));
 
     for (name, content) in sources.iter() {
-        let ast = parser::parse(content.as_ref()).with_context(|| eyre!("parsing `{}`", name))?;
+        let ast = parser::parse(content.as_ref()).with_context(|| anyhow!("parsing `{}`", name))?;
         definitions::pass(&ast, ctx.clone())
-            .with_context(|| eyre!("parsing definitions in `{}`", name))?;
+            .with_context(|| anyhow!("parsing definitions in `{}`", name))?;
         asts.push((name, ast));
     }
 
@@ -77,7 +77,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         .iter()
         .map(|(name, ast)| {
             generator::pass(ast, ctx.clone())
-                .with_context(|| eyre!("compiling constraints in `{}`", name))
+                .with_context(|| anyhow!("compiling constraints in `{}`", name))
         })
         .collect::<Result<Vec<_>>>()?
         .into_iter()

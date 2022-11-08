@@ -7,7 +7,7 @@ use crate::{
         Builtin, ComputationTable, Constraint, ConstraintSet, Expression, Handle, Kind, Magma, Type,
     },
 };
-use eyre::*;
+use anyhow::Result;
 
 const RESERVED_MODULE: &str = "RESERVED";
 

@@ -1,12 +1,11 @@
 use cached::SizedCache;
-use color_eyre::owo_colors::OwoColorize;
+use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use rayon::prelude::*;
 use std::collections::HashSet;
-use tabled::{builder::Builder, object::Columns, ModifyObject, Style};
 
-use eyre::*;
+use anyhow::*;
 use log::*;
 use pairing_ce::{bn256::Fr, ff::Field};
 
@@ -19,7 +18,6 @@ use crate::{
 fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Result<()> {
     let trace_span: isize = crate::SETTINGS.get().unwrap().trace_span;
 
-    let mut builder = Builder::default();
     let module = expr.dependencies().iter().next().unwrap().module.clone();
     let handles = if crate::SETTINGS.get().unwrap().full_trace {
         columns
@@ -33,37 +31,39 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
     } else {
         expr.dependencies().iter().cloned().collect::<Vec<_>>()
     };
-    for handle in handles.into_iter() {
-        builder.add_record(
-            vec![handle.to_string()]
+
+    let mut m_columns = vec![vec![String::new()]
+        .into_iter()
+        .chain(handles.iter().map(|h| h.to_string()))
+        .collect::<Vec<_>>()];
+    for j in (i - trace_span).max(0)..=i + trace_span {
+        m_columns.push(
+            vec![j.to_string()]
                 .into_iter()
-                .chain(((i - trace_span).max(0)..=i + trace_span).map(|i| {
+                .chain(handles.iter().map(|handle| {
                     columns
                         .get(&handle)
                         .unwrap()
-                        .get(i, false)
+                        .get(j, false)
                         .map(|x| x.pretty())
                         .unwrap_or_else(|| "nil".into())
                 }))
-                .collect::<Vec<_>>(),
-        );
+                .collect(),
+        )
     }
 
-    builder.set_columns(
-        vec![String::new()]
-            .into_iter()
-            .chain(((i - trace_span).max(0)..=i + trace_span).map(|i| i.to_string()))
-            .collect::<Vec<_>>(),
-    );
-    let mut table = builder.build();
-    table
-        .with(
-            Columns::single(trace_span as usize + 1)
-                .modify()
-                .with(|s: &str| s.red().to_string()),
-        )
-        .with(Style::blank());
-    eprintln!("\n\n{}\n", table);
+    for ii in 0..m_columns[0].len() {
+        for j in 0..m_columns.len() {
+            let padding = m_columns[j].iter().map(String::len).max().unwrap() + 2;
+            // - 1 to account for the first column
+            if j as isize + (i - trace_span).max(0) - 1 == i {
+                print!("{:width$}", m_columns[j][ii].red(), width = padding);
+            } else {
+                print!("{:width$}", m_columns[j][ii], width = padding);
+            }
+        }
+        println!();
+    }
 
     let r = expr.eval(
         i,
@@ -78,7 +78,7 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
         &EvalSettings::new().trace(true),
     );
 
-    Err(eyre!(
+    Err(anyhow!(
         "{}|{}{}\n -> {}",
         expr.pretty(),
         i,
@@ -125,7 +125,7 @@ fn check_constraint(
         .map(|handle| {
             columns
                 .get(&handle)
-                .with_context(|| eyre!("can not find column `{}`", handle))
+                .with_context(|| anyhow!("can not find column `{}`", handle))
                 .map(|c| c.len())
         })
         .collect::<Result<Vec<_>>>()?;
@@ -160,7 +160,7 @@ fn check_constraint(
     }
     let l = cols_lens[0].unwrap_or(0);
     if l == 0 {
-        return Err(eyre!("empty trace, aborting"));
+        return Err(anyhow!("empty trace, aborting"));
     }
 
     let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
@@ -260,7 +260,7 @@ pub fn check(cs: &ConstraintSet, only: &Option<Vec<String>>, with_bar: bool) -> 
         info!("Validation successful");
         Ok(())
     } else {
-        Err(eyre!(
+        Err(anyhow!(
             "Constraints failed: {}",
             failed.into_iter().collect::<Vec<_>>().join(", ")
         ))
