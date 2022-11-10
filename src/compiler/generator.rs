@@ -1055,11 +1055,11 @@ fn reduce(
                 let func = ctx
                     .borrow()
                     .resolve_function(&Handle::new(&module, verb))
-                    .with_context(|| anyhow!("resolving function `{}`", verb))?;
+                    .with_context(|| make_src_error(e))?;
 
                 apply(&func, &args[1..], ctx, module)
             } else {
-                Err(anyhow!("Not a function: {:?}", args[0]))
+                Err(anyhow!("not a function: `{:?}`", args[0])).with_context(|| make_src_error(e))
             }
         }
 
@@ -1089,7 +1089,7 @@ fn reduce(
         | Token::DefPlookup(..)
         | Token::DefInrange(..) => Ok(None),
     }
-    .with_context(|| format!("at line {}, col.{}: \"{}\"", e.lc.0, e.lc.1, e.src))
+    .with_context(|| make_src_error(&e))
 }
 
 fn reduce_toplevel(
@@ -1169,11 +1169,34 @@ pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Constraint>>
 
     let mut module = String::from(super::MAIN_MODULE);
     for exp in ast.exprs.iter().cloned() {
-        if let Some(c) = reduce_toplevel(&exp, ctx.clone(), &mut module)
-            .with_context(|| format!("at line {}, col.{}: \"{}\"", exp.lc.0, exp.lc.1, exp.src))?
+        if let Some(c) =
+            reduce_toplevel(&exp, ctx.clone(), &mut module).with_context(|| make_src_error(&exp))?
         {
             r.push(c)
         }
     }
     Ok(r)
+}
+
+fn make_src_error(exp: &AstNode) -> String {
+    let src_str = exp
+        .src
+        .chars()
+        .take_while(|x| *x != '\n')
+        .collect::<String>()
+        .bold()
+        .bright_white()
+        .to_string();
+
+    format!(
+        "at line {}: {}{}",
+        exp.lc.0.to_string().blue(),
+        src_str,
+        if src_str.len() < exp.src.len() {
+            "..."
+        } else {
+            ""
+        }
+        .bright_white()
+    )
 }

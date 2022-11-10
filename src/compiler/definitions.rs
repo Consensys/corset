@@ -126,7 +126,7 @@ impl SymbolTable {
                     }
                     None => self.parent.as_ref().map_or(
                         Err(anyhow!(
-                            "Column `{}` unknown in module `{}`",
+                            "column `{}` unknown in module `{}`",
                             handle.name.red(),
                             handle.module.blue()
                         )),
@@ -162,7 +162,7 @@ impl SymbolTable {
                     }
                     None => self.parent.as_ref().map_or(
                         Err(anyhow!(
-                            "Column `{}` unknown in module `{}`",
+                            "column `{}` unknown in module `{}`",
                             handle.name.red(),
                             handle.module.blue()
                         )),

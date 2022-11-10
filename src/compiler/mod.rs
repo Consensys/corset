@@ -22,6 +22,8 @@ const ALLOW_DUP: bool = true;
 
 #[cfg(feature = "interactive")]
 pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, ConstraintSet)> {
+    use colored::Colorize;
+
     let mut asts = vec![];
     let ctx = Rc::new(RefCell::new(SymbolTable::new_root()));
 
@@ -78,7 +80,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         .iter()
         .map(|(name, ast)| {
             generator::pass(ast, ctx.clone())
-                .with_context(|| anyhow!("compiling constraints in `{}`", name))
+                .with_context(|| anyhow!("compiling constraints in {}", name.bright_white()))
         })
         .collect::<Result<Vec<_>>>()?
         .into_iter()
