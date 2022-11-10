@@ -523,12 +523,12 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             src,
         }),
         Rule::defcolumns => {
-            let defs = pair
+            let columns = pair
                 .into_inner()
                 .map(rec_parse)
                 .collect::<Result<Vec<_>>>()?;
             Ok(AstNode {
-                class: Token::DefColumns(defs),
+                class: Token::DefColumns(columns),
                 lc,
                 src,
             })

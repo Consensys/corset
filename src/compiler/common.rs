@@ -13,64 +13,67 @@ const ARRAY_SEPARATOR: &str = "_";
 lazy_static::lazy_static! {
     pub static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
         "nth" => Function {
-            name: "nth".into(),
+            handle: Handle::new(super::MAIN_MODULE, "nth"),
             class: FunctionClass::Builtin(Builtin::Nth),
         },
 
         "for" => Function {
-            name: "for".into(),
+            handle: Handle::new(super::MAIN_MODULE, "for"),
             class: FunctionClass::SpecialForm(Form::For),
         },
 
 
         // monadic
         "inv" => Function {
-            name: "inv".into(),
+            handle: Handle::new(super::MAIN_MODULE, "inv"),
             class: FunctionClass::Builtin(Builtin::Inv)
         },
         "neg" => Function {
-            name: "neg".into(),
+            handle: Handle::new(super::MAIN_MODULE, "neg"),
             class: FunctionClass::Builtin(Builtin::Neg)
         },
         "not" => Function {
-            name: "not".into(),
+            handle: Handle::new(super::MAIN_MODULE, "not"),
             class: FunctionClass::Builtin(Builtin::Not),
         },
 
         // Dyadic
         "shift" => Function{
-            name: "shift".into(),
+            handle: Handle::new(super::MAIN_MODULE, "shift"),
             class: FunctionClass::Builtin(Builtin::Shift),
         },
 
 
         // polyadic
         "+" => Function {
-            name: "+".into(),
+            handle: Handle::new(super::MAIN_MODULE, "+"),
             class: FunctionClass::Builtin(Builtin::Add)
         },
         "*" => Function {
-            name: "*".into(),
+            handle: Handle::new(super::MAIN_MODULE, "*"),
             class: FunctionClass::Builtin(Builtin::Mul)
         },
         "-" => Function {
-            name: "-".into(),
+            handle: Handle::new(super::MAIN_MODULE, "-"),
             class: FunctionClass::Builtin(Builtin::Sub)
         },
 
-        "begin" => Function{name: "begin".into(), class: FunctionClass::Builtin(Builtin::Begin)},
+        "begin" => Function{
+            handle: Handle::new(super::MAIN_MODULE, "begin"),
+            class: FunctionClass::Builtin(Builtin::Begin)
+        },
 
         "if-zero" => Function {
-            name: "if-zero".into(),
+            handle: Handle::new(super::MAIN_MODULE, "if-zero"),
             class: FunctionClass::Builtin(Builtin::IfZero)
         },
         "if-not-zero" => Function {
-            name: "if-not-zero".into(),
+            handle: Handle::new(super::MAIN_MODULE, "if-not-zero"),
             class: FunctionClass::Builtin(Builtin::IfNotZero)
         },
 
         "make-decomposition" => Function {
-            name: "make-decomposition".into(),
+            handle: Handle::new(super::MAIN_MODULE, "make-decomposition"),
             class: FunctionClass::Builtin(Builtin::ByteDecomposition)
         }
     };
@@ -329,6 +332,6 @@ impl std::fmt::Debug for Handle {
 }
 impl std::fmt::Display for Handle {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}.{}", self.module, self.name)
+        write!(f, "{}::{}", self.module, self.name)
     }
 }

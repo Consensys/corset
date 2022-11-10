@@ -65,9 +65,11 @@ impl ComputationTable {
 }
 #[derive(Debug)]
 pub struct SymbolTable {
+    // The parent relationship is only used for contextual
+    // semantics (i.e. for & functions), not modules
     parent: Option<Rc<RefCell<SymbolTable>>>,
     constraints: HashMap<String, HashSet<String>>,
-    funcs: HashMap<String, Function>,
+    funcs: HashMap<Handle, Function>,
     symbols: HashMap<Handle, (Symbol, Type)>,
     pub computation_table: ComputationTable,
 }
@@ -77,8 +79,8 @@ impl SymbolTable {
             parent: None,
             constraints: Default::default(),
             funcs: BUILTINS
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.clone()))
+                .values()
+                .map(|f| (f.handle.to_owned(), f.clone()))
                 .collect(),
             symbols: Default::default(),
             computation_table: Default::default(),
@@ -143,7 +145,10 @@ impl SymbolTable {
         ax: &mut HashSet<Handle>,
     ) -> Result<()> {
         if ax.contains(handle) {
-            Err(anyhow!("Circular definitions found for {}", handle))
+            Err(anyhow!(
+                "Circular definitions found for {}",
+                handle.to_string().red()
+            ))
         } else {
             ax.insert(handle.to_owned());
             // Ugly, but required for borrowing reasons
@@ -169,20 +174,23 @@ impl SymbolTable {
         }
     }
 
-    fn _resolve_function(&self, name: &str, ax: &mut HashSet<String>) -> Result<Function> {
-        if ax.contains(name) {
-            Err(anyhow!("Circular definitions found for {}", name.red()))
+    fn _resolve_function(&self, handle: &Handle, ax: &mut HashSet<Handle>) -> Result<Function> {
+        if ax.contains(handle) {
+            Err(anyhow!(
+                "Circular definitions found for {}",
+                handle.to_string().red()
+            ))
         } else {
-            ax.insert(name.into());
-            match self.funcs.get(name) {
+            ax.insert(handle.to_owned());
+            match self.funcs.get(handle) {
                 Some(Function {
                     class: FunctionClass::Alias(ref to),
                     ..
                 }) => self._resolve_function(to, ax),
                 Some(f) => Ok(f.to_owned()),
                 None => self.parent.as_ref().map_or(
-                    Err(anyhow!("Function `{}` unknown", name.red())),
-                    |parent| parent.borrow().resolve_function(name),
+                    Err(anyhow!("Function {} unknown", handle.name.red())),
+                    |parent| parent.borrow().resolve_function(handle),
                 ),
             }
         }
@@ -220,11 +228,14 @@ impl SymbolTable {
         }
     }
 
-    pub fn insert_func(&mut self, f: Function) -> Result<()> {
-        if self.funcs.contains_key(&f.name) {
-            Err(anyhow!("function `{}` already defined", &f.name.red()))
+    pub fn insert_function(&mut self, handle: &Handle, f: Function) -> Result<()> {
+        if self.funcs.contains_key(handle) {
+            Err(anyhow!(
+                "function {} already defined",
+                handle.to_string().red()
+            ))
         } else {
-            self.funcs.insert(f.name.clone(), f);
+            self.funcs.insert(handle.to_owned(), f);
             Ok(())
         }
     }
@@ -239,20 +250,20 @@ impl SymbolTable {
         }
     }
 
-    pub fn insert_funalias(&mut self, from: &str, to: &str) -> Result<()> {
+    pub fn insert_funalias(&mut self, from: &Handle, to: &Handle) -> Result<()> {
         if self.funcs.contains_key(from) {
             Err(anyhow!(
-                "`{}` already exists: {} -> {:?}",
-                from.red(),
-                to.magenta(),
-                self.funcs[from]
+                "{} already exists: {} -> {}",
+                from.to_string().red(),
+                from.to_string().red(),
+                to.to_string().magenta(),
             ))
         } else {
             self.funcs.insert(
-                from.into(),
+                from.to_owned(),
                 Function {
-                    name: from.into(),
-                    class: FunctionClass::Alias(to.into()),
+                    handle: to.clone(),
+                    class: FunctionClass::Alias(to.clone()),
                 },
             );
             Ok(())
@@ -267,8 +278,14 @@ impl SymbolTable {
         self._edit_symbol(handle, f, &mut HashSet::new())
     }
 
-    pub fn resolve_function(&self, name: &str) -> Result<Function> {
-        self._resolve_function(name, &mut HashSet::new())
+    pub fn resolve_function(&self, handle: &Handle) -> Result<Function> {
+        self._resolve_function(handle, &mut HashSet::new())
+            .or_else(|_| {
+                self._resolve_function(
+                    &Handle::new(super::MAIN_MODULE, &handle.name),
+                    &mut HashSet::new(),
+                )
+            })
     }
 
     pub fn insert_constant(&mut self, handle: &Handle, value: BigInt) -> Result<()> {
@@ -426,20 +443,23 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
         Token::DefAliases(aliases) => aliases.iter().fold(Ok(()), |ax, alias| {
             ax.and(reduce(alias, ctx.clone(), module))
         }),
-        Token::Defun(name, args, body) => ctx.borrow_mut().insert_func(Function {
-            name: name.into(),
-            class: FunctionClass::UserDefined(Defined {
-                args: args.to_owned(),
-                body: *body.clone(),
-            }),
-        }),
+        Token::Defun(name, args, body) => ctx.borrow_mut().insert_function(
+            &Handle::new(&module, name),
+            Function {
+                handle: Handle::new(&module, name),
+                class: FunctionClass::UserDefined(Defined {
+                    args: args.to_owned(),
+                    body: *body.clone(),
+                }),
+            },
+        ),
         Token::DefAlias(from, to) => ctx
             .borrow_mut()
             .insert_alias(&Handle::new(&module, from), &Handle::new(&module, to))
             .with_context(|| anyhow!("defining {} -> {}", from, to)),
         Token::DefunAlias(from, to) => ctx
             .borrow_mut()
-            .insert_funalias(from, to)
+            .insert_funalias(&Handle::new(&module, from), &Handle::new(&module, to))
             .with_context(|| anyhow!("defining {} -> {}", from, to)),
     }
 }

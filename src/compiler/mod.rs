@@ -16,7 +16,7 @@ mod definitions;
 mod generator;
 mod parser;
 
-const MAIN_MODULE: &str = "MAIN";
+const MAIN_MODULE: &str = "prelude";
 
 const ALLOW_DUP: bool = true;
 

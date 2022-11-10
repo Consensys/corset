@@ -1,5 +1,6 @@
-use cached::Cached;
 use anyhow::*;
+use cached::Cached;
+use colored::Colorize;
 use log::*;
 use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
@@ -461,7 +462,7 @@ impl Builtin {
 
 #[derive(Debug, Clone)]
 pub struct Function {
-    pub name: String,
+    pub handle: Handle,
     pub class: FunctionClass,
 }
 #[derive(Debug, Clone)]
@@ -469,7 +470,7 @@ pub enum FunctionClass {
     UserDefined(Defined),
     SpecialForm(Form),
     Builtin(Builtin),
-    Alias(String),
+    Alias(Handle),
 }
 
 #[derive(Debug, Clone)]
@@ -562,7 +563,10 @@ impl FuncVerifier<Expression> for Builtin {
                 if !matches!(args[0], Expression::List(_)) {
                     Ok(())
                 } else {
-                    Err(anyhow!("`{:?}` expects an expression as its condition", self))
+                    Err(anyhow!(
+                        "`{:?}` expects an expression as its condition",
+                        self
+                    ))
                 }
             }
             Builtin::Begin => Ok(()),
@@ -917,9 +921,9 @@ fn apply(
 
         match &f.class {
             FunctionClass::Builtin(b) => {
-                let traversed_args = b
-                    .validate_args(traversed_args)
-                    .with_context(|| anyhow!("validating call to `{}`", f.name))?;
+                let traversed_args = b.validate_args(traversed_args).with_context(|| {
+                    anyhow!("validating call to {}", f.handle.to_string().blue())
+                })?;
                 match b {
                     Builtin::Begin => Ok(Some((
                         Expression::List(traversed_args.into_iter().fold(
@@ -1010,7 +1014,7 @@ fn apply(
             FunctionClass::UserDefined(b @ Defined { args: f_args, body }) => {
                 let traversed_args = b
                     .validate_args(traversed_args)
-                    .with_context(|| anyhow!("validating call to `{}`", f.name))?;
+                    .with_context(|| anyhow!("validating call to `{}`", f.handle))?;
                 let new_ctx = SymbolTable::derived(ctx);
                 for (i, f_arg) in f_args.iter().enumerate() {
                     new_ctx
@@ -1050,7 +1054,7 @@ fn reduce(
             } else if let Token::Symbol(verb) = &args[0].class {
                 let func = ctx
                     .borrow()
-                    .resolve_function(verb)
+                    .resolve_function(&Handle::new(&module, verb))
                     .with_context(|| anyhow!("resolving function `{}`", verb))?;
 
                 apply(&func, &args[1..], ctx, module)
