@@ -104,7 +104,6 @@ fn do_expand_ifs(e: &mut Expression) {
             for e in es.iter_mut() {
                 do_expand_ifs(e);
             }
-            ()
         }
         Expression::Funcall { func, args, .. } => {
             for e in args.iter_mut() {
@@ -277,11 +276,8 @@ fn expand_expr<T: Clone + Ord>(
 
 pub fn expand_ifs(cs: &mut ConstraintSet) {
     for c in cs.constraints.iter_mut() {
-        match c {
-            Constraint::Vanishes { expr: e, .. } => {
-                do_expand_ifs(e); // Ifs create Inv and must be expanded first
-            }
-            _ => (),
+        if let Constraint::Vanishes { expr: e, .. } = c {
+            do_expand_ifs(e); // Ifs create Inv and must be expanded first
         }
     }
 }

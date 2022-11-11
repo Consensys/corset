@@ -8,7 +8,7 @@ use pairing_ce::ff::PrimeField;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use super::common::BUILTINS;
 use super::generator::{Defined, Expression, Function, FunctionClass};
@@ -18,7 +18,7 @@ use crate::compiler::parser::*;
 
 #[derive(Debug, Clone)]
 pub enum Symbol {
-    Alias(Handle),
+    Alias(String),
     Final(Expression, bool),
 }
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -67,70 +67,91 @@ impl ComputationTable {
 pub struct SymbolTable {
     // The parent relationship is only used for contextual
     // semantics (i.e. for & functions), not modules
-    parent: Option<Rc<RefCell<SymbolTable>>>,
-    constraints: HashMap<String, HashSet<String>>,
-    funcs: HashMap<Handle, Function>,
-    symbols: HashMap<Handle, (Symbol, Type)>,
+    pub name: String,
+    parent: Weak<RefCell<Self>>,
+    children: HashMap<String, Rc<RefCell<SymbolTable>>>,
+    constraints: HashSet<String>,
+    funcs: HashMap<String, Function>,
+    symbols: HashMap<String, (Symbol, Type)>,
     pub computation_table: ComputationTable,
 }
 impl SymbolTable {
     pub fn new_root() -> SymbolTable {
         SymbolTable {
-            parent: None,
+            name: super::MAIN_MODULE.to_owned(),
+            parent: Weak::new(),
+            children: Default::default(),
             constraints: Default::default(),
             funcs: BUILTINS
-                .values()
-                .map(|f| (f.handle.to_owned(), f.clone()))
+                .iter()
+                .map(|(k, f)| (k.to_string(), f.clone()))
                 .collect(),
             symbols: Default::default(),
             computation_table: Default::default(),
         }
     }
 
-    pub fn derived(parent: Rc<RefCell<SymbolTable>>) -> Rc<RefCell<SymbolTable>> {
-        Rc::new(RefCell::new(SymbolTable {
-            parent: Some(parent),
-            constraints: Default::default(),
-            funcs: Default::default(),
-            symbols: Default::default(),
-            computation_table: Default::default(),
-        }))
+    pub fn derived(parent: Rc<RefCell<Self>>, name: &str) -> Rc<RefCell<Self>> {
+        parent
+            .borrow_mut()
+            .children
+            .entry(name.to_string())
+            .or_insert_with(|| {
+                Rc::new(RefCell::new(SymbolTable {
+                    name: name.to_owned(),
+                    parent: Rc::downgrade(&parent),
+                    children: Default::default(),
+                    constraints: Default::default(),
+                    funcs: Default::default(),
+                    symbols: Default::default(),
+                    computation_table: Default::default(),
+                }))
+            })
+            .clone()
     }
 
-    #[allow(dead_code)]
-    pub fn symbols(&self) -> impl Iterator<Item = (&Handle, &(Symbol, Type))> {
-        self.symbols.iter()
-    }
-
-    pub fn symbols_mut(&mut self) -> impl Iterator<Item = (&Handle, &mut (Symbol, Type))> {
-        self.symbols.iter_mut()
+    pub fn visit_mut<T>(
+        &mut self,
+        f: &mut dyn FnMut((Handle, &mut (Symbol, Type))) -> Result<()>,
+    ) -> Result<()> {
+        for s in self
+            .symbols
+            .iter_mut()
+            .map(|(k, v)| (Handle::new(&self.name, k), v))
+        {
+            f(s)?;
+        }
+        for c in self.children.values_mut() {
+            c.borrow_mut().visit_mut::<T>(f)?;
+        }
+        Ok(())
     }
 
     fn _resolve_symbol(
         &mut self,
-        handle: &Handle,
-        ax: &mut HashSet<Handle>,
+        name: &str,
+        ax: &mut HashSet<String>,
     ) -> Result<(Expression, Type)> {
-        if ax.contains(handle) {
-            Err(anyhow!("Circular definitions found for {}", handle))
+        if ax.contains(name) {
+            Err(anyhow!("Circular definitions found for {}", name))
         } else {
-            ax.insert(handle.to_owned());
+            ax.insert(name.to_owned());
             // Ugly, but required for borrowing reasons
-            if let Some((Symbol::Alias(target), _)) = self.symbols.get(handle).cloned() {
+            if let Some((Symbol::Alias(target), _)) = self.symbols.get(name).cloned() {
                 self._resolve_symbol(&target, ax)
             } else {
-                match self.symbols.get_mut(handle) {
+                match self.symbols.get_mut(name) {
                     Some((Symbol::Final(constraint, visited), t)) => {
                         *visited = true;
                         Ok((constraint.clone(), *t))
                     }
-                    None => self.parent.as_ref().map_or(
+                    None => self.parent.upgrade().map_or(
                         Err(anyhow!(
                             "column `{}` unknown in module `{}`",
-                            handle.name.red(),
-                            handle.module.blue()
+                            name.red(),
+                            self.name.blue()
                         )),
-                        |parent| parent.borrow_mut().resolve_symbol(handle),
+                        |parent| parent.borrow_mut().resolve_symbol(name),
                     ),
                     _ => unimplemented!(),
                 }
@@ -140,33 +161,33 @@ impl SymbolTable {
 
     fn _edit_symbol(
         &mut self,
-        handle: &Handle,
+        name: &str,
         f: &dyn Fn(&mut Expression),
-        ax: &mut HashSet<Handle>,
+        ax: &mut HashSet<String>,
     ) -> Result<()> {
-        if ax.contains(handle) {
+        if ax.contains(name) {
             Err(anyhow!(
                 "Circular definitions found for {}",
-                handle.to_string().red()
+                name.to_string().red()
             ))
         } else {
-            ax.insert(handle.to_owned());
+            ax.insert(name.to_owned());
             // Ugly, but required for borrowing reasons
-            if let Some((Symbol::Alias(_), _)) = self.symbols.get(handle).cloned() {
-                self._edit_symbol(handle, f, ax)
+            if let Some((Symbol::Alias(_), _)) = self.symbols.get(name).cloned() {
+                self._edit_symbol(name, f, ax)
             } else {
-                match self.symbols.get_mut(handle) {
+                match self.symbols.get_mut(name) {
                     Some((Symbol::Final(constraint, _), _)) => {
                         f(constraint);
                         Ok(())
                     }
-                    None => self.parent.as_ref().map_or(
+                    None => self.parent.upgrade().map_or(
                         Err(anyhow!(
                             "column `{}` unknown in module `{}`",
-                            handle.name.red(),
-                            handle.module.blue()
+                            name.red(),
+                            self.name.blue()
                         )),
-                        |parent| parent.borrow_mut().edit_symbol(handle, f),
+                        |parent| parent.borrow_mut().edit_symbol(name, f),
                     ),
                     _ => unimplemented!(),
                 }
@@ -174,73 +195,68 @@ impl SymbolTable {
         }
     }
 
-    fn _resolve_function(&self, handle: &Handle, ax: &mut HashSet<Handle>) -> Result<Function> {
-        if ax.contains(handle) {
+    fn _resolve_function(&self, name: &str, ax: &mut HashSet<String>) -> Result<Function> {
+        if ax.contains(name) {
             Err(anyhow!(
                 "Circular definitions found for {}",
-                handle.to_string().red()
+                name.to_string().red()
             ))
         } else {
-            ax.insert(handle.to_owned());
-            match self.funcs.get(handle) {
+            ax.insert(name.to_owned());
+            match self.funcs.get(name) {
                 Some(Function {
                     class: FunctionClass::Alias(ref to),
                     ..
-                }) => self._resolve_function(to, ax),
+                }) => self.resolve_function(to),
                 Some(f) => Ok(f.to_owned()),
-                None => self.parent.as_ref().map_or(
-                    Err(anyhow!("Function {} unknown", handle.name.red())),
-                    |parent| parent.borrow().resolve_function(handle),
-                ),
+                None => self
+                    .parent
+                    .upgrade()
+                    .map_or(Err(anyhow!("function {} unknown", name.red())), |parent| {
+                        parent.borrow().resolve_function(name)
+                    }),
             }
         }
     }
 
-    pub fn insert_constraint(&mut self, module: &str, name: &str) -> Result<()> {
-        if self
-            .constraints
-            .entry(module.into())
-            .or_default()
-            .contains(name)
-        {
-            warn!("redefining constraint `{}`", name);
+    pub fn insert_constraint(&mut self, name: &str) -> Result<()> {
+        if self.constraints.contains(name) {
+            warn!("redefining constraint `{}`", name.yellow());
         }
         self.constraints
-            .entry(module.into())
-            .or_default()
             .insert(name.to_owned())
             .then(|| ())
             .ok_or_else(|| anyhow!("Constraint `{}` already defined", name))
     }
 
-    pub fn insert_symbol(&mut self, handle: &Handle, e: Expression) -> Result<()> {
+    pub fn insert_symbol(&mut self, name: &str, e: Expression) -> Result<()> {
         let t = e.t();
-        if self.symbols.contains_key(handle) {
+        if self.symbols.contains_key(name) {
             Err(anyhow!(
                 "column `{}` already exists in module `{}`",
-                handle.name.red(),
-                handle.module.blue()
+                name.red(),
+                self.name.blue()
             ))
         } else {
             self.symbols
-                .insert(handle.to_owned(), (Symbol::Final(e, false), t));
+                .insert(name.to_owned(), (Symbol::Final(e, false), t));
             Ok(())
         }
     }
 
-    pub fn insert_function(&mut self, handle: &Handle, f: Function) -> Result<()> {
-        if self.funcs.contains_key(handle) {
+    pub fn insert_function(&mut self, name: &str, f: Function) -> Result<()> {
+        if self.funcs.contains_key(name) {
             Err(anyhow!(
                 "function {} already defined",
-                handle.to_string().red()
+                name.to_string().red()
             ))
         } else {
-            self.funcs.insert(handle.to_owned(), f);
+            self.funcs.insert(name.to_owned(), f);
             Ok(())
         }
     }
 
-    pub fn insert_alias(&mut self, from: &Handle, to: &Handle) -> Result<()> {
+    pub fn insert_alias(&mut self, from: &str, to: &str) -> Result<()> {
         if self.symbols.contains_key(from) {
             Err(anyhow!("`{}` already exists", from))
         } else {
@@ -250,7 +266,7 @@ impl SymbolTable {
         }
     }
 
-    pub fn insert_funalias(&mut self, from: &Handle, to: &Handle) -> Result<()> {
+    pub fn insert_funalias(&mut self, from: &str, to: &str) -> Result<()> {
         if self.funcs.contains_key(from) {
             Err(anyhow!(
                 "{} already exists: {} -> {}",
@@ -262,47 +278,41 @@ impl SymbolTable {
             self.funcs.insert(
                 from.to_owned(),
                 Function {
-                    handle: to.clone(),
-                    class: FunctionClass::Alias(to.clone()),
+                    handle: Handle::new(&self.name, to),
+                    class: FunctionClass::Alias(to.to_string()),
                 },
             );
             Ok(())
         }
     }
 
-    pub fn resolve_symbol(&mut self, handle: &Handle) -> Result<(Expression, Type)> {
-        self._resolve_symbol(handle, &mut HashSet::new())
+    pub fn resolve_symbol(&mut self, name: &str) -> Result<(Expression, Type)> {
+        self._resolve_symbol(name, &mut HashSet::new())
     }
 
-    pub fn edit_symbol(&mut self, handle: &Handle, f: &dyn Fn(&mut Expression)) -> Result<()> {
-        self._edit_symbol(handle, f, &mut HashSet::new())
+    pub fn edit_symbol(&mut self, name: &str, f: &dyn Fn(&mut Expression)) -> Result<()> {
+        self._edit_symbol(name, f, &mut HashSet::new())
     }
 
-    pub fn resolve_function(&self, handle: &Handle) -> Result<Function> {
-        self._resolve_function(handle, &mut HashSet::new())
-            .or_else(|_| {
-                self._resolve_function(
-                    &Handle::new(super::MAIN_MODULE, &handle.name),
-                    &mut HashSet::new(),
-                )
-            })
+    pub fn resolve_function(&self, name: &str) -> Result<Function> {
+        self._resolve_function(name, &mut HashSet::new())
     }
 
-    pub fn insert_constant(&mut self, handle: &Handle, value: BigInt) -> Result<()> {
+    pub fn insert_constant(&mut self, name: &str, value: BigInt) -> Result<()> {
         let t = if Zero::is_zero(&value) || One::is_one(&value) {
             Type::Scalar(Magma::Boolean)
         } else {
             Type::Scalar(Magma::Integer)
         };
-        if self.symbols.contains_key(handle) {
+        if self.symbols.contains_key(name) {
             Err(anyhow!(
                 "`{}` already exists in `{}`",
-                handle.name.red(),
-                handle.module.blue()
+                name.red(),
+                self.name.blue()
             ))
         } else {
             self.symbols.insert(
-                handle.to_owned(),
+                name.to_owned(),
                 (
                     Symbol::Final(
                         Expression::Const(value.clone(), Fr::from_str(&value.to_string())),
@@ -316,7 +326,11 @@ impl SymbolTable {
     }
 }
 
-fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Result<()> {
+fn reduce(
+    e: &AstNode,
+    root_ctx: Rc<RefCell<SymbolTable>>,
+    ctx: &mut Rc<RefCell<SymbolTable>>,
+) -> Result<()> {
     match &e.class {
         Token::Value(_)
         | Token::Symbol(_)
@@ -327,29 +341,26 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
         | Token::DefPlookup(..)
         | Token::DefInrange(..) => Ok(()),
 
-        Token::DefConstraint(name, ..) => ctx
-            .borrow_mut()
-            .insert_constraint(module, &format!("{}-{}", module, name)),
+        Token::DefConstraint(name, ..) => ctx.borrow_mut().insert_constraint(name),
         Token::DefModule(name) => {
-            *module = String::from(name);
+            *ctx = SymbolTable::derived(root_ctx, name);
             Ok(())
         }
         Token::DefConsts(cs) => {
             for (name, value) in cs.iter() {
-                ctx.borrow_mut()
-                    .insert_constant(&Handle::new(&module, name), value.to_owned())?;
+                ctx.borrow_mut().insert_constant(name, value.to_owned())?;
             }
             Ok(())
         }
         Token::DefColumns(cols) => cols
             .iter()
-            .fold(Ok(()), |ax, col| ax.and(reduce(col, ctx.clone(), module))),
+            .fold(Ok(()), |ax, col| ax.and(reduce(col, root_ctx.clone(), ctx))),
         Token::DefColumn(col, t, kind) => {
-            let handle = Handle::new(&module, col);
+            let module_name = ctx.borrow().name.to_owned();
             ctx.borrow_mut().insert_symbol(
-                &handle,
+                col,
                 Expression::Column(
-                    handle.clone(),
+                    Handle::new(&module_name, col),
                     *t,
                     // Convert Kind<AstNode> to Kind<Expression>
                     match kind {
@@ -357,23 +368,23 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                         Kind::Phantom => Kind::Phantom,
                         Kind::Composite(_) => Kind::Phantom, // The actual expression is computed by the generator
                         Kind::Interleaved(xs) => Kind::Interleaved(
-                            xs.iter().map(|h| Handle::new(&module, &h.name)).collect(),
+                            xs.iter()
+                                .map(|h| Handle::new(&module_name, &h.name))
+                                .collect(),
                         ),
                     },
                 ),
             )
         }
         Token::DefArrayColumn(col, range, t) => {
-            let handle = Handle::new(&module, col);
-            ctx.borrow_mut().insert_symbol(
-                &handle,
-                Expression::ArrayColumn(handle.clone(), range.to_owned(), *t),
-            )?;
+            let handle = Handle::new(&ctx.borrow().name, col);
+            ctx.borrow_mut()
+                .insert_symbol(col, Expression::ArrayColumn(handle, range.to_owned(), *t))?;
             for i in range {
                 let column_name = format!("{}_{}", col, i);
-                let handle = Handle::new(&module, column_name);
+                let handle = Handle::new(&ctx.borrow().name, &column_name);
                 ctx.borrow_mut().insert_symbol(
-                    &handle,
+                    &column_name,
                     Expression::Column(handle.clone(), *t, Kind::Atomic),
                 )?;
             }
@@ -402,16 +413,16 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
                             ..
                         },
                     ) => {
-                        let from_handle = Handle::new(&module, &from);
-                        let to_handle = Handle::new(&module, &to);
+                        let from_handle = Handle::new(&ctx.borrow().name, &from);
+                        let to_handle = Handle::new(&ctx.borrow().name, &to);
                         ctx.borrow_mut()
-                            .resolve_symbol(&Handle::new(&module, from))
+                            .resolve_symbol(from)
                             .with_context(|| "while defining permutation")?;
                         ctx.borrow_mut()
                             .insert_symbol(
-                                &to_handle,
+                                to,
                                 Expression::Column(
-                                    Handle::new(&module, to),
+                                    to_handle.clone(),
                                     Type::Column(Magma::Integer),
                                     Kind::Phantom,
                                 ),
@@ -441,33 +452,36 @@ fn reduce(e: &AstNode, ctx: Rc<RefCell<SymbolTable>>, module: &mut String) -> Re
             Ok(())
         }
         Token::DefAliases(aliases) => aliases.iter().fold(Ok(()), |ax, alias| {
-            ax.and(reduce(alias, ctx.clone(), module))
+            ax.and(reduce(alias, root_ctx.clone(), ctx))
         }),
-        Token::Defun(name, args, body) => ctx.borrow_mut().insert_function(
-            &Handle::new(&module, name),
-            Function {
-                handle: Handle::new(&module, name),
-                class: FunctionClass::UserDefined(Defined {
-                    args: args.to_owned(),
-                    body: *body.clone(),
-                }),
-            },
-        ),
+        Token::Defun(name, args, body) => {
+            let module_name = ctx.borrow().name.to_owned();
+            ctx.borrow_mut().insert_function(
+                name,
+                Function {
+                    handle: Handle::new(&module_name, name),
+                    class: FunctionClass::UserDefined(Defined {
+                        args: args.to_owned(),
+                        body: *body.clone(),
+                    }),
+                },
+            )
+        }
         Token::DefAlias(from, to) => ctx
             .borrow_mut()
-            .insert_alias(&Handle::new(&module, from), &Handle::new(&module, to))
+            .insert_alias(from, to)
             .with_context(|| anyhow!("defining {} -> {}", from, to)),
         Token::DefunAlias(from, to) => ctx
             .borrow_mut()
-            .insert_funalias(&Handle::new(&module, from), &Handle::new(&module, to))
+            .insert_funalias(from, to)
             .with_context(|| anyhow!("defining {} -> {}", from, to)),
     }
 }
 
 pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
-    let mut module = String::from(super::MAIN_MODULE);
+    let mut current_ctx = ctx.clone();
     for e in ast.exprs.iter() {
-        reduce(e, ctx.clone(), &mut module)?;
+        reduce(e, ctx.clone(), &mut current_ctx)?;
     }
 
     Ok(())

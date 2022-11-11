@@ -5,6 +5,7 @@ use log::*;
 use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
 use num_traits::{One, Zero};
+use once_cell::sync::OnceCell;
 use pairing_ce::bn256::Fr;
 use pairing_ce::ff::{Field, PrimeField};
 use rayon::prelude::*;
@@ -15,6 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Write;
 use std::rc::Rc;
+use std::sync::atomic::AtomicUsize;
 
 use super::definitions::ComputationTable;
 use super::{common::*, Handle};
@@ -22,6 +24,8 @@ use crate::column::{Column, ColumnSet, Computation};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 use crate::pretty::Pretty;
+
+static COUNTER: OnceCell<AtomicUsize> = OnceCell::new();
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Constraint {
@@ -470,7 +474,7 @@ pub enum FunctionClass {
     UserDefined(Defined),
     SpecialForm(Form),
     Builtin(Builtin),
-    Alias(Handle),
+    Alias(String),
 }
 
 #[derive(Debug, Clone)]
@@ -866,8 +870,8 @@ impl ConstraintSet {
 fn apply_form(
     f: Form,
     args: &[AstNode],
-    ctx: Rc<RefCell<SymbolTable>>,
-    module: &mut String,
+    root_ctx: Rc<RefCell<SymbolTable>>,
+    ctx: &mut Rc<RefCell<SymbolTable>>,
 ) -> Result<Option<(Expression, Type)>> {
     let args = f
         .validate_args(args.to_vec())
@@ -881,13 +885,22 @@ fn apply_form(
                 let mut l = vec![];
                 let mut t = Type::INFIMUM;
                 for i in is {
-                    let new_ctx = SymbolTable::derived(ctx.clone());
-                    new_ctx.borrow_mut().insert_symbol(
-                        &Handle::new(&module, i_name),
+                    let mut for_ctx = SymbolTable::derived(
+                        ctx.clone(),
+                        &format!(
+                            "for-{}-{}",
+                            COUNTER
+                                .get_or_init(|| AtomicUsize::new(0))
+                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+                            i
+                        ),
+                    );
+                    for_ctx.borrow_mut().insert_symbol(
+                        i_name,
                         Expression::Const(BigInt::from(*i), Fr::from_str(&i.to_string())),
                     )?;
 
-                    let (r, to) = reduce(&body.clone(), new_ctx, module)?.unwrap();
+                    let (r, to) = reduce(&body.clone(), root_ctx.clone(), &mut for_ctx)?.unwrap();
                     l.push(r);
                     t = t.max(&to)
                 }
@@ -903,16 +916,16 @@ fn apply_form(
 fn apply(
     f: &Function,
     args: &[AstNode],
-    ctx: Rc<RefCell<SymbolTable>>,
-    module: &mut String,
+    root_ctx: Rc<RefCell<SymbolTable>>,
+    ctx: &mut Rc<RefCell<SymbolTable>>,
 ) -> Result<Option<(Expression, Type)>> {
     if let FunctionClass::SpecialForm(sf) = f.class {
-        apply_form(sf, args, ctx, module)
+        apply_form(sf, args, root_ctx, ctx)
     } else {
         let mut traversed_args = vec![];
         let mut traversed_args_t = vec![];
         for arg in args.iter() {
-            let traversed = reduce(arg, ctx.clone(), module)?;
+            let traversed = reduce(arg, root_ctx.clone(), ctx)?;
             if let Some((traversed, t)) = traversed {
                 traversed_args.push(traversed);
                 traversed_args_t.push(t);
@@ -955,13 +968,13 @@ fn apply(
                             (&traversed_args[0], &traversed_args[1])
                         {
                             let x = i.to_usize().unwrap();
-                            match &ctx.borrow_mut().resolve_symbol(handle)? {
-                                array @ (Expression::ArrayColumn(_, range, t), _) => {
+                            match &ctx.borrow_mut().resolve_symbol(&handle.name)? {
+                                array @ (Expression::ArrayColumn(handle, range, t), _) => {
                                     if range.contains(&x) {
                                         Ok(Some((
                                             Expression::Column(
                                                 Handle::new(
-                                                    module,
+                                                    &handle.module,
                                                     format!("{}_{}", handle.name, i),
                                                 ),
                                                 *t,
@@ -1012,17 +1025,23 @@ fn apply(
             }
 
             FunctionClass::UserDefined(b @ Defined { args: f_args, body }) => {
+                let f_mangle = format!(
+                    "fn-{}-{}",
+                    f.handle,
+                    COUNTER
+                        .get_or_init(|| AtomicUsize::new(0))
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                );
                 let traversed_args = b
                     .validate_args(traversed_args)
                     .with_context(|| anyhow!("validating call to `{}`", f.handle))?;
-                let new_ctx = SymbolTable::derived(ctx);
+                let mut f_ctx = SymbolTable::derived(ctx.clone(), &f_mangle);
                 for (i, f_arg) in f_args.iter().enumerate() {
-                    new_ctx
+                    f_ctx
                         .borrow_mut()
-                        .insert_symbol(&Handle::new(&module, f_arg), traversed_args[i].clone())?;
+                        .insert_symbol(f_arg, traversed_args[i].clone())?;
                 }
-
-                reduce(body, new_ctx, module)
+                reduce(body, root_ctx, &mut f_ctx)
             }
             _ => unimplemented!("{:?}", f),
         }
@@ -1031,8 +1050,8 @@ fn apply(
 
 fn reduce(
     e: &AstNode,
-    ctx: Rc<RefCell<SymbolTable>>,
-    module: &mut String,
+    root_ctx: Rc<RefCell<SymbolTable>>,
+    ctx: &mut Rc<RefCell<SymbolTable>>,
 ) -> Result<Option<(Expression, Type)>> {
     match &e.class {
         Token::Keyword(_) | Token::Type(_) | Token::Range(_) => Ok(None),
@@ -1044,20 +1063,21 @@ fn reduce(
                 Type::Scalar(Magma::Integer)
             },
         ))),
-        Token::Symbol(name) => Ok(Some(
-            ctx.borrow_mut()
-                .resolve_symbol(&Handle::new(module, name))?,
-        )),
+        Token::Symbol(name) => {
+            let r = ctx.borrow_mut().resolve_symbol(name)?;
+            Ok(Some(r))
+        }
+
         Token::List(args) => {
             if args.is_empty() {
                 Ok(Some((Expression::List(vec![]), Type::Void)))
             } else if let Token::Symbol(verb) = &args[0].class {
                 let func = ctx
                     .borrow()
-                    .resolve_function(&Handle::new(&module, verb))
+                    .resolve_function(verb)
                     .with_context(|| make_src_error(e))?;
 
-                apply(&func, &args[1..], ctx, module)
+                apply(&func, &args[1..], root_ctx, ctx)
             } else {
                 Err(anyhow!("not a function: `{:?}`", args[0])).with_context(|| make_src_error(e))
             }
@@ -1065,13 +1085,12 @@ fn reduce(
 
         Token::DefColumn(name, _, k) => match k {
             Kind::Composite(e) => {
-                let e = reduce(e, ctx.clone(), module)?.unwrap();
-                ctx.borrow_mut()
-                    .edit_symbol(&Handle::new(module, name), &|x| {
-                        if let Expression::Column(_, _, kind) = x {
-                            *kind = Kind::Composite(Box::new(e.0.clone()))
-                        }
-                    })?;
+                let e = reduce(e, root_ctx, ctx)?.unwrap();
+                ctx.borrow_mut().edit_symbol(name, &|x| {
+                    if let Expression::Column(_, _, kind) = x {
+                        *kind = Kind::Composite(Box::new(e.0.clone()))
+                    }
+                })?;
                 Ok(None)
             }
             _ => Ok(None),
@@ -1089,20 +1108,20 @@ fn reduce(
         | Token::DefPlookup(..)
         | Token::DefInrange(..) => Ok(None),
     }
-    .with_context(|| make_src_error(&e))
+    .with_context(|| make_src_error(e))
 }
 
 fn reduce_toplevel(
     e: &AstNode,
-    ctx: Rc<RefCell<SymbolTable>>,
-    module: &mut String,
+    root_ctx: Rc<RefCell<SymbolTable>>,
+    ctx: &mut Rc<RefCell<SymbolTable>>,
 ) -> Result<Option<Constraint>> {
     match &e.class {
         Token::DefConstraint(name, domain, expr) => Ok(Some(Constraint::Vanishes {
             name: name.into(),
             domain: domain.to_owned(),
             expr: Box::new(
-                reduce(expr, ctx, module)?
+                reduce(expr, root_ctx, ctx)?
                     .unwrap_or((Expression::Void, Type::Void))
                     .0,
             ), // the parser ensures that the body is never empty
@@ -1110,14 +1129,14 @@ fn reduce_toplevel(
         Token::DefPlookup(parent, child) => {
             let parents = parent
                 .iter()
-                .map(|e| reduce(e, ctx.clone(), module))
+                .map(|e| reduce(e, root_ctx.clone(), ctx))
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 .map(|e| e.unwrap().0)
                 .collect::<Vec<_>>();
             let children = child
                 .iter()
-                .map(|e| reduce(e, ctx.clone(), module))
+                .map(|e| reduce(e, root_ctx.clone(), ctx))
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 .map(|e| e.unwrap().0)
@@ -1130,34 +1149,32 @@ fn reduce_toplevel(
         }
         Token::DefInrange(e, range) => Ok(Some(Constraint::InRange(
             names::Generator::default().next().unwrap(),
-            reduce(e, ctx, module)?.unwrap().0,
+            reduce(e, root_ctx, ctx)?.unwrap().0,
             *range,
         ))),
         Token::DefColumns(columns) => {
-            for c in columns {
-                reduce(c, ctx.clone(), module)?;
+            for _ in columns {
+                reduce(e, root_ctx.clone(), ctx)?;
             }
             Ok(None)
         }
         Token::DefModule(name) => {
-            *module = String::from(name);
+            *ctx = SymbolTable::derived(root_ctx, name);
             Ok(None)
         }
-
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
             Err(anyhow!("Unexpected top-level form: {:?}", e))
         }
-
         Token::Defun(..) | Token::DefAliases(_) | Token::DefunAlias(..) | Token::DefConsts(_) => {
             Ok(None)
         }
         Token::DefSort(to, from) => Ok(Some(Constraint::Permutation(
             names::Generator::default().next().unwrap(),
             from.iter()
-                .map(|f| Handle::new(module.clone(), f.as_symbol().unwrap()))
+                .map(|f| Handle::new(&ctx.borrow().name, f.as_symbol().unwrap()))
                 .collect::<Vec<_>>(),
             to.iter()
-                .map(|f| Handle::new(&module, f.as_symbol().unwrap()))
+                .map(|f| Handle::new(&ctx.borrow().name, f.as_symbol().unwrap()))
                 .collect::<Vec<_>>(),
         ))),
         _ => unreachable!("{:?}", e.src),
@@ -1167,10 +1184,10 @@ fn reduce_toplevel(
 pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Constraint>> {
     let mut r = vec![];
 
-    let mut module = String::from(super::MAIN_MODULE);
-    for exp in ast.exprs.iter().cloned() {
+    let mut module = ctx.clone();
+    for exp in ast.exprs.iter() {
         if let Some(c) =
-            reduce_toplevel(&exp, ctx.clone(), &mut module).with_context(|| make_src_error(&exp))?
+            reduce_toplevel(exp, ctx.clone(), &mut module).with_context(|| make_src_error(exp))?
         {
             r.push(c)
         }

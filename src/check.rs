@@ -43,7 +43,7 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
                 .into_iter()
                 .chain(handles.iter().map(|handle| {
                     columns
-                        .get(&handle)
+                        .get(handle)
                         .unwrap()
                         .get(j, false)
                         .map(|x| x.pretty())
@@ -54,8 +54,8 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
     }
 
     for ii in 0..m_columns[0].len() {
-        for j in 0..m_columns.len() {
-            let padding = m_columns[j].iter().map(String::len).max().unwrap() + 2;
+        for (j, col) in m_columns.iter().enumerate() {
+            let padding = col.iter().map(String::len).max().unwrap() + 2;
             // - 1 to account for the first column
             if j as isize + (i - trace_span).max(0) - 1 == i {
                 print!("{:width$}", m_columns[j][ii].red(), width = padding);

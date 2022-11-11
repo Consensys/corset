@@ -37,12 +37,13 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
     let mut columns: ColumnSet<pairing_ce::bn256::Fr> = Default::default();
     let mut constants: HashMap<Handle, i64> = Default::default();
     let mut computations = ctx.borrow().computation_table.clone();
-    for s in ctx.borrow_mut().symbols_mut() {
-        match &mut s.1 .0 {
+    // ctx.borrow().render();
+    ctx.borrow_mut().visit_mut::<()>(&mut |(handle, symbol)| {
+        match &mut symbol.0 {
             Symbol::Alias(_) => {}
             Symbol::Final(ref mut symbol, used) => {
                 if !*used {
-                    warn!("{} unused", symbol);
+                    warn!("symbol is never used: {}", handle);
                 }
                 match symbol {
                     Expression::Column(ref mut handle, t, k) => {
@@ -69,13 +70,15 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                         columns.insert_array(handle, range, *t, ALLOW_DUP)?
                     }
                     Expression::Const(ref x, _) => {
-                        constants.insert(s.0.to_owned(), x.try_into().unwrap());
+                        constants.insert(handle, x.try_into().unwrap());
                     }
                     x => todo!("{:?}", x),
                 }
             }
         }
-    }
+        Ok(())
+    })?;
+
     let mut constraints = asts
         .iter()
         .map(|(name, ast)| {
@@ -87,6 +90,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         .flatten()
         .sorted_by_cached_key(|x| -(x.size() as isize))
         .collect::<Vec<_>>();
+    // ctx.borrow().render();
     constraints
         .iter_mut()
         .for_each(|x| x.add_id_to_handles(&|h| h.set_id(columns.id_of(h))));
