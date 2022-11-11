@@ -32,3 +32,14 @@
 (defun (is-not-zero e0) (if-zero e0 1 0))
 (defun (if-eq e0 e1 e2) (if-zero (eq e0 e1) e2))
 (defun (if-eq-else e0 e1 e2 e3) (if-zero (eq e0 e1) e2 e3))
+
+;; counter constancy constraint
+(defun (counter-constancy ct X)
+            (if-not-zero ct
+                (didnt-change X)))
+
+;; byte decomposition constraint
+(defun (byte-decomposition ct acc bytes)
+            (if-zero ct
+                (eq acc bytes)
+                (eq acc (+ (* 256 (shift acc -1)) bytes))))
