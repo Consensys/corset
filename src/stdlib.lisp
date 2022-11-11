@@ -43,3 +43,17 @@
             (if-zero ct
                 (eq acc bytes)
                 (eq acc (+ (* 256 (shift acc -1)) bytes))))
+
+;; plateau constraints
+;; underlying assumptions:
+;;  - C is counter constant wrt CT
+;;  - X is binary
+(defun (plateau-constraint CT X C)
+            (if-zero-else C
+                (eq X 1)
+                (begin
+                    (if-zero-else CT
+                        (vanishes X)
+                        (if-eq-else CT C
+                            (eq X (+ (shift X -1) 1))
+                            (eq (didnt-change X)))))))
