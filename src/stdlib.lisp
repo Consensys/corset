@@ -52,7 +52,7 @@
             (if-zero-else C
                 (eq X 1)
                 (begin
-                    (if-zero-else CT
+                    (if-zero CT
                         (vanishes X)
                         (if-eq-else CT C
                             (eq X (+ (shift X -1) 1))
