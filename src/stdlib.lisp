@@ -49,7 +49,7 @@
 ;;  - C is counter constant wrt CT
 ;;  - X is binary
 (defun (plateau-constraint CT X C)
-            (if-zero-else C
+            (if-zero C
                 (eq X 1)
                 (begin
                     (if-zero CT
