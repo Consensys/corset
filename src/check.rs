@@ -203,7 +203,7 @@ fn check_plookup(
             .iter()
             .map(|p| cs.compute_composite_static(p))
             .collect::<Result<Vec<_>>>()
-            .with_context(|| anyhow!("while columns for plookup verification"))?;
+            .with_context(|| anyhow!("while computing {:?}", exps))?;
         if !cols.iter().all(|p| p.len() == cols[0].len()) {
             return Err(anyhow!("all columns should be of the same length"));
         }
@@ -299,7 +299,7 @@ pub fn check(
                         Expression::List(es) => {
                             for e in es {
                                 if let Err(err) = check_constraint(e, domain, &cs.modules, name) {
-                                    error!("{}", err);
+                                    error!("{:?}", err);
                                     return Some(name.to_owned());
                                 }
                             }
@@ -307,7 +307,7 @@ pub fn check(
                         }
                         _ => {
                             if let Err(err) = check_constraint(expr, domain, &cs.modules, name) {
-                                error!("{}", err);
+                                error!("{:?}", err);
                                 Some(name.to_owned())
                             } else {
                                 None
@@ -317,7 +317,7 @@ pub fn check(
                 }
                 Constraint::Plookup(name, parents, children) => {
                     if let Err(err) = check_plookup(cs, parents, children) {
-                        error!("{}", err);
+                        error!("{:?}", err);
                         Some(name.to_owned())
                     } else {
                         None

@@ -720,13 +720,20 @@ impl ConstraintSet {
         let cols_in_expr = exp.dependencies();
         for c in &cols_in_expr {
             if !self.get(c)?.is_computed() {
-                return Err(anyhow!("column {} is not computed", c.to_string().red()));
+                return Err(anyhow!("column {} not found", c.to_string().red()));
             }
         }
 
         let length = *cols_in_expr
             .iter()
-            .map(|handle| Ok(self.get(handle).unwrap().len().unwrap().to_owned()))
+            .map(|handle| {
+                Ok(self
+                    .get(handle)
+                    .with_context(|| anyhow!("while reading {}", handle.to_string().red().bold()))?
+                    .len()
+                    .ok_or_else(|| anyhow!("{} has no len", handle.to_string().red().bold()))?
+                    .to_owned())
+            })
             .collect::<Result<Vec<_>>>()?
             .iter()
             .max()
