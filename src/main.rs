@@ -188,6 +188,9 @@ enum Commands {
         #[arg(long = "only", help = "only check these constraints")]
         only: Option<Vec<String>>,
 
+        #[arg(long = "skip", help = "skip these constraints")]
+        skip: Vec<String>,
+
         #[arg(short = 'S', long = "trace-span", help = "", default_value_t = 3)]
         trace_span: isize,
     },
@@ -452,6 +455,7 @@ fn main() -> Result<()> {
             full_trace,
             trace_span,
             only,
+            skip,
         } => {
             settings.full_trace = full_trace;
             settings.trace_span = trace_span;
@@ -472,6 +476,7 @@ fn main() -> Result<()> {
             check::check(
                 &constraints,
                 &only,
+                &skip,
                 args.verbose.log_level_filter() >= log::Level::Warn
                     && std::io::stdout().is_terminal(),
             )

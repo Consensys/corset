@@ -245,7 +245,12 @@ fn check_plookup(
     Ok(())
 }
 
-pub fn check(cs: &ConstraintSet, only: &Option<Vec<String>>, with_bar: bool) -> Result<()> {
+pub fn check(
+    cs: &ConstraintSet,
+    only: &Option<Vec<String>>,
+    skip: &[String],
+    with_bar: bool,
+) -> Result<()> {
     if cs.modules.is_empty() {
         return Ok(());
     }
@@ -274,6 +279,7 @@ pub fn check(cs: &ConstraintSet, only: &Option<Vec<String>>, with_bar: bool) -> 
                 .map(|o| o.contains(&c.name().to_string()))
                 .unwrap_or(true)
         })
+        .filter(|c| !skip.contains(&c.name().to_string()))
         .inspect(|_| {
             #[cfg(feature = "interactive")]
             {
