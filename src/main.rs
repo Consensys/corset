@@ -155,6 +155,16 @@ enum Commands {
         database: String,
         #[arg(long = "rm", help = "remove succesully validated blocks")]
         remove: bool,
+
+        #[arg(
+            long = "only",
+            help = "only check these constraints",
+            value_delimiter = ','
+        )]
+        only: Option<Vec<String>>,
+
+        #[arg(long = "skip", help = "skip these constraints", value_delimiter = ',')]
+        skip: Vec<String>,
     },
     /// Given a set of constraints, indefinitely fill the computed columns from/to an SQL table
     #[cfg(feature = "postgres")]
@@ -396,6 +406,8 @@ fn main() -> Result<()> {
             password,
             database,
             remove,
+            only,
+            skip,
         } => {
             SETTINGS.set(settings).unwrap();
 
@@ -432,7 +444,8 @@ fn main() -> Result<()> {
 
                     match check::check(
                         &local_constraints,
-                        &None,
+                        &only,
+                        &skip,
                         args.verbose.log_level_filter() >= log::Level::Warn
                             && std::io::stdout().is_terminal(),
                     ) {
