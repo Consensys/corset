@@ -605,7 +605,7 @@ impl ConstraintSet {
         self.modules.get_mut(handle)
     }
 
-    fn compute_interleaved(&mut self, target: &Handle, froms: &[Handle]) -> Result<()> {
+    fn compute_interleaved(&mut self, froms: &[Handle]) -> Result<Vec<Fr>> {
         for from in froms.iter() {
             self.compute_column(from)?;
         }
@@ -631,9 +631,7 @@ impl ConstraintSet {
             })
             .collect::<Vec<_>>();
 
-        self.get_mut(target)?.set_value(values);
-
-        Ok(())
+        Ok(values)
     }
 
     fn compute_sorted(&mut self, froms: &[Handle], tos: &[Handle]) -> Result<()> {
@@ -680,12 +678,7 @@ impl ConstraintSet {
         Ok(())
     }
 
-    fn compute_composite(&mut self, target: &Handle, exp: &Expression) -> Result<()> {
-        let target_col = self.modules.get(target)?;
-        if target_col.is_computed() {
-            return Ok(());
-        }
-
+    fn compute_composite(&mut self, exp: &Expression) -> Result<Vec<Fr>> {
         let cols_in_expr = exp.dependencies();
         for c in &cols_in_expr {
             self.compute_column(c)?
@@ -720,9 +713,7 @@ impl ConstraintSet {
             })
             .collect::<Vec<_>>();
 
-        self.modules.get_mut(target).unwrap().set_value(values);
-
-        Ok(())
+        Ok(values)
     }
 
     fn compute_column(&mut self, target: &Handle) -> Result<()> {
@@ -742,8 +733,20 @@ impl ConstraintSet {
         info!("Computing `{}`", comp.target());
 
         match &comp {
-            Computation::Composite { target, exp } => self.compute_composite(target, exp),
-            Computation::Interleaved { target, froms } => self.compute_interleaved(target, froms),
+            Computation::Composite { target, exp } => {
+                if !self.modules.get(target)?.is_computed() {
+                    let r = self.compute_composite(exp)?;
+                    self.modules.get_mut(target).unwrap().set_value(r);
+                }
+                Ok(())
+            }
+            Computation::Interleaved { target, froms } => {
+                if !self.modules.get(target)?.is_computed() {
+                    let r = self.compute_interleaved(froms)?;
+                    self.get_mut(target)?.set_value(r);
+                }
+                Ok(())
+            }
             Computation::Sorted { froms, tos } => self.compute_sorted(froms, tos),
         }
     }
