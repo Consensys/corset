@@ -185,10 +185,14 @@ enum Commands {
         )]
         full_trace: bool,
 
-        #[arg(long = "only", help = "only check these constraints")]
+        #[arg(
+            long = "only",
+            help = "only check these constraints",
+            value_delimiter = ','
+        )]
         only: Option<Vec<String>>,
 
-        #[arg(long = "skip", help = "skip these constraints")]
+        #[arg(long = "skip", help = "skip these constraints", value_delimiter = ',')]
         skip: Vec<String>,
 
         #[arg(short = 'S', long = "trace-span", help = "", default_value_t = 3)]
