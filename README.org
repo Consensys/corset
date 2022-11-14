@@ -263,10 +263,11 @@ Chronological operations define constraints on the temporal evolution of a colum
 *** PLookups
 PLookup constraints are defined using the ~defplookup~ form, which takes two lists of columns or column expressions that must be included one in the other. For instance:
 #+begin_src lisp
-(defcolumns A B C P Q R)
+  (defcolumns A B C P Q R)
 
-(defplookup (A C) (Q R))
-(defplookup (A B) ((* 2 Q) (+ Q R)))
+;; (defplookup NAME (LIST PARENTS) (LIST CHILDREN))
+  (defplookup plookup-1 (A C) (Q R))
+  (defplookup another-name (A B) ((* 2 Q) (+ Q R)))
 #+end_src
 
 ** Interfacing Corset

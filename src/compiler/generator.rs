@@ -678,11 +678,52 @@ impl ConstraintSet {
         Ok(())
     }
 
-    fn compute_composite(&mut self, exp: &Expression) -> Result<Vec<Fr>> {
+    pub fn compute_composite(&mut self, exp: &Expression) -> Result<Vec<Fr>> {
         let cols_in_expr = exp.dependencies();
         for c in &cols_in_expr {
             self.compute_column(c)?
         }
+        let length = *cols_in_expr
+            .iter()
+            .map(|handle| Ok(self.get(handle).unwrap().len().unwrap().to_owned()))
+            .collect::<Result<Vec<_>>>()?
+            .iter()
+            .max()
+            .unwrap();
+
+        let values = (0..length as isize)
+            .into_par_iter()
+            .map(|i| {
+                exp.eval(
+                    i,
+                    &mut |handle, i, _| {
+                        // All the columns are guaranteed to have been computed
+                        // at the begiinning of the function
+                        self.modules._cols[handle.id.unwrap()]
+                            .get(i, false)
+                            .cloned()
+                    },
+                    &mut None,
+                    &EvalSettings {
+                        trace: false,
+                        wrap: false,
+                    },
+                )
+                .unwrap_or_else(Fr::zero)
+            })
+            .collect::<Vec<_>>();
+
+        Ok(values)
+    }
+
+    pub fn compute_composite_static(&self, exp: &Expression) -> Result<Vec<Fr>> {
+        let cols_in_expr = exp.dependencies();
+        for c in &cols_in_expr {
+            if !self.get(c)?.is_computed() {
+                return Err(anyhow!("column {} is not computed", c.to_string().red()));
+            }
+        }
+
         let length = *cols_in_expr
             .iter()
             .map(|handle| Ok(self.get(handle).unwrap().len().unwrap().to_owned()))
@@ -1129,7 +1170,7 @@ fn reduce_toplevel(
                     .0,
             ), // the parser ensures that the body is never empty
         })),
-        Token::DefPlookup(parent, child) => {
+        Token::DefPlookup(name, parent, child) => {
             let parents = parent
                 .iter()
                 .map(|e| reduce(e, root_ctx.clone(), ctx))
@@ -1144,11 +1185,7 @@ fn reduce_toplevel(
                 .into_iter()
                 .map(|e| e.unwrap().0)
                 .collect::<Vec<_>>();
-            Ok(Some(Constraint::Plookup(
-                names::Generator::default().next().unwrap(),
-                parents,
-                children,
-            )))
+            Ok(Some(Constraint::Plookup(name.clone(), parents, children)))
         }
         Token::DefInrange(e, range) => Ok(Some(Constraint::InRange(
             names::Generator::default().next().unwrap(),

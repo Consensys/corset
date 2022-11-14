@@ -327,11 +327,11 @@ impl Handle {
 }
 impl std::fmt::Debug for Handle {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}::{}/{:?}", self.module, self.name, self.id)
+        write!(f, "{}.{}/{:?}", self.module, self.name, self.id)
     }
 }
 impl std::fmt::Display for Handle {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}::{}", self.module, self.name)
+        write!(f, "{}.{}", self.module, self.name)
     }
 }

@@ -8,7 +8,10 @@ use std::collections::HashSet;
 
 use anyhow::*;
 use log::*;
-use pairing_ce::{bn256::Fr, ff::Field};
+use pairing_ce::{
+    bn256::Fr,
+    ff::{Field, PrimeField},
+};
 
 use crate::{
     column::ColumnSet,
@@ -180,6 +183,68 @@ fn check_constraint(
     Ok(())
 }
 
+fn check_plookup(
+    cs: &ConstraintSet,
+    parents: &[Expression],
+    children: &[Expression],
+) -> Result<()> {
+    fn pseudo_rlc(cols: &[Vec<Fr>], i: usize) -> Fr {
+        let mut ax = Fr::zero();
+        for (j, col) in cols.iter().enumerate() {
+            let mut x = Fr::from_str(&(j + 2).to_string()).unwrap();
+            x.mul_assign(&col[i]);
+            ax.add_assign(&x);
+        }
+        ax
+    }
+
+    fn compute_cols(exps: &[Expression], cs: &ConstraintSet) -> Result<Vec<Vec<Fr>>> {
+        let cols = exps
+            .iter()
+            .map(|p| cs.compute_composite_static(p))
+            .collect::<Result<Vec<_>>>()
+            .with_context(|| anyhow!("while columns for plookup verification"))?;
+        if !cols.iter().all(|p| p.len() == cols[0].len()) {
+            return Err(anyhow!("all columns should be of the same length"));
+        }
+
+        Ok(cols)
+    }
+
+    if children.len() != parents.len() {
+        return Err(anyhow!("parents and children are not of the same length"));
+    }
+    let parent_cols = compute_cols(parents, cs)?;
+    let child_cols = compute_cols(children, cs)?;
+
+    let hashes: HashSet<_> = (0..parent_cols[0].len())
+        .map(|i| pseudo_rlc(&parent_cols, i))
+        .collect();
+
+    for i in 0..child_cols[0].len() {
+        let ax = pseudo_rlc(&child_cols, i);
+
+        if !hashes.contains(&ax) {
+            return Err(anyhow!(
+                "{{\n{}\n}} not found in {{{}}}",
+                children
+                    .iter()
+                    .zip(child_cols.iter().map(|c| c[i]))
+                    .map(|(k, v)| format!("{}: {}", k, v.pretty()))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                parents
+                    .iter()
+                    .map(|k| format!("{}", k))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 pub fn check(cs: &ConstraintSet, only: &Option<Vec<String>>, with_bar: bool) -> Result<()> {
     if cs.modules.is_empty() {
         return Ok(());
@@ -220,11 +285,7 @@ pub fn check(cs: &ConstraintSet, only: &Option<Vec<String>>, with_bar: bool) -> 
         .filter_map(|c| {
             match c {
                 Constraint::Vanishes { name, domain, expr } => {
-                    if name == "INV_CONSTRAINTS" {
-                        return None;
-                    }
-                    if matches!(**expr, Expression::Void) {
-                        // warn!("Ignoring Void expression {}", name);
+                    if name == "INV_CONSTRAINTS" || matches!(**expr, Expression::Void) {
                         return None;
                     }
 
@@ -248,9 +309,13 @@ pub fn check(cs: &ConstraintSet, only: &Option<Vec<String>>, with_bar: bool) -> 
                         }
                     }
                 }
-                Constraint::Plookup(_, _, _) => {
-                    // warn!("Plookup validation not yet implemented");
-                    None
+                Constraint::Plookup(name, parents, children) => {
+                    if let Err(err) = check_plookup(cs, parents, children) {
+                        error!("{}", err);
+                        Some(name.to_owned())
+                    } else {
+                        None
+                    }
                 }
                 Constraint::Permutation(_name, _from, _to) => {
                     // warn!("Permutation validation not yet implemented");
@@ -269,7 +334,11 @@ pub fn check(cs: &ConstraintSet, only: &Option<Vec<String>>, with_bar: bool) -> 
     } else {
         Err(anyhow!(
             "Constraints failed: {}",
-            failed.into_iter().collect::<Vec<_>>().join(", ")
+            failed
+                .into_iter()
+                .map(|x| x.bold().red().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         ))
     }
 }

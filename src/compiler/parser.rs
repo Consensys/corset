@@ -106,7 +106,7 @@ pub enum Token {
     DefAliases(Vec<AstNode>),
     DefAlias(String, String),
     DefunAlias(String, String),
-    DefPlookup(Vec<AstNode>, Vec<AstNode>),
+    DefPlookup(String, Vec<AstNode>, Vec<AstNode>),
 }
 impl Token {
     pub fn depth(&self) -> usize {
@@ -172,7 +172,9 @@ impl Debug for Token {
             Token::DefAliases(cols) => write!(f, "ALIASES {:?}", cols),
             Token::DefAlias(from, to) => write!(f, "{} -> {}", from, to),
             Token::DefunAlias(from, to) => write!(f, "{} -> {}", from, to),
-            Token::DefPlookup(parent, child) => write!(f, "{:?} ⊂ {:?}", parent, child),
+            Token::DefPlookup(name, parent, child) => {
+                write!(f, "{}: {:?} ⊂ {:?}", name, parent, child)
+            }
         }
     }
 }
@@ -454,14 +456,22 @@ impl AstNode {
             }
 
             Some(Token::Symbol(defkw)) if defkw == "defplookup" => {
-                match (tokens.get(1), tokens.get(2)) {
-                    (Some(Token::List(parent)), Some(Token::List(child))) => Ok(AstNode {
-                        class: Token::DefPlookup(parent.to_owned(), child.to_owned()),
+                match (tokens.get(1), tokens.get(2), tokens.get(3)) {
+                    (
+                        Some(Token::Symbol(name)),
+                        Some(Token::List(parent)),
+                        Some(Token::List(child)),
+                    ) => Ok(AstNode {
+                        class: Token::DefPlookup(
+                            name.to_owned(),
+                            parent.to_owned(),
+                            child.to_owned(),
+                        ),
                         src: src.into(),
                         lc,
                     }),
                     _ => Err(anyhow!(
-                        "DEFPLOOKUP expects (PARENT:LIST CHILD:LIST); received {:?}",
+                        "DEFPLOOKUP expects (NAME PARENT:LIST CHILD:LIST); received {:?}",
                         &tokens[1..]
                     )),
                 }

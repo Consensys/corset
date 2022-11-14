@@ -38,6 +38,3 @@ serde_json = { version = "1", features = ["arbitrary_precision"] }
 default = [ "interactive" ]
 postgres = [ "dep:postgres" ]
 interactive = [ "dep:indicatif", "dep:pest", "dep:pest_derive" ]
-
-[profile.release]
-debug = true
