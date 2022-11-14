@@ -131,6 +131,7 @@ impl SymbolTable {
         &mut self,
         name: &str,
         ax: &mut HashSet<String>,
+        absolute_path: bool,
     ) -> Result<(Expression, Type)> {
         if ax.contains(name) {
             Err(anyhow!("Circular definitions found for {}", name))
@@ -138,21 +139,31 @@ impl SymbolTable {
             ax.insert(name.to_owned());
             // Ugly, but required for borrowing reasons
             if let Some((Symbol::Alias(target), _)) = self.symbols.get(name).cloned() {
-                self._resolve_symbol(&target, ax)
+                self._resolve_symbol(&target, ax, absolute_path)
             } else {
                 match self.symbols.get_mut(name) {
                     Some((Symbol::Final(constraint, visited), t)) => {
                         *visited = true;
                         Ok((constraint.clone(), *t))
                     }
-                    None => self.parent.upgrade().map_or(
-                        Err(anyhow!(
-                            "column `{}` unknown in module `{}`",
-                            name.red(),
-                            self.name.blue()
-                        )),
-                        |parent| parent.borrow_mut().resolve_symbol(name),
-                    ),
+                    None => {
+                        if absolute_path {
+                            Err(anyhow!(
+                                "column `{}` unknown in module `{}`",
+                                name.red(),
+                                self.name.blue()
+                            ))
+                        } else {
+                            self.parent.upgrade().map_or(
+                                Err(anyhow!(
+                                    "column `{}` unknown in module `{}`",
+                                    name.red(),
+                                    self.name.blue()
+                                )),
+                                |parent| parent.borrow_mut().resolve_symbol(name),
+                            )
+                        }
+                    }
                     _ => unimplemented!(),
                 }
             }
@@ -287,7 +298,11 @@ impl SymbolTable {
     }
 
     pub fn resolve_symbol(&mut self, name: &str) -> Result<(Expression, Type)> {
-        self._resolve_symbol(name, &mut HashSet::new())
+        if name.contains(".") {
+            self.resolve_symbol_with_path(name.split('.').peekable())
+        } else {
+            self._resolve_symbol(name, &mut HashSet::new(), false)
+        }
     }
 
     pub fn edit_symbol(&mut self, name: &str, f: &dyn Fn(&mut Expression)) -> Result<()> {
@@ -322,6 +337,27 @@ impl SymbolTable {
                 ),
             );
             Ok(())
+        }
+    }
+
+    fn resolve_symbol_with_path<'a>(
+        &mut self,
+        mut path: std::iter::Peekable<impl Iterator<Item = &'a str>>,
+    ) -> Result<(Expression, Type)> {
+        let name = path.next().unwrap();
+        match path.peek() {
+            Some(_) => {
+                if let Some(submodule) = self.children.get_mut(name) {
+                    submodule.borrow_mut().resolve_symbol_with_path(path)
+                } else {
+                    Err(anyhow!(
+                        "module {} not found in {}",
+                        name.red(),
+                        self.name.blue()
+                    ))
+                }
+            }
+            None => self._resolve_symbol(name, &mut HashSet::new(), true),
         }
     }
 }

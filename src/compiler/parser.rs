@@ -70,6 +70,20 @@ impl<T> Kind<T> {
 }
 
 #[derive(PartialEq, Clone)]
+pub enum Symbol {
+    Local(String),
+    Path(Vec<String>),
+}
+impl std::fmt::Display for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Symbol::Local(s) => write!(f, "{}", &s),
+            Symbol::Path(ss) => write!(f, "{}", ss.join(":")),
+        }
+    }
+}
+
+#[derive(PartialEq, Clone)]
 pub enum Token {
     Value(BigInt),
     Symbol(String),
