@@ -69,6 +69,7 @@ impl<T> Kind<T> {
     }
 }
 
+#[allow(dead_code)]
 #[derive(PartialEq, Clone)]
 pub enum Symbol {
     Local(String),

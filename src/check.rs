@@ -76,7 +76,7 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
                 .cloned()
         },
         &mut None,
-        &EvalSettings::new().trace(true),
+        &EvalSettings::new().set_trace(true),
     );
 
     Err(anyhow!(

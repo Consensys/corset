@@ -1,6 +1,7 @@
 use anyhow::*;
 #[cfg(feature = "postgres")]
 use postgres::Client;
+#[cfg(feature = "postgres")]
 use std::io::Read;
 
 pub fn is_file_empty(f: &str) -> Result<bool> {
@@ -9,6 +10,7 @@ pub fn is_file_empty(f: &str) -> Result<bool> {
         .map(|f| f.len() == 0)
 }
 
+#[cfg(feature = "postgres")]
 pub fn decompress(bytes: &[u8]) -> Result<String> {
     use flate2::read::GzDecoder;
     let mut gz = GzDecoder::new(bytes);

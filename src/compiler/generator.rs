@@ -88,11 +88,8 @@ impl EvalSettings {
     pub fn new() -> Self {
         Default::default()
     }
-    pub fn trace(self, trace: bool) -> Self {
+    pub fn set_trace(self, trace: bool) -> Self {
         EvalSettings { trace, ..self }
-    }
-    pub fn wrap(self, wrap: bool) -> Self {
-        EvalSettings { wrap, ..self }
     }
 }
 

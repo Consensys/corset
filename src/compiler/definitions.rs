@@ -298,7 +298,7 @@ impl SymbolTable {
     }
 
     pub fn resolve_symbol(&mut self, name: &str) -> Result<(Expression, Type)> {
-        if name.contains(".") {
+        if name.contains('.') {
             self.resolve_symbol_with_path(name.split('.').peekable())
         } else {
             self._resolve_symbol(name, &mut HashSet::new(), false)
