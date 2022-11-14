@@ -56,4 +56,4 @@
                         (vanishes X)
                         (if-eq-else CT C
                             (eq X (+ (shift X -1) 1))
-                            (eq (didnt-change X)))))))
+                            (didnt-change X))))))
