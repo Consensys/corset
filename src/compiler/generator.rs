@@ -546,7 +546,7 @@ impl FuncVerifier<Expression> for Builtin {
                     Err(anyhow!(
                         "`{:?}` expects a COLUMN and a VALUE but received {:?}",
                         self,
-                        args
+                        args.iter().map(Expression::t).collect::<Vec<_>>()
                     ))
                 }
             }
@@ -935,7 +935,7 @@ fn apply(
         match &f.class {
             FunctionClass::Builtin(b) => {
                 let traversed_args = b.validate_args(traversed_args).with_context(|| {
-                    anyhow!("validating call to {}", f.handle.to_string().blue())
+                    anyhow!("validating arguments to {}", f.handle.to_string().blue())
                 })?;
                 match b {
                     Builtin::Begin => Ok(Some((
@@ -1064,7 +1064,10 @@ fn reduce(
             },
         ))),
         Token::Symbol(name) => {
-            let r = ctx.borrow_mut().resolve_symbol(name)?;
+            let r = ctx
+                .borrow_mut()
+                .resolve_symbol(name)
+                .with_context(|| make_src_error(e))?;
             Ok(Some(r))
         }
 

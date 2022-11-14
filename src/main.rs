@@ -286,6 +286,7 @@ fn main() -> Result<()> {
             fname,
         } => {
             expander::expand_ifs(&mut constraints);
+            expander::lower_shifts(&mut constraints);
             let mut go_exporter = exporters::GoExporter {
                 constraints_filename,
                 package,
@@ -301,6 +302,7 @@ fn main() -> Result<()> {
             package,
         } => {
             expander::expand_ifs(&mut constraints);
+            expander::lower_shifts(&mut constraints);
             expander::expand(&mut constraints)?;
             let mut wiop_exporter = exporters::WizardIOP {
                 out_filename,

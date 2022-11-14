@@ -1,4 +1,5 @@
-use num_traits::One;
+use num_bigint::BigInt;
+use num_traits::{One, ToPrimitive};
 use pairing_ce::{bn256::Fr, ff::Field};
 
 use crate::{
@@ -240,7 +241,7 @@ fn expand_inv<T: Clone + Ord>(
     }
 }
 
-fn expand_expr<T: Clone + Ord>(
+fn do_expand_expr<T: Clone + Ord>(
     e: &Expression,
     cols: &mut ColumnSet<T>,
     comps: &mut ComputationTable,
@@ -274,6 +275,58 @@ fn expand_expr<T: Clone + Ord>(
     }
 }
 
+fn do_lower_shifts(e: &mut Expression, depth: isize) {
+    match e {
+        Expression::Funcall { func, args } => {
+            if matches!(func, Builtin::Shift) {
+                let shift = args[1].pure_eval().to_isize().unwrap();
+                *e = args[0].clone();
+                do_lower_shifts(e, depth + shift);
+            } else {
+                for x in args.iter_mut() {
+                    do_lower_shifts(x, depth)
+                }
+            }
+        }
+        Expression::Const(_, _) => (),
+        Expression::Column(_, _, _) => {
+            if depth != 0 {
+                let column = e.clone();
+                *e = Expression::Funcall {
+                    func: Builtin::Shift,
+                    args: vec![column, Expression::Const(BigInt::from(depth), None)],
+                }
+            }
+        }
+        Expression::ArrayColumn(_, _, _) => (),
+        Expression::List(xs) => {
+            for x in xs.iter_mut() {
+                do_lower_shifts(x, depth)
+            }
+        }
+        Expression::Void => (),
+    }
+}
+
+pub fn lower_shifts(cs: &mut ConstraintSet) {
+    for c in cs.constraints.iter_mut() {
+        match c {
+            Constraint::Vanishes { expr: e, .. } => {
+                do_lower_shifts(e, 0);
+            }
+            Constraint::Plookup(_name, parents, children) => {
+                for e in parents.iter_mut().chain(children.iter_mut()) {
+                    do_lower_shifts(e, 0);
+                }
+            }
+            Constraint::Permutation(..) => (),
+            Constraint::InRange(_, e, _) => {
+                do_lower_shifts(e, 0);
+            }
+        }
+    }
+}
+
 pub fn expand_ifs(cs: &mut ConstraintSet) {
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr: e, .. } = c {
@@ -292,12 +345,13 @@ pub fn expand(cs: &mut ConstraintSet) -> Result<()> {
             }
             Constraint::Plookup(_name, parents, children) => {
                 for e in parents.iter_mut().chain(children.iter_mut()) {
-                    *e = expand_expr(e, &mut cs.modules, &mut cs.computations, &mut new_cs_exps)?;
+                    *e =
+                        do_expand_expr(e, &mut cs.modules, &mut cs.computations, &mut new_cs_exps)?;
                 }
             }
             Constraint::Permutation(..) => (),
             Constraint::InRange(_, e, _) => {
-                *e = expand_expr(e, &mut cs.modules, &mut cs.computations, &mut new_cs_exps)?;
+                *e = do_expand_expr(e, &mut cs.modules, &mut cs.computations, &mut new_cs_exps)?;
             }
         }
     }
