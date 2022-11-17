@@ -257,7 +257,7 @@ fn main() -> Result<()> {
             .map(|e| e == "bin")
             .unwrap_or(false)
     {
-        info!("Loading Corset binary...");
+        info!("Loading `{}`", &args.source[0]);
         (
             Vec::new(),
             ron::from_str(
