@@ -216,6 +216,12 @@ fn check_plookup(
     }
     let parent_cols = compute_cols(parents, cs)?;
     let child_cols = compute_cols(children, cs)?;
+    if parent_cols.get(0).map(|c| c.len()).unwrap_or(0) == 0
+        || child_cols.get(0).map(|c| c.len()).unwrap_or(0) == 0
+    {
+        debug!("empty plookup; skipping");
+        return Ok(());
+    }
 
     let hashes: HashSet<_> = (0..parent_cols[0].len())
         .map(|i| pseudo_rlc(&parent_cols, i))
