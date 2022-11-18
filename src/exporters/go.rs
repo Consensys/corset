@@ -1,7 +1,7 @@
 use std::{collections::HashMap, io::Write};
 
-use convert_case::{Case, Casing};
 use anyhow::*;
+use convert_case::{Case, Casing};
 use itertools::Itertools;
 
 use crate::compiler::*;
@@ -132,15 +132,27 @@ import (
         );
 
         r += "const (\n";
-        for (handle, col) in cs.modules.iter() {
-            if matches!(col.kind, Kind::Atomic) {
-                r.push_str(&format!(
-                    "{} column.Column = \"{}\"\n",
+
+        r += &cs
+            .modules
+            .iter()
+            .filter_map(|(handle, col)| match col.kind {
+                Kind::Atomic => Some(format!(
+                    "{} column.Column = \"{}\"",
                     handle.mangle_no_module(),
+                    handle.mangle_no_module()
+                )),
+                Kind::Phantom => None,
+                Kind::Composite(_) => None,
+                Kind::Interleaved(_) => Some(format!(
+                    "{} column.Column = \"{}\"",
                     handle.mangle_no_module(),
-                ))
-            };
-        }
+                    handle.mangle_no_module()
+                )),
+            })
+            .sorted()
+            .collect::<Vec<_>>()
+            .join("\n");
         r += ")\n\n";
 
         for comp in cs.computations.iter() {
