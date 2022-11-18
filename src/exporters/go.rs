@@ -95,7 +95,7 @@ impl GoExporter {
             Builtin::Shift => Ok(format!(
                 "({}).Shift({})",
                 self.render_node(&args[0])?,
-                &args[1].pure_eval(),
+                &args[1].pure_eval()?,
             )),
             x => {
                 unimplemented!("{:?}", x)

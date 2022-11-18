@@ -2,8 +2,8 @@ use num_bigint::BigInt;
 use pairing_ce::{bn256::Fr, ff::PrimeField};
 use std::{collections::HashMap, io::Write};
 
-use convert_case::{Case, Casing};
 use anyhow::*;
+use convert_case::{Case, Casing};
 
 use crate::{column::ColumnSet, compiler::*};
 
@@ -13,7 +13,7 @@ fn shift(e: &Expression, i: isize) -> Expression {
     match e {
         Expression::Funcall { func, args } => match func {
             Builtin::Shift => {
-                let value = args[1].pure_eval() + i;
+                let value = args[1].pure_eval().unwrap() + i;
                 Expression::Funcall {
                     func: Builtin::Shift,
                     args: vec![
@@ -93,7 +93,11 @@ fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
                 Expression::Column(handle, ..) => handle.mangle(),
                 _ => unreachable!(),
             };
-            format!("({}).Shift({}).AsVariable()", leaf, args[1].pure_eval(),)
+            format!(
+                "({}).Shift({}).AsVariable()",
+                leaf,
+                args[1].pure_eval().unwrap(),
+            )
         }
         x => {
             unimplemented!("{:?}", x)

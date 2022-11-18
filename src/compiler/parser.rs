@@ -94,7 +94,7 @@ pub enum Token {
     Type(Type),
 
     DefModule(String),
-    DefConsts(Vec<(String, BigInt)>),
+    DefConsts(Vec<(String, Box<AstNode>)>),
     DefColumns(Vec<AstNode>),
     DefColumn(String, Type, Kind<Box<AstNode>>),
     DefSort(Vec<AstNode>, Vec<AstNode>),
@@ -153,7 +153,7 @@ impl Debug for Token {
                     f,
                     "{}",
                     v.iter().fold(String::new(), |mut ax, c| {
-                        ax.push_str(&format!("{}:CONST({})", c.0, c.1));
+                        ax.push_str(&format!("{}:CONST({:?})", c.0, c.1));
                         ax
                     })
                 )
@@ -307,12 +307,13 @@ impl AstNode {
                 } else {
                     Ok(AstNode {
                         class: Token::DefConsts(
-                            tokens[1..]
+                            args[1..]
                                 .chunks(2)
-                                .map(|w| match (&w[0], &w[1]) {
-                                    (Token::Symbol(name), Token::Value(x)) => {
-                                        Ok((name.to_owned(), x.to_owned()))
-                                    }
+                                .map(|w| match &w[0] {
+                                    AstNode {
+                                        class: Token::Symbol(name),
+                                        ..
+                                    } => Ok((name.to_owned(), Box::new(w[1].clone()))),
                                     _ => Err(anyhow!(
                                         "DEFCONST expects (SYMBOL VALUE); received {:?}",
                                         &tokens[1..]

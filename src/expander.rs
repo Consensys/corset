@@ -279,7 +279,7 @@ fn do_lower_shifts(e: &mut Expression, depth: isize) {
     match e {
         Expression::Funcall { func, args } => {
             if matches!(func, Builtin::Shift) {
-                let shift = args[1].pure_eval().to_isize().unwrap();
+                let shift = args[1].pure_eval().unwrap().to_isize().unwrap();
                 *e = args[0].clone();
                 do_lower_shifts(e, depth + shift);
             } else {

@@ -165,30 +165,45 @@ impl Expression {
     }
 
     /// Evaluate a compile-time known value
-    pub fn pure_eval(&self) -> BigInt {
+    pub fn pure_eval(&self) -> Result<BigInt> {
         match self {
             Expression::Funcall { func, args } => match func {
                 Builtin::Add => {
-                    let args = args.iter().map(|x| x.pure_eval()).collect::<Vec<_>>();
-                    args.iter().fold(BigInt::zero(), |ax, x| ax + x)
+                    let args = args
+                        .iter()
+                        .map(|x| x.pure_eval())
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok(args.iter().fold(BigInt::zero(), |ax, x| ax + x))
                 }
                 Builtin::Sub => {
-                    let args = args.iter().map(|x| x.pure_eval()).collect::<Vec<_>>();
+                    let args = args
+                        .iter()
+                        .map(|x| x.pure_eval())
+                        .collect::<Result<Vec<_>>>()?;
                     let mut ax = args[0].to_owned();
                     for x in args[1..].iter() {
                         ax -= x
                     }
-                    ax
+                    Ok(ax)
                 }
                 Builtin::Mul => {
-                    let args = args.iter().map(|x| x.pure_eval()).collect::<Vec<_>>();
-                    args.iter().fold(BigInt::one(), |ax, x| ax * x)
+                    let args = args
+                        .iter()
+                        .map(|x| x.pure_eval())
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok(args.iter().fold(BigInt::one(), |ax, x| ax * x))
                 }
-                Builtin::Neg => -args[0].pure_eval(),
-                _ => unreachable!(),
+                Builtin::Neg => Ok(-args[0].pure_eval()?),
+                x @ _ => Err(anyhow!(
+                    "{} is not known at compile-time",
+                    x.to_string().red()
+                )),
             },
-            Expression::Const(v, _) => v.to_owned(),
-            _ => unreachable!(),
+            Expression::Const(v, _) => Ok(v.to_owned()),
+            x @ _ => Err(anyhow!(
+                "{} is not known at compile-time",
+                x.to_string().red()
+            )),
         }
     }
 
@@ -223,7 +238,7 @@ impl Expression {
                     Some(ax)
                 }
                 Builtin::Shift => {
-                    let shift = args[1].pure_eval().to_isize().unwrap();
+                    let shift = args[1].pure_eval().unwrap().to_isize().unwrap();
                     args[0].eval(
                         i + shift,
                         get,
@@ -379,7 +394,7 @@ impl Display for Expression {
             }
             Expression::List(cs) => write!(f, "{{{}}}", format_list(cs)),
             Self::Funcall { func, args } => {
-                write!(f, "({:?} {})", func, format_list(args))
+                write!(f, "({} {})", func, format_list(args))
             }
             Expression::Void => write!(f, "nil"),
             // Expression::Permutation(froms, tos) => write!(f, "{:?}<=>{:?}", froms, tos),
@@ -458,6 +473,28 @@ impl Builtin {
             Builtin::Shift | Builtin::Nth => argtype[0],
             Builtin::ByteDecomposition => Type::Void,
         }
+    }
+}
+impl std::fmt::Display for Builtin {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Builtin::Add => "+",
+                Builtin::Sub => "-",
+                Builtin::Mul => "*",
+                Builtin::Shift => "shift",
+                Builtin::Neg => "-",
+                Builtin::Inv => "INV",
+                Builtin::Not => "not",
+                Builtin::Nth => "nth",
+                Builtin::Begin => "begin",
+                Builtin::IfZero => "if-zero",
+                Builtin::IfNotZero => "if-not-zero",
+                Builtin::ByteDecomposition => "make-byte-decomposition",
+            }
+        )
     }
 }
 
@@ -1168,6 +1205,17 @@ fn reduce_toplevel(
     ctx: &mut Rc<RefCell<SymbolTable>>,
 ) -> Result<Option<Constraint>> {
     match &e.class {
+        Token::DefConsts(cs) => {
+            for (name, exp) in cs.iter() {
+                let (value, _) = reduce(exp, root_ctx.clone(), ctx)?.unwrap();
+                ctx.borrow_mut().insert_constant(
+                    name,
+                    value.pure_eval().with_context(|| make_src_error(exp))?,
+                )?;
+            }
+            Ok(None)
+        }
+
         Token::DefConstraint(name, domain, expr) => Ok(Some(Constraint::Vanishes {
             name: name.into(),
             domain: domain.to_owned(),
@@ -1212,9 +1260,7 @@ fn reduce_toplevel(
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
             Err(anyhow!("Unexpected top-level form: {:?}", e))
         }
-        Token::Defun(..) | Token::DefAliases(_) | Token::DefunAlias(..) | Token::DefConsts(_) => {
-            Ok(None)
-        }
+        Token::Defun(..) | Token::DefAliases(_) | Token::DefunAlias(..) => Ok(None),
         Token::DefSort(to, from) => Ok(Some(Constraint::Permutation(
             names::Generator::default().next().unwrap(),
             from.iter()

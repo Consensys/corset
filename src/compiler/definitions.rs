@@ -375,17 +375,12 @@ fn reduce(
         | Token::Range(_)
         | Token::Type(_)
         | Token::DefPlookup(..)
+        | Token::DefConsts(..)
         | Token::DefInrange(..) => Ok(()),
 
         Token::DefConstraint(name, ..) => ctx.borrow_mut().insert_constraint(name),
         Token::DefModule(name) => {
             *ctx = SymbolTable::derived(root_ctx, name);
-            Ok(())
-        }
-        Token::DefConsts(cs) => {
-            for (name, value) in cs.iter() {
-                ctx.borrow_mut().insert_constant(name, value.to_owned())?;
-            }
             Ok(())
         }
         Token::DefColumns(cols) => cols
