@@ -1133,7 +1133,7 @@ fn apply(
     }
 }
 
-fn reduce(
+pub fn reduce(
     e: &AstNode,
     root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
@@ -1205,17 +1205,6 @@ fn reduce_toplevel(
     ctx: &mut Rc<RefCell<SymbolTable>>,
 ) -> Result<Option<Constraint>> {
     match &e.class {
-        Token::DefConsts(cs) => {
-            for (name, exp) in cs.iter() {
-                let (value, _) = reduce(exp, root_ctx.clone(), ctx)?.unwrap();
-                ctx.borrow_mut().insert_constant(
-                    name,
-                    value.pure_eval().with_context(|| make_src_error(exp))?,
-                )?;
-            }
-            Ok(None)
-        }
-
         Token::DefConstraint(name, domain, expr) => Ok(Some(Constraint::Vanishes {
             name: name.into(),
             domain: domain.to_owned(),
@@ -1260,7 +1249,9 @@ fn reduce_toplevel(
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
             Err(anyhow!("Unexpected top-level form: {:?}", e))
         }
-        Token::Defun(..) | Token::DefAliases(_) | Token::DefunAlias(..) => Ok(None),
+        Token::Defun(..) | Token::DefAliases(_) | Token::DefunAlias(..) | Token::DefConsts(..) => {
+            Ok(None)
+        }
         Token::DefSort(to, from) => Ok(Some(Constraint::Permutation(
             names::Generator::default().next().unwrap(),
             from.iter()
@@ -1274,21 +1265,7 @@ fn reduce_toplevel(
     }
 }
 
-pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Constraint>> {
-    let mut r = vec![];
-
-    let mut module = ctx.clone();
-    for exp in ast.exprs.iter() {
-        if let Some(c) =
-            reduce_toplevel(exp, ctx.clone(), &mut module).with_context(|| make_src_error(exp))?
-        {
-            r.push(c)
-        }
-    }
-    Ok(r)
-}
-
-fn make_src_error(exp: &AstNode) -> String {
+pub fn make_src_error(exp: &AstNode) -> String {
     let src_str = exp
         .src
         .chars()
@@ -1309,4 +1286,18 @@ fn make_src_error(exp: &AstNode) -> String {
         }
         .bright_white()
     )
+}
+
+pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Constraint>> {
+    let mut r = vec![];
+
+    let mut module = ctx.clone();
+    for exp in ast.exprs.iter() {
+        if let Some(c) =
+            reduce_toplevel(exp, ctx.clone(), &mut module).with_context(|| make_src_error(exp))?
+        {
+            r.push(c)
+        }
+    }
+    Ok(r)
 }

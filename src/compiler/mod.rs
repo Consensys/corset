@@ -12,6 +12,7 @@ pub use generator::{Builtin, Constraint, ConstraintSet, EvalSettings, Expression
 pub use parser::{Ast, AstNode, Kind, Token};
 
 mod common;
+mod compiletime;
 mod definitions;
 mod generator;
 mod parser;
@@ -79,6 +80,10 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         Ok(())
     })?;
 
+    for (name, ast) in asts.iter_mut() {
+        compiletime::pass(ast, ctx.clone())
+            .with_context(|| anyhow!("compiling constraints in {}", name.bright_white()))?
+    }
     let mut constraints = asts
         .iter()
         .map(|(name, ast)| {
@@ -90,7 +95,6 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         .flatten()
         .sorted_by_cached_key(|x| -(x.size() as isize))
         .collect::<Vec<_>>();
-    // ctx.borrow().render();
     constraints
         .iter_mut()
         .for_each(|x| x.add_id_to_handles(&|h| h.set_id(columns.id_of(h))));

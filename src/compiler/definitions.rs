@@ -149,19 +149,24 @@ impl SymbolTable {
                     None => {
                         if absolute_path {
                             Err(anyhow!(
-                                "column `{}` unknown in module `{}`",
+                                "symbol {} unknown in module {}",
                                 name.red(),
                                 self.name.blue()
                             ))
                         } else {
-                            self.parent.upgrade().map_or(
-                                Err(anyhow!(
-                                    "column `{}` unknown in module `{}`",
-                                    name.red(),
-                                    self.name.blue()
-                                )),
-                                |parent| parent.borrow_mut().resolve_symbol(name),
-                            )
+                            self.parent
+                                .upgrade()
+                                .map_or(
+                                    Err(anyhow!(
+                                        "symbol {} unknown in module {}",
+                                        name.red(),
+                                        self.name.blue()
+                                    )),
+                                    |parent| parent.borrow_mut().resolve_symbol(name),
+                                )
+                                .with_context(|| {
+                                    anyhow!("looking for {} in {}", name.red(), self.name.blue())
+                                })
                         }
                     }
                     _ => unimplemented!(),
