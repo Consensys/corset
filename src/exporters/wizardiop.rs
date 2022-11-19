@@ -1,6 +1,9 @@
 use num_bigint::BigInt;
 use pairing_ce::{bn256::Fr, ff::PrimeField};
-use std::{collections::HashMap, io::Write};
+use std::{
+    collections::{HashMap, HashSet},
+    io::Write,
+};
 
 use anyhow::*;
 use convert_case::{Case, Casing};
@@ -160,11 +163,13 @@ fn render_constants(consts: &HashMap<Handle, i64>) -> String {
     }
 }
 
-fn make_size(h: &Handle) -> String {
-    format!("SIZE_{}", h.module)
+fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {
+    let r = format!("SIZE_{}", h.module);
+    sizes.insert(r.clone());
+    r
 }
 
-fn render_columns<T: Clone>(cols: &ColumnSet<T>) -> String {
+fn render_columns<T: Clone>(cols: &ColumnSet<T>, sizes: &mut HashSet<String>) -> String {
     let mut r = String::new();
     for (handle, column) in cols.iter() {
         match column.kind {
@@ -173,7 +178,7 @@ fn render_columns<T: Clone>(cols: &ColumnSet<T>) -> String {
                     "{} := build.RegisterCommit(\"{}\", {})\n",
                     handle.mangle(),
                     handle.mangle(),
-                    make_size(&handle)
+                    make_size(&handle, sizes)
                 )
             }
             _ => (),
@@ -228,12 +233,14 @@ fn render_constraint(name: &str, domain: Option<Vec<isize>>, expr: &Expression) 
 pub struct WizardIOP {
     pub out_filename: Option<String>,
     pub package: String,
+
+    pub sizes: HashSet<String>,
 }
 
 impl WizardIOP {
     pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
         let consts = render_constants(&cs.constants);
-        let columns = render_columns(&cs.modules);
+        let columns = render_columns(&cs.modules, &mut self.sizes);
         let constraints = render_constraints(&cs.constraints);
 
         let r = format!(
@@ -247,7 +254,10 @@ import (
     "github.com/consensys/accelerated-crypto-monorepo/symbolic"
 )
 
-const SIZE = {}
+const (
+SIZE = {}
+{}
+)
 
 {}
 
@@ -264,7 +274,14 @@ func Define(build *zkevm.Builder) {{
 {}
 }}
 "#,
-            &self.package, SIZE, consts, columns, constraints,
+            &self.package,
+            SIZE,
+            self.sizes
+                .iter()
+                .fold(String::new(), |ax, s| ax + &format!("{} = SIZE\n", s)),
+            consts,
+            columns,
+            constraints,
         );
 
         if let Some(filename) = self.out_filename.as_ref() {

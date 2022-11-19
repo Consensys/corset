@@ -324,6 +324,7 @@ fn main() -> Result<()> {
             let mut wiop_exporter = exporters::WizardIOP {
                 out_filename,
                 package,
+                sizes: Default::default(),
             };
             wiop_exporter.render(&constraints)?;
         }
