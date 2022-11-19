@@ -160,14 +160,20 @@ fn render_constants(consts: &HashMap<Handle, i64>) -> String {
     }
 }
 
+fn make_size(h: &Handle) -> String {
+    format!("SIZE_{}", h.module)
+}
+
 fn render_columns<T: Clone>(cols: &ColumnSet<T>) -> String {
     let mut r = String::new();
     for (handle, column) in cols.iter() {
         match column.kind {
             Kind::Atomic | Kind::Composite(_) | Kind::Phantom => {
                 r += &format!(
-                    "{} := build.RegisterCommit(\"{}\", SIZE)\n",
-                    handle.name, handle.name
+                    "{} := build.RegisterCommit(\"{}\", {})\n",
+                    handle.mangle(),
+                    handle.mangle(),
+                    make_size(&handle)
                 )
             }
             _ => (),

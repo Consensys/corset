@@ -301,15 +301,17 @@ impl Handle {
             .replace('}', "_")
             .replace('[', "_")
             .replace(']', "_")
-            .replace('/', "_")
             .replace(':', "_")
             .replace('%', "_")
             .replace('.', "_")
-            .replace('-', "_")
+            .replace('-', "sub_")
+            .replace('*', "mul_")
+            .replace('+', "add_")
+            .replace('/', "div_")
     }
 
     pub fn mangle(&self) -> String {
-        format!(
+        let r = format!(
             "{}{}{}",
             Self::purify(&self.module),
             if self.module.is_empty() {
@@ -318,7 +320,12 @@ impl Handle {
                 MODULE_SEPARATOR
             },
             Self::purify(&self.name)
-        )
+        );
+        if r.len() < 100 {
+            r
+        } else {
+            format!("H{:?}", md5::compute(r))
+        }
     }
 
     pub fn mangle_no_module(&self) -> String {
