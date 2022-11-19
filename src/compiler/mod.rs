@@ -38,52 +38,48 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
     let mut columns: ColumnSet<pairing_ce::bn256::Fr> = Default::default();
     let mut constants: HashMap<Handle, i64> = Default::default();
     let mut computations = ctx.borrow().computation_table.clone();
-    // ctx.borrow().render();
-    ctx.borrow_mut().visit_mut::<()>(&mut |(handle, symbol)| {
-        match &mut symbol.0 {
-            Symbol::Alias(_) => {}
-            Symbol::Final(ref mut symbol, used) => {
-                if !*used {
-                    warn!("symbol is never used: {}", handle);
-                }
-                match symbol {
-                    Expression::Column(ref mut handle, t, k) => {
-                        columns.insert_column(handle, *t, k.to_nil(), ALLOW_DUP)?;
-                        match k {
-                            Kind::Atomic | Kind::Phantom => (),
-                            Kind::Composite(e) => computations.insert(
-                                handle,
-                                Computation::Composite {
-                                    target: handle.clone(),
-                                    exp: *e.clone(),
-                                },
-                            )?,
-                            Kind::Interleaved(froms) => computations.insert(
-                                handle,
-                                Computation::Interleaved {
-                                    target: handle.clone(),
-                                    froms: froms.clone(),
-                                },
-                            )?,
-                        }
-                    }
-                    Expression::ArrayColumn(handle, range, t) => {
-                        columns.insert_array(handle, range, *t, ALLOW_DUP)?
-                    }
-                    Expression::Const(ref x, _) => {
-                        constants.insert(handle, x.try_into().unwrap());
-                    }
-                    x => todo!("{:?}", x),
-                }
-            }
-        }
-        Ok(())
-    })?;
 
     for (name, ast) in asts.iter_mut() {
         compiletime::pass(ast, ctx.clone())
             .with_context(|| anyhow!("compiling constraints in {}", name.bright_white()))?
     }
+
+    ctx.borrow_mut().visit_mut::<()>(&mut |(handle, symbol)| {
+        match &mut symbol.0 {
+            Symbol::Alias(_) => {}
+            Symbol::Final(ref mut symbol, _) => match symbol {
+                Expression::Column(ref mut handle, t, k) => {
+                    columns.insert_column(handle, *t, k.to_nil(), ALLOW_DUP)?;
+                    match k {
+                        Kind::Atomic | Kind::Phantom => (),
+                        Kind::Composite(e) => computations.insert(
+                            handle,
+                            Computation::Composite {
+                                target: handle.clone(),
+                                exp: *e.clone(),
+                            },
+                        )?,
+                        Kind::Interleaved(froms) => computations.insert(
+                            handle,
+                            Computation::Interleaved {
+                                target: handle.clone(),
+                                froms: froms.clone(),
+                            },
+                        )?,
+                    }
+                }
+                Expression::ArrayColumn(handle, range, t) => {
+                    columns.insert_array(handle, range, *t, ALLOW_DUP)?
+                }
+                Expression::Const(ref x, _) => {
+                    constants.insert(handle, x.try_into().unwrap());
+                }
+                x => todo!("{:?}", x),
+            },
+        }
+        Ok(())
+    })?;
+
     let mut constraints = asts
         .iter()
         .map(|(name, ast)| {
@@ -98,6 +94,15 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
     constraints
         .iter_mut()
         .for_each(|x| x.add_id_to_handles(&|h| h.set_id(columns.id_of(h))));
+
+    ctx.borrow_mut().visit_mut::<()>(&mut |(handle, symbol)| {
+        if let Symbol::Final(_, used) = symbol.0 {
+            if !used {
+                warn!("symbol is never used: {}", handle);
+            }
+        }
+        Ok(())
+    })?;
 
     let r = ConstraintSet {
         constraints,

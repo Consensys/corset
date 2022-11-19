@@ -142,9 +142,9 @@ impl SymbolTable {
                 self._resolve_symbol(&target, ax, absolute_path)
             } else {
                 match self.symbols.get_mut(name) {
-                    Some((Symbol::Final(constraint, visited), t)) => {
+                    Some((Symbol::Final(exp, visited), t)) => {
                         *visited = true;
-                        Ok((constraint.clone(), *t))
+                        Ok((exp.clone(), *t))
                     }
                     None => {
                         if absolute_path {
