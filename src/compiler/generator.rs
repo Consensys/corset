@@ -893,7 +893,23 @@ impl ConstraintSet {
 
         out.write_all("{\"columns\":{\n".as_bytes())?;
 
-        for (i, (module, columns)) in self.modules.cols.iter().enumerate() {
+        let mut touched = false;
+        for (i, (module, columns)) in self.modules.cols.iter().enumerate().peekable() {
+            info!("Exporting {}", &module);
+            if i > 0
+                && touched
+                && columns
+                    .values()
+                    .any(|i| self.modules._cols[*i].value().is_some())
+            {
+                out.write_all(b",")?;
+            } else if columns
+                .values()
+                .any(|i| self.modules._cols[*i].value().is_some())
+            {
+                touched = true;
+            }
+
             let mut current_col = columns
                 .iter()
                 .filter(|c| self.modules._cols[*c.1].value().is_some())
@@ -901,7 +917,6 @@ impl ConstraintSet {
             while let Some((name, &i)) = current_col.next() {
                 let column = &self.modules._cols[i];
                 let handle = Handle::new(&module, &name);
-                info!("Processing {}", &handle);
                 if let Some(value) = column.value() {
                     out.write_all(format!("\"{}\":{{\n", handle.mangle()).as_bytes())?;
 
@@ -935,14 +950,6 @@ impl ConstraintSet {
                         out.write_all(b",")?;
                     }
                 }
-            }
-
-            if columns
-                .values()
-                .any(|i| self.modules._cols[*i].value().is_some())
-                && i < self.modules.cols.len() - 1
-            {
-                out.write_all(b" , ")?;
             }
         }
         out.write_all("}}".as_bytes())?;
