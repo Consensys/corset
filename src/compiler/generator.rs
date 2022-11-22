@@ -815,7 +815,7 @@ impl ConstraintSet {
 
     fn compute(&mut self, i: usize) -> Result<()> {
         let comp = self.computations.get(i).unwrap().clone();
-        info!("Computing `{}`", comp.target());
+        debug!("Computing `{}`", comp.target());
 
         match &comp {
             Computation::Composite { target, exp } => {
@@ -893,62 +893,48 @@ impl ConstraintSet {
 
         out.write_all("{\"columns\":{\n".as_bytes())?;
 
-        let mut touched = false;
         for (i, (module, columns)) in self.modules.cols.iter().enumerate().peekable() {
             info!("Exporting {}", &module);
-            if i > 0
-                && touched
-                && columns
-                    .values()
-                    .any(|i| self.modules._cols[*i].value().is_some())
-            {
+            if i > 0 {
                 out.write_all(b",")?;
-            } else if columns
-                .values()
-                .any(|i| self.modules._cols[*i].value().is_some())
-            {
-                touched = true;
             }
 
-            let mut current_col = columns
-                .iter()
-                .filter(|c| self.modules._cols[*c.1].value().is_some())
-                .peekable();
+            let mut current_col = columns.iter().peekable();
             while let Some((name, &i)) = current_col.next() {
+                trace!("Writing {}/{}", module, name);
                 let column = &self.modules._cols[i];
                 let handle = Handle::new(&module, &name);
-                if let Some(value) = column.value() {
-                    out.write_all(format!("\"{}\":{{\n", handle.mangle()).as_bytes())?;
+                let value = column.value().unwrap_or_default();
 
-                    out.write_all("\"values\":[".as_bytes())?;
+                out.write_all(format!("\"{}\":{{\n", handle.mangle()).as_bytes())?;
+                out.write_all("\"values\":[".as_bytes())?;
 
-                    out.write_all(
-                        value
-                            .par_iter()
-                            .map(|x| {
-                                format!(
-                                    "\"0x0{}\"",
-                                    x.into_repr().to_string()[2..].trim_start_matches('0')
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                            .join(",")
-                            .as_bytes(),
-                    )?;
-
-                    out.write_all(b"],\n")?;
-                    let padding_value = self.padding_value_for(&handle);
-                    out.write_all(
-                        format!(
-                            "\"padding_strategy\": {{\"action\": \"prepend\", \"value\": \"{}\"}}",
-                            padding_value
-                        )
+                out.write_all(
+                    value
+                        .par_iter()
+                        .map(|x| {
+                            format!(
+                                "\"0x0{}\"",
+                                x.into_repr().to_string()[2..].trim_start_matches('0')
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(",")
                         .as_bytes(),
-                    )?;
-                    out.write_all(b"\n}\n")?;
-                    if current_col.peek().is_some() {
-                        out.write_all(b",")?;
-                    }
+                )?;
+
+                out.write_all(b"],\n")?;
+                let padding_value = self.padding_value_for(&handle);
+                out.write_all(
+                    format!(
+                        "\"padding_strategy\": {{\"action\": \"prepend\", \"value\": \"{}\"}}",
+                        padding_value
+                    )
+                    .as_bytes(),
+                )?;
+                out.write_all(b"\n}\n")?;
+                if current_col.peek().is_some() {
+                    out.write_all(b",")?;
                 }
             }
         }
