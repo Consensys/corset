@@ -342,6 +342,8 @@ fn main() -> Result<()> {
         Commands::Compute { tracefile, outfile } => {
             let outfile = outfile.as_ref().unwrap();
 
+            expander::expand_ifs(&mut constraints);
+            expander::lower_shifts(&mut constraints);
             expander::expand(&mut constraints)?;
             compute::compute(
                 &read_trace(&tracefile)?,
@@ -367,6 +369,8 @@ fn main() -> Result<()> {
             use flate2::write::GzEncoder;
             use flate2::Compression;
 
+            expander::expand_ifs(&mut constraints);
+            expander::lower_shifts(&mut constraints);
             expander::expand(&mut constraints)?;
             let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
 
