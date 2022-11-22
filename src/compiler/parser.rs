@@ -211,7 +211,7 @@ impl AstNode {
                             ));
                         }
                     }
-                    ":NATURAL" => t = Type::Column(Magma::Integer),
+                    ":NATURAL" | ":BYTE" => t = Type::Column(Magma::Integer),
                     ":BOOLEAN" => t = Type::Column(Magma::Boolean),
                     ":COMP" => {
                         let n = pairs.next().map(rec_parse);
@@ -625,7 +625,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
         }),
         Rule::typing => Ok(AstNode {
             class: Token::Type(match pair.as_str() {
-                "NATURAL" => Type::Column(Magma::Integer),
+                "NATURAL" | "BYTE" => Type::Column(Magma::Integer),
                 "BOOLEAN" => Type::Column(Magma::Boolean),
                 _ => unreachable!(),
             }),
