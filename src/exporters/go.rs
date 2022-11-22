@@ -64,7 +64,7 @@ impl GoExporter {
             Expression::ArrayColumn(..) => unreachable!(),
             Expression::Const(x, _) => Ok(format!("column.CONST_STRING(\"{}\")", x)),
             Expression::Column(handle, _, _) => {
-                Ok(format!("{}[{}.Name()]", self.ce, handle.mangle_no_module()))
+                Ok(format!("{}[{}.Name()]", self.ce, handle.mangled_name()))
             }
             Expression::Funcall { func, args } => self.render_funcall(func, args),
             Expression::List(constraints) => Ok(constraints
@@ -111,7 +111,7 @@ impl GoExporter {
             .fold(String::new(), |mut ax, (handle, value)| {
                 ax.push_str(&format!(
                     "const {} = {}\n",
-                    handle.mangle_no_module().to_case(Case::ScreamingSnake),
+                    handle.mangled_name().to_case(Case::ScreamingSnake),
                     value
                 ));
                 ax
@@ -139,15 +139,15 @@ import (
             .filter_map(|(handle, col)| match col.kind {
                 Kind::Atomic => Some(format!(
                     "{} column.Column = \"{}\"",
-                    handle.mangle_no_module(),
-                    handle.mangle_no_module()
+                    handle.mangled_name(),
+                    handle.mangled_name()
                 )),
                 Kind::Phantom => None,
                 Kind::Composite(_) => None,
                 Kind::Interleaved(_) => Some(format!(
                     "{} column.Column = \"{}\"",
-                    handle.mangle_no_module(),
-                    handle.mangle_no_module()
+                    handle.mangled_name(),
+                    handle.mangled_name()
                 )),
             })
             .sorted()
@@ -171,8 +171,8 @@ import (
                     for (from, to) in froms.iter().zip(tos.iter()) {
                         r.push_str(&format!(
                             "var {}  = column.NewSorted({})\n",
-                            to.mangle_no_module(),
-                            from.mangle_no_module()
+                            to.mangled_name(),
+                            from.mangled_name()
                         ))
                     }
                 }
@@ -185,10 +185,10 @@ import (
             cs.modules
                 .iter()
                 .filter_map(|(handle, col)| match col.kind {
-                    Kind::Atomic => Some(format!("{},", handle.mangle_no_module())),
+                    Kind::Atomic => Some(format!("{},", handle.mangled_name())),
                     Kind::Phantom => None,
                     Kind::Composite(_) => None,
-                    Kind::Interleaved(_) => Some(format!("{},", handle.mangle_no_module())),
+                    Kind::Interleaved(_) => Some(format!("{},", handle.mangled_name())),
                 })
                 .sorted()
                 .collect::<Vec<_>>()
@@ -202,7 +202,7 @@ import (
                 }
                 crate::column::Computation::Sorted { tos, .. } => {
                     for to in tos.iter() {
-                        r.push_str(&format!("{},\n", to.mangle_no_module()))
+                        r.push_str(&format!("{},\n", to.mangled_name()))
                     }
                 }
             }
@@ -217,7 +217,7 @@ import (
                     Kind::Atomic => None,
                     Kind::Phantom => None,
                     Kind::Composite(_) => None,
-                    Kind::Interleaved(_) => Some(format!("{},", handle.mangle_no_module())),
+                    Kind::Interleaved(_) => Some(format!("{},", handle.mangled_name())),
                 })
                 .collect::<Vec<_>>()
                 .join("\n")

@@ -164,7 +164,7 @@ fn render_constants(consts: &HashMap<Handle, i64>) -> String {
 }
 
 fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {
-    let r = format!("SIZE_{}", h.module);
+    let r = format!("SIZE_{}", h.mangled_module());
     sizes.insert(r.clone());
     r
 }

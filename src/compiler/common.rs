@@ -304,7 +304,7 @@ impl Handle {
             .replace(':', "_")
             .replace('%', "_")
             .replace('.', "_")
-            .replace('-', "sub_")
+            .replace('-', "_")
             .replace('*', "mul_")
             .replace('+', "add_")
             .replace('/', "div_")
@@ -328,8 +328,12 @@ impl Handle {
         }
     }
 
-    pub fn mangle_no_module(&self) -> String {
+    pub fn mangled_name(&self) -> String {
         Self::purify(&self.name)
+    }
+
+    pub fn mangled_module(&self) -> String {
+        Self::purify(&self.module)
     }
 }
 impl std::fmt::Debug for Handle {
