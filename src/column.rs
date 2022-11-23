@@ -158,7 +158,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
         Ok(())
     }
 
-    pub fn len(&self) -> usize {
+    pub fn max_len(&self) -> usize {
         let lens = self
             ._cols
             .iter()
@@ -173,7 +173,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.max_len() == 0
     }
 }
 

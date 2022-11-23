@@ -61,6 +61,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                 let handle = Handle::new(module, colname);
 
                 if let Some(column) = columns.by_handle_mut(&handle) {
+                    trace!("Inserting {} ({})", handle, xs.len());
                     column.set_value(parse_column(xs, column.t)?)
                 }
             }
@@ -76,38 +77,42 @@ pub enum PaddingStrategy {
     None,
 }
 fn pad(r: &mut ColumnSet<F>, s: PaddingStrategy) -> Result<()> {
-    if matches!(s, PaddingStrategy::None) || r.is_empty() {
-        return Ok(());
-    }
-
-    let max_len = r.len();
-    let binary_not_len = r
-        .by_handle(&Handle::new("binary", "NOT"))
-        .and_then(|c| c.len());
-    let pad_to = match s {
-        PaddingStrategy::Full => (max_len + 1).next_power_of_two(),
-        PaddingStrategy::OneLine => max_len + 1,
-        PaddingStrategy::None => unreachable!(),
-    };
-
-    r.columns_mut().for_each(|x| {
-        x.map(&|xs| {
-            xs.reverse();
-            xs.resize(pad_to, Fr::zero());
-            xs.reverse();
-        })
-    });
-
-    if let Some(col) = r.by_handle_mut(&Handle::new("binary", "NOT")) {
-        let _255 = Fr::from_str("255").unwrap();
-        col.map(&|xs| {
-            for x in xs.iter_mut().take(pad_to - binary_not_len.unwrap()) {
-                *x = _255;
+    match s {
+        PaddingStrategy::Full => {
+            let max_len = r.max_len();
+            let pad_to = (max_len + 1).next_power_of_two();
+            let binary_not_len = r
+                .by_handle(&Handle::new("binary", "NOT"))
+                .and_then(|c| c.len());
+            r.columns_mut().for_each(|x| {
+                x.map(&|xs| {
+                    xs.reverse();
+                    xs.resize(pad_to, Fr::zero());
+                    xs.reverse();
+                })
+            });
+            if let Some(col) = r.by_handle_mut(&Handle::new("binary", "NOT")) {
+                let _255 = Fr::from_str("255").unwrap();
+                col.map(&|xs| {
+                    for x in xs.iter_mut().take(pad_to - binary_not_len.unwrap()) {
+                        *x = _255;
+                    }
+                });
             }
-        });
+            Ok(())
+        }
+        PaddingStrategy::OneLine => {
+            r.columns_mut().for_each(|x| {
+                x.map(&|xs| {
+                    xs.reverse();
+                    xs.resize(xs.len() + 1, Fr::zero());
+                    xs.reverse();
+                })
+            });
+            Ok(())
+        }
+        PaddingStrategy::None => Ok(()),
     }
-
-    Ok(())
 }
 
 pub fn compute(v: &Value, cs: &mut ConstraintSet, padding_strategy: PaddingStrategy) -> Result<()> {

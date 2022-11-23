@@ -757,7 +757,7 @@ impl ConstraintSet {
         let cols_in_expr = exp.dependencies();
         for c in &cols_in_expr {
             if !self.get(c)?.is_computed() {
-                return Err(anyhow!("column {} not found", c.to_string().red()));
+                return Err(anyhow!("column {} not yet computed", c.to_string().red()));
             }
         }
 
