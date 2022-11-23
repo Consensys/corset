@@ -17,7 +17,7 @@ mod definitions;
 mod generator;
 mod parser;
 
-const MAIN_MODULE: &str = "root";
+const MAIN_MODULE: &str = "<top-level>";
 
 const ALLOW_DUP: bool = true;
 

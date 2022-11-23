@@ -188,6 +188,7 @@ fn check_plookup(
     parents: &[Expression],
     children: &[Expression],
 ) -> Result<()> {
+    // Compute the LC \sum_k (k+1)×x_k[i]
     fn pseudo_rlc(cols: &[Vec<Fr>], i: usize) -> Fr {
         let mut ax = Fr::zero();
         for (j, col) in cols.iter().enumerate() {
@@ -198,10 +199,11 @@ fn check_plookup(
         ax
     }
 
+    // Given a list of column expression to PLookup, retrieve the corresponding values
     fn compute_cols(exps: &[Expression], cs: &ConstraintSet) -> Result<Vec<Vec<Fr>>> {
         let cols = exps
             .iter()
-            .map(|p| cs.compute_composite_static(p))
+            .map(|e| cs.compute_composite_static(e))
             .collect::<Result<Vec<_>>>()
             .with_context(|| anyhow!("while computing {:?}", exps))?;
         if !cols.iter().all(|p| p.len() == cols[0].len()) {
@@ -228,11 +230,10 @@ fn check_plookup(
         .collect();
 
     for i in 0..child_cols[0].len() {
-        let ax = pseudo_rlc(&child_cols, i);
-
-        if !hashes.contains(&ax) {
+        if !hashes.contains(&pseudo_rlc(&child_cols, i)) {
             return Err(anyhow!(
-                "{{\n{}\n}} not found in {{{}}}",
+                "@{}: {{\n{}\n}} not found in {{{}}}",
+                i,
                 children
                     .iter()
                     .zip(child_cols.iter().map(|c| c[i]))
