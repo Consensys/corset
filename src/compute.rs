@@ -77,6 +77,7 @@ pub enum PaddingStrategy {
     None,
 }
 fn pad(r: &mut ColumnSet<F>, s: PaddingStrategy) -> Result<()> {
+    let _255 = Fr::from_str("255").unwrap();
     match s {
         PaddingStrategy::Full => {
             let max_len = r.max_len();
@@ -91,14 +92,13 @@ fn pad(r: &mut ColumnSet<F>, s: PaddingStrategy) -> Result<()> {
                     xs.reverse();
                 })
             });
-            if let Some(col) = r.by_handle_mut(&Handle::new("binary", "NOT")) {
-                let _255 = Fr::from_str("255").unwrap();
+            r.by_handle_mut(&Handle::new("binary", "NOT")).map(|col| {
                 col.map(&|xs| {
                     for x in xs.iter_mut().take(pad_to - binary_not_len.unwrap()) {
                         *x = _255;
                     }
-                });
-            }
+                })
+            });
             Ok(())
         }
         PaddingStrategy::OneLine => {
@@ -109,6 +109,8 @@ fn pad(r: &mut ColumnSet<F>, s: PaddingStrategy) -> Result<()> {
                     xs.reverse();
                 })
             });
+            r.by_handle_mut(&Handle::new("binary", "NOT"))
+                .map(|col| col.map(&|xs| xs[0] = _255));
             Ok(())
         }
         PaddingStrategy::None => Ok(()),
