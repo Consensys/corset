@@ -92,25 +92,21 @@ fn pad(r: &mut ColumnSet<F>, s: PaddingStrategy) -> Result<()> {
                     xs.reverse();
                 })
             });
-            r.by_handle_mut(&Handle::new("binary", "NOT")).map(|col| {
+            if let Some(col) = r.by_handle_mut(&Handle::new("binary", "NOT")) {
                 col.map(&|xs| {
                     for x in xs.iter_mut().take(pad_to - binary_not_len.unwrap()) {
                         *x = _255;
                     }
                 })
-            });
+            }
             Ok(())
         }
         PaddingStrategy::OneLine => {
-            r.columns_mut().for_each(|x| {
-                x.map(&|xs| {
-                    xs.reverse();
-                    xs.resize(xs.len() + 1, Fr::zero());
-                    xs.reverse();
-                })
-            });
-            r.by_handle_mut(&Handle::new("binary", "NOT"))
-                .map(|col| col.map(&|xs| xs[0] = _255));
+            r.columns_mut()
+                .for_each(|x| x.map(&|xs| xs.insert(0, Fr::zero())));
+            if let Some(col) = r.by_handle_mut(&Handle::new("binary", "NOT")) {
+                col.map(&|xs| xs[0] = _255)
+            }
             Ok(())
         }
         PaddingStrategy::None => Ok(()),

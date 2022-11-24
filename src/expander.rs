@@ -121,16 +121,16 @@ fn do_expand_ifs(e: &mut Expression) {
                             } else {
                                 *e = args
                                     .get(2)
-                                    .map(|x| x.clone())
-                                    .unwrap_or(Expression::Const(BigInt::zero(), None));
+                                    .cloned()
+                                    .unwrap_or_else(|| Expression::Const(BigInt::zero(), None));
                             }
                         }
                         Builtin::IfNotZero => {
                             if !constant_cond.is_zero() {
                                 *e = args
                                     .get(2)
-                                    .map(|x| x.clone())
-                                    .unwrap_or(Expression::Const(BigInt::zero(), None));
+                                    .cloned()
+                                    .unwrap_or_else(|| Expression::Const(BigInt::zero(), None));
                             } else {
                                 *e = args[1].clone();
                             }

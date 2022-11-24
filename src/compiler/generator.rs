@@ -194,13 +194,13 @@ impl Expression {
                     Ok(args.iter().fold(BigInt::one(), |ax, x| ax * x))
                 }
                 Builtin::Neg => Ok(-args[0].pure_eval()?),
-                x @ _ => Err(anyhow!(
+                x => Err(anyhow!(
                     "{} is not known at compile-time",
                     x.to_string().red()
                 )),
             },
             Expression::Const(v, _) => Ok(v.to_owned()),
-            x @ _ => Err(anyhow!(
+            x => Err(anyhow!(
                 "{} is not known at compile-time",
                 x.to_string().red()
             )),
@@ -916,7 +916,7 @@ impl ConstraintSet {
 
         out.write_all("{\"columns\":{\n".as_bytes())?;
 
-        for (i, (module, columns)) in self.modules.cols.iter().enumerate().peekable() {
+        for (i, (module, columns)) in self.modules.cols.iter().enumerate() {
             info!("Exporting {}", &module);
             if i > 0 {
                 out.write_all(b",")?;
