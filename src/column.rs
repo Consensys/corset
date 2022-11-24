@@ -221,4 +221,10 @@ impl Computation {
                 .join(", "),
         }
     }
+    pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut Handle)) {
+        match self {
+            Computation::Composite { exp, .. } => exp.add_id_to_handles(set_id),
+            _ => (),
+        }
+    }
 }

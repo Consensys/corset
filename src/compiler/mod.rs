@@ -80,7 +80,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         Ok(())
     })?;
 
-    let mut constraints = asts
+    let constraints = asts
         .iter()
         .map(|(name, ast)| {
             generator::pass(ast, ctx.clone())
@@ -89,11 +89,9 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .flatten()
+        // Sort by decreasing size for more efficient multi-threaded computation
         .sorted_by_cached_key(|x| -(x.size() as isize))
         .collect::<Vec<_>>();
-    constraints
-        .iter_mut()
-        .for_each(|x| x.add_id_to_handles(&|h| h.set_id(columns.id_of(h))));
 
     ctx.borrow_mut().visit_mut::<()>(&mut |(handle, symbol)| {
         if let Symbol::Final(_, used) = symbol.0 {
@@ -104,12 +102,8 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
         Ok(())
     })?;
 
-    let r = ConstraintSet {
-        constraints,
-        modules: columns,
-        constants,
-        computations,
-    };
-
-    Ok((asts.into_iter().map(|x| x.1).collect(), r))
+    Ok((
+        asts.into_iter().map(|x| x.1).collect(),
+        ConstraintSet::new(columns, constraints, constants, computations),
+    ))
 }

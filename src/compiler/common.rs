@@ -259,11 +259,16 @@ impl Magma {
     const SUPREMUM: Self = Magma::Integer;
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, Serialize, Deserialize)]
 pub struct Handle {
     pub module: String,
     pub name: String,
     pub id: Option<usize>,
+}
+impl std::cmp::PartialEq for Handle {
+    fn eq(&self, other: &Self) -> bool {
+        (self.module == other.module) && (self.name == other.name)
+    }
 }
 impl std::hash::Hash for Handle {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {

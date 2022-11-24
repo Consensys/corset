@@ -27,6 +27,11 @@ pub struct ComputationTable {
     computations: Vec<Computation>,
 }
 impl ComputationTable {
+    pub fn update_ids(&mut self, set_id: &dyn Fn(&mut Handle)) {
+        self.computations
+            .iter_mut()
+            .for_each(|x| x.add_id_to_handles(set_id));
+    }
     pub fn dep(&self, target: &Handle) -> Option<usize> {
         self.dependencies.get(target).cloned()
     }

@@ -413,7 +413,7 @@ impl Debug for Expression {
         match self {
             Expression::Const(x, _) => write!(f, "{}", x),
             Expression::Column(handle, t, _k) => {
-                write!(f, "{}:{:?}", handle, t)
+                write!(f, "{:?}:{:?}", handle, t)
             }
             Expression::ArrayColumn(handle, range, t) => {
                 write!(
@@ -634,6 +634,29 @@ pub struct ConstraintSet {
     pub computations: ComputationTable,
 }
 impl ConstraintSet {
+    pub fn new(
+        columns: ColumnSet<Fr>,
+        constraints: Vec<Constraint>,
+        constants: HashMap<Handle, i64>,
+        computations: ComputationTable,
+    ) -> Self {
+        let mut r = ConstraintSet {
+            constraints,
+            modules: columns,
+            constants,
+            computations,
+        };
+        r.update_ids();
+        r
+    }
+    pub fn update_ids(&mut self) {
+        let set_id = |h: &mut Handle| h.set_id(self.modules.id_of(h));
+        self.constraints
+            .iter_mut()
+            .for_each(|x| x.add_id_to_handles(&set_id));
+        self.computations.update_ids(&set_id)
+    }
+
     fn get(&self, handle: &Handle) -> Result<&Column<Fr>> {
         self.modules.get(handle)
     }
@@ -735,7 +758,7 @@ impl ConstraintSet {
                     i,
                     &mut |handle, i, _| {
                         // All the columns are guaranteed to have been computed
-                        // at the begiinning of the function
+                        // at the beginning of the function
                         self.modules._cols[handle.id.unwrap()]
                             .get(i, false)
                             .cloned()
@@ -880,7 +903,7 @@ impl ConstraintSet {
                         _ => unreachable!(),
                     }
                 } else {
-                    todo!()
+                    unreachable!()
                 }
             }
         }
