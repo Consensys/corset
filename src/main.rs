@@ -21,6 +21,7 @@ mod compiler;
 mod compute;
 mod expander;
 mod exporters;
+mod fuser;
 mod pretty;
 mod utils;
 
@@ -218,6 +219,7 @@ enum Commands {
         )]
         outfile: String,
     },
+    Fuse {},
 }
 
 fn read_trace<S: AsRef<str>>(tracefile: S) -> Result<Value> {
@@ -511,6 +513,7 @@ fn main() -> Result<()> {
                 .write_all(ron::to_string(&constraints).unwrap().as_bytes())
                 .with_context(|| format!("while writing to `{}`", &outfile))?;
         }
+        Commands::Fuse {} => fuser::fuse(&mut constraints),
     }
 
     Ok(())
