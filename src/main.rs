@@ -142,30 +142,6 @@ enum Commands {
         )]
         outfile: Option<String>,
     },
-    /// Given a set of constraints, indefinitely check the traces from an SQL table
-    #[cfg(feature = "postgres")]
-    CheckLoop {
-        #[arg(long, default_value = "localhost")]
-        host: String,
-        #[arg(long, default_value = "postgres")]
-        user: String,
-        #[arg(long)]
-        password: Option<String>,
-        #[arg(long, default_value = "zkevm")]
-        database: String,
-        #[arg(long = "rm", help = "remove succesully validated blocks")]
-        remove: bool,
-
-        #[arg(
-            long = "only",
-            help = "only check these constraints",
-            value_delimiter = ','
-        )]
-        only: Option<Vec<String>>,
-
-        #[arg(long = "skip", help = "skip these constraints", value_delimiter = ',')]
-        skip: Vec<String>,
-    },
     /// Given a set of constraints, indefinitely fill the computed columns from/to an SQL table
     #[cfg(feature = "postgres")]
     ComputeLoop {
@@ -207,6 +183,30 @@ enum Commands {
 
         #[arg(short = 'S', long = "trace-span", help = "", default_value_t = 3)]
         trace_span: isize,
+    },
+    /// Given a set of constraints, indefinitely check the traces from an SQL table
+    #[cfg(feature = "postgres")]
+    CheckLoop {
+        #[arg(long, default_value = "localhost")]
+        host: String,
+        #[arg(long, default_value = "postgres")]
+        user: String,
+        #[arg(long)]
+        password: Option<String>,
+        #[arg(long, default_value = "zkevm")]
+        database: String,
+        #[arg(long = "rm", help = "remove succesully validated blocks")]
+        remove: bool,
+
+        #[arg(
+            long = "only",
+            help = "only check these constraints",
+            value_delimiter = ','
+        )]
+        only: Option<Vec<String>>,
+
+        #[arg(long = "skip", help = "skip these constraints", value_delimiter = ',')]
+        skip: Vec<String>,
     },
     /// Given a set of Corset files, compile them into a single file for faster later use
     Compile {
