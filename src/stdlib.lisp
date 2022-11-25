@@ -16,15 +16,17 @@
 (defun (is-binary e0) (* e0 (- 1 e0)))
 
 ;; Chronological forms
-(defun (inc e0 offset) (eq (shift e0 1)
+(defun (next X) (shift X 1))
+(defun (prev X) (shift X -1))
+(defun (inc e0 offset) (eq (next e0)
                            (+ e0 offset)))
-(defun (dec e0 offset) (eq (shift e0 1)
+(defun (dec e0 offset) (eq (next e0)
                            (- e0 offset)))
 (defun (remains-constant e0) (will-eq e0 e0))
-(defun (didnt-change e0) (eq e0 (shift e0 -1)))
-(defun (did-change e0) (neq e0 (shift e0 -1)))
-(defun (will-eq e0 e1) (eq (shift e0 1) e1))
-(defun (was-eq e0 e1) (eq (shift e0 -1) e1))
+(defun (didnt-change e0) (eq e0 (prev e0)))
+(defun (did-change e0) (neq e0 (prev e0)))
+(defun (will-eq e0 e1) (eq (next e0) e1))
+(defun (was-eq e0 e1) (eq (prev e0) e1))
 
 
 ;; Helpers
@@ -42,7 +44,7 @@
 (defun (byte-decomposition ct acc bytes)
             (if-zero ct
                 (eq acc bytes)
-                (eq acc (+ (* 256 (shift acc -1)) bytes))))
+                (eq acc (+ (* 256 (prev acc)) bytes))))
 
 ;; plateau constraints
 ;; underlying assumptions:
@@ -55,5 +57,5 @@
                     (if-zero CT
                         (vanishes X)
                         (if-eq-else CT C
-                            (eq X (+ (shift X -1) 1))
+                            (eq X (+ (prev X) 1))
                             (didnt-change X))))))
