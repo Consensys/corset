@@ -212,10 +212,9 @@ impl Type {
         match (self, other) {
             (Type::Void, Type::Void) => Type::Void,
             (Type::Void, _) => *other,
-            (Type::Column(_), Type::Void) => *self,
+            (_, Type::Void) => *self,
             (Type::Column(x), Type::Column(y)) => Type::Column(x.max(y).to_owned()),
             (Type::Column(x), Type::Scalar(y)) => Type::Column(x.max(y).to_owned()),
-            (Type::Scalar(_), Type::Void) => *self,
             (Type::Scalar(x), Type::Column(y)) => Type::Column(x.max(y).to_owned()),
             (Type::Scalar(x), Type::Scalar(y)) => Type::Scalar(x.max(y).to_owned()),
         }
