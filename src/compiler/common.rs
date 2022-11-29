@@ -53,6 +53,10 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "*"),
             class: FunctionClass::Builtin(Builtin::Mul)
         },
+        "^" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "^"),
+            class: FunctionClass::Builtin(Builtin::Exp)
+        },
         "-" => Function {
             handle: Handle::new(super::MAIN_MODULE, "-"),
             class: FunctionClass::Builtin(Builtin::Sub)
@@ -311,6 +315,8 @@ impl Handle {
             .replace('}', "_")
             .replace('[', "_")
             .replace(']', "_")
+            .replace('<', "")
+            .replace('>', "")
             .replace(':', "_")
             .replace('%', "_")
             .replace('.', "_")

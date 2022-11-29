@@ -237,6 +237,15 @@ impl Expression {
                     }
                     Some(ax)
                 }
+                Builtin::Exp => {
+                    let mut ax = Fr::one();
+                    let mantissa = args[0].eval(i, get, cache, settings)?;
+                    let exp = args[1].pure_eval().unwrap().to_usize().unwrap();
+                    for _ in 0..exp.into() {
+                        ax.mul_assign(&mantissa);
+                    }
+                    Some(ax)
+                }
                 Builtin::Shift => {
                     let shift = args[1].pure_eval().unwrap().to_isize().unwrap();
                     args[0].eval(
@@ -440,6 +449,7 @@ pub enum Builtin {
     Add,
     Sub,
     Mul,
+    Exp,
     Shift,
     Neg,
     Inv,
@@ -464,6 +474,7 @@ impl Builtin {
                     x => x,
                 }
             }
+            Builtin::Exp => argtype[0],
             Builtin::Not => argtype[0].same_scale(Magma::Boolean),
             Builtin::Mul => argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)),
             Builtin::IfZero | Builtin::IfNotZero => {
@@ -484,6 +495,7 @@ impl std::fmt::Display for Builtin {
                 Builtin::Add => "+",
                 Builtin::Sub => "-",
                 Builtin::Mul => "*",
+                Builtin::Exp => "^",
                 Builtin::Shift => "shift",
                 Builtin::Neg => "-",
                 Builtin::Inv => "INV",
@@ -532,6 +544,7 @@ impl FuncVerifier<Expression> for Builtin {
             Builtin::Add => Arity::AtLeast(2),
             Builtin::Sub => Arity::AtLeast(2),
             Builtin::Mul => Arity::AtLeast(2),
+            Builtin::Exp => Arity::Exactly(2),
             Builtin::Neg => Arity::Monadic,
             Builtin::Inv => Arity::Monadic,
             Builtin::Not => Arity::Monadic,
@@ -555,6 +568,14 @@ impl FuncVerifier<Expression> for Builtin {
                     ))
                 }
             }
+            Builtin::Exp => args[1].t().is_scalar().then(|| ()).ok_or_else(|| {
+                anyhow!(
+                    "`{:?}` expects a scalar exponent; found `{}` of type {:?}",
+                    &self,
+                    args[1],
+                    args[1].t()
+                )
+            }),
             Builtin::Not => args[0].t().is_bool().then(|| ()).ok_or_else(|| {
                 anyhow!(
                     "`{:?}` expects a boolean; found `{}` of type {:?}",
@@ -1113,6 +1134,7 @@ fn apply(
                     b @ (Builtin::Add
                     | Builtin::Sub
                     | Builtin::Mul
+                    | Builtin::Exp
                     | Builtin::Neg
                     | Builtin::Inv
                     | Builtin::Shift) => Ok(Some((

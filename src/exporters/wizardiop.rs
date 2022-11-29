@@ -1,4 +1,5 @@
 use num_bigint::BigInt;
+use num_traits::ToPrimitive;
 use pairing_ce::{bn256::Fr, ff::PrimeField};
 use std::{
     collections::{HashMap, HashSet},
@@ -90,6 +91,27 @@ fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
         Builtin::Add => make_chain(args, "Add", true),
         Builtin::Mul => make_chain(args, "Mul", false),
         Builtin::Sub => make_chain(args, "Sub", true),
+        Builtin::Exp => {
+            let exp = args[1]
+                .pure_eval()
+                .expect(&format!("Exponent `{}` is not evaluable", &args[1]))
+                .to_usize()
+                .expect(&format!(
+                    "Exponent `{}` is too large",
+                    &args[1].pure_eval().unwrap()
+                ));
+            match exp {
+                0 => "column.CONST_STRING(\"1\")".to_string(),
+                1 => render_expression(&args[0]),
+                _ => make_chain(
+                    &std::iter::repeat(args[0].clone())
+                        .take(exp)
+                        .collect::<Vec<_>>(),
+                    "Mul",
+                    false,
+                ),
+            }
+        }
         Builtin::Neg => format!("({}).Neg()", render_expression(&args[0])),
         Builtin::Shift => {
             let leaf = match &args[0] {

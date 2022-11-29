@@ -3,6 +3,7 @@ use std::{collections::HashMap, io::Write};
 use anyhow::*;
 use convert_case::{Case, Casing};
 use itertools::Itertools;
+use num_traits::ToPrimitive;
 
 use crate::compiler::*;
 
@@ -90,6 +91,26 @@ impl GoExporter {
             Builtin::Add => self.make_chain(args, "Add", true),
             Builtin::Mul => self.make_chain(args, "Mul", false),
             Builtin::Sub => self.make_chain(args, "Sub", true),
+            Builtin::Exp => {
+                let exp = args[1]
+                    .pure_eval()
+                    .with_context(|| anyhow!("Exponent `{}` is not evaluable", &args[1]))?
+                    .to_usize()
+                    .with_context(|| {
+                        anyhow!("Exponent `{}` is too large", &args[1].pure_eval().unwrap())
+                    })?;
+                match exp {
+                    0 => Ok("column.CONST_STRING(\"1\")".to_string()),
+                    1 => self.render_node(&args[0]),
+                    _ => self.make_chain(
+                        &std::iter::repeat(args[0].clone())
+                            .take(exp)
+                            .collect::<Vec<_>>(),
+                        "Mul",
+                        false,
+                    ),
+                }
+            }
             Builtin::Inv => Ok(format!("({}).Inv()", self.render_node(&args[0])?)),
             Builtin::Neg => Ok(format!("({}).Neg()", self.render_node(&args[0])?)),
             Builtin::Shift => Ok(format!(
