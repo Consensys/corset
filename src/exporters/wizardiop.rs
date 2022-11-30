@@ -1,3 +1,4 @@
+use log::*;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use pairing_ce::{bn256::Fr, ff::PrimeField};
@@ -82,7 +83,10 @@ fn render_expression(e: &Expression) -> String {
             })
             .collect::<Vec<_>>()
             .join("\n"),
-        Expression::Void => String::new(),
+        Expression::Void => {
+            warn!("Rendering VOID expression");
+            "symbolic.NewConstant(\"0\")".into()
+        }
     }
 }
 
