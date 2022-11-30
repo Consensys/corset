@@ -259,6 +259,7 @@ pub fn check(
     with_bar: bool,
 ) -> Result<()> {
     if cs.modules.is_empty() {
+        info!("Skipping empty trace");
         return Ok(());
     }
 

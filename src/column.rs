@@ -173,7 +173,16 @@ impl<T: Ord + Clone> ColumnSet<T> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.max_len() == 0
+        const IGNORED: &[&str] = &[
+            "shift-table",
+            "binary-table",
+            "rom",
+            "instruction-decoder",
+            "fuse",
+        ];
+        self.iter()
+            .filter(|(h, _)| !IGNORED.contains(&h.module.as_str()))
+            .all(|(_, c)| c.value().is_none())
     }
 }
 

@@ -60,9 +60,11 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                 let colname = &path[path.len() - 1];
                 let handle = Handle::new(module, colname);
 
-                if let Some(column) = columns.by_handle_mut(&handle) {
-                    trace!("Inserting {} ({})", handle, xs.len());
-                    column.set_value(parse_column(xs, column.t)?)
+                if !xs.is_empty() {
+                    if let Some(column) = columns.by_handle_mut(&handle) {
+                        trace!("Inserting {} ({})", handle, xs.len());
+                        column.set_value(parse_column(xs, column.t)?)
+                    }
                 }
             }
             Ok(())
