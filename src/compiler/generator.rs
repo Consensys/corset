@@ -1267,7 +1267,16 @@ fn reduce_toplevel(
                 .into_iter()
                 .map(|e| e.unwrap().0)
                 .collect::<Vec<_>>();
-            Ok(Some(Constraint::Plookup(name.clone(), parents, children)))
+            if parents.len() != children.len() {
+                Err(anyhow!(
+                    "in {}, parents and children have different lengths: {} and {}",
+                    name.red(),
+                    parents.len(),
+                    children.len()
+                ))
+            } else {
+                Ok(Some(Constraint::Plookup(name.clone(), parents, children)))
+            }
         }
         Token::DefInrange(e, range) => Ok(Some(Constraint::InRange(
             names::Generator::default().next().unwrap(),
