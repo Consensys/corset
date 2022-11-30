@@ -29,6 +29,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
     let ctx = Rc::new(RefCell::new(SymbolTable::new_root()));
 
     for (name, content) in sources.iter() {
+        info!("Parsing {}", name.bright_white().bold());
         let ast = parser::parse(content.as_ref()).with_context(|| anyhow!("parsing `{}`", name))?;
         definitions::pass(&ast, ctx.clone())
             .with_context(|| anyhow!("parsing definitions in `{}`", name))?;
@@ -40,6 +41,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
     let mut computations = ctx.borrow().computation_table.clone();
 
     for (name, ast) in asts.iter_mut() {
+        info!("Compiling {}", name.bright_white().bold());
         compiletime::pass(ast, ctx.clone())
             .with_context(|| anyhow!("compiling constraints in {}", name.bright_white()))?
     }
