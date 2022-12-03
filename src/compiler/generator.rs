@@ -558,16 +558,18 @@ impl FuncVerifier<Expression> for Builtin {
     }
     fn validate_types(&self, args: &[Expression]) -> Result<()> {
         match self {
-            f @ (Builtin::Add | Builtin::Sub | Builtin::Mul) => {
-                if args.iter().all(|a| !matches!(a, Expression::List(_))) {
+            f @ (Builtin::Add | Builtin::Sub | Builtin::Mul) => args.iter().try_for_each(|a| {
+                if a.t() != Type::Void {
                     Ok(())
                 } else {
                     Err(anyhow!(
-                        "`{:?}` expects scalar arguments but received a list",
+                        "`{:?}` received unexepcted argument {} of type {:?}",
                         f,
+                        a.pretty(),
+                        a.t(),
                     ))
                 }
-            }
+            }),
             Builtin::Exp => args[1].t().is_scalar().then(|| ()).ok_or_else(|| {
                 anyhow!(
                     "`{:?}` expects a scalar exponent; found `{}` of type {:?}",
@@ -1036,14 +1038,14 @@ fn apply_form(
         }
         Form::Debug => {
             if !settings.debug {
-                Ok(Some((Expression::Void, Type::Void)))
+                Ok(None)
             } else {
                 let reduced = args
                     .iter()
                     .map(|e| reduce(e, root_ctx.clone(), ctx, settings))
                     .collect::<Result<Vec<_>>>()?;
                 match reduced.len() {
-                    0 => Ok(Some((Expression::Void, Type::Void))),
+                    0 => Ok(None),
                     1 => Ok(reduced[0].to_owned()),
                     _ => Ok(Some((
                         Expression::Funcall {
@@ -1074,7 +1076,7 @@ fn apply(
         let mut traversed_args = vec![];
         let mut traversed_args_t = vec![];
         for arg in args.iter() {
-            let traversed = reduce(arg, root_ctx.clone(), ctx, settings)?;
+            let traversed = dbg!(reduce(arg, root_ctx.clone(), ctx, settings)?);
             if let Some((traversed, t)) = traversed {
                 traversed_args.push(traversed);
                 traversed_args_t.push(t);
