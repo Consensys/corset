@@ -1190,7 +1190,7 @@ pub fn reduce(
             let r = ctx
                 .borrow_mut()
                 .resolve_symbol(name)
-                .with_context(|| make_src_error(e))?;
+                .with_context(|| make_ast_error(e))?;
             Ok(Some(r))
         }
 
@@ -1201,11 +1201,11 @@ pub fn reduce(
                 let func = ctx
                     .borrow()
                     .resolve_function(verb)
-                    .with_context(|| make_src_error(e))?;
+                    .with_context(|| make_ast_error(e))?;
 
                 apply(&func, &args[1..], root_ctx, ctx)
             } else {
-                Err(anyhow!("not a function: `{:?}`", args[0])).with_context(|| make_src_error(e))
+                Err(anyhow!("not a function: `{:?}`", args[0])).with_context(|| make_ast_error(e))
             }
         }
 
@@ -1234,7 +1234,7 @@ pub fn reduce(
         | Token::DefPlookup(..)
         | Token::DefInrange(..) => Ok(None),
     }
-    .with_context(|| make_src_error(e))
+    .with_context(|| make_ast_error(e))
 }
 
 fn reduce_toplevel(
@@ -1312,7 +1312,7 @@ fn reduce_toplevel(
     }
 }
 
-pub fn make_src_error(exp: &AstNode) -> String {
+pub fn make_ast_error(exp: &AstNode) -> String {
     let src_str = exp
         .src
         .chars()
@@ -1341,7 +1341,7 @@ pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Constraint>>
     let mut module = ctx.clone();
     for exp in ast.exprs.iter() {
         if let Some(c) =
-            reduce_toplevel(exp, ctx.clone(), &mut module).with_context(|| make_src_error(exp))?
+            reduce_toplevel(exp, ctx.clone(), &mut module).with_context(|| make_ast_error(exp))?
         {
             r.push(c)
         }

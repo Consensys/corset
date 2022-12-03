@@ -1,4 +1,6 @@
 use anyhow::{anyhow, Context, Result};
+use colored::Colorize;
+use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 #[cfg(feature = "interactive")]
@@ -328,6 +330,17 @@ impl AstNode {
             }
 
             Some(Token::Symbol(defkw)) if defkw == "defun" => {
+                if tokens.len() > 3 {
+                    return Err(anyhow!(
+                        "DEFUN expects one body, {} found: {}",
+                        tokens.len(),
+                        args[2..]
+                            .iter()
+                            .map(|t| t.src.replace('\n', "").bold().bright_white().to_string())
+                            .intersperse(", ".to_string())
+                            .collect::<String>()
+                    ));
+                }
                 match (&tokens.get(1), tokens.get(2)) {
                     (Some(Token::List(fargs)), Some(_))
                         if !fargs.is_empty()

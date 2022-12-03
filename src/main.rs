@@ -22,6 +22,8 @@ mod compute;
 mod expander;
 mod exporters;
 mod pretty;
+#[cfg(test)]
+mod tests;
 mod utils;
 
 #[derive(Default, Debug)]
