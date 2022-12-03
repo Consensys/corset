@@ -4,13 +4,14 @@ use std::{cell::RefCell, rc::Rc};
 use super::{
     definitions::SymbolTable,
     generator::{make_ast_error, reduce},
-    Ast, AstNode, Token,
+    Ast, AstNode, CompileSettings, Token,
 };
 
 fn reduce_compiletime(
     e: &AstNode,
     root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
+    settings: &CompileSettings,
 ) -> Result<()> {
     match &e.class {
         Token::DefModule(name) => {
@@ -19,7 +20,7 @@ fn reduce_compiletime(
         }
         Token::DefConsts(cs) => {
             for (name, exp) in cs.iter() {
-                let (value, _) = reduce(exp, root_ctx.clone(), ctx)?.unwrap();
+                let (value, _) = reduce(exp, root_ctx.clone(), ctx, settings)?.unwrap();
                 ctx.borrow_mut().insert_constant(
                     name,
                     value.pure_eval().with_context(|| make_ast_error(exp))?,
@@ -31,10 +32,11 @@ fn reduce_compiletime(
     }
 }
 
-pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
+pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>, settings: &CompileSettings) -> Result<()> {
     let mut module = ctx.clone();
     for exp in ast.exprs.iter() {
-        reduce_compiletime(exp, ctx.clone(), &mut module).with_context(|| make_ast_error(exp))?;
+        reduce_compiletime(exp, ctx.clone(), &mut module, settings)
+            .with_context(|| make_ast_error(exp))?;
     }
 
     Ok(())

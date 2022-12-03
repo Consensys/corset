@@ -19,10 +19,16 @@ mod parser;
 
 const MAIN_MODULE: &str = "<top-level>";
 
-const ALLOW_DUP: bool = true;
+pub struct CompileSettings {
+    pub debug: bool,
+    pub allow_dups: bool,
+}
 
 #[cfg(feature = "interactive")]
-pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, ConstraintSet)> {
+pub fn make<S: AsRef<str>>(
+    sources: &[(&str, S)],
+    settings: &CompileSettings,
+) -> Result<(Vec<Ast>, ConstraintSet)> {
     use colored::Colorize;
 
     let mut asts = vec![];
@@ -42,7 +48,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
 
     for (name, ast) in asts.iter_mut() {
         info!("Compiling {}", name.bright_white().bold());
-        compiletime::pass(ast, ctx.clone())
+        compiletime::pass(ast, ctx.clone(), settings)
             .with_context(|| anyhow!("compiling constraints in {}", name.bright_white()))?
     }
 
@@ -51,7 +57,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
             Symbol::Alias(_) => {}
             Symbol::Final(ref mut symbol, _) => match symbol {
                 Expression::Column(ref mut handle, t, k) => {
-                    columns.insert_column(handle, *t, k.to_nil(), ALLOW_DUP)?;
+                    columns.insert_column(handle, *t, k.to_nil(), settings.allow_dups)?;
                     match k {
                         Kind::Atomic | Kind::Phantom => (),
                         Kind::Composite(e) => computations.insert(
@@ -71,7 +77,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
                     }
                 }
                 Expression::ArrayColumn(handle, range, t) => {
-                    columns.insert_array(handle, range, *t, ALLOW_DUP)?
+                    columns.insert_array(handle, range, *t, settings.allow_dups)?
                 }
                 Expression::Const(ref x, _) => {
                     constants.insert(handle, x.try_into().unwrap());
@@ -85,7 +91,7 @@ pub fn make<S: AsRef<str>>(sources: &[(&str, S)]) -> Result<(Vec<Ast>, Constrain
     let constraints = asts
         .iter()
         .map(|(name, ast)| {
-            generator::pass(ast, ctx.clone())
+            generator::pass(ast, ctx.clone(), settings)
                 .with_context(|| anyhow!("compiling constraints in {}", name.bright_white()))
         })
         .collect::<Result<Vec<_>>>()?

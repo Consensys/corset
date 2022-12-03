@@ -46,6 +46,12 @@ pub struct Args {
     )]
     source: Vec<String>,
 
+    #[arg(help = "Compile code in debug mode", global = true)]
+    debug: bool,
+
+    #[arg(help = "Whether to allow re-declaration of symbols", global = true)]
+    allow_dups: bool,
+
     #[arg(
         short = 't',
         long = "threads",
@@ -286,7 +292,13 @@ fn main() -> Result<()> {
                     inputs.push(("Immediate expression", f.into()));
                 }
             }
-            compiler::make(inputs.as_slice())?
+            compiler::make(
+                inputs.as_slice(),
+                &compiler::CompileSettings {
+                    debug: args.debug,
+                    allow_dups: args.allow_dups,
+                },
+            )?
         }
 
         #[cfg(not(feature = "interactive"))]

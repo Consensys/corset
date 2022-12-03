@@ -19,7 +19,7 @@ use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 
 use super::definitions::ComputationTable;
-use super::{common::*, Handle};
+use super::{common::*, CompileSettings, Handle};
 use crate::column::{Column, ColumnSet, Computation};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
@@ -994,6 +994,7 @@ fn apply_form(
     args: &[AstNode],
     root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
+    settings: &CompileSettings,
 ) -> Result<Option<(Expression, Type)>> {
     let args = f
         .validate_args(args.to_vec())
@@ -1022,7 +1023,8 @@ fn apply_form(
                         Expression::Const(BigInt::from(*i), Fr::from_str(&i.to_string())),
                     )?;
 
-                    let (r, to) = reduce(&body.clone(), root_ctx.clone(), &mut for_ctx)?.unwrap();
+                    let (r, to) =
+                        reduce(&body.clone(), root_ctx.clone(), &mut for_ctx, settings)?.unwrap();
                     l.push(r);
                     t = t.max(&to)
                 }
@@ -1040,14 +1042,15 @@ fn apply(
     args: &[AstNode],
     root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
+    settings: &CompileSettings,
 ) -> Result<Option<(Expression, Type)>> {
     if let FunctionClass::SpecialForm(sf) = f.class {
-        apply_form(sf, args, root_ctx, ctx)
+        apply_form(sf, args, root_ctx, ctx, settings)
     } else {
         let mut traversed_args = vec![];
         let mut traversed_args_t = vec![];
         for arg in args.iter() {
-            let traversed = reduce(arg, root_ctx.clone(), ctx)?;
+            let traversed = reduce(arg, root_ctx.clone(), ctx, settings)?;
             if let Some((traversed, t)) = traversed {
                 traversed_args.push(traversed);
                 traversed_args_t.push(t);
@@ -1164,7 +1167,7 @@ fn apply(
                         .borrow_mut()
                         .insert_symbol(f_arg, traversed_args[i].clone())?;
                 }
-                reduce(body, root_ctx, &mut f_ctx)
+                reduce(body, root_ctx, &mut f_ctx, settings)
             }
             _ => unimplemented!("{:?}", f),
         }
@@ -1175,6 +1178,7 @@ pub fn reduce(
     e: &AstNode,
     root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
+    settings: &CompileSettings,
 ) -> Result<Option<(Expression, Type)>> {
     match &e.class {
         Token::Keyword(_) | Token::Type(_) | Token::Range(_) => Ok(None),
@@ -1203,7 +1207,7 @@ pub fn reduce(
                     .resolve_function(verb)
                     .with_context(|| make_ast_error(e))?;
 
-                apply(&func, &args[1..], root_ctx, ctx)
+                apply(&func, &args[1..], root_ctx, ctx, settings)
             } else {
                 Err(anyhow!("not a function: `{:?}`", args[0])).with_context(|| make_ast_error(e))
             }
@@ -1211,7 +1215,7 @@ pub fn reduce(
 
         Token::DefColumn(name, _, k) => match k {
             Kind::Composite(e) => {
-                let e = reduce(e, root_ctx, ctx)?.unwrap();
+                let e = reduce(e, root_ctx, ctx, settings)?.unwrap();
                 ctx.borrow_mut().edit_symbol(name, &|x| {
                     if let Expression::Column(_, _, kind) = x {
                         *kind = Kind::Composite(Box::new(e.0.clone()))
@@ -1241,13 +1245,14 @@ fn reduce_toplevel(
     e: &AstNode,
     root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
+    settings: &CompileSettings,
 ) -> Result<Option<Constraint>> {
     match &e.class {
         Token::DefConstraint(name, domain, expr) => Ok(Some(Constraint::Vanishes {
             name: name.into(),
             domain: domain.to_owned(),
             expr: Box::new(
-                reduce(expr, root_ctx, ctx)?
+                reduce(expr, root_ctx, ctx, settings)?
                     .unwrap_or((Expression::Void, Type::Void))
                     .0,
             ), // the parser ensures that the body is never empty
@@ -1255,14 +1260,14 @@ fn reduce_toplevel(
         Token::DefPlookup(name, parent, child) => {
             let parents = parent
                 .iter()
-                .map(|e| reduce(e, root_ctx.clone(), ctx))
+                .map(|e| reduce(e, root_ctx.clone(), ctx, settings))
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 .map(|e| e.unwrap().0)
                 .collect::<Vec<_>>();
             let children = child
                 .iter()
-                .map(|e| reduce(e, root_ctx.clone(), ctx))
+                .map(|e| reduce(e, root_ctx.clone(), ctx, settings))
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 .map(|e| e.unwrap().0)
@@ -1280,12 +1285,12 @@ fn reduce_toplevel(
         }
         Token::DefInrange(e, range) => Ok(Some(Constraint::InRange(
             names::Generator::default().next().unwrap(),
-            reduce(e, root_ctx, ctx)?.unwrap().0,
+            reduce(e, root_ctx, ctx, settings)?.unwrap().0,
             *range,
         ))),
         Token::DefColumns(columns) => {
             for _ in columns {
-                reduce(e, root_ctx.clone(), ctx)?;
+                reduce(e, root_ctx.clone(), ctx, settings)?;
             }
             Ok(None)
         }
@@ -1335,13 +1340,17 @@ pub fn make_ast_error(exp: &AstNode) -> String {
     )
 }
 
-pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<Vec<Constraint>> {
+pub fn pass(
+    ast: &Ast,
+    ctx: Rc<RefCell<SymbolTable>>,
+    settings: &CompileSettings,
+) -> Result<Vec<Constraint>> {
     let mut r = vec![];
 
     let mut module = ctx.clone();
     for exp in ast.exprs.iter() {
-        if let Some(c) =
-            reduce_toplevel(exp, ctx.clone(), &mut module).with_context(|| make_ast_error(exp))?
+        if let Some(c) = reduce_toplevel(exp, ctx.clone(), &mut module, settings)
+            .with_context(|| make_ast_error(exp))?
         {
             r.push(c)
         }
