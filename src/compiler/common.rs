@@ -22,6 +22,11 @@ lazy_static::lazy_static! {
             class: FunctionClass::SpecialForm(Form::For),
         },
 
+        "debug" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "debug"),
+            class: FunctionClass::SpecialForm(Form::Debug),
+        },
+
 
         // monadic
         "inv" => Function {
@@ -87,6 +92,7 @@ lazy_static::lazy_static! {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Form {
     For,
+    Debug,
 }
 
 pub enum Arity {
@@ -156,6 +162,7 @@ impl FuncVerifier<AstNode> for Form {
     fn arity(&self) -> Arity {
         match self {
             Form::For => Arity::Exactly(3),
+            Form::Debug => Arity::AtLeast(1),
         }
     }
     fn validate_types(&self, args: &[AstNode]) -> Result<()> {
@@ -174,6 +181,7 @@ impl FuncVerifier<AstNode> for Form {
                     ))
                 }
             }
+            Form::Debug => Ok(()),
         }
     }
 }

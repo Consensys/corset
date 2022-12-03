@@ -1034,6 +1034,30 @@ fn apply_form(
                 unreachable!()
             }
         }
+        Form::Debug => {
+            if !settings.debug {
+                Ok(Some((Expression::Void, Type::Void)))
+            } else {
+                let reduced = args
+                    .iter()
+                    .map(|e| reduce(e, root_ctx.clone(), ctx, settings))
+                    .collect::<Result<Vec<_>>>()?;
+                match reduced.len() {
+                    0 => Ok(Some((Expression::Void, Type::Void))),
+                    1 => Ok(reduced[0].to_owned()),
+                    _ => Ok(Some((
+                        Expression::Funcall {
+                            func: Builtin::Begin,
+                            args: reduced
+                                .into_iter()
+                                .map(|e| e.map(|e| e.0).unwrap_or(Expression::Void))
+                                .collect(),
+                        },
+                        Type::Void,
+                    ))),
+                }
+            }
+        }
     }
 }
 

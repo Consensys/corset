@@ -46,10 +46,14 @@ pub struct Args {
     )]
     source: Vec<String>,
 
-    #[arg(help = "Compile code in debug mode", global = true)]
+    #[arg(long = "debug", help = "Compile code in debug mode", global = true)]
     debug: bool,
 
-    #[arg(help = "Whether to allow re-declaration of symbols", global = true)]
+    #[arg(
+        long = "allow-dups",
+        help = "Whether to allow re-declaration of symbols",
+        global = true
+    )]
     allow_dups: bool,
 
     #[arg(
