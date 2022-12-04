@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Context, Result};
 use colored::Colorize;
-use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 #[cfg(feature = "interactive")]
@@ -16,6 +15,23 @@ use super::{Handle, Magma};
 #[derive(Parser)]
 #[grammar = "corset.pest"]
 struct CorsetParser;
+
+pub fn make_src_error(src: &str, lc: (usize, usize)) -> String {
+    let src_str = src
+        .chars()
+        .take_while(|x| *x != '\n')
+        .collect::<String>()
+        .bold()
+        .bright_white()
+        .to_string();
+
+    format!(
+        "at line {}: {}{}",
+        lc.0.to_string().blue(),
+        src_str,
+        if src_str.len() < src.len() { "..." } else { "" }.bright_white()
+    )
+}
 
 #[derive(Debug)]
 pub struct Ast {
@@ -374,13 +390,8 @@ impl AstNode {
             Some(Token::Symbol(defkw)) if defkw == "defun" => {
                 if tokens.len() > 3 {
                     return Err(anyhow!(
-                        "DEFUN expects one body, {} found: {}",
-                        tokens.len(),
-                        args[2..]
-                            .iter()
-                            .map(|t| t.src.replace('\n', "").bold().bright_white().to_string())
-                            .intersperse(", ".to_string())
-                            .collect::<String>()
+                        "DEFUN expects one body, {} found",
+                        tokens.len() - 2,
                     ));
                 }
                 match (&tokens.get(1), tokens.get(2)) {
@@ -583,7 +594,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
                 .map(rec_parse)
                 .collect::<Result<Vec<_>>>()?;
 
-            Ok(AstNode::def_from(args, &src, lc).with_context(|| anyhow!("parsing `{}`", &src))?)
+            Ok(AstNode::def_from(args, &src, lc).with_context(|| make_src_error(&src, lc))?)
         }
         Rule::list => {
             let args = pair
@@ -615,9 +626,8 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         Rule::defcolumn => {
-            let msg = pair.as_str().to_string();
             let pairs = pair.into_inner().collect::<Vec<_>>();
-            AstNode::column_from(pairs, src, lc).with_context(|| format!("parsing `{}`", msg))
+            AstNode::column_from(pairs, src.clone(), lc).with_context(|| make_src_error(&src, lc))
         }
         Rule::integer => Ok(AstNode {
             class: Token::Value(pair.as_str().parse().unwrap()),

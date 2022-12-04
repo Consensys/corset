@@ -318,8 +318,11 @@ import (
                         Constraint::Plookup(name, parents, children)  => {
                             format!("// New Plookup {}\n// Parents:\n// {:?}\n// Children:\n// {:?}", name, parents, children)
                         },
-                        Constraint::Permutation(name, from, to) =>
-                            format!("// Permutation {}\n// Parents:\n// {:?}\n// Children:\n// {:?}", name, from, to),
+                        Constraint::Permutation(_name, from, to) =>
+                            format!("// Permutation \n// Parents:\n// {}\n// Children:\n// {:?}",
+                                    from.iter().map(|h| h.to_string()).intersperse(", ".to_string()).collect::<String>(),
+                                    to.iter().map(|h| h.to_string()).intersperse(", ".to_string()).collect::<String>()
+                            ),
                         Constraint::InRange(.. ) => "".into()
                     }
                 })

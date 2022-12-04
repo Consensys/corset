@@ -98,12 +98,11 @@ fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
         Builtin::Exp => {
             let exp = args[1]
                 .pure_eval()
-                .expect(&format!("Exponent `{}` is not evaluable", &args[1]))
+                .unwrap_or_else(|_| panic!("Exponent `{}` is not evaluable", &args[1]))
                 .to_usize()
-                .expect(&format!(
-                    "Exponent `{}` is too large",
-                    &args[1].pure_eval().unwrap()
-                ));
+                .unwrap_or_else(|| {
+                    panic!("Exponent `{}` is too large", &args[1].pure_eval().unwrap())
+                });
             match exp {
                 0 => "column.CONST_STRING(\"1\")".to_string(),
                 1 => render_expression(&args[0]),

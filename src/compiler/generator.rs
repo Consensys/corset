@@ -241,7 +241,7 @@ impl Expression {
                     let mut ax = Fr::one();
                     let mantissa = args[0].eval(i, get, cache, settings)?;
                     let exp = args[1].pure_eval().unwrap().to_usize().unwrap();
-                    for _ in 0..exp.into() {
+                    for _ in 0..exp {
                         ax.mul_assign(&mantissa);
                     }
                     Some(ax)
@@ -1344,26 +1344,7 @@ fn reduce_toplevel(
 }
 
 pub fn make_ast_error(exp: &AstNode) -> String {
-    let src_str = exp
-        .src
-        .chars()
-        .take_while(|x| *x != '\n')
-        .collect::<String>()
-        .bold()
-        .bright_white()
-        .to_string();
-
-    format!(
-        "at line {}: {}{}",
-        exp.lc.0.to_string().blue(),
-        src_str,
-        if src_str.len() < exp.src.len() {
-            "..."
-        } else {
-            ""
-        }
-        .bright_white()
-    )
+    make_src_error(&exp.src, exp.lc)
 }
 
 pub fn pass(
