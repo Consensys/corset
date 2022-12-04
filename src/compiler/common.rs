@@ -250,6 +250,7 @@ impl std::cmp::PartialOrd for Type {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Magma {
     Boolean,
+    Nibble,
     Integer,
 }
 impl std::cmp::Ord for Magma {
@@ -260,9 +261,15 @@ impl std::cmp::Ord for Magma {
 impl std::cmp::PartialOrd for Magma {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (Magma::Integer, Magma::Boolean) => Some(Ordering::Greater),
+            (Magma::Boolean, Magma::Boolean) => Some(Ordering::Equal),
+            (Magma::Boolean, Magma::Nibble) => Some(Ordering::Less),
             (Magma::Boolean, Magma::Integer) => Some(Ordering::Less),
-            _ => Some(Ordering::Equal),
+            (Magma::Nibble, Magma::Boolean) => Some(Ordering::Greater),
+            (Magma::Nibble, Magma::Nibble) => Some(Ordering::Equal),
+            (Magma::Nibble, Magma::Integer) => Some(Ordering::Less),
+            (Magma::Integer, Magma::Boolean) => Some(Ordering::Greater),
+            (Magma::Integer, Magma::Nibble) => Some(Ordering::Greater),
+            (Magma::Integer, Magma::Integer) => Some(Ordering::Equal),
         }
     }
 }

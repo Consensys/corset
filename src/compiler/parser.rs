@@ -190,7 +190,7 @@ impl AstNode {
         let mut pairs = args.into_iter();
         let name = pairs.next().unwrap().as_str();
 
-        let mut t = Type::Column(Magma::Integer);
+        let mut t: Option<Type> = None;
         let mut range = None;
         let mut kind = Kind::Atomic;
 
@@ -213,8 +213,42 @@ impl AstNode {
                             ));
                         }
                     }
-                    ":NATURAL" | ":BYTE" => t = Type::Column(Magma::Integer),
-                    ":BOOLEAN" => t = Type::Column(Magma::Boolean),
+                    ":NATURAL" | ":BYTE" => {
+                        if let Some(tt) = t {
+                            return Err(anyhow!(
+                                "{} is already of type {:?}; can not be of type {:?}",
+                                name,
+                                tt,
+                                x.as_str()
+                            ));
+                        } else {
+                            t = Some(Type::Column(Magma::Integer))
+                        }
+                    }
+                    ":NIBBLE" => {
+                        if let Some(tt) = t {
+                            return Err(anyhow!(
+                                "{} is already of type {:?}; can not be of type {:?}",
+                                name,
+                                tt,
+                                x.as_str()
+                            ));
+                        } else {
+                            t = Some(Type::Column(Magma::Nibble))
+                        }
+                    }
+                    ":BOOLEAN" => {
+                        if let Some(tt) = t {
+                            return Err(anyhow!(
+                                "{} is already of type {:?}; can not be of type {:?}",
+                                name,
+                                tt,
+                                x.as_str()
+                            ));
+                        } else {
+                            t = Some(Type::Column(Magma::Boolean))
+                        }
+                    }
                     ":COMP" => {
                         let n = pairs.next().map(rec_parse);
                         if let Some(Ok(AstNode {
@@ -274,7 +308,7 @@ impl AstNode {
                             ));
                         }
                     }
-                    x => unreachable!("{:?}", x),
+                    x => return Err(anyhow!("unknown column attribute {:?}", x)),
                 },
                 _ => {
                     return Err(anyhow!("expected :KEYWORD, found `{}`", x.as_str()));
@@ -287,14 +321,22 @@ impl AstNode {
                 Err(anyhow!("array columns must be atomic"))
             } else {
                 Ok(AstNode {
-                    class: Token::DefArrayColumn(name.into(), range, t),
+                    class: Token::DefArrayColumn(
+                        name.into(),
+                        range,
+                        t.unwrap_or(Type::Column(Magma::Integer)),
+                    ),
                     lc,
                     src,
                 })
             }
         } else {
             Ok(AstNode {
-                class: Token::DefColumn(name.into(), t, kind),
+                class: Token::DefColumn(
+                    name.into(),
+                    t.unwrap_or(Type::Column(Magma::Integer)),
+                    kind,
+                ),
                 lc,
                 src,
             })

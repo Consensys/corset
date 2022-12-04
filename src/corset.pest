@@ -29,7 +29,7 @@ forloop = { "(" ~ "for" ~ symbol ~ range ~ expr ~ ")" }
 range = _{ immediate_range | interval }
 immediate_range = { "{" ~ natural+ ~ "}" }
 interval = { "[" ~ natural ~ (":" ~ natural ~ (":" ~ natural)?)? ~ "]" }
-typing = @{ "NATURAL" | "BOOLEAN" | "BYTE" }
+typing = @{ "NATURAL" | "BOOLEAN" | "BYTE" | "NIBBLE" }
 
 integer = @{ "-"? ~ natural }
 natural = @{ ASCII_DIGIT+ }
