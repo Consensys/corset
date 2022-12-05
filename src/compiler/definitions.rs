@@ -336,17 +336,21 @@ impl SymbolTable {
                 self.name.blue()
             ))
         } else {
-            self.symbols.insert(
-                name.to_owned(),
-                (
-                    Symbol::Final(
-                        Expression::Const(value.clone(), Fr::from_str(&value.to_string())),
-                        false,
+            if let Some(fr) = Fr::from_str(&value.to_string()) {
+                self.symbols.insert(
+                    name.to_owned(),
+                    (
+                        Symbol::Final(Expression::Const(value.clone(), Some(fr)), false),
+                        t,
                     ),
-                    t,
-                ),
-            );
-            Ok(())
+                );
+                Ok(())
+            } else {
+                Err(anyhow!(
+                    "{} is not an Fr element",
+                    value.to_string().red().bold()
+                ))
+            }
         }
     }
 

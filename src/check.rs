@@ -133,6 +133,9 @@ fn check_constraint(
                 .map(|c| c.len())
         })
         .collect::<Result<Vec<_>>>()?;
+    if cols_lens.is_empty() {
+        return Ok(());
+    }
     // Early exit if all the columns are empty: the module is not triggered
     // Ideally, this should be an `all` rather than an `any`, but the IC
     // pushes columns that will always be filled.
