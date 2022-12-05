@@ -1076,7 +1076,7 @@ fn apply(
         let mut traversed_args = vec![];
         let mut traversed_args_t = vec![];
         for arg in args.iter() {
-            let traversed = dbg!(reduce(arg, root_ctx.clone(), ctx, settings)?);
+            let traversed = reduce(arg, root_ctx.clone(), ctx, settings)?;
             if let Some((traversed, t)) = traversed {
                 traversed_args.push(traversed);
                 traversed_args_t.push(t);
