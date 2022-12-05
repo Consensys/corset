@@ -310,7 +310,7 @@ pub fn check(
                         Expression::List(es) => {
                             for e in es {
                                 if let Err(err) = check_constraint(e, domain, &cs.modules, name) {
-                                    error!("{:?}", err);
+                                    error!("{} failed:\n{:?}", name, err);
                                     return Some(name.to_owned());
                                 }
                             }
@@ -318,7 +318,7 @@ pub fn check(
                         }
                         _ => {
                             if let Err(err) = check_constraint(expr, domain, &cs.modules, name) {
-                                error!("{:?}", err);
+                                error!("{} failed:\n{:?}", name, err);
                                 Some(name.to_owned())
                             } else {
                                 None
@@ -328,7 +328,7 @@ pub fn check(
                 }
                 Constraint::Plookup(name, parents, children) => {
                     if let Err(err) = check_plookup(cs, parents, children) {
-                        error!("{:?}", err);
+                        error!("{} failed:\n{:?}", name, err);
                         Some(name.to_owned())
                     } else {
                         None
