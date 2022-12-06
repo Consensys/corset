@@ -281,16 +281,23 @@ pub fn check(
     } else {
         None
     };
-    let failed = cs
+    let todo = cs
         .constraints
-        .par_iter()
-        .with_max_len(1)
+        .iter()
         .filter(|c| {
             only.as_ref()
                 .map(|o| o.contains(&c.name().to_string()))
                 .unwrap_or(true)
         })
         .filter(|c| !skip.contains(&c.name().to_string()))
+        .collect::<Vec<_>>();
+    if todo.is_empty() {
+        return Err(anyhow!("refusing to check an empty constraint set"));
+    }
+
+    let failed = todo
+        .par_iter()
+        .with_max_len(1)
         .inspect(|_| {
             #[cfg(feature = "interactive")]
             {
