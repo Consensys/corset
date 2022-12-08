@@ -121,6 +121,7 @@ pub enum Token {
     DefArrayColumn(String, Vec<usize>, Type),
     DefConstraint(String, Option<Vec<isize>>, Box<AstNode>),
     Defun(String, Vec<String>, Box<AstNode>),
+    Defpurefun(String, Vec<String>, Box<AstNode>),
     DefAliases(Vec<AstNode>),
     DefAlias(String, String),
     DefunAlias(String, String),
@@ -185,6 +186,9 @@ impl Debug for Token {
             }
             Token::DefConstraint(name, ..) => write!(f, "{:?}:CONSTRAINT", name),
             Token::Defun(name, args, content) => {
+                write!(f, "{}:({:?}) -> {:?}", name, args, content)
+            }
+            Token::Defpurefun(name, args, content) => {
                 write!(f, "{}:({:?}) -> {:?}", name, args, content)
             }
             Token::DefAliases(cols) => write!(f, "ALIASES {:?}", cols),
@@ -401,6 +405,49 @@ impl AstNode {
                     {
                         Ok(AstNode {
                             class: Token::Defun(
+                                if let Token::Symbol(ref name) = fargs[0].class {
+                                    name.to_string()
+                                } else {
+                                    unreachable!()
+                                },
+                                fargs
+                                    .iter()
+                                    .skip(1)
+                                    .map(|a| {
+                                        if let Token::Symbol(ref aa) = a.class {
+                                            aa.to_owned()
+                                        } else {
+                                            unreachable!()
+                                        }
+                                    })
+                                    .collect::<Vec<_>>(),
+                                Box::new(args[2].clone()),
+                            ),
+                            src: src.into(),
+                            lc,
+                        })
+                    }
+                    _ => Err(anyhow!(
+                        "DEFUN expects ((SYMBOL SYMBOL*) FORM); received {:?}",
+                        &tokens[1..]
+                    )),
+                }
+            }
+
+            Some(Token::Symbol(defkw)) if defkw == "defpurefun" => {
+                if tokens.len() > 3 {
+                    return Err(anyhow!(
+                        "DEFPUREFUN expects one body, {} found",
+                        tokens.len() - 2,
+                    ));
+                }
+                match (&tokens.get(1), tokens.get(2)) {
+                    (Some(Token::List(fargs)), Some(_))
+                        if !fargs.is_empty()
+                            && fargs.iter().all(|x| matches!(x.class, Token::Symbol(_))) =>
+                    {
+                        Ok(AstNode {
+                            class: Token::Defpurefun(
                                 if let Token::Symbol(ref name) = fargs[0].class {
                                     name.to_string()
                                 } else {

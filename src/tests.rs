@@ -37,3 +37,40 @@ fn defun_too_many_args() {
     )
     .is_err());
 }
+
+#[test]
+fn defpure_ok() {
+    let inputs = vec![
+        ("stdlib", include_str!("stdlib.lisp")),
+        ("defpurefun", "(defcolumns X Y) (defun (f A B) (eq A B))"),
+    ];
+
+    assert!(compiler::make(
+        inputs.as_slice(),
+        &CompileSettings {
+            debug: false,
+            allow_dups: false,
+        },
+    )
+    .is_ok());
+}
+
+#[test]
+fn defpure_ko() {
+    let inputs = vec![
+        ("stdlib", include_str!("stdlib.lisp")),
+        (
+            "defpurefun",
+            "(defcolumns X Y Z) (defpurefun (f A B) (begin (eq A 3) (eq B Z))) (defconstraint asdf () (f X Y))",
+        ),
+    ];
+
+    assert!(dbg!(compiler::make(
+        inputs.as_slice(),
+        &CompileSettings {
+            debug: false,
+            allow_dups: false
+        }
+    ))
+    .is_err());
+}

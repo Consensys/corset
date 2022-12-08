@@ -525,6 +525,7 @@ pub enum FunctionClass {
 
 #[derive(Debug, Clone)]
 pub struct Defined {
+    pub pure: bool,
     pub args: Vec<String>,
     pub body: AstNode,
 }
@@ -1019,6 +1020,7 @@ fn apply_form(
                                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                             i
                         ),
+                        false,
                     );
                     for_ctx.borrow_mut().insert_symbol(
                         i_name,
@@ -1176,7 +1178,13 @@ fn apply(
                 }
             }
 
-            FunctionClass::UserDefined(b @ Defined { args: f_args, body }) => {
+            FunctionClass::UserDefined(
+                b @ Defined {
+                    args: f_args,
+                    body,
+                    pure,
+                },
+            ) => {
                 let f_mangle = format!(
                     "fn-{}-{}",
                     f.handle,
@@ -1187,7 +1195,7 @@ fn apply(
                 let traversed_args = b
                     .validate_args(traversed_args)
                     .with_context(|| anyhow!("validating call to `{}`", f.handle))?;
-                let mut f_ctx = SymbolTable::derived(ctx.clone(), &f_mangle);
+                let mut f_ctx = SymbolTable::derived(ctx.clone(), &f_mangle, *pure);
                 for (i, f_arg) in f_args.iter().enumerate() {
                     f_ctx
                         .borrow_mut()
@@ -1260,6 +1268,7 @@ pub fn reduce(
         | Token::DefunAlias(..)
         | Token::DefConsts(..)
         | Token::Defun(..)
+        | Token::Defpurefun(..)
         | Token::DefSort(..)
         | Token::DefPlookup(..)
         | Token::DefInrange(..) => Ok(None),
@@ -1321,15 +1330,17 @@ fn reduce_toplevel(
             Ok(None)
         }
         Token::DefModule(name) => {
-            *ctx = SymbolTable::derived(root_ctx, name);
+            *ctx = SymbolTable::derived(root_ctx, name, false);
             Ok(None)
         }
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
             Err(anyhow!("Unexpected top-level form: {:?}", e))
         }
-        Token::Defun(..) | Token::DefAliases(_) | Token::DefunAlias(..) | Token::DefConsts(..) => {
-            Ok(None)
-        }
+        Token::Defun(..)
+        | Token::Defpurefun(..)
+        | Token::DefAliases(_)
+        | Token::DefunAlias(..)
+        | Token::DefConsts(..) => Ok(None),
         Token::DefSort(to, from) => Ok(Some(Constraint::Permutation(
             names::Generator::default().next().unwrap(),
             from.iter()

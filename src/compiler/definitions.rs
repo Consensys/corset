@@ -72,6 +72,7 @@ impl ComputationTable {
 pub struct SymbolTable {
     // The parent relationship is only used for contextual
     // semantics (i.e. for & functions), not modules
+    closed: bool,
     pub name: String,
     parent: Weak<RefCell<Self>>,
     children: HashMap<String, Rc<RefCell<SymbolTable>>>,
@@ -83,6 +84,7 @@ pub struct SymbolTable {
 impl SymbolTable {
     pub fn new_root() -> SymbolTable {
         SymbolTable {
+            closed: true,
             name: super::MAIN_MODULE.to_owned(),
             parent: Weak::new(),
             children: Default::default(),
@@ -96,13 +98,14 @@ impl SymbolTable {
         }
     }
 
-    pub fn derived(parent: Rc<RefCell<Self>>, name: &str) -> Rc<RefCell<Self>> {
+    pub fn derived(parent: Rc<RefCell<Self>>, name: &str, closed: bool) -> Rc<RefCell<Self>> {
         parent
             .borrow_mut()
             .children
             .entry(name.to_string())
             .or_insert_with(|| {
                 Rc::new(RefCell::new(SymbolTable {
+                    closed,
                     name: name.to_owned(),
                     parent: Rc::downgrade(&parent),
                     children: Default::default(),
@@ -152,7 +155,7 @@ impl SymbolTable {
                         Ok((exp.clone(), *t))
                     }
                     None => {
-                        if absolute_path {
+                        if absolute_path || self.closed {
                             Err(anyhow!(
                                 "symbol {} unknown in module {}",
                                 name.red(),
@@ -394,7 +397,7 @@ fn reduce(
 
         Token::DefConstraint(name, ..) => ctx.borrow_mut().insert_constraint(name),
         Token::DefModule(name) => {
-            *ctx = SymbolTable::derived(root_ctx, name);
+            *ctx = SymbolTable::derived(root_ctx, name, false);
             Ok(())
         }
         Token::DefColumns(cols) => cols
@@ -506,6 +509,21 @@ fn reduce(
                 Function {
                     handle: Handle::new(&module_name, name),
                     class: FunctionClass::UserDefined(Defined {
+                        pure: false,
+                        args: args.to_owned(),
+                        body: *body.clone(),
+                    }),
+                },
+            )
+        }
+        Token::Defpurefun(name, args, body) => {
+            let module_name = ctx.borrow().name.to_owned();
+            ctx.borrow_mut().insert_function(
+                name,
+                Function {
+                    handle: Handle::new(&module_name, name),
+                    class: FunctionClass::UserDefined(Defined {
+                        pure: true,
                         args: args.to_owned(),
                         body: *body.clone(),
                     }),
