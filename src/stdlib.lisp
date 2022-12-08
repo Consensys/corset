@@ -53,12 +53,11 @@
 (defun (plateau-constraint CT X C)
             (if-zero C
                 (eq X 1)
-                (begin
                     (if-zero CT
                         (vanishes X)
                         (if-eq-else CT C
                             (eq X (+ (prev X) 1))
-                            (didnt-change X))))))
+                            (didnt-change X)))))
 
 ;; stamp constancy imposes that the column C may only
 ;; change at rows where the STAMP column changes.

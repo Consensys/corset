@@ -99,6 +99,26 @@ fn expression_to_name(e: &Expression, prefix: &str) -> String {
     format!("{}_{}", prefix, e).replace(' ', "_")
 }
 
+fn wrap(ex: Expression) -> Expression {
+    match ex {
+        Expression::List(_) => ex,
+        _ => Expression::List(vec![ex]),
+    }
+}
+
+fn flatten_list(mut e: Expression) -> Expression {
+    match e {
+        Expression::List(ref mut xs) => {
+            if xs.len() == 1 {
+                flatten_list(xs.pop().unwrap())
+            } else {
+                e
+            }
+        }
+        _ => e,
+    }
+}
+
 fn do_expand_ifs(e: &mut Expression) {
     match e {
         Expression::List(es) => {
@@ -119,20 +139,20 @@ fn do_expand_ifs(e: &mut Expression) {
                             if constant_cond.is_zero() {
                                 *e = args[1].clone();
                             } else {
-                                *e = args
-                                    .get(2)
-                                    .cloned()
-                                    .unwrap_or_else(|| Expression::Const(BigInt::zero(), None));
+                                *e =
+                                    flatten_list(args.get(2).cloned().unwrap_or_else(|| {
+                                        Expression::Const(BigInt::zero(), None)
+                                    }));
                             }
                         }
                         Builtin::IfNotZero => {
                             if !constant_cond.is_zero() {
-                                *e = args
-                                    .get(2)
-                                    .cloned()
-                                    .unwrap_or_else(|| Expression::Const(BigInt::zero(), None));
-                            } else {
                                 *e = args[1].clone();
+                            } else {
+                                *e =
+                                    flatten_list(args.get(2).cloned().unwrap_or_else(|| {
+                                        Expression::Const(BigInt::zero(), None)
+                                    }));
                             }
                         }
                         _ => unreachable!(),
@@ -178,16 +198,8 @@ fn do_expand_ifs(e: &mut Expression) {
                         .enumerate()
                         // Only keep the non-empty branches
                         .filter_map(|(i, ex)| ex.map(|ex| (i, ex)))
-                        // Ensure branches are wrapped in in lists
-                        .map(|(i, ex)| {
-                            (
-                                i,
-                                match ex {
-                                    Expression::List(_) => ex.clone(),
-                                    ex => Expression::List(vec![ex.clone()]),
-                                },
-                            )
-                        })
+                        // Ensure branches are wrapped in lists
+                        .map(|(i, ex)| (i, wrap(ex.clone())))
                         // Map the corresponding then/else operations on the branches
                         .flat_map(|(i, exs)| {
                             if let Expression::List(exs) = exs {
