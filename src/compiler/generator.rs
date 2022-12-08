@@ -1020,6 +1020,7 @@ fn apply_form(
                                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                             i
                         ),
+                        &ctx.borrow().pretty_name.clone(),
                         false,
                     );
                     for_ctx.borrow_mut().insert_symbol(
@@ -1195,7 +1196,8 @@ fn apply(
                 let traversed_args = b
                     .validate_args(traversed_args)
                     .with_context(|| anyhow!("validating call to `{}`", f.handle))?;
-                let mut f_ctx = SymbolTable::derived(ctx.clone(), &f_mangle, *pure);
+                let mut f_ctx =
+                    SymbolTable::derived(ctx.clone(), &f_mangle, &f.handle.to_string(), *pure);
                 for (i, f_arg) in f_args.iter().enumerate() {
                     f_ctx
                         .borrow_mut()
@@ -1330,7 +1332,7 @@ fn reduce_toplevel(
             Ok(None)
         }
         Token::DefModule(name) => {
-            *ctx = SymbolTable::derived(root_ctx, name, false);
+            *ctx = SymbolTable::derived(root_ctx, name, name, false);
             Ok(None)
         }
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {

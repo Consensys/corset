@@ -15,7 +15,7 @@ fn reduce_compiletime(
 ) -> Result<()> {
     match &e.class {
         Token::DefModule(name) => {
-            *ctx = SymbolTable::derived(root_ctx, name, false);
+            *ctx = SymbolTable::derived(root_ctx, name, name, false);
             Ok(())
         }
         Token::DefConsts(cs) => {

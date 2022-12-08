@@ -52,7 +52,7 @@ pub fn make<S: AsRef<str>>(
             .with_context(|| anyhow!("compiling constraints in {}", name.bright_white()))?
     }
 
-    ctx.borrow_mut().visit_mut::<()>(&mut |(handle, symbol)| {
+    ctx.borrow_mut().visit_mut::<()>(&mut |_, handle, symbol| {
         match &mut symbol.0 {
             Symbol::Alias(_) => {}
             Symbol::Final(ref mut symbol, _) => match symbol {
@@ -101,14 +101,19 @@ pub fn make<S: AsRef<str>>(
         .sorted_by_cached_key(|x| -(x.size() as isize))
         .collect::<Vec<_>>();
 
-    ctx.borrow_mut().visit_mut::<()>(&mut |(handle, symbol)| {
-        if let Symbol::Final(_, used) = symbol.0 {
-            if !used {
-                warn!("symbol is never used: {}", handle);
+    ctx.borrow_mut()
+        .visit_mut::<()>(&mut |module, handle, symbol| {
+            if let Symbol::Final(_, used) = symbol.0 {
+                if !used {
+                    warn!(
+                        "{} {} is never used",
+                        module.blue(),
+                        handle.name.bright_white().bold()
+                    );
+                }
             }
-        }
-        Ok(())
-    })?;
+            Ok(())
+        })?;
 
     Ok((
         asts.into_iter().map(|x| x.1).collect(),

@@ -74,6 +74,7 @@ pub struct SymbolTable {
     // semantics (i.e. for & functions), not modules
     closed: bool,
     pub name: String,
+    pub pretty_name: String,
     parent: Weak<RefCell<Self>>,
     children: HashMap<String, Rc<RefCell<SymbolTable>>>,
     constraints: HashSet<String>,
@@ -86,6 +87,7 @@ impl SymbolTable {
         SymbolTable {
             closed: true,
             name: super::MAIN_MODULE.to_owned(),
+            pretty_name: "".into(),
             parent: Weak::new(),
             children: Default::default(),
             constraints: Default::default(),
@@ -98,7 +100,12 @@ impl SymbolTable {
         }
     }
 
-    pub fn derived(parent: Rc<RefCell<Self>>, name: &str, closed: bool) -> Rc<RefCell<Self>> {
+    pub fn derived(
+        parent: Rc<RefCell<Self>>,
+        name: &str,
+        pretty_name: &str,
+        closed: bool,
+    ) -> Rc<RefCell<Self>> {
         parent
             .borrow_mut()
             .children
@@ -107,6 +114,7 @@ impl SymbolTable {
                 Rc::new(RefCell::new(SymbolTable {
                     closed,
                     name: name.to_owned(),
+                    pretty_name: pretty_name.to_owned(),
                     parent: Rc::downgrade(&parent),
                     children: Default::default(),
                     constraints: Default::default(),
@@ -120,14 +128,14 @@ impl SymbolTable {
 
     pub fn visit_mut<T>(
         &mut self,
-        f: &mut dyn FnMut((Handle, &mut (Symbol, Type))) -> Result<()>,
+        f: &mut dyn FnMut(&str, Handle, &mut (Symbol, Type)) -> Result<()>,
     ) -> Result<()> {
-        for s in self
+        for (m, h, s) in self
             .symbols
             .iter_mut()
-            .map(|(k, v)| (Handle::new(&self.name, k), v))
+            .map(|(k, v)| (&self.pretty_name, Handle::new(&self.name, k), v))
         {
-            f(s)?;
+            f(m, h, s)?;
         }
         for c in self.children.values_mut() {
             c.borrow_mut().visit_mut::<T>(f)?;
@@ -397,7 +405,7 @@ fn reduce(
 
         Token::DefConstraint(name, ..) => ctx.borrow_mut().insert_constraint(name),
         Token::DefModule(name) => {
-            *ctx = SymbolTable::derived(root_ctx, name, false);
+            *ctx = SymbolTable::derived(root_ctx, name, name, false);
             Ok(())
         }
         Token::DefColumns(cols) => cols
