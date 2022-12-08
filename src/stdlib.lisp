@@ -59,3 +59,9 @@
                         (if-eq-else CT C
                             (eq X (+ (prev X) 1))
                             (didnt-change X))))))
+
+;; stamp constancy imposes that the column C may only
+;; change at rows where the STAMP column changes.
+(defun (stamp-constancy STAMP C)
+                (if-zero (remains-constant STAMP)
+                    (remains-constant C)))
