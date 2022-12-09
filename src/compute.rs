@@ -104,8 +104,13 @@ fn pad(r: &mut ColumnSet<F>, s: PaddingStrategy) -> Result<()> {
             Ok(())
         }
         PaddingStrategy::OneLine => {
-            r.columns_mut()
-                .for_each(|x| x.map(&|xs| xs.insert(0, Fr::zero())));
+            r.columns_mut().for_each(|x| {
+                if let Some(mut xs) = x.value() {
+                    xs.insert(0, Fr::zero());
+                } else {
+                    x.set_value(vec![Fr::zero()]);
+                }
+            });
             if let Some(col) = r.by_handle_mut(&Handle::new("binary", "NOT")) {
                 col.map(&|xs| xs[0] = _255)
             }
