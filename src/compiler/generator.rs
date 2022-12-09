@@ -946,13 +946,13 @@ impl ConstraintSet {
                 out.write_all(b",")?;
             }
 
+            let empty_vec = Vec::new();
             let mut current_col = columns.iter().peekable();
             while let Some((name, &i)) = current_col.next() {
                 trace!("Writing {}/{}", module, name);
                 let column = &self.modules._cols[i];
                 let handle = Handle::new(&module, &name);
-                let value = column.value().unwrap_or_default();
-
+                let value = column.value().unwrap_or(&empty_vec);
                 out.write_all(format!("\"{}\":{{\n", handle.mangle()).as_bytes())?;
                 out.write_all("\"values\":[".as_bytes())?;
 

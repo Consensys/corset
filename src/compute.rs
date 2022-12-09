@@ -105,7 +105,7 @@ fn pad(r: &mut ColumnSet<F>, s: PaddingStrategy) -> Result<()> {
         }
         PaddingStrategy::OneLine => {
             r.columns_mut().for_each(|x| {
-                if let Some(mut xs) = x.value() {
+                if let Some(xs) = x.value_mut() {
                     xs.insert(0, Fr::zero());
                 } else {
                     x.set_value(vec![Fr::zero()]);

@@ -1,5 +1,6 @@
 use crate::compiler::{Expression, Handle, Kind, Type};
 use anyhow::{anyhow, Result};
+use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -33,8 +34,12 @@ impl<T: Clone> Column<T> {
         self.value = Some(v);
     }
 
-    pub fn value(&self) -> Option<Vec<T>> {
-        self.value.clone()
+    pub fn value(&self) -> Option<&Vec<T>> {
+        self.value.as_ref()
+    }
+
+    pub fn value_mut(&mut self) -> Option<&mut Vec<T>> {
+        self.value.as_mut()
     }
 
     pub fn map(&mut self, f: &dyn Fn(&mut Vec<T>)) {
@@ -92,9 +97,9 @@ impl<T: Ord + Clone> ColumnSet<T> {
             .get(&handle.name)
             .ok_or_else(|| {
                 anyhow!(
-                    "column `{}` not found in module `{}`",
-                    handle.name,
-                    handle.module
+                    "column {} not found in module {}",
+                    handle.name.red().bold(),
+                    handle.module.blue()
                 )
             })
             .map(|i| &self._cols[*i])
@@ -107,9 +112,9 @@ impl<T: Ord + Clone> ColumnSet<T> {
             .get_mut(&handle.name)
             .ok_or_else(|| {
                 anyhow!(
-                    "column `{}` not found in module `{}`",
-                    handle.name,
-                    handle.module
+                    "column {} not found in module {}",
+                    handle.name.red().bold(),
+                    handle.module.blue()
                 )
             })
             .map(|i| &mut self._cols[*i])
@@ -129,7 +134,10 @@ impl<T: Ord + Clone> ColumnSet<T> {
             .unwrap_or(false)
             && !allow_dup
         {
-            Err(anyhow!("`{}` already exists", handle))
+            Err(anyhow!(
+                "{} already exists",
+                handle.to_string().red().bold()
+            ))
         } else {
             let i = self._cols.len();
             self._cols.push(Column {
