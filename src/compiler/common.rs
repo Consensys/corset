@@ -339,6 +339,7 @@ impl Handle {
             .replace('*', "mul_")
             .replace('+', "add_")
             .replace('/', "div_")
+            .replace(|c: char| !c.is_ascii(), "_")
     }
 
     pub fn mangle(&self) -> String {
