@@ -172,7 +172,7 @@ fn render_constraints(constraints: &[Constraint]) -> String {
         .join("\n")
 }
 
-fn render_constants(consts: &HashMap<Handle, i64>) -> String {
+fn render_constants(consts: &HashMap<Handle, BigInt>) -> String {
     if consts.is_empty() {
         String::default()
     } else {

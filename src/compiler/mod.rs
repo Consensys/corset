@@ -30,6 +30,7 @@ pub fn make<S: AsRef<str>>(
     settings: &CompileSettings,
 ) -> Result<(Vec<Ast>, ConstraintSet)> {
     use colored::Colorize;
+    use num_bigint::BigInt;
 
     let mut asts = vec![];
     let ctx = Rc::new(RefCell::new(SymbolTable::new_root()));
@@ -43,7 +44,7 @@ pub fn make<S: AsRef<str>>(
     }
 
     let mut columns: ColumnSet<pairing_ce::bn256::Fr> = Default::default();
-    let mut constants: HashMap<Handle, i64> = Default::default();
+    let mut constants: HashMap<Handle, BigInt> = Default::default();
     let mut computations = ctx.borrow().computation_table.clone().take();
 
     for (name, ast) in asts.iter_mut() {
@@ -80,7 +81,7 @@ pub fn make<S: AsRef<str>>(
                     columns.insert_array(handle, range, *t, settings.allow_dups)?
                 }
                 Expression::Const(ref x, _) => {
-                    constants.insert(handle, x.try_into().unwrap());
+                    constants.insert(handle, x.clone());
                 }
                 x => todo!("{:?}", x),
             },

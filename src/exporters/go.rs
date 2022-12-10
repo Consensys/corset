@@ -3,6 +3,7 @@ use std::{collections::HashMap, io::Write};
 use anyhow::*;
 use convert_case::{Case, Casing};
 use itertools::Itertools;
+use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 
 use crate::compiler::*;
@@ -125,7 +126,7 @@ impl GoExporter {
         Ok(r)
     }
 
-    fn render_consts(&self, consts: &HashMap<Handle, i64>) -> String {
+    fn render_consts(&self, consts: &HashMap<Handle, BigInt>) -> String {
         consts
             .iter()
             .sorted_by_key(|(handle, _)| handle.to_string())

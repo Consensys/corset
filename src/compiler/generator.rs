@@ -654,14 +654,14 @@ impl FuncVerifier<Expression> for Builtin {
 pub struct ConstraintSet {
     pub modules: ColumnSet<Fr>,
     pub constraints: Vec<Constraint>,
-    pub constants: HashMap<Handle, i64>,
+    pub constants: HashMap<Handle, BigInt>,
     pub computations: ComputationTable,
 }
 impl ConstraintSet {
     pub fn new(
         columns: ColumnSet<Fr>,
         constraints: Vec<Constraint>,
-        constants: HashMap<Handle, i64>,
+        constants: HashMap<Handle, BigInt>,
         computations: ComputationTable,
     ) -> Self {
         let mut r = ConstraintSet {

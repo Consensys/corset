@@ -74,3 +74,23 @@ fn defpure_ko() {
     ))
     .is_err());
 }
+
+#[test]
+fn huge_const() {
+    let inputs = vec![
+        ("stdlib", include_str!("stdlib.lisp")),
+        (
+            "hugeconstant",
+            "(defconst A 340282366920938463463374607431768211456)",
+        ),
+    ];
+
+    assert!(dbg!(compiler::make(
+        inputs.as_slice(),
+        &CompileSettings {
+            debug: false,
+            allow_dups: false
+        }
+    ))
+    .is_ok());
+}
