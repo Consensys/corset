@@ -120,10 +120,12 @@ impl Expression {
             }
             Expression::Column(_, t, _) => *t,
             Expression::ArrayColumn(_, _, t) => *t,
-            Expression::List(xs) => xs
-                .iter()
-                .map(Expression::t)
-                .fold(Type::INFIMUM, |a, b| a.max(&b)),
+            Expression::List(xs) => Type::List(
+                xs.iter()
+                    .map(Expression::t)
+                    .fold(Type::INFIMUM, |a, b| a.max(&b))
+                    .magma(),
+            ),
             Expression::Void => Type::Void,
         }
     }
@@ -480,7 +482,9 @@ impl Builtin {
             Builtin::IfZero | Builtin::IfNotZero => {
                 argtype[1].max(argtype.get(2).unwrap_or(&Type::INFIMUM))
             }
-            Builtin::Begin => argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)),
+            Builtin::Begin => {
+                Type::List(argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)).magma())
+            }
             Builtin::Shift | Builtin::Nth => argtype[0],
             Builtin::ByteDecomposition => Type::Void,
         }
@@ -560,7 +564,7 @@ impl FuncVerifier<Expression> for Builtin {
     fn validate_types(&self, args: &[Expression]) -> Result<()> {
         match self {
             f @ (Builtin::Add | Builtin::Sub | Builtin::Mul) => args.iter().try_for_each(|a| {
-                if a.t() != Type::Void {
+                if a.t().is_value() {
                     Ok(())
                 } else {
                     Err(anyhow!(
@@ -571,14 +575,16 @@ impl FuncVerifier<Expression> for Builtin {
                     ))
                 }
             }),
-            Builtin::Exp => args[1].t().is_scalar().then(|| ()).ok_or_else(|| {
-                anyhow!(
-                    "`{:?}` expects a scalar exponent; found `{}` of type {:?}",
-                    &self,
-                    args[1],
-                    args[1].t()
-                )
-            }),
+            Builtin::Exp => (args[0].t().is_value() && args[1].t().is_scalar())
+                .then(|| ())
+                .ok_or_else(|| {
+                    anyhow!(
+                        "`{:?}` expects a scalar exponent; found `{}` of type {:?}",
+                        &self,
+                        args[1],
+                        args[1].t()
+                    )
+                }),
             Builtin::Not => args[0].t().is_bool().then(|| ()).ok_or_else(|| {
                 anyhow!(
                     "`{:?}` expects a boolean; found `{}` of type {:?}",
@@ -588,11 +594,11 @@ impl FuncVerifier<Expression> for Builtin {
                 )
             }),
             Builtin::Neg | Builtin::Inv => {
-                if args.iter().all(|a| !matches!(a, Expression::List(_))) {
+                if args.iter().all(|a| a.t().is_value()) {
                     Ok(())
                 } else {
                     Err(anyhow!(
-                        "`{:?}` expects scalar arguments but received a list",
+                        "`{:?}` expects value arguments but received a list",
                         self
                     ))
                 }

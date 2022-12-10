@@ -190,23 +190,34 @@ impl FuncVerifier<AstNode> for Form {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Type {
     Void,
-    Column(Magma),
     Scalar(Magma),
+    Column(Magma),
+    List(Magma),
 }
 impl Type {
     pub const SUPREMUM: Self = Type::Column(Magma::SUPREMUM);
     pub const INFIMUM: Self = Type::Void;
 
+    pub fn magma(self) -> Magma {
+        match self {
+            Type::Void => todo!(),
+            Type::Scalar(m) => m,
+            Type::Column(m) => m,
+            Type::List(m) => m,
+        }
+    }
+
     pub fn same_scale(&self, new: Magma) -> Self {
         match self {
             Type::Void => todo!(),
-            Type::Column(_) => Type::Column(new),
             Type::Scalar(_) => Type::Scalar(new),
+            Type::Column(_) => Type::Column(new),
+            Type::List(_) => Type::List(new),
         }
     }
     pub fn is_bool(&self) -> bool {
         match self {
-            Type::Void => false,
+            Type::Void | Type::List(_) => false,
             Type::Column(x) => matches!(x, Magma::Boolean),
             Type::Scalar(x) => matches!(x, Magma::Boolean),
         }
@@ -216,6 +227,9 @@ impl Type {
     }
     pub fn is_column(&self) -> bool {
         matches!(self, Type::Column(_))
+    }
+    pub fn is_value(&self) -> bool {
+        self.is_scalar() || self.is_column()
     }
     pub fn min(&self, other: &Self) -> Self {
         other.max(self)
@@ -229,6 +243,7 @@ impl Type {
             (Type::Column(x), Type::Scalar(y)) => Type::Column(x.max(y).to_owned()),
             (Type::Scalar(x), Type::Column(y)) => Type::Column(x.max(y).to_owned()),
             (Type::Scalar(x), Type::Scalar(y)) => Type::Scalar(x.max(y).to_owned()),
+            _ => unimplemented!(),
         }
     }
 }
@@ -243,6 +258,7 @@ impl std::cmp::PartialOrd for Type {
             (Type::Scalar(_), Type::Void) => Some(Ordering::Greater),
             (Type::Scalar(_), Type::Column(_)) => None,
             (Type::Scalar(x), Type::Scalar(y)) => Some(x.cmp(y)),
+            _ => unimplemented!(),
         }
     }
 }
