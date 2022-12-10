@@ -34,6 +34,8 @@
 (defpurefun (is-not-zero e0) (if-zero e0 1 0))
 (defpurefun (if-eq e0 e1 e2) (if-zero (eq e0 e1) e2))
 (defpurefun (if-eq-else e0 e1 e2 e3) (if-zero (eq e0 e1) e2 e3))
+(defpurefun (if-not-eq A B CONCLUSION) (if-not-zero (- A B) CONCLUSION))
+(defpurefun (if-not-eq-else A B CONCLUSION ALT_CONCLUSION) (if-not-zero (- A B) CONCLUSION ALT_CONCLUSION))
 
 ;; counter constancy constraint
 (defpurefun (counter-constancy ct X)
