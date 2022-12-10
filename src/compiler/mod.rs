@@ -44,7 +44,7 @@ pub fn make<S: AsRef<str>>(
 
     let mut columns: ColumnSet<pairing_ce::bn256::Fr> = Default::default();
     let mut constants: HashMap<Handle, i64> = Default::default();
-    let mut computations = ctx.borrow().computation_table.clone();
+    let mut computations = ctx.borrow().computation_table.clone().take();
 
     for (name, ast) in asts.iter_mut() {
         info!("Compiling {}", name.bright_white().bold());

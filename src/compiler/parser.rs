@@ -115,7 +115,7 @@ pub enum Token {
     DefConsts(Vec<(String, Box<AstNode>)>),
     DefColumns(Vec<AstNode>),
     DefColumn(String, Type, Kind<Box<AstNode>>),
-    DefSort(Vec<AstNode>, Vec<AstNode>),
+    DefPermutation(Vec<AstNode>, Vec<AstNode>),
 
     DefInrange(Box<AstNode>, usize),
     DefArrayColumn(String, Vec<usize>, Type),
@@ -179,7 +179,7 @@ impl Debug for Token {
             }
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
             Token::DefColumn(name, t, kind) => write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind),
-            Token::DefSort(to, from) => write!(f, "({:?}):PERMUTATION({:?})", to, from),
+            Token::DefPermutation(to, from) => write!(f, "({:?}):PERMUTATION({:?})", to, from),
             Token::DefInrange(exp, max) => write!(f, "{:?}E{}", exp, max),
             Token::DefArrayColumn(name, range, t) => {
                 write!(f, "DECLARATION {}{:?}{{{:?}}}", name, range, t)
@@ -611,7 +611,7 @@ impl AstNode {
             Some(Token::Symbol(defkw)) if defkw == "defpermutation" => {
                 match (tokens.get(1), tokens.get(2)) {
                     (Some(Token::List(to)), Some(Token::List(from))) => Ok(AstNode {
-                        class: Token::DefSort(to.to_owned(), from.to_owned()),
+                        class: Token::DefPermutation(to.to_owned(), from.to_owned()),
                         src: src.into(),
                         lc,
                     }),

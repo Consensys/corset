@@ -80,7 +80,7 @@ pub struct SymbolTable {
     constraints: HashSet<String>,
     funcs: HashMap<String, Function>,
     symbols: HashMap<String, (Symbol, Type)>,
-    pub computation_table: ComputationTable,
+    pub computation_table: Rc<RefCell<ComputationTable>>,
 }
 impl SymbolTable {
     pub fn new_root() -> SymbolTable {
@@ -96,7 +96,7 @@ impl SymbolTable {
                 .map(|(k, f)| (k.to_string(), f.clone()))
                 .collect(),
             symbols: Default::default(),
-            computation_table: Default::default(),
+            computation_table: Rc::new(RefCell::new(Default::default())),
         }
     }
 
@@ -106,6 +106,7 @@ impl SymbolTable {
         pretty_name: &str,
         closed: bool,
     ) -> Rc<RefCell<Self>> {
+        let ct = parent.borrow().computation_table.clone();
         parent
             .borrow_mut()
             .children
@@ -120,7 +121,7 @@ impl SymbolTable {
                     constraints: Default::default(),
                     funcs: Default::default(),
                     symbols: Default::default(),
-                    computation_table: Default::default(),
+                    computation_table: ct,
                 }))
             })
             .clone()
@@ -446,7 +447,7 @@ fn reduce(
             }
             Ok(())
         }
-        Token::DefSort(tos, froms) => {
+        Token::DefPermutation(tos, froms) => {
             if tos.len() != froms.len() {
                 return Err(anyhow!(
                     "cardinality mismatch in permutation declaration: {:?} vs. {:?}",
@@ -498,13 +499,16 @@ fn reduce(
                 }
             }
 
-            ctx.borrow_mut().computation_table.insert_multiple(
-                &_tos,
-                Computation::Sorted {
-                    froms: _froms,
-                    tos: _tos.clone(),
-                },
-            )?;
+            ctx.borrow_mut()
+                .computation_table
+                .borrow_mut()
+                .insert_multiple(
+                    &_tos,
+                    Computation::Sorted {
+                        froms: _froms,
+                        tos: _tos.clone(),
+                    },
+                )?;
             Ok(())
         }
         Token::DefAliases(aliases) => aliases.iter().fold(Ok(()), |ax, alias| {

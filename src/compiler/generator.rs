@@ -1271,7 +1271,7 @@ pub fn reduce(
         | Token::DefConsts(..)
         | Token::Defun(..)
         | Token::Defpurefun(..)
-        | Token::DefSort(..)
+        | Token::DefPermutation(..)
         | Token::DefPlookup(..)
         | Token::DefInrange(..) => Ok(None),
     }
@@ -1343,7 +1343,7 @@ fn reduce_toplevel(
         | Token::DefAliases(_)
         | Token::DefunAlias(..)
         | Token::DefConsts(..) => Ok(None),
-        Token::DefSort(to, from) => Ok(Some(Constraint::Permutation(
+        Token::DefPermutation(to, from) => Ok(Some(Constraint::Permutation(
             names::Generator::default().next().unwrap(),
             from.iter()
                 .map(|f| Handle::new(&ctx.borrow().name, f.as_symbol().unwrap()))
