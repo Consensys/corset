@@ -49,8 +49,12 @@ pub fn make<S: AsRef<str>>(
 
     for (name, ast) in asts.iter_mut() {
         info!("Compiling {}", name.bright_white().bold());
-        compiletime::pass(ast, ctx.clone(), settings)
-            .with_context(|| anyhow!("compiling constraints in {}", name.bright_white()))?
+        compiletime::pass(ast, ctx.clone(), settings).with_context(|| {
+            anyhow!(
+                "evaluating compile-time values in {}",
+                name.bright_white().bold()
+            )
+        })?
     }
 
     ctx.borrow_mut().visit_mut::<()>(&mut |_, handle, symbol| {
@@ -93,7 +97,7 @@ pub fn make<S: AsRef<str>>(
         .iter()
         .map(|(name, ast)| {
             generator::pass(ast, ctx.clone(), settings)
-                .with_context(|| anyhow!("compiling constraints in {}", name.bright_white()))
+                .with_context(|| anyhow!("compiling constraints in {}", name.bright_white().bold()))
         })
         .collect::<Result<Vec<_>>>()?
         .into_iter()

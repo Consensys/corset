@@ -260,6 +260,30 @@ impl Expression {
                         },
                     )
                 }
+                Builtin::Eq => {
+                    let (x, y) = (
+                        args[0].eval(i, get, cache, settings)?,
+                        args[1].eval(i, get, cache, settings)?,
+                    );
+                    if args[0].t().is_bool() && args[1].t().is_bool() {
+                        // (/A + B)×(A + /B)
+                        let mut ax = Fr::one();
+                        ax.sub_assign(&x);
+                        ax.add_assign(&y);
+
+                        let mut bx = Fr::one();
+                        bx.sub_assign(&y);
+                        bx.add_assign(&x);
+
+                        ax.mul_assign(&bx);
+
+                        Some(ax)
+                    } else {
+                        let mut ax = x;
+                        ax.sub_assign(&y);
+                        Some(ax)
+                    }
+                }
                 Builtin::Neg => args[0].eval(i, get, cache, settings).map(|mut x| {
                     x.negate();
                     x
@@ -458,6 +482,7 @@ pub enum Builtin {
     Not,
 
     Nth,
+    Eq,
     Begin,
 
     IfZero,
@@ -466,6 +491,16 @@ pub enum Builtin {
     ByteDecomposition,
 }
 impl Builtin {
+    fn call(self, args: &[Expression]) -> (Expression, Type) {
+        (
+            Expression::Funcall {
+                func: self,
+                args: args.to_owned(),
+            },
+            self.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>()),
+        )
+    }
+
     fn typing(&self, argtype: &[Type]) -> Type {
         match self {
             Builtin::Add | Builtin::Sub | Builtin::Neg | Builtin::Inv => {
@@ -477,7 +512,11 @@ impl Builtin {
                 }
             }
             Builtin::Exp => argtype[0],
-            Builtin::Not => argtype[0].same_scale(Magma::Boolean),
+            Builtin::Eq => argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)),
+            Builtin::Not => argtype
+                .iter()
+                .fold(Type::INFIMUM, |a, b| a.max(b))
+                .same_scale(Magma::Boolean),
             Builtin::Mul => argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)),
             Builtin::IfZero | Builtin::IfNotZero => {
                 argtype[1].max(argtype.get(2).unwrap_or(&Type::INFIMUM))
@@ -496,6 +535,7 @@ impl std::fmt::Display for Builtin {
             f,
             "{}",
             match self {
+                Builtin::Eq => "eq",
                 Builtin::Add => "+",
                 Builtin::Sub => "-",
                 Builtin::Mul => "*",
@@ -550,6 +590,7 @@ impl FuncVerifier<Expression> for Builtin {
             Builtin::Sub => Arity::AtLeast(2),
             Builtin::Mul => Arity::AtLeast(2),
             Builtin::Exp => Arity::Exactly(2),
+            Builtin::Eq => Arity::Exactly(2),
             Builtin::Neg => Arity::Monadic,
             Builtin::Inv => Arity::Monadic,
             Builtin::Not => Arity::Monadic,
@@ -585,6 +626,11 @@ impl FuncVerifier<Expression> for Builtin {
                         args[1].t()
                     )
                 }),
+            Builtin::Eq => args
+                .iter()
+                .all(|a| a.t().is_value())
+                .then(|| ())
+                .ok_or_else(|| anyhow!("`{:?}` expects value arguments", Builtin::Eq)),
             Builtin::Not => args[0].t().is_bool().then(|| ()).ok_or_else(|| {
                 anyhow!(
                     "`{:?}` expects a boolean; found `{}` of type {:?}",
@@ -1168,6 +1214,50 @@ fn apply(
                         },
                         traversed_args[0].t().same_scale(Magma::Boolean),
                     ))),
+
+                    Builtin::Eq => {
+                        let x = &traversed_args[0];
+                        let y = &traversed_args[1];
+                        if traversed_args_t[0].is_bool() && traversed_args_t[1].is_bool() {
+                            Ok(Some(
+                                Builtin::Mul.call(&[
+                                    Builtin::Add
+                                        .call(&[
+                                            Builtin::Sub
+                                                .call(&[
+                                                    Expression::Const(One::one(), Some(Fr::one())),
+                                                    y.clone(),
+                                                ])
+                                                .0,
+                                            x.to_owned(),
+                                        ])
+                                        .0,
+                                    Builtin::Add
+                                        .call(&[
+                                            Builtin::Sub
+                                                .call(&[
+                                                    Expression::Const(One::one(), Some(Fr::one())),
+                                                    x.clone(),
+                                                ])
+                                                .0,
+                                            y.to_owned(),
+                                        ])
+                                        .0,
+                                ]),
+                            ))
+                        } else {
+                            Ok(Some((
+                                Expression::Funcall {
+                                    func: Builtin::Sub,
+                                    args: vec![
+                                        traversed_args[0].to_owned(),
+                                        traversed_args[1].to_owned(),
+                                    ],
+                                },
+                                traversed_args[0].t().same_scale(Magma::Boolean),
+                            )))
+                        }
+                    }
 
                     b @ (Builtin::Add
                     | Builtin::Sub

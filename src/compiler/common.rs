@@ -43,6 +43,10 @@ lazy_static::lazy_static! {
         },
 
         // Dyadic
+        "eq" => Function{
+            handle: Handle::new(super::MAIN_MODULE, "eq"),
+            class: FunctionClass::Builtin(Builtin::Eq),
+        },
         "shift" => Function{
             handle: Handle::new(super::MAIN_MODULE, "shift"),
             class: FunctionClass::Builtin(Builtin::Shift),
@@ -243,7 +247,11 @@ impl Type {
             (Type::Column(x), Type::Scalar(y)) => Type::Column(x.max(y).to_owned()),
             (Type::Scalar(x), Type::Column(y)) => Type::Column(x.max(y).to_owned()),
             (Type::Scalar(x), Type::Scalar(y)) => Type::Scalar(x.max(y).to_owned()),
-            _ => unimplemented!(),
+            (Type::Scalar(x), Type::List(y)) => Type::List(x.max(y).to_owned()),
+            (Type::Column(x), Type::List(y)) => Type::List(x.max(y).to_owned()),
+            (Type::List(_), Type::Scalar(_)) => todo!(),
+            (Type::List(x), Type::Column(y)) => Type::List(x.max(y).to_owned()),
+            (Type::List(x), Type::List(y)) => Type::List(x.max(y).to_owned()),
         }
     }
 }
