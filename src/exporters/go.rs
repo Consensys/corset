@@ -166,11 +166,7 @@ import (
                 )),
                 Kind::Phantom => None,
                 Kind::Composite(_) => None,
-                Kind::Interleaved(_) => Some(format!(
-                    "{} column.Column = \"{}\"",
-                    handle.mangled_name(),
-                    handle.mangled_name()
-                )),
+                Kind::Interleaved(_) => None,
             })
             .sorted()
             .collect::<Vec<_>>()
