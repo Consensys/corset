@@ -1,6 +1,5 @@
 use num_bigint::BigInt;
-use num_traits::{One, ToPrimitive, Zero};
-use pairing_ce::{bn256::Fr, ff::Field};
+use num_traits::{ToPrimitive, Zero};
 
 use crate::{
     column::{ColumnSet, Computation},
@@ -13,86 +12,53 @@ use anyhow::Result;
 const RESERVED_MODULE: &str = "RESERVED";
 
 fn invert_expr(e: &Expression) -> Expression {
-    Expression::Funcall {
-        func: Builtin::Inv,
-        args: vec![e.to_owned()],
-    }
+    Builtin::Inv.call(&[e.to_owned()])
 }
 
 fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &Handle) {
-    cs.push(Expression::Funcall {
-        func: Builtin::Mul,
-        args: vec![
-            x_expr.clone(),
-            Expression::Funcall {
-                func: Builtin::Sub,
-                args: vec![
-                    Expression::Funcall {
-                        func: Builtin::Mul,
-                        args: vec![
-                            x_expr.clone(),
-                            Expression::Column(
-                                inv_x_col.clone(),
-                                Type::Column(Magma::Integer),
-                                Kind::Composite(Box::new(Expression::Funcall {
-                                    func: Builtin::Inv,
-                                    args: vec![x_expr.clone()],
-                                })),
-                            ),
-                        ],
-                    },
-                    Expression::Const(One::one(), Some(Fr::one())),
-                ],
-            },
-        ],
-    });
-    cs.push(Expression::Funcall {
-        func: Builtin::Mul,
-        args: vec![
-            Expression::Column(
-                inv_x_col.clone(),
-                Type::Column(Magma::Integer),
-                Kind::Composite(Box::new(Expression::Funcall {
-                    func: Builtin::Inv,
-                    args: vec![x_expr.clone()],
-                })),
-            ),
-            Expression::Funcall {
-                func: Builtin::Sub,
-                args: vec![
-                    Expression::Funcall {
-                        func: Builtin::Mul,
-                        args: vec![
-                            x_expr.clone(),
-                            Expression::Column(
-                                inv_x_col.clone(),
-                                Type::Column(Magma::Integer),
-                                Kind::Composite(Box::new(Expression::Funcall {
-                                    func: Builtin::Inv,
-                                    args: vec![x_expr.clone()],
-                                })),
-                            ),
-                        ],
-                    },
-                    Expression::Const(One::one(), Some(Fr::one())),
-                ],
-            },
-        ],
-    });
+    cs.push(Builtin::Mul.call(&[
+        x_expr.clone(),
+        Builtin::Sub.call(&[
+            Builtin::Mul.call(&[
+                x_expr.clone(),
+                Expression::Column(
+                    inv_x_col.clone(),
+                    Type::Column(Magma::Integer),
+                    Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()]))),
+                ),
+            ]),
+            Expression::one(),
+        ]),
+    ]));
+    cs.push(Builtin::Mul.call(&[
+        Expression::Column(
+            inv_x_col.clone(),
+            Type::Column(Magma::Integer),
+            Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()]))),
+        ),
+        Builtin::Sub.call(&[
+            Builtin::Mul.call(&[
+                x_expr.clone(),
+                Expression::Column(
+                    inv_x_col.clone(),
+                    Type::Column(Magma::Integer),
+                    Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()]))),
+                ),
+            ]),
+            Expression::one(),
+        ]),
+    ]));
 }
 
 fn validate_computation(cs: &mut Vec<Expression>, x_expr: &Expression, x_col: &Handle) {
-    cs.push(Expression::Funcall {
-        func: Builtin::Sub,
-        args: vec![
-            x_expr.clone(),
-            Expression::Column(
-                x_col.to_owned(),
-                Type::Column(Magma::Integer),
-                Kind::Composite(Box::new(x_expr.clone())),
-            ),
-        ],
-    })
+    cs.push(Builtin::Sub.call(&[
+        x_expr.clone(),
+        Expression::Column(
+            x_col.to_owned(),
+            Type::Column(Magma::Integer),
+            Kind::Composite(Box::new(x_expr.clone())),
+        ),
+    ]))
 }
 
 fn expression_to_name(e: &Expression, prefix: &str) -> String {
@@ -139,20 +105,18 @@ fn do_expand_ifs(e: &mut Expression) {
                             if constant_cond.is_zero() {
                                 *e = args[1].clone();
                             } else {
-                                *e =
-                                    flatten_list(args.get(2).cloned().unwrap_or_else(|| {
-                                        Expression::Const(BigInt::zero(), None)
-                                    }));
+                                *e = flatten_list(
+                                    args.get(2).cloned().unwrap_or_else(|| Expression::zero()),
+                                );
                             }
                         }
                         Builtin::IfNotZero => {
                             if !constant_cond.is_zero() {
                                 *e = args[1].clone();
                             } else {
-                                *e =
-                                    flatten_list(args.get(2).cloned().unwrap_or_else(|| {
-                                        Expression::Const(BigInt::zero(), None)
-                                    }));
+                                *e = flatten_list(
+                                    args.get(2).cloned().unwrap_or_else(|| Expression::zero()),
+                                );
                             }
                         }
                         _ => unreachable!(),
@@ -162,28 +126,13 @@ fn do_expand_ifs(e: &mut Expression) {
                         let cond_not_zero = cond.clone();
                         // If the condition is binary, cond_zero = 1 - x...
                         let cond_zero = if args[0].t().is_bool() {
-                            Expression::Funcall {
-                                func: Builtin::Sub,
-                                args: vec![Expression::Const(One::one(), Some(Fr::one())), cond],
-                            }
+                            Builtin::Sub.call(&[Expression::one(), cond])
                         } else {
                             // ...otherwise, cond_zero = 1 - x.INV(x)
-                            Expression::Funcall {
-                                func: Builtin::Sub,
-                                args: vec![
-                                    Expression::Const(One::one(), Some(Fr::one())),
-                                    Expression::Funcall {
-                                        func: Builtin::Mul,
-                                        args: vec![
-                                            cond.clone(),
-                                            Expression::Funcall {
-                                                func: Builtin::Inv,
-                                                args: vec![cond],
-                                            },
-                                        ],
-                                    },
-                                ],
-                            }
+                            Builtin::Sub.call(&[
+                                Expression::one(),
+                                Builtin::Mul.call(&[cond.clone(), Builtin::Inv.call(&[cond])]),
+                            ])
                         };
                         match func {
                             Builtin::IfZero => [cond_zero, cond_not_zero],
@@ -205,9 +154,8 @@ fn do_expand_ifs(e: &mut Expression) {
                             if let Expression::List(exs) = exs {
                                 exs.into_iter()
                                     .map(|ex: Expression| {
-                                        ex.flat_fold(&|ex| Expression::Funcall {
-                                            func: Builtin::Mul,
-                                            args: vec![conds[i].clone(), ex.clone()],
+                                        ex.flat_fold(&|ex| {
+                                            Builtin::Mul.call(&[conds[i].clone(), ex.clone()])
                                         })
                                     })
                                     .collect::<Vec<_>>()
@@ -331,10 +279,7 @@ fn do_lower_shifts(e: &mut Expression, depth: isize) {
         Expression::Column(_, _, _) => {
             if depth != 0 {
                 let column = e.clone();
-                *e = Expression::Funcall {
-                    func: Builtin::Shift,
-                    args: vec![column, Expression::Const(BigInt::from(depth), None)],
-                }
+                *e = Builtin::Shift.call(&[column, Expression::Const(BigInt::from(depth), None)])
             }
         }
         Expression::ArrayColumn(_, _, _) => (),

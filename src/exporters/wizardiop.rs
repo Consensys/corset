@@ -19,13 +19,10 @@ fn shift(e: &Expression, i: isize) -> Expression {
         Expression::Funcall { func, args } => match func {
             Builtin::Shift => {
                 let value = args[1].pure_eval().unwrap() + i;
-                Expression::Funcall {
-                    func: Builtin::Shift,
-                    args: vec![
-                        args[0].clone(),
-                        Expression::Const(value.clone(), Fr::from_str(&value.to_string())),
-                    ],
-                }
+                Builtin::Shift.call(&[
+                    args[0].clone(),
+                    Expression::Const(value.clone(), Fr::from_str(&value.to_string())),
+                ])
             }
             _ => Expression::Funcall {
                 func: *func,
@@ -33,13 +30,10 @@ fn shift(e: &Expression, i: isize) -> Expression {
             },
         },
         Expression::Const(..) => e.clone(),
-        Expression::Column(..) => Expression::Funcall {
-            func: Builtin::Shift,
-            args: vec![
-                e.clone(),
-                Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())),
-            ],
-        },
+        Expression::Column(..) => Builtin::Shift.call(&[
+            e.clone(),
+            Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())),
+        ]),
         Expression::List(xs) => Expression::List(xs.iter().map(|x| shift(x, i)).collect()),
         Expression::ArrayColumn(..) => unreachable!(),
         Expression::Void => Expression::Void,

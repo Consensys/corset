@@ -106,6 +106,12 @@ pub enum Expression {
     Void,
 }
 impl Expression {
+    pub fn one() -> Expression {
+        Expression::Const(One::one(), Some(Fr::one()))
+    }
+    pub fn zero() -> Expression {
+        Expression::Const(Zero::zero(), Some(Fr::zero()))
+    }
     pub fn t(&self) -> Type {
         match self {
             Expression::Funcall { func, args } => {
@@ -491,7 +497,14 @@ pub enum Builtin {
     ByteDecomposition,
 }
 impl Builtin {
-    fn call(self, args: &[Expression]) -> (Expression, Type) {
+    pub fn call(self, args: &[Expression]) -> Expression {
+        Expression::Funcall {
+            func: self,
+            args: args.to_owned(),
+        }
+    }
+
+    pub fn call_t(self, args: &[Expression]) -> (Expression, Type) {
         (
             Expression::Funcall {
                 func: self,
@@ -1102,16 +1115,14 @@ fn apply_form(
                 match reduced.len() {
                     0 => Ok(None),
                     1 => Ok(reduced[0].to_owned()),
-                    _ => Ok(Some((
-                        Expression::Funcall {
-                            func: Builtin::Begin,
-                            args: reduced
+                    _ => Ok(Some(
+                        Builtin::Begin.call_t(
+                            &reduced
                                 .into_iter()
                                 .map(|e| e.map(|e| e.0).unwrap_or(Expression::Void))
-                                .collect(),
-                        },
-                        Type::Void,
-                    ))),
+                                .collect::<Vec<_>>(),
+                        ),
+                    )),
                 }
             }
         }
@@ -1161,13 +1172,9 @@ fn apply(
                         traversed_args_t.iter().fold(Type::INFIMUM, |a, b| a.max(b)),
                     ))),
 
-                    b @ (Builtin::IfZero | Builtin::IfNotZero) => Ok(Some((
-                        Expression::Funcall {
-                            func: *b,
-                            args: traversed_args,
-                        },
-                        b.typing(&traversed_args_t),
-                    ))),
+                    b @ (Builtin::IfZero | Builtin::IfNotZero) => {
+                        Ok(Some(b.call_t(&traversed_args)))
+                    }
 
                     Builtin::Nth => {
                         if let (Expression::ArrayColumn(handle, ..), Expression::Const(i, _)) =
@@ -1204,58 +1211,36 @@ fn apply(
                         Ok(None)
                     }
 
-                    Builtin::Not => Ok(Some((
-                        Expression::Funcall {
-                            func: Builtin::Sub,
-                            args: vec![
-                                Expression::Const(One::one(), Some(Fr::one())),
-                                traversed_args[0].to_owned(),
-                            ],
-                        },
-                        traversed_args[0].t().same_scale(Magma::Boolean),
-                    ))),
+                    Builtin::Not => Ok(Some(Builtin::Sub.call_t(&[
+                        Expression::Const(One::one(), Some(Fr::one())),
+                        traversed_args[0].to_owned(),
+                    ]))),
 
                     Builtin::Eq => {
                         let x = &traversed_args[0];
                         let y = &traversed_args[1];
                         if traversed_args_t[0].is_bool() && traversed_args_t[1].is_bool() {
-                            Ok(Some(
-                                Builtin::Mul.call(&[
-                                    Builtin::Add
-                                        .call(&[
-                                            Builtin::Sub
-                                                .call(&[
-                                                    Expression::Const(One::one(), Some(Fr::one())),
-                                                    y.clone(),
-                                                ])
-                                                .0,
-                                            x.to_owned(),
-                                        ])
-                                        .0,
-                                    Builtin::Add
-                                        .call(&[
-                                            Builtin::Sub
-                                                .call(&[
-                                                    Expression::Const(One::one(), Some(Fr::one())),
-                                                    x.clone(),
-                                                ])
-                                                .0,
-                                            y.to_owned(),
-                                        ])
-                                        .0,
+                            Ok(Some(Builtin::Mul.call_t(&[
+                                Builtin::Add.call(&[
+                                    Builtin::Sub.call(&[
+                                        Expression::Const(One::one(), Some(Fr::one())),
+                                        y.clone(),
+                                    ]),
+                                    x.to_owned(),
                                 ]),
-                            ))
+                                Builtin::Add.call(&[
+                                    Builtin::Sub.call(&[
+                                        Expression::Const(One::one(), Some(Fr::one())),
+                                        x.clone(),
+                                    ]),
+                                    y.to_owned(),
+                                ]),
+                            ])))
                         } else {
-                            Ok(Some((
-                                Expression::Funcall {
-                                    func: Builtin::Sub,
-                                    args: vec![
-                                        traversed_args[0].to_owned(),
-                                        traversed_args[1].to_owned(),
-                                    ],
-                                },
-                                traversed_args[0].t().same_scale(Magma::Boolean),
-                            )))
+                            Ok(Some(Builtin::Sub.call_t(&[
+                                traversed_args[0].to_owned(),
+                                traversed_args[1].to_owned(),
+                            ])))
                         }
                     }
 
@@ -1265,13 +1250,7 @@ fn apply(
                     | Builtin::Exp
                     | Builtin::Neg
                     | Builtin::Inv
-                    | Builtin::Shift) => Ok(Some((
-                        Expression::Funcall {
-                            func: *b,
-                            args: traversed_args,
-                        },
-                        b.typing(&traversed_args_t),
-                    ))),
+                    | Builtin::Shift) => Ok(Some(b.call_t(&traversed_args))),
                 }
             }
 
