@@ -31,8 +31,8 @@
 ;; Helpers
 (defpurefun (vanishes e0) e0)
 (defpurefun (is-not-zero e0) (if-zero e0 1 0))
-(defpurefun (if-eq e0 e1 e2) (if-zero (eq e0 e1) e2))
-(defpurefun (if-eq-else e0 e1 e2 e3) (if-zero (eq e0 e1) e2 e3))
+(defpurefun (if-eq e0 e1 e2) (if-not-zero (eq e0 e1) e2))
+(defpurefun (if-eq-else e0 e1 e2 e3) (if-not-zero (eq e0 e1) e2 e3))
 
 ;; counter constancy constraint
 (defpurefun (counter-constancy ct X)
