@@ -272,7 +272,7 @@ impl Expression {
                         args[1].eval(i, get, cache, settings)?,
                     );
                     if args[0].t().is_bool() && args[1].t().is_bool() {
-                        // (/A + B)×(A + /B)
+                        // 1 - (/A + B)×(A + /B)
                         let mut ax = Fr::one();
                         ax.sub_assign(&x);
                         ax.add_assign(&y);
@@ -282,8 +282,10 @@ impl Expression {
                         bx.add_assign(&x);
 
                         ax.mul_assign(&bx);
+                        let mut bx = Fr::one();
+                        bx.sub_assign(&ax);
 
-                        Some(ax)
+                        Some(bx)
                     } else {
                         let mut ax = x;
                         ax.sub_assign(&y);
@@ -1220,20 +1222,17 @@ fn apply(
                         let x = &traversed_args[0];
                         let y = &traversed_args[1];
                         if traversed_args_t[0].is_bool() && traversed_args_t[1].is_bool() {
-                            Ok(Some(Builtin::Mul.call_t(&[
-                                Builtin::Add.call(&[
-                                    Builtin::Sub.call(&[
-                                        Expression::Const(One::one(), Some(Fr::one())),
-                                        y.clone(),
+                            Ok(Some(Builtin::Sub.call_t(&[
+                                Expression::one(),
+                                Builtin::Mul.call(&[
+                                    Builtin::Add.call(&[
+                                        Builtin::Sub.call(&[Expression::one(), y.clone()]),
+                                        x.to_owned(),
                                     ]),
-                                    x.to_owned(),
-                                ]),
-                                Builtin::Add.call(&[
-                                    Builtin::Sub.call(&[
-                                        Expression::Const(One::one(), Some(Fr::one())),
-                                        x.clone(),
+                                    Builtin::Add.call(&[
+                                        Builtin::Sub.call(&[Expression::one(), x.clone()]),
+                                        y.to_owned(),
                                     ]),
-                                    y.to_owned(),
                                 ]),
                             ])))
                         } else {
