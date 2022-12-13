@@ -19,7 +19,7 @@ use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 
 use super::definitions::ComputationTable;
-use super::{common::*, CompileSettings, Handle};
+use super::{common::*, CompileSettings, Handle, PaddingStrategy};
 use crate::column::{Column, ColumnSet, Computation};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
@@ -962,7 +962,7 @@ impl ConstraintSet {
 
     // The padding value is 0 for atomic columns.
     // However, it has to be computed for computed columns.
-    fn padding_value_for(&self, h: &Handle) -> String {
+    fn padding_value_for(&self, h: &Handle) -> Fr {
         match &self.get(h).unwrap().kind {
             Kind::Atomic | Kind::Interleaved(_) | Kind::Phantom => {
                 if *h == Handle::new("binary", "NOT") {
@@ -977,12 +977,20 @@ impl ConstraintSet {
                         Computation::Composite { exp, .. } => exp
                             .eval(
                                 0,
-                                &mut |h, _, _| {
-                                    Some(if *h == Handle::new("binary", "NOT") {
-                                        Fr::from_str("255").unwrap()
+                                &mut |h, i, wrap| {
+                                    if *h == Handle::new("binary", "NOT") {
+                                        Some(Fr::from_str("255").unwrap())
                                     } else {
-                                        Fr::zero()
-                                    })
+                                        if i == 0 {
+                                            Some(self.padding_value_for(h))
+                                        } else {
+                                            self.modules
+                                                .get(h)
+                                                .ok()
+                                                .and_then(|c| c.get(i, wrap))
+                                                .cloned()
+                                        }
+                                    }
                                 },
                                 &mut None,
                                 &EvalSettings {
@@ -998,9 +1006,52 @@ impl ConstraintSet {
                 }
             }
         }
-        .pretty()
     }
 
+    pub fn pad(&mut self, s: PaddingStrategy) -> Result<()> {
+        let _255 = Fr::from_str("255").unwrap();
+        match s {
+            PaddingStrategy::Full => {
+                let max_len = self.modules.max_len();
+                let pad_to = (max_len + 1).next_power_of_two();
+                let binary_not_len = self
+                    .modules
+                    .by_handle(&Handle::new("binary", "NOT"))
+                    .and_then(|c| c.len());
+                self.modules.columns_mut().for_each(|x| {
+                    x.map(&|xs| {
+                        xs.reverse();
+                        xs.resize(pad_to, Fr::zero());
+                        xs.reverse();
+                    })
+                });
+                if let Some(col) = self.modules.by_handle_mut(&Handle::new("binary", "NOT")) {
+                    col.map(&|xs| {
+                        for x in xs.iter_mut().take(pad_to - binary_not_len.unwrap()) {
+                            *x = _255;
+                        }
+                    })
+                }
+                Ok(())
+            }
+            PaddingStrategy::OneLine => {
+                self.modules.handles().iter().for_each(|h| {
+                    let padding_value = self.padding_value_for(&h);
+                    let x = self.modules.by_handle_mut(&h).unwrap();
+                    if let Some(xs) = x.value_mut() {
+                        xs.insert(0, padding_value);
+                    } else {
+                        x.set_value(vec![Fr::zero()]);
+                    }
+                });
+                if let Some(col) = self.modules.by_handle_mut(&Handle::new("binary", "NOT")) {
+                    col.map(&|xs| xs[0] = _255)
+                }
+                Ok(())
+            }
+            PaddingStrategy::None => Ok(()),
+        }
+    }
     pub fn write(&self, out: &mut impl Write) -> Result<()> {
         // TODO encode the padding strategy behavior
         // serde_json::to_writer(out, self).with_context(|| "while serializing to JSON")
@@ -1038,7 +1089,7 @@ impl ConstraintSet {
                 )?;
 
                 out.write_all(b"],\n")?;
-                let padding_value = self.padding_value_for(&handle);
+                let padding_value = self.padding_value_for(&handle).pretty();
                 out.write_all(
                     format!(
                         "\"padding_strategy\": {{\"action\": \"prepend\", \"value\": \"{}\"}}",

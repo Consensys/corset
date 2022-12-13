@@ -73,58 +73,21 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
     }
 }
 
-pub enum PaddingStrategy {
-    Full,
-    OneLine,
-    None,
-}
-fn pad(r: &mut ColumnSet<F>, s: PaddingStrategy) -> Result<()> {
-    let _255 = Fr::from_str("255").unwrap();
-    match s {
-        PaddingStrategy::Full => {
-            let max_len = r.max_len();
-            let pad_to = (max_len + 1).next_power_of_two();
-            let binary_not_len = r
-                .by_handle(&Handle::new("binary", "NOT"))
-                .and_then(|c| c.len());
-            r.columns_mut().for_each(|x| {
-                x.map(&|xs| {
-                    xs.reverse();
-                    xs.resize(pad_to, Fr::zero());
-                    xs.reverse();
-                })
-            });
-            if let Some(col) = r.by_handle_mut(&Handle::new("binary", "NOT")) {
-                col.map(&|xs| {
-                    for x in xs.iter_mut().take(pad_to - binary_not_len.unwrap()) {
-                        *x = _255;
-                    }
-                })
-            }
-            Ok(())
-        }
-        PaddingStrategy::OneLine => {
-            r.columns_mut().for_each(|x| {
-                if let Some(xs) = x.value_mut() {
-                    xs.insert(0, Fr::zero());
-                } else {
-                    x.set_value(vec![Fr::zero()]);
-                }
-            });
-            if let Some(col) = r.by_handle_mut(&Handle::new("binary", "NOT")) {
-                col.map(&|xs| xs[0] = _255)
-            }
-            Ok(())
-        }
-        PaddingStrategy::None => Ok(()),
-    }
-}
-
-pub fn compute(v: &Value, cs: &mut ConstraintSet, padding_strategy: PaddingStrategy) -> Result<()> {
+pub fn compute(
+    v: &Value,
+    cs: &mut ConstraintSet,
+    padding_strategy: crate::compiler::PaddingStrategy,
+) -> Result<()> {
     fill_traces(v, vec![], &mut cs.modules).with_context(|| "while reading columns")?;
-    pad(&mut cs.modules, padding_strategy).with_context(|| "while padding columns")?;
     cs.compute_all()
         .with_context(|| "while computing columns")?;
+    for h in cs.modules.handles() {
+        if !cs.modules.get(&h).unwrap().is_computed() {
+            error!("{} not found", h);
+        }
+    }
+    cs.pad(padding_strategy)
+        .with_context(|| "while padding columns")?;
 
     Ok(())
 }

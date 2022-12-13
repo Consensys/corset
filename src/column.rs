@@ -84,6 +84,13 @@ impl<T: Clone> ColumnSet<T> {
         })
     }
 
+    pub fn handles(&self) -> Vec<Handle> {
+        self.cols
+            .keys()
+            .flat_map(|m| self.cols[m].keys().map(|c| Handle::new(m.clone(), c)))
+            .collect()
+    }
+
     pub fn columns_mut(&mut self) -> impl Iterator<Item = &mut Column<T>> {
         self._cols.iter_mut()
     }

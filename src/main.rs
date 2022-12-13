@@ -366,7 +366,7 @@ fn main() -> Result<()> {
             compute::compute(
                 &read_trace(&tracefile)?,
                 &mut constraints,
-                compute::PaddingStrategy::None,
+                compiler::PaddingStrategy::None,
             )
             .with_context(|| format!("while computing from `{}`", tracefile))?;
 
@@ -408,7 +408,7 @@ fn main() -> Result<()> {
                         &utils::decompress(payload).with_context(|| "while decompressing payload")?,
                     )?;
 
-                    compute::compute(&v, &mut local_constraints, compute::PaddingStrategy::None)
+                    compute::compute(&v, &mut local_constraints, compiler::PaddingStrategy::None)
                         .with_context(|| "while computing columns")?;
 
                     let mut e = GzEncoder::new(Vec::new(), Compression::default());
@@ -461,7 +461,7 @@ fn main() -> Result<()> {
                     compute::compute(
                         &v,
                         &mut local_constraints,
-                        compute::PaddingStrategy::OneLine,
+                        compiler::PaddingStrategy::OneLine,
                     )
                         .with_context(|| format!("while expanding from {}", id))?;
 
@@ -506,10 +506,13 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
+            // expander::lower_shifts(&mut constraints);
+            expander::expand_ifs(&mut constraints);
+            expander::expand(&mut constraints)?;
             compute::compute(
                 &read_trace(&tracefile)?,
                 &mut constraints,
-                compute::PaddingStrategy::OneLine,
+                compiler::PaddingStrategy::OneLine,
             )
             .with_context(|| format!("while expanding `{}`", tracefile))?;
 
