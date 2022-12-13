@@ -20,10 +20,10 @@ use crate::{
 };
 
 fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Result<()> {
-    let trace_span: isize = crate::SETTINGS.get().unwrap().trace_span;
+    let trace_span: isize = crate::SETTINGS.get().unwrap().context_span;
 
     let module = expr.dependencies().iter().next().unwrap().module.clone();
-    let handles = if crate::SETTINGS.get().unwrap().full_trace {
+    let handles = if crate::SETTINGS.get().unwrap().full_context {
         columns
             .cols
             .get(&module)

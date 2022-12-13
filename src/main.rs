@@ -28,8 +28,8 @@ mod utils;
 
 #[derive(Default, Debug)]
 struct Settings {
-    pub full_trace: bool,
-    pub trace_span: isize,
+    pub full_context: bool,
+    pub context_span: isize,
 }
 
 static SETTINGS: OnceCell<Settings> = OnceCell::new();
@@ -497,8 +497,8 @@ fn main() -> Result<()> {
             only,
             skip,
         } => {
-            settings.full_trace = full_trace;
-            settings.trace_span = trace_span;
+            settings.full_context = full_trace;
+            settings.context_span = trace_span;
             SETTINGS.set(settings).unwrap();
 
             if utils::is_file_empty(&tracefile)? {
