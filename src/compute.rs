@@ -81,13 +81,20 @@ pub fn compute(
     fill_traces(v, vec![], &mut cs.modules).with_context(|| "while reading columns")?;
     cs.compute_all()
         .with_context(|| "while computing columns")?;
+    cs.pad(padding_strategy)
+        .with_context(|| "while padding columns")?;
     for h in cs.modules.handles() {
         if !cs.modules.get(&h).unwrap().is_computed() {
             error!("{} not found", h);
         }
     }
-    cs.pad(padding_strategy)
-        .with_context(|| "while padding columns")?;
+    println!(
+        "{:?}",
+        cs.modules
+            .by_handle(&Handle::new("mmio", "MICRO_INSTRUCTION_STAMP"))
+            .unwrap()
+            .len()
+    );
 
     Ok(())
 }
