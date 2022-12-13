@@ -184,6 +184,13 @@ enum Commands {
         full_trace: bool,
 
         #[arg(
+            short = 'E',
+            long = "expand",
+            help = "perform all expansion operations before checking"
+        )]
+        expand: bool,
+
+        #[arg(
             long = "only",
             help = "only check these constraints",
             value_delimiter = ','
@@ -494,6 +501,7 @@ fn main() -> Result<()> {
             tracefile,
             full_trace,
             trace_span,
+            expand,
             only,
             skip,
         } => {
@@ -506,9 +514,11 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
-            // expander::lower_shifts(&mut constraints);
-            expander::expand_ifs(&mut constraints);
-            expander::expand(&mut constraints)?;
+            if expand {
+                expander::lower_shifts(&mut constraints);
+                expander::expand_ifs(&mut constraints);
+                expander::expand(&mut constraints)?;
+            }
             compute::compute(
                 &read_trace(&tracefile)?,
                 &mut constraints,
