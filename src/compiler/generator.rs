@@ -172,6 +172,19 @@ impl Expression {
             .collect()
     }
 
+    pub fn module(&self) -> Option<String> {
+        let modules = self
+            .dependencies()
+            .into_iter()
+            .map(|h| h.module)
+            .collect::<HashSet<_>>();
+        if modules.len() != 1 {
+            return None;
+        } else {
+            modules.into_iter().next()
+        }
+    }
+
     /// Evaluate a compile-time known value
     pub fn pure_eval(&self) -> Result<BigInt> {
         match self {
@@ -1006,6 +1019,21 @@ impl ConstraintSet {
                 }
             }
         }
+    }
+
+    pub fn length_multiplier(&self, h: &Handle) -> usize {
+        self.computations
+            .computation_for(&h)
+            .map(|comp| match comp {
+                Computation::Composite { exp, .. } => {
+                    self.length_multiplier(&exp.dependencies().iter().next().unwrap())
+                }
+                Computation::Interleaved { froms, .. } => {
+                    self.length_multiplier(&froms[0]) * froms.len()
+                }
+                Computation::Sorted { froms, .. } => self.length_multiplier(&froms[0]),
+            })
+            .unwrap_or(1)
     }
 
     pub fn pad(&mut self, s: PaddingStrategy) -> Result<()> {

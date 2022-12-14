@@ -10,7 +10,7 @@ use std::{
 use anyhow::*;
 use convert_case::{Case, Casing};
 
-use crate::{column::ColumnSet, compiler::*};
+use crate::compiler::*;
 
 const SIZE: usize = 4_194_304;
 
@@ -188,22 +188,27 @@ fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {
     r
 }
 
-fn render_columns<T: Clone>(cols: &ColumnSet<T>, sizes: &mut HashSet<String>) -> String {
+fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
     let mut r = String::new();
-    for (handle, column) in cols.iter() {
+    for (handle, column) in cs.modules.iter() {
         match column.kind {
             Kind::Atomic | Kind::Composite(_) | Kind::Phantom => {
+                let size_multiplier = cs.length_multiplier(&handle);
                 r += &format!(
                     "{} := build.RegisterCommit(\"{}\", {})\n",
                     handle.mangle(),
                     handle.mangle(),
-                    make_size(&handle, sizes)
+                    if size_multiplier == 1 {
+                        make_size(&handle, sizes)
+                    } else {
+                        format!("{}*{}", size_multiplier, make_size(&handle, sizes))
+                    }
                 )
             }
             _ => (),
         }
     }
-    for (handle, column) in cols.iter() {
+    for (handle, column) in cs.modules.iter() {
         if let Kind::Interleaved(ref froms) = column.kind {
             r += &format!(
                 "{} := zkevm.Interleave({})\n",
@@ -259,7 +264,7 @@ pub struct WizardIOP {
 impl WizardIOP {
     pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
         let consts = render_constants(&cs.constants);
-        let columns = render_columns(&cs.modules, &mut self.sizes);
+        let columns = render_columns(&cs, &mut self.sizes);
         let constraints = render_constraints(&cs.constraints);
 
         let r = format!(

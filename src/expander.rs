@@ -9,8 +9,6 @@ use crate::{
 };
 use anyhow::Result;
 
-const RESERVED_MODULE: &str = "RESERVED";
-
 fn invert_expr(e: &Expression) -> Expression {
     Builtin::Inv.call(&[e.to_owned()])
 }
@@ -106,7 +104,7 @@ fn do_expand_ifs(e: &mut Expression) {
                                 *e = args[1].clone();
                             } else {
                                 *e = flatten_list(
-                                    args.get(2).cloned().unwrap_or_else(|| Expression::zero()),
+                                    args.get(2).cloned().unwrap_or_else(Expression::zero),
                                 );
                             }
                         }
@@ -115,7 +113,7 @@ fn do_expand_ifs(e: &mut Expression) {
                                 *e = args[1].clone();
                             } else {
                                 *e = flatten_list(
-                                    args.get(2).cloned().unwrap_or_else(|| Expression::zero()),
+                                    args.get(2).cloned().unwrap_or_else(Expression::zero),
                                 );
                             }
                         }
@@ -179,7 +177,7 @@ fn do_expand_ifs(e: &mut Expression) {
 
 /// For all Builtin::Inv encountered, create a new column and the associated constraints
 /// pre-computing and proving the inverted column.
-fn expand_inv<T: Clone + Ord>(
+fn do_expand_inv<T: Clone + Ord>(
     e: &mut Expression,
     cols: &mut ColumnSet<T>,
     comps: &mut ComputationTable,
@@ -188,20 +186,20 @@ fn expand_inv<T: Clone + Ord>(
     match e {
         Expression::List(es) => {
             for e in es.iter_mut() {
-                expand_inv(e, cols, comps, new_cs)?;
+                do_expand_inv(e, cols, comps, new_cs)?;
             }
             Ok(())
         }
         Expression::Funcall { func, args, .. } => {
             for e in args.iter_mut() {
-                expand_inv(e, cols, comps, new_cs)?;
+                do_expand_inv(e, cols, comps, new_cs)?;
             }
             if matches!(func, Builtin::Inv) {
-                let inverted = &mut args[0];
-                let inverted_handle =
-                    Handle::new(RESERVED_MODULE, expression_to_name(inverted, "INV"));
+                let module = &args[0].module().unwrap();
+                let inverted_expr = &mut args[0];
+                let inverted_handle = Handle::new(module, expression_to_name(inverted_expr, "INV"));
                 if cols.get(&inverted_handle).is_err() {
-                    validate_inv(new_cs, inverted, &inverted_handle);
+                    validate_inv(new_cs, inverted_expr, &inverted_handle);
                     cols.insert_column(
                         &inverted_handle,
                         Type::Column(Magma::Integer),
@@ -212,7 +210,7 @@ fn expand_inv<T: Clone + Ord>(
                         &inverted_handle,
                         Computation::Composite {
                             target: inverted_handle.clone(),
-                            exp: invert_expr(inverted),
+                            exp: invert_expr(inverted_expr),
                         },
                     )?;
                 }
@@ -237,7 +235,8 @@ fn do_expand_expr<T: Clone + Ord>(
     match e {
         Expression::Column(..) => Ok(e.clone()),
         e => {
-            let new_handle = Handle::new(RESERVED_MODULE, expression_to_name(e, "EXPAND"));
+            let module = e.module().unwrap();
+            let new_handle = Handle::new(module, expression_to_name(e, "EXPAND"));
             validate_computation(new_cs, e, &new_handle);
             cols.insert_column(
                 &new_handle,
@@ -322,11 +321,8 @@ pub fn expand_ifs(cs: &mut ConstraintSet) {
 pub fn expand_invs(cs: &mut ConstraintSet) -> Result<()> {
     let mut new_cs_inv = vec![];
     for c in cs.constraints.iter_mut() {
-        match c {
-            Constraint::Vanishes { expr: e, .. } => {
-                expand_inv(e, &mut cs.modules, &mut cs.computations, &mut new_cs_inv)?;
-            }
-            _ => (),
+        if let Constraint::Vanishes { expr: e, .. } = c {
+            do_expand_inv(e, &mut cs.modules, &mut cs.computations, &mut new_cs_inv)?;
         }
     }
     if !new_cs_inv.is_empty() {
