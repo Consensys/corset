@@ -345,7 +345,8 @@ fn main() -> Result<()> {
         } => {
             expander::expand_ifs(&mut constraints);
             expander::lower_shifts(&mut constraints);
-            expander::expand(&mut constraints)?;
+            expander::expand_constraints(&mut constraints)?;
+            expander::expand_invs(&mut constraints)?;
             let mut wiop_exporter = exporters::WizardIOP {
                 out_filename,
                 package,
@@ -369,7 +370,8 @@ fn main() -> Result<()> {
 
             expander::expand_ifs(&mut constraints);
             expander::lower_shifts(&mut constraints);
-            expander::expand(&mut constraints)?;
+            expander::expand_constraints(&mut constraints)?;
+            expander::expand_invs(&mut constraints)?;
             compute::compute(
                 &read_trace(&tracefile)?,
                 &mut constraints,
@@ -396,7 +398,8 @@ fn main() -> Result<()> {
 
             expander::expand_ifs(&mut constraints);
             expander::lower_shifts(&mut constraints);
-            expander::expand(&mut constraints)?;
+            expander::expand_constraints(&mut constraints)?;
+            expander::expand_invs(&mut constraints)?;
             let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
 
             loop {
@@ -517,7 +520,8 @@ fn main() -> Result<()> {
             if expand {
                 expander::lower_shifts(&mut constraints);
                 expander::expand_ifs(&mut constraints);
-                expander::expand(&mut constraints)?;
+                expander::expand_constraints(&mut constraints)?;
+                expander::expand_invs(&mut constraints)?;
             }
             compute::compute(
                 &read_trace(&tracefile)?,

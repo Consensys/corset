@@ -88,13 +88,6 @@ pub fn compute(
             error!("{} not found", h);
         }
     }
-    println!(
-        "{:?}",
-        cs.modules
-            .by_handle(&Handle::new("mmio", "MICRO_INSTRUCTION_STAMP"))
-            .unwrap()
-            .len()
-    );
 
     Ok(())
 }
