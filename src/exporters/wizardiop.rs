@@ -264,7 +264,7 @@ pub struct WizardIOP {
 impl WizardIOP {
     pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
         let consts = render_constants(&cs.constants);
-        let columns = render_columns(&cs, &mut self.sizes);
+        let columns = render_columns(cs, &mut self.sizes);
         let constraints = render_constraints(&cs.constraints);
 
         let r = format!(

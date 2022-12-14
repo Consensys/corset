@@ -258,7 +258,7 @@ impl SymbolTable {
         }
         self.constraints
             .insert(name.to_owned())
-            .then(|| ())
+            .then_some(())
             .ok_or_else(|| anyhow!("Constraint `{}` already defined", name))
     }
 
@@ -347,22 +347,17 @@ impl SymbolTable {
                 name.red(),
                 self.name.blue()
             ))
+        } else if let Some(fr) = Fr::from_str(&value.to_string()) {
+            self.symbols.insert(
+                name.to_owned(),
+                (Symbol::Final(Expression::Const(value, Some(fr)), false), t),
+            );
+            Ok(())
         } else {
-            if let Some(fr) = Fr::from_str(&value.to_string()) {
-                self.symbols.insert(
-                    name.to_owned(),
-                    (
-                        Symbol::Final(Expression::Const(value.clone(), Some(fr)), false),
-                        t,
-                    ),
-                );
-                Ok(())
-            } else {
-                Err(anyhow!(
-                    "{} is not an Fr element",
-                    value.to_string().red().bold()
-                ))
-            }
+            Err(anyhow!(
+                "{} is not an Fr element",
+                value.to_string().red().bold()
+            ))
         }
     }
 

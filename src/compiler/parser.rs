@@ -69,7 +69,7 @@ impl Debug for AstNode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Kind<T> {
     Atomic,
     Phantom,
@@ -88,7 +88,7 @@ impl<T> Kind<T> {
 }
 
 #[allow(dead_code)]
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum Symbol {
     Local(String),
     Path(Vec<String>),
@@ -367,7 +367,7 @@ impl AstNode {
         match tokens.get(0) {
             Some(Token::Symbol(defkw)) if defkw == "defconst" => {
                 if tokens.len() % 2 != 1 {
-                    return Err(anyhow!("DEFCONST expects an even number of arguments"));
+                    Err(anyhow!("DEFCONST expects an even number of arguments"))
                 } else {
                     Ok(AstNode {
                         class: Token::DefConsts(

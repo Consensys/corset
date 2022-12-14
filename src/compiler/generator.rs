@@ -179,7 +179,7 @@ impl Expression {
             .map(|h| h.module)
             .collect::<HashSet<_>>();
         if modules.len() != 1 {
-            return None;
+            None
         } else {
             modules.into_iter().next()
         }
@@ -491,7 +491,7 @@ impl Debug for Expression {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum Builtin {
     Add,
     Sub,
@@ -645,7 +645,7 @@ impl FuncVerifier<Expression> for Builtin {
                 }
             }),
             Builtin::Exp => (args[0].t().is_value() && args[1].t().is_scalar())
-                .then(|| ())
+                .then_some(())
                 .ok_or_else(|| {
                     anyhow!(
                         "`{:?}` expects a scalar exponent; found `{}` of type {:?}",
@@ -657,9 +657,9 @@ impl FuncVerifier<Expression> for Builtin {
             Builtin::Eq => args
                 .iter()
                 .all(|a| a.t().is_value())
-                .then(|| ())
+                .then_some(())
                 .ok_or_else(|| anyhow!("`{:?}` expects value arguments", Builtin::Eq)),
-            Builtin::Not => args[0].t().is_bool().then(|| ()).ok_or_else(|| {
+            Builtin::Not => args[0].t().is_bool().then_some(()).ok_or_else(|| {
                 anyhow!(
                     "`{:?}` expects a boolean; found `{}` of type {:?}",
                     &self,
@@ -993,16 +993,14 @@ impl ConstraintSet {
                                 &mut |h, i, wrap| {
                                     if *h == Handle::new("binary", "NOT") {
                                         Some(Fr::from_str("255").unwrap())
+                                    } else if i == 0 {
+                                        Some(self.padding_value_for(h))
                                     } else {
-                                        if i == 0 {
-                                            Some(self.padding_value_for(h))
-                                        } else {
-                                            self.modules
-                                                .get(h)
-                                                .ok()
-                                                .and_then(|c| c.get(i, wrap))
-                                                .cloned()
-                                        }
+                                        self.modules
+                                            .get(h)
+                                            .ok()
+                                            .and_then(|c| c.get(i, wrap))
+                                            .cloned()
                                     }
                                 },
                                 &mut None,
@@ -1023,10 +1021,10 @@ impl ConstraintSet {
 
     pub fn length_multiplier(&self, h: &Handle) -> usize {
         self.computations
-            .computation_for(&h)
+            .computation_for(h)
             .map(|comp| match comp {
                 Computation::Composite { exp, .. } => {
-                    self.length_multiplier(&exp.dependencies().iter().next().unwrap())
+                    self.length_multiplier(exp.dependencies().iter().next().unwrap())
                 }
                 Computation::Interleaved { froms, .. } => {
                     self.length_multiplier(&froms[0]) * froms.len()
@@ -1064,8 +1062,8 @@ impl ConstraintSet {
             }
             PaddingStrategy::OneLine => {
                 self.modules.handles().iter().for_each(|h| {
-                    let padding_value = self.padding_value_for(&h);
-                    let x = self.modules.by_handle_mut(&h).unwrap();
+                    let padding_value = self.padding_value_for(h);
+                    let x = self.modules.by_handle_mut(h).unwrap();
                     if let Some(xs) = x.value_mut() {
                         xs.insert(0, padding_value);
                     } else {

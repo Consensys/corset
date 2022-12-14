@@ -93,7 +93,7 @@ lazy_static::lazy_static! {
 }
 
 // Form have a special treatment and do not evaluate all their arguments
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Form {
     For,
     Debug,
@@ -142,7 +142,7 @@ impl Arity {
             Arity::Exactly(x) => l == *x,
             Arity::Between(x, y) => l >= *x && l <= *y,
         }
-        .then(|| ())
+        .then_some(())
         .ok_or_else(|| anyhow!(self.make_error(l)))
     }
 }
