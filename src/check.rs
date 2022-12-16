@@ -122,6 +122,7 @@ fn check_constraint(
     domain: &Option<Vec<isize>>,
     columns: &ColumnSet<Fr>,
     name: &str,
+    continue_on_error: bool,
 ) -> Result<()> {
     let cols_lens = expr
         .dependencies()
@@ -179,7 +180,10 @@ fn check_constraint(
         }
         None => {
             for i in 0..l as isize {
-                check_constraint_at(expr, i, Some(l), columns, false, &mut cache)?;
+                let err = check_constraint_at(expr, i, Some(l), columns, false, &mut cache);
+                if err.is_err() && !continue_on_error {
+                    return err;
+                }
             }
         }
     };
@@ -260,6 +264,7 @@ pub fn check(
     only: &Option<Vec<String>>,
     skip: &[String],
     with_bar: bool,
+    continue_on_error: bool,
 ) -> Result<()> {
     if cs.modules.is_empty() {
         info!("Skipping empty trace");
@@ -316,7 +321,13 @@ pub fn check(
                     match expr.as_ref() {
                         Expression::List(es) => {
                             for e in es {
-                                if let Err(err) = check_constraint(e, domain, &cs.modules, name) {
+                                if let Err(err) = check_constraint(
+                                    e,
+                                    domain,
+                                    &cs.modules,
+                                    name,
+                                    continue_on_error,
+                                ) {
                                     error!("{} failed:\n{:?}", name, err);
                                     return Some(name.to_owned());
                                 }
@@ -324,7 +335,9 @@ pub fn check(
                             None
                         }
                         _ => {
-                            if let Err(err) = check_constraint(expr, domain, &cs.modules, name) {
+                            if let Err(err) =
+                                check_constraint(expr, domain, &cs.modules, name, continue_on_error)
+                            {
                                 error!("{} failed:\n{:?}", name, err);
                                 Some(name.to_owned())
                             } else {
