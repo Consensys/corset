@@ -506,27 +506,6 @@ fn main() -> Result<()> {
                 std::thread::sleep(std::time::Duration::from_secs(1));
             }
         }
-        Commands::Inspect { tracefile, expand } => {
-            if utils::is_file_empty(&tracefile)? {
-                warn!("`{}` is empty, exiting", tracefile);
-                return Ok(());
-            }
-
-            if expand {
-                expander::lower_shifts(&mut constraints);
-                expander::expand_ifs(&mut constraints);
-                expander::expand_constraints(&mut constraints)?;
-                expander::expand_invs(&mut constraints)?;
-            }
-            // compute::compute(
-            //     &read_trace(&tracefile)?,
-            //     &mut constraints,
-            //     compiler::PaddingStrategy::OneLine,
-            // )
-            // .with_context(|| format!("while expanding `{}`", tracefile))?;
-
-            inspect::inspect(&constraints)?;
-        }
         Commands::Check {
             tracefile,
             full_trace,
