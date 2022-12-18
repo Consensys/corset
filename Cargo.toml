@@ -39,3 +39,9 @@ serde_json = { version = "1", features = ["arbitrary_precision"] }
 default = [ "interactive" ]
 postgres = [ "dep:postgres" ]
 interactive = [ "dep:indicatif", "dep:pest", "dep:pest_derive" ]
+
+[package.metadata.release]
+tag-prefix = ""
+publish = false
+pre-release-hook = ["git-cliff", "-o", "CHANGELOG.md", "--tag", "{{version}}"]
+allow-branch = ["master"]
