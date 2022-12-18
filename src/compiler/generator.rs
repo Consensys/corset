@@ -285,20 +285,7 @@ impl Expression {
                         args[1].eval(i, get, cache, settings)?,
                     );
                     if args[0].t().is_bool() && args[1].t().is_bool() {
-                        // 1 - (/A + B)×(A + /B)
-                        let mut ax = Fr::one();
-                        ax.sub_assign(&x);
-                        ax.add_assign(&y);
-
-                        let mut bx = Fr::one();
-                        bx.sub_assign(&y);
-                        bx.add_assign(&x);
-
-                        ax.mul_assign(&bx);
-                        let mut bx = Fr::one();
-                        bx.sub_assign(&ax);
-
-                        Some(bx)
+                        Some(if x.eq(&y) { Fr::zero() } else { Fr::one() })
                     } else {
                         let mut ax = x;
                         ax.sub_assign(&y);
@@ -1299,18 +1286,9 @@ fn apply(
                         let x = &traversed_args[0];
                         let y = &traversed_args[1];
                         if traversed_args_t[0].is_bool() && traversed_args_t[1].is_bool() {
-                            Ok(Some(Builtin::Sub.call_t(&[
-                                Expression::one(),
-                                Builtin::Mul.call(&[
-                                    Builtin::Add.call(&[
-                                        Builtin::Sub.call(&[Expression::one(), y.clone()]),
-                                        x.to_owned(),
-                                    ]),
-                                    Builtin::Add.call(&[
-                                        Builtin::Sub.call(&[Expression::one(), x.clone()]),
-                                        y.to_owned(),
-                                    ]),
-                                ]),
+                            Ok(Some(Builtin::Mul.call_t(&[
+                                Builtin::Sub.call(&[x.clone(), y.clone()]),
+                                Builtin::Sub.call(&[x.clone(), y.clone()]),
                             ])))
                         } else {
                             Ok(Some(Builtin::Sub.call_t(&[
