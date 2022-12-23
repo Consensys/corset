@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use log::*;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
@@ -130,6 +131,7 @@ fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
 fn render_constraints(constraints: &[Constraint]) -> String {
     constraints
         .iter()
+        .sorted_by_key(|c| c.name())
         .map(|constraint| match constraint {
             Constraint::Vanishes { name, domain, expr } => {
                 render_constraint(name, domain.clone(), expr)
@@ -174,6 +176,7 @@ fn render_constants(consts: &HashMap<Handle, BigInt>) -> String {
             "const (\n{}\n)",
             consts
                 .iter()
+                .sorted_by_cached_key(|(h, _)| h.mangle())
                 .fold(String::new(), |mut ax, (handle, value)| {
                     ax.push_str(&format!("{} int = {}\n", handle.mangle(), value));
                     ax
@@ -190,7 +193,7 @@ fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {
 
 fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
     let mut r = String::new();
-    for (handle, column) in cs.modules.iter() {
+    for (handle, column) in cs.modules.iter().sorted_by_cached_key(|(h, _)| h.mangle()) {
         match column.kind {
             Kind::Atomic | Kind::Composite(_) | Kind::Phantom => {
                 let size_multiplier = cs.length_multiplier(&handle);
@@ -302,6 +305,7 @@ func Define(build *zkevm.Builder) {{
             SIZE,
             self.sizes
                 .iter()
+                .sorted()
                 .fold(String::new(), |ax, s| ax + &format!("{} = SIZE\n", s)),
             consts,
             columns,
