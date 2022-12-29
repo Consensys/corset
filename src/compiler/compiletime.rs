@@ -20,7 +20,7 @@ fn reduce_compiletime(
         }
         Token::DefConsts(cs) => {
             for (name, exp) in cs.iter() {
-                let (value, _) = reduce(exp, root_ctx.clone(), ctx, settings)?.unwrap();
+                let value = reduce(exp, root_ctx.clone(), ctx, settings)?.unwrap();
                 ctx.borrow_mut().insert_constant(
                     name,
                     value.pure_eval().with_context(|| make_ast_error(exp))?,

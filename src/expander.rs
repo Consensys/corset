@@ -4,74 +4,80 @@ use num_traits::{ToPrimitive, Zero};
 use crate::{
     column::{ColumnSet, Computation},
     compiler::{
-        Builtin, ComputationTable, Constraint, ConstraintSet, Expression, Handle, Kind, Magma, Type,
+        Builtin, ComputationTable, Constraint, ConstraintSet, Expression, Handle, Kind, Magma,
+        Node, Type,
     },
 };
 use anyhow::Result;
 
-fn invert_expr(e: &Expression) -> Expression {
+fn invert_expr(e: &Node) -> Node {
     Builtin::Inv.call(&[e.to_owned()])
 }
 
-fn validate_inv(cs: &mut Vec<Expression>, x_expr: &Expression, inv_x_col: &Handle) {
+fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) {
     cs.push(Builtin::Mul.call(&[
         x_expr.clone(),
         Builtin::Sub.call(&[
             Builtin::Mul.call(&[
                 x_expr.clone(),
-                Expression::Column(
-                    inv_x_col.clone(),
-                    Type::Column(Magma::Integer),
-                    Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()]))),
-                ),
+                Node {
+                    _e: Expression::Column(
+                        inv_x_col.clone(),
+                        Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()]))),
+                    ),
+                    _t: Some(Type::Column(Magma::Integer)),
+                },
             ]),
-            Expression::one(),
+            Node::one(),
         ]),
     ]));
     cs.push(Builtin::Mul.call(&[
-        Expression::Column(
-            inv_x_col.clone(),
-            Type::Column(Magma::Integer),
-            Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()]))),
-        ),
+        Node {
+            _e: Expression::Column(
+                inv_x_col.clone(),
+                Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()]))),
+            ),
+            _t: Some(Type::Column(Magma::Integer)),
+        },
         Builtin::Sub.call(&[
             Builtin::Mul.call(&[
                 x_expr.clone(),
-                Expression::Column(
-                    inv_x_col.clone(),
-                    Type::Column(Magma::Integer),
-                    Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()]))),
-                ),
+                Node {
+                    _e: Expression::Column(
+                        inv_x_col.clone(),
+                        Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()]))),
+                    ),
+                    _t: Some(Type::Column(Magma::Integer)),
+                },
             ]),
-            Expression::one(),
+            Node::one(),
         ]),
     ]));
 }
 
-fn validate_computation(cs: &mut Vec<Expression>, x_expr: &Expression, x_col: &Handle) {
+fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
     cs.push(Builtin::Sub.call(&[
         x_expr.clone(),
-        Expression::Column(
-            x_col.to_owned(),
-            Type::Column(Magma::Integer),
-            Kind::Composite(Box::new(x_expr.clone())),
-        ),
+        Node {
+            _e: Expression::Column(x_col.to_owned(), Kind::Composite(Box::new(x_expr.clone()))),
+            _t: Some(Type::Column(Magma::Integer)),
+        },
     ]))
 }
 
-fn expression_to_name(e: &Expression, prefix: &str) -> String {
+fn expression_to_name(e: &Node, prefix: &str) -> String {
     format!("{}_{}", prefix, e).replace(' ', "_")
 }
 
-fn wrap(ex: Expression) -> Expression {
-    match ex {
+fn wrap(ex: Node) -> Node {
+    match ex.e() {
         Expression::List(_) => ex,
-        _ => Expression::List(vec![ex]),
+        _ => Node::from_expr(Expression::List(vec![ex])),
     }
 }
 
-fn flatten_list(mut e: Expression) -> Expression {
-    match e {
+fn flatten_list(mut e: Node) -> Node {
+    match e.e_mut() {
         Expression::List(ref mut xs) => {
             if xs.len() == 1 {
                 flatten_list(xs.pop().unwrap())
@@ -83,8 +89,8 @@ fn flatten_list(mut e: Expression) -> Expression {
     }
 }
 
-fn do_expand_ifs(e: &mut Expression) {
-    match e {
+fn do_expand_ifs(e: &mut Node) {
+    match e.e_mut() {
         Expression::List(es) => {
             for e in es.iter_mut() {
                 do_expand_ifs(e);
@@ -103,18 +109,14 @@ fn do_expand_ifs(e: &mut Expression) {
                             if constant_cond.is_zero() {
                                 *e = args[1].clone();
                             } else {
-                                *e = flatten_list(
-                                    args.get(2).cloned().unwrap_or_else(Expression::zero),
-                                );
+                                *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
                             }
                         }
                         Builtin::IfNotZero => {
                             if !constant_cond.is_zero() {
                                 *e = args[1].clone();
                             } else {
-                                *e = flatten_list(
-                                    args.get(2).cloned().unwrap_or_else(Expression::zero),
-                                );
+                                *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
                             }
                         }
                         _ => unreachable!(),
@@ -124,11 +126,11 @@ fn do_expand_ifs(e: &mut Expression) {
                         let cond_not_zero = cond.clone();
                         // If the condition is binary, cond_zero = 1 - x...
                         let cond_zero = if args[0].t().is_bool() {
-                            Builtin::Sub.call(&[Expression::one(), cond])
+                            Builtin::Sub.call(&[Node::one(), cond])
                         } else {
                             // ...otherwise, cond_zero = 1 - x.INV(x)
                             Builtin::Sub.call(&[
-                                Expression::one(),
+                                Node::one(),
                                 Builtin::Mul.call(&[cond.clone(), Builtin::Inv.call(&[cond])]),
                             ])
                         };
@@ -149,11 +151,11 @@ fn do_expand_ifs(e: &mut Expression) {
                         .map(|(i, ex)| (i, wrap(ex.clone())))
                         // Map the corresponding then/else operations on the branches
                         .flat_map(|(i, exs)| {
-                            if let Expression::List(exs) = exs {
-                                exs.into_iter()
-                                    .map(|ex: Expression| {
-                                        ex.flat_fold(&|ex| {
-                                            Builtin::Mul.call(&[conds[i].clone(), ex.clone()])
+                            if let Expression::List(exs) = exs.e() {
+                                exs.iter()
+                                    .map(|ex: &Node| {
+                                        ex.flat_map(&|e| {
+                                            Builtin::Mul.call(&[conds[i].clone(), e.clone()])
                                         })
                                     })
                                     .collect::<Vec<_>>()
@@ -166,7 +168,7 @@ fn do_expand_ifs(e: &mut Expression) {
                     *e = if then_else.len() == 1 {
                         then_else[0].clone()
                     } else {
-                        Expression::List(then_else)
+                        Node::from_expr(Expression::List(then_else))
                     }
                 };
             }
@@ -178,12 +180,12 @@ fn do_expand_ifs(e: &mut Expression) {
 /// For all Builtin::Inv encountered, create a new column and the associated constraints
 /// pre-computing and proving the inverted column.
 fn do_expand_inv<T: Clone + Ord>(
-    e: &mut Expression,
+    e: &mut Node,
     cols: &mut ColumnSet<T>,
     comps: &mut ComputationTable,
-    new_cs: &mut Vec<Expression>,
+    new_cs: &mut Vec<Node>,
 ) -> Result<()> {
-    match e {
+    match e.e_mut() {
         Expression::List(es) => {
             for e in es.iter_mut() {
                 do_expand_inv(e, cols, comps, new_cs)?;
@@ -214,11 +216,10 @@ fn do_expand_inv<T: Clone + Ord>(
                         },
                     )?;
                 }
-                *e = Expression::Column(
-                    inverted_handle.clone(),
-                    Type::Column(Magma::Integer),
-                    Kind::Atomic,
-                )
+                *e = Node {
+                    _e: Expression::Column(inverted_handle.clone(), Kind::Atomic),
+                    _t: Some(Type::Column(Magma::Integer)),
+                }
             }
             Ok(())
         }
@@ -227,14 +228,14 @@ fn do_expand_inv<T: Clone + Ord>(
 }
 
 fn do_expand_expr<T: Clone + Ord>(
-    e: &Expression,
+    e: &Node,
     cols: &mut ColumnSet<T>,
     comps: &mut ComputationTable,
-    new_cs: &mut Vec<Expression>,
-) -> Result<Expression> {
-    match e {
+    new_cs: &mut Vec<Node>,
+) -> Result<Node> {
+    match e.e() {
         Expression::Column(..) => Ok(e.clone()),
-        e => {
+        _ => {
             let module = e.module().unwrap();
             let new_handle = Handle::new(module, expression_to_name(e, "EXPAND"));
             validate_computation(new_cs, e, &new_handle);
@@ -252,17 +253,16 @@ fn do_expand_expr<T: Clone + Ord>(
                     exp: e.clone(),
                 },
             );
-            Ok(Expression::Column(
-                new_handle,
-                Type::Column(Magma::Integer),
-                Kind::Phantom,
-            ))
+            Ok(Node {
+                _e: Expression::Column(new_handle, Kind::Phantom),
+                _t: Some(Type::Column(Magma::Integer)),
+            })
         }
     }
 }
 
-fn do_lower_shifts(e: &mut Expression, depth: isize) {
-    match e {
+fn do_lower_shifts(e: &mut Node, depth: isize) {
+    match e.e_mut() {
         Expression::Funcall { func, args } => {
             if matches!(func, Builtin::Shift) {
                 let shift = args[1].pure_eval().unwrap().to_isize().unwrap();
@@ -275,13 +275,16 @@ fn do_lower_shifts(e: &mut Expression, depth: isize) {
             }
         }
         Expression::Const(_, _) => (),
-        Expression::Column(_, _, _) => {
+        Expression::Column(..) => {
             if depth != 0 {
                 let column = e.clone();
-                *e = Builtin::Shift.call(&[column, Expression::Const(BigInt::from(depth), None)])
+                *e = Builtin::Shift.call(&[
+                    column,
+                    Node::from_expr(Expression::Const(BigInt::from(depth), None)),
+                ])
             }
         }
-        Expression::ArrayColumn(_, _, _) => (),
+        Expression::ArrayColumn(..) => (),
         Expression::List(xs) => {
             for x in xs.iter_mut() {
                 do_lower_shifts(x, depth)
@@ -329,7 +332,7 @@ pub fn expand_invs(cs: &mut ConstraintSet) -> Result<()> {
         cs.constraints.push(Constraint::Vanishes {
             name: "INV_CONSTRAINTS".into(),
             domain: None,
-            expr: Expression::List(new_cs_inv).into(),
+            expr: Box::new(Expression::List(new_cs_inv).into()),
         });
     }
 
@@ -357,7 +360,7 @@ pub fn expand_constraints(cs: &mut ConstraintSet) -> Result<()> {
         cs.constraints.push(Constraint::Vanishes {
             name: "EXPANSION_CONSTRAINTS".into(),
             domain: None,
-            expr: Expression::List(new_cs_exps).into(),
+            expr: Box::new(Expression::List(new_cs_exps).into()),
         });
     }
 

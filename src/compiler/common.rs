@@ -219,6 +219,14 @@ impl Type {
             Type::List(_) => Type::List(new),
         }
     }
+
+    pub fn as_scalar(&self) -> Self {
+        match self {
+            Type::Column(x) => Type::Scalar(*x),
+            Type::List(x) => Type::Scalar(*x),
+            _ => *self,
+        }
+    }
     pub fn is_bool(&self) -> bool {
         match self {
             Type::Void | Type::List(_) => false,

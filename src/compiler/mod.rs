@@ -8,7 +8,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use common::*;
 pub use definitions::ComputationTable;
-pub use generator::{Builtin, Constraint, ConstraintSet, EvalSettings, Expression};
+pub use generator::{Builtin, Constraint, ConstraintSet, EvalSettings, Expression, Node};
 pub use parser::{Ast, AstNode, Kind, Token};
 
 mod common;
@@ -17,7 +17,7 @@ mod definitions;
 mod generator;
 mod parser;
 
-const MAIN_MODULE: &str = "<top-level>";
+const MAIN_MODULE: &str = "<prelude>";
 
 pub struct CompileSettings {
     pub debug: bool,
@@ -64,11 +64,11 @@ pub fn make<S: AsRef<str>>(
     }
 
     ctx.borrow_mut().visit_mut::<()>(&mut |_, handle, symbol| {
-        match &mut symbol.0 {
+        match symbol {
             Symbol::Alias(_) => {}
-            Symbol::Final(ref mut symbol, _) => match symbol {
-                Expression::Column(ref mut handle, t, k) => {
-                    columns.insert_column(handle, *t, k.to_nil(), settings.allow_dups)?;
+            Symbol::Final(symbol, _) => match symbol.e() {
+                Expression::Column(handle, k) => {
+                    columns.insert_column(handle, symbol.t(), k.to_nil(), settings.allow_dups)?;
                     match k {
                         Kind::Atomic | Kind::Phantom => (),
                         Kind::Composite(e) => computations.insert(
@@ -87,13 +87,13 @@ pub fn make<S: AsRef<str>>(
                         )?,
                     }
                 }
-                Expression::ArrayColumn(handle, range, t) => {
-                    columns.insert_array(handle, range, *t, settings.allow_dups)?
+                Expression::ArrayColumn(handle, range) => {
+                    columns.insert_array(handle, range, symbol.t(), settings.allow_dups)?
                 }
                 Expression::Const(ref x, _) => {
                     constants.insert(handle, x.clone());
                 }
-                x => todo!("{:?}", x),
+                _ => todo!("{:?}", symbol),
             },
         }
         Ok(())
@@ -114,8 +114,8 @@ pub fn make<S: AsRef<str>>(
 
     ctx.borrow_mut()
         .visit_mut::<()>(&mut |module, handle, symbol| {
-            if let Symbol::Final(_, used) = symbol.0 {
-                if !used {
+            if let Symbol::Final(_, used) = symbol {
+                if !*used {
                     warn!(
                         "{} {} is never used",
                         module.blue(),

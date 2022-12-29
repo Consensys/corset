@@ -36,7 +36,7 @@ pub struct GoExporter {
     pub render_columns: bool,
 }
 impl GoExporter {
-    fn make_chain(&self, xs: &[Expression], operand: &str, surround: bool) -> Result<String> {
+    fn make_chain(&self, xs: &[Node], operand: &str, surround: bool) -> Result<String> {
         let head = self.render_node(&xs[0])?;
         let tail = &xs[1..];
         if xs.len() > 2 {
@@ -61,11 +61,11 @@ impl GoExporter {
         }
     }
 
-    pub fn render_node(&self, node: &Expression) -> Result<String> {
-        let r = match node {
+    pub fn render_node(&self, node: &Node) -> Result<String> {
+        let r = match node.e() {
             Expression::ArrayColumn(..) => unreachable!(),
             Expression::Const(x, _) => Ok(format!("column.CONST_STRING(\"{}\")", x)),
-            Expression::Column(handle, _, _) => {
+            Expression::Column(handle, ..) => {
                 Ok(format!("{}[{}.Name()]", self.ce, handle.mangled_name()))
             }
             Expression::Funcall { func, args } => self.render_funcall(func, args),
@@ -87,7 +87,7 @@ impl GoExporter {
 
         Ok(r)
     }
-    pub fn render_funcall(&self, func: &Builtin, args: &[Expression]) -> Result<String> {
+    pub fn render_funcall(&self, func: &Builtin, args: &[Node]) -> Result<String> {
         let r = match func {
             Builtin::Add => self.make_chain(args, "Add", true),
             Builtin::Mul => self.make_chain(args, "Mul", false),

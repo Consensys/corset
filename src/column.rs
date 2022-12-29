@@ -1,4 +1,4 @@
-use crate::compiler::{Expression, Handle, Kind, Type};
+use crate::compiler::{Handle, Kind, Node, Type};
 use anyhow::{anyhow, Result};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
@@ -222,7 +222,7 @@ impl<T: Clone> std::convert::From<HashMap<String, HashMap<String, Column<T>>>> f
 pub enum Computation {
     Composite {
         target: Handle,
-        exp: Expression,
+        exp: Node,
     },
     Interleaved {
         target: Handle,

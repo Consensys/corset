@@ -12,14 +12,14 @@ use std::rc::{Rc, Weak};
 
 use super::common::BUILTINS;
 use super::generator::{Defined, Expression, Function, FunctionClass};
-use super::{Handle, Magma, Type};
+use super::{Handle, Magma, Node, Type};
 use crate::column::Computation;
 use crate::compiler::parser::*;
 
 #[derive(Debug, Clone)]
 pub enum Symbol {
     Alias(String),
-    Final(Expression, bool),
+    Final(Node, bool),
 }
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct ComputationTable {
@@ -79,7 +79,7 @@ pub struct SymbolTable {
     children: HashMap<String, Rc<RefCell<SymbolTable>>>,
     constraints: HashSet<String>,
     funcs: HashMap<String, Function>,
-    symbols: HashMap<String, (Symbol, Type)>,
+    symbols: HashMap<String, Symbol>,
     pub computation_table: Rc<RefCell<ComputationTable>>,
 }
 impl SymbolTable {
@@ -129,14 +129,14 @@ impl SymbolTable {
 
     pub fn visit_mut<T>(
         &mut self,
-        f: &mut dyn FnMut(&str, Handle, &mut (Symbol, Type)) -> Result<()>,
+        f: &mut dyn FnMut(&str, Handle, &mut Symbol) -> Result<()>,
     ) -> Result<()> {
-        for (m, h, s) in self
+        for (module, handle, symbol) in self
             .symbols
             .iter_mut()
             .map(|(k, v)| (&self.pretty_name, Handle::new(&self.name, k), v))
         {
-            f(m, h, s)?;
+            f(module, handle, symbol)?;
         }
         for c in self.children.values_mut() {
             c.borrow_mut().visit_mut::<T>(f)?;
@@ -149,19 +149,26 @@ impl SymbolTable {
         name: &str,
         ax: &mut HashSet<String>,
         absolute_path: bool,
-    ) -> Result<(Expression, Type)> {
+    ) -> Result<Node> {
         if ax.contains(name) {
             Err(anyhow!("Circular definitions found for {}", name))
         } else {
             ax.insert(name.to_owned());
             // Ugly, but required for borrowing reasons
-            if let Some((Symbol::Alias(target), _)) = self.symbols.get(name).cloned() {
+            if let Some(Symbol::Alias(target)) = self.symbols.get(name).cloned() {
                 self._resolve_symbol(&target, ax, absolute_path)
             } else {
                 match self.symbols.get_mut(name) {
-                    Some((Symbol::Final(exp, visited), t)) => {
+                    Some(Symbol::Final(exp, visited)) => {
+                        // if pure && !matches!(exp, Expression::Const(..)) {
+                        //     Err(anyhow!(
+                        //         "symbol {} can not be used in a pure context",
+                        //         exp.to_string().blue()
+                        //     ))
+                        // } else {
                         *visited = true;
-                        Ok((exp.clone(), *t))
+                        Ok(exp.clone())
+                        // }
                     }
                     None => {
                         if absolute_path || self.closed {
@@ -206,12 +213,12 @@ impl SymbolTable {
         } else {
             ax.insert(name.to_owned());
             // Ugly, but required for borrowing reasons
-            if let Some((Symbol::Alias(_), _)) = self.symbols.get(name).cloned() {
+            if let Some(Symbol::Alias(_)) = self.symbols.get(name).cloned() {
                 self._edit_symbol(name, f, ax)
             } else {
                 match self.symbols.get_mut(name) {
-                    Some((Symbol::Final(constraint, _), _)) => {
-                        f(constraint);
+                    Some(Symbol::Final(constraint, _)) => {
+                        f(constraint.e_mut());
                         Ok(())
                     }
                     None => self.parent.upgrade().map_or(
@@ -262,8 +269,7 @@ impl SymbolTable {
             .ok_or_else(|| anyhow!("Constraint `{}` already defined", name))
     }
 
-    pub fn insert_symbol(&mut self, name: &str, e: Expression) -> Result<()> {
-        let t = e.t();
+    pub fn insert_symbol(&mut self, name: &str, e: Node) -> Result<()> {
         if self.symbols.contains_key(name) {
             Err(anyhow!(
                 "column `{}` already exists in module `{}`",
@@ -272,7 +278,7 @@ impl SymbolTable {
             ))
         } else {
             self.symbols
-                .insert(name.to_owned(), (Symbol::Final(e, false), t));
+                .insert(name.to_owned(), Symbol::Final(e, false));
             Ok(())
         }
     }
@@ -294,7 +300,7 @@ impl SymbolTable {
             Err(anyhow!("`{}` already exists", from))
         } else {
             self.symbols
-                .insert(from.to_owned(), (Symbol::Alias(to.to_owned()), Type::Void));
+                .insert(from.to_owned(), Symbol::Alias(to.to_owned()));
             Ok(())
         }
     }
@@ -319,7 +325,7 @@ impl SymbolTable {
         }
     }
 
-    pub fn resolve_symbol(&mut self, name: &str) -> Result<(Expression, Type)> {
+    pub fn resolve_symbol(&mut self, name: &str) -> Result<Node> {
         if name.contains('.') {
             self.resolve_symbol_with_path(name.split('.').peekable())
         } else {
@@ -350,7 +356,13 @@ impl SymbolTable {
         } else if let Some(fr) = Fr::from_str(&value.to_string()) {
             self.symbols.insert(
                 name.to_owned(),
-                (Symbol::Final(Expression::Const(value, Some(fr)), false), t),
+                Symbol::Final(
+                    Node {
+                        _e: Expression::Const(value, Some(fr)),
+                        _t: Some(t),
+                    },
+                    false,
+                ),
             );
             Ok(())
         } else {
@@ -364,7 +376,7 @@ impl SymbolTable {
     fn resolve_symbol_with_path<'a>(
         &mut self,
         mut path: std::iter::Peekable<impl Iterator<Item = &'a str>>,
-    ) -> Result<(Expression, Type)> {
+    ) -> Result<Node> {
         let name = path.next().unwrap();
         match path.peek() {
             Some(_) => {
@@ -411,33 +423,43 @@ fn reduce(
             let module_name = ctx.borrow().name.to_owned();
             ctx.borrow_mut().insert_symbol(
                 col,
-                Expression::Column(
-                    Handle::new(&module_name, col),
-                    *t,
-                    // Convert Kind<AstNode> to Kind<Expression>
-                    match kind {
-                        Kind::Atomic => Kind::Atomic,
-                        Kind::Phantom => Kind::Phantom,
-                        Kind::Composite(_) => Kind::Phantom, // The actual expression is computed by the generator
-                        Kind::Interleaved(xs) => Kind::Interleaved(
-                            xs.iter()
-                                .map(|h| Handle::new(&module_name, &h.name))
-                                .collect(),
-                        ),
-                    },
-                ),
+                Node {
+                    _e: Expression::Column(
+                        Handle::new(&module_name, col),
+                        // Convert Kind<AstNode> to Kind<Expression>
+                        match kind {
+                            Kind::Atomic => Kind::Atomic,
+                            Kind::Phantom => Kind::Phantom,
+                            Kind::Composite(_) => Kind::Phantom, // The actual expression is computed by the generator
+                            Kind::Interleaved(xs) => Kind::Interleaved(
+                                xs.iter()
+                                    .map(|h| Handle::new(&module_name, &h.name))
+                                    .collect(),
+                            ),
+                        },
+                    ),
+                    _t: Some(*t),
+                },
             )
         }
         Token::DefArrayColumn(col, range, t) => {
             let handle = Handle::new(&ctx.borrow().name, col);
-            ctx.borrow_mut()
-                .insert_symbol(col, Expression::ArrayColumn(handle, range.to_owned(), *t))?;
+            ctx.borrow_mut().insert_symbol(
+                col,
+                Node {
+                    _e: Expression::ArrayColumn(handle, range.to_owned()),
+                    _t: Some(*t),
+                },
+            )?;
             for i in range {
                 let column_name = format!("{}_{}", col, i);
                 let handle = Handle::new(&ctx.borrow().name, &column_name);
                 ctx.borrow_mut().insert_symbol(
                     &column_name,
-                    Expression::Column(handle.clone(), *t, Kind::Atomic),
+                    Node {
+                        _e: Expression::Column(handle.clone(), Kind::Atomic),
+                        _t: Some(*t),
+                    },
                 )?;
             }
             Ok(())
@@ -473,11 +495,10 @@ fn reduce(
                         ctx.borrow_mut()
                             .insert_symbol(
                                 to,
-                                Expression::Column(
-                                    to_handle.clone(),
-                                    Type::Column(Magma::Integer),
-                                    Kind::Phantom,
-                                ),
+                                Node {
+                                    _e: Expression::Column(to_handle.clone(), Kind::Phantom),
+                                    _t: Some(Type::Column(Magma::Integer)),
+                                },
                             )
                             .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
                         _froms.push(from_handle);
