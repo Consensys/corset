@@ -2,11 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [3.0.0] - 2022-12-29
+## [3.1.0] - 2022-12-29
 
 ### Features
 
 - Sort elements in WizardIOP export
+- Pure functions can access constants
 
 ### Miscellaneous Tasks
 
