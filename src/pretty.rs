@@ -1,7 +1,7 @@
 use colored::{Color, ColoredString, Colorize};
 use pairing_ce::{bn256::Fr, ff::PrimeField};
 
-use crate::compiler::Expression;
+use crate::compiler::{Expression, Node};
 
 pub const COLORS: [Color; 7] = [
     Color::Green,
@@ -26,14 +26,14 @@ impl Pretty for Fr {
     }
 }
 
-impl Pretty for Expression {
+impl Pretty for Node {
     fn pretty(&self) -> String {
-        fn rec_pretty(s: &Expression, depth: usize) -> ColoredString {
+        fn rec_pretty(s: &Node, depth: usize) -> ColoredString {
             let c = &COLORS[depth % COLORS.len()];
-            match s {
+            match s.e() {
                 Expression::Const(x, _) => format!("{}", x).color(*c),
-                Expression::Column(handle, _t, _k) => handle.name.to_string().color(*c),
-                Expression::ArrayColumn(handle, range, _t) => format!(
+                Expression::Column(handle, ..) => handle.name.to_string().color(*c),
+                Expression::ArrayColumn(handle, range, ..) => format!(
                     "{}[{}:{}]",
                     handle.name,
                     range.first().unwrap(),
@@ -47,7 +47,7 @@ impl Pretty for Expression {
                 Expression::Void => "nil".color(*c),
             }
         }
-        fn format_list(cs: &[Expression], depth: usize) -> String {
+        fn format_list(cs: &[Node], depth: usize) -> String {
             cs.iter()
                 .map(|c| rec_pretty(c, depth).to_string())
                 .collect::<Vec<_>>()

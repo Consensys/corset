@@ -32,11 +32,11 @@ pub enum Constraint {
     Vanishes {
         name: String,
         domain: Option<Vec<isize>>,
-        expr: Box<Expression>,
+        expr: Box<Node>,
     },
-    Plookup(String, Vec<Expression>, Vec<Expression>),
+    Plookup(String, Vec<Node>, Vec<Node>),
     Permutation(String, Vec<Handle>, Vec<Handle>),
-    InRange(String, Expression, usize),
+    InRange(String, Node, usize),
 }
 impl Constraint {
     pub fn name(&self) -> &str {
@@ -95,25 +95,42 @@ impl EvalSettings {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Expression {
-    Funcall {
-        func: Builtin,
-        args: Vec<Expression>,
-    },
+    Funcall { func: Builtin, args: Vec<Node> },
     Const(BigInt, Option<Fr>),
-    Column(Handle, Type, Kind<Box<Expression>>),
-    ArrayColumn(Handle, Vec<usize>, Type),
-    List(Vec<Expression>),
+    Column(Handle, Kind<Box<Node>>),
+    ArrayColumn(Handle, Vec<usize>),
+    List(Vec<Node>),
     Void,
 }
-impl Expression {
-    pub fn one() -> Expression {
-        Expression::Const(One::one(), Some(Fr::one()))
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Node {
+    pub _e: Expression,
+    pub _t: Option<Type>,
+}
+impl From<Expression> for Node {
+    fn from(e: Expression) -> Self {
+        Node::from_expr(e)
     }
-    pub fn zero() -> Expression {
-        Expression::Const(Zero::zero(), Some(Fr::zero()))
+}
+impl Node {
+    pub fn from_expr(e: Expression) -> Node {
+        Node { _e: e, _t: None }
+    }
+    pub fn one() -> Node {
+        Self::from_expr(Expression::Const(One::one(), Some(Fr::one())))
+    }
+    pub fn zero() -> Node {
+        Self::from_expr(Expression::Const(Zero::zero(), Some(Fr::zero())))
+    }
+    pub fn e(&self) -> &Expression {
+        &self._e
+    }
+    pub fn e_mut(&mut self) -> &mut Expression {
+        &mut self._e
     }
     pub fn t(&self) -> Type {
-        match self {
+        self._t.unwrap_or_else(|| match self.e() {
             Expression::Funcall { func, args } => {
                 func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
             }
@@ -124,49 +141,47 @@ impl Expression {
                     Type::Scalar(Magma::Integer)
                 }
             }
-            Expression::Column(_, t, _) => *t,
-            Expression::ArrayColumn(_, _, t) => *t,
+            Expression::Column(..) => unreachable!(),
+            Expression::ArrayColumn(..) => unreachable!(),
             Expression::List(xs) => Type::List(
                 xs.iter()
-                    .map(Expression::t)
+                    .map(Node::t)
                     .fold(Type::INFIMUM, |a, b| a.max(&b))
                     .magma(),
             ),
             Expression::Void => Type::Void,
-        }
+        })
     }
 
     pub fn size(&self) -> usize {
-        match self {
-            Expression::Funcall { args, .. } => {
-                1 + args.iter().map(Expression::size).sum::<usize>()
-            }
-            Expression::Const(_, _) => 0,
-            Expression::Column(_, _, _) => 1,
-            Expression::ArrayColumn(_, _, _) => 0,
-            Expression::List(xs) => xs.iter().map(Expression::size).sum::<usize>(),
+        match self.e() {
+            Expression::Funcall { args, .. } => 1 + args.iter().map(Node::size).sum::<usize>(),
+            Expression::Const(..) => 0,
+            Expression::Column(..) => 1,
+            Expression::ArrayColumn(..) => 0,
+            Expression::List(xs) => xs.iter().map(Node::size).sum::<usize>(),
             Expression::Void => 0,
         }
     }
 
     pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut Handle)) {
-        match self {
+        match self.e_mut() {
             Expression::Funcall { args, .. } => {
                 args.iter_mut().for_each(|e| e.add_id_to_handles(set_id))
             }
 
-            Expression::Column(handle, _, _) => set_id(handle),
+            Expression::Column(handle, ..) => set_id(handle),
             Expression::List(xs) => xs.iter_mut().for_each(|x| x.add_id_to_handles(set_id)),
 
-            Expression::ArrayColumn(_, _, _) | Expression::Const(_, _) | Expression::Void => {}
+            Expression::ArrayColumn(..) | Expression::Const(_, _) | Expression::Void => {}
         }
     }
 
     pub fn dependencies(&self) -> HashSet<Handle> {
         self.leaves()
             .into_iter()
-            .filter_map(|e| match e {
-                Expression::Column(handle, ..) => Some(handle),
+            .filter_map(|e| match e.e() {
+                Expression::Column(handle, ..) => Some(handle.clone()),
                 _ => None,
             })
             .collect()
@@ -187,7 +202,7 @@ impl Expression {
 
     /// Evaluate a compile-time known value
     pub fn pure_eval(&self) -> Result<BigInt> {
-        match self {
+        match self.e() {
             Expression::Funcall { func, args } => match func {
                 Builtin::Add => {
                     let args = args
@@ -221,9 +236,9 @@ impl Expression {
                 )),
             },
             Expression::Const(v, _) => Ok(v.to_owned()),
-            x => Err(anyhow!(
+            _ => Err(anyhow!(
                 "{} is not known at compile-time",
-                x.to_string().red()
+                self.to_string().red()
             )),
         }
     }
@@ -235,7 +250,7 @@ impl Expression {
         cache: &mut Option<cached::SizedCache<Fr, Fr>>,
         settings: &EvalSettings,
     ) -> Option<Fr> {
-        let r = match self {
+        let r = match self.e() {
             Expression::Funcall { func, args } => match func {
                 Builtin::Add => {
                     let mut ax = Fr::zero();
@@ -318,8 +333,8 @@ impl Expression {
                     }
                 }
                 Builtin::Nth => {
-                    if let (Expression::ArrayColumn(h, range, _), Expression::Const(idx, _)) =
-                        (&args[0], &args[1])
+                    if let (Expression::ArrayColumn(h, range), Expression::Const(idx, _)) =
+                        (&args[0].e(), &args[1].e())
                     {
                         let idx = idx.to_usize().unwrap();
                         if !range.contains(&idx) {
@@ -360,9 +375,9 @@ impl Expression {
                 .filter_map(|x| x.eval(i, get, cache, settings))
                 .find(|x| !x.is_zero())
                 .or_else(|| Some(Fr::zero())),
-            x => unreachable!("{:?}", x),
+            _ => unreachable!("{:?}", self),
         };
-        if settings.trace && !matches!(self, Expression::Const(..)) {
+        if settings.trace && !matches!(self.e(), Expression::Const(..)) {
             eprintln!(
                 "{:70} <- {}[{}]",
                 r.as_ref()
@@ -375,17 +390,17 @@ impl Expression {
         r
     }
 
-    pub fn leaves(&self) -> Vec<Expression> {
-        fn _flatten(e: &Expression, ax: &mut Vec<Expression>) {
-            match e {
+    pub fn leaves(&self) -> Vec<Node> {
+        fn _flatten(e: &Node, ax: &mut Vec<Node>) {
+            match e.e() {
                 Expression::Funcall { args, .. } => {
                     for a in args {
                         _flatten(a, ax);
                     }
                 }
                 Expression::Const(..) => ax.push(e.clone()),
-                Expression::Column(_, _, _) => ax.push(e.clone()),
-                Expression::ArrayColumn(_, _, _) => {}
+                Expression::Column(..) => ax.push(e.clone()),
+                Expression::ArrayColumn(..) => {}
                 Expression::List(args) => {
                     for a in args {
                         _flatten(a, ax);
@@ -399,34 +414,35 @@ impl Expression {
         _flatten(self, &mut r);
         r
     }
-    pub fn flat_fold<T>(&self, f: &dyn Fn(&Expression) -> T) -> Vec<T> {
+
+    pub fn flat_map<T>(&self, f: &dyn Fn(&Node) -> T) -> Vec<T> {
         let mut ax = vec![];
-        match self {
+        match self.e() {
             Expression::List(xs) => {
                 for x in xs {
                     ax.push(f(x));
                 }
             }
-            x => ax.push(f(x)),
+            _ => ax.push(f(self)),
         }
         ax
     }
 }
-impl Display for Expression {
+impl Display for Node {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        fn format_list(cs: &[Expression]) -> String {
+        fn format_list(cs: &[Node]) -> String {
             cs.iter()
                 .map(|c| format!("{}", c))
                 .collect::<Vec<_>>()
                 .join(" ")
         }
 
-        match self {
+        match self.e() {
             Expression::Const(x, _) => write!(f, "{}", x),
-            Expression::Column(handle, _t, _k) => {
+            Expression::Column(handle, ..) => {
                 write!(f, "{}", handle)
             }
-            Expression::ArrayColumn(handle, range, _t) => {
+            Expression::ArrayColumn(handle, range, ..) => {
                 write!(
                     f,
                     "{}[{}:{}]",
@@ -436,7 +452,7 @@ impl Display for Expression {
                 )
             }
             Expression::List(cs) => write!(f, "{{{}}}", format_list(cs)),
-            Self::Funcall { func, args } => {
+            Expression::Funcall { func, args } => {
                 write!(f, "({} {})", func, format_list(args))
             }
             Expression::Void => write!(f, "nil"),
@@ -444,32 +460,32 @@ impl Display for Expression {
         }
     }
 }
-impl Debug for Expression {
+impl Debug for Node {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        fn format_list(cs: &[Expression]) -> String {
+        fn format_list(cs: &[Node]) -> String {
             cs.iter()
                 .map(|c| format!("{:?}", c))
                 .collect::<Vec<_>>()
                 .join(" ")
         }
 
-        match self {
+        match self.e() {
             Expression::Const(x, _) => write!(f, "{}", x),
-            Expression::Column(handle, t, _k) => {
-                write!(f, "{:?}:{:?}", handle, t)
+            Expression::Column(handle, ..) => {
+                write!(f, "{:?}:{:?}", handle, self.t())
             }
-            Expression::ArrayColumn(handle, range, t) => {
+            Expression::ArrayColumn(handle, range, ..) => {
                 write!(
                     f,
                     "{}:{:?}[{}:{}]",
                     handle,
-                    t,
+                    self.t(),
                     range.first().unwrap(),
                     range.last().unwrap(),
                 )
             }
             Expression::List(cs) => write!(f, "'({})", format_list(cs)),
-            Self::Funcall { func, args } => {
+            Expression::Funcall { func, args } => {
                 write!(f, "({:?} {})", func, format_list(args))
             }
             Expression::Void => write!(f, "nil"),
@@ -499,21 +515,15 @@ pub enum Builtin {
     ByteDecomposition,
 }
 impl Builtin {
-    pub fn call(self, args: &[Expression]) -> Expression {
+    pub fn call(self, args: &[Node]) -> Node {
+        Node::from_expr(self.raw_call(args))
+    }
+
+    pub fn raw_call(self, args: &[Node]) -> Expression {
         Expression::Funcall {
             func: self,
             args: args.to_owned(),
         }
-    }
-
-    pub fn call_t(self, args: &[Expression]) -> (Expression, Type) {
-        (
-            Expression::Funcall {
-                func: self,
-                args: args.to_owned(),
-            },
-            self.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>()),
-        )
     }
 
     fn typing(&self, argtype: &[Type]) -> Type {
@@ -588,17 +598,17 @@ pub struct Defined {
     pub args: Vec<String>,
     pub body: AstNode,
 }
-impl FuncVerifier<Expression> for Defined {
+impl FuncVerifier<Node> for Defined {
     fn arity(&self) -> Arity {
         Arity::Exactly(self.args.len())
     }
 
-    fn validate_types(&self, _args: &[Expression]) -> Result<()> {
+    fn validate_types(&self, _args: &[Node]) -> Result<()> {
         Ok(())
     }
 }
 
-impl FuncVerifier<Expression> for Builtin {
+impl FuncVerifier<Node> for Builtin {
     fn arity(&self) -> Arity {
         match self {
             Builtin::Add => Arity::AtLeast(2),
@@ -617,7 +627,7 @@ impl FuncVerifier<Expression> for Builtin {
             Builtin::ByteDecomposition => Arity::Exactly(3),
         }
     }
-    fn validate_types(&self, args: &[Expression]) -> Result<()> {
+    fn validate_types(&self, args: &[Node]) -> Result<()> {
         match self {
             f @ (Builtin::Add | Builtin::Sub | Builtin::Mul) => args.iter().try_for_each(|a| {
                 if a.t().is_value() {
@@ -671,13 +681,13 @@ impl FuncVerifier<Expression> for Builtin {
                     Err(anyhow!(
                         "`{:?}` expects a COLUMN and a VALUE but received {:?}",
                         self,
-                        args.iter().map(Expression::t).collect::<Vec<_>>()
+                        args.iter().map(Node::t).collect::<Vec<_>>()
                     ))
                 }
             }
             Builtin::Nth => {
-                if matches!(args[0], Expression::ArrayColumn(..))
-                    && matches!(&args[1], Expression::Const(x, _) if x.sign() != num_bigint::Sign::Minus)
+                if matches!(args[0].e(), Expression::ArrayColumn(..))
+                    && matches!(&args[1].e(), Expression::Const(x, _) if x.sign() != num_bigint::Sign::Minus)
                 {
                     Ok(())
                 } else {
@@ -689,7 +699,7 @@ impl FuncVerifier<Expression> for Builtin {
                 }
             }
             Builtin::IfZero | Builtin::IfNotZero => {
-                if !matches!(args[0], Expression::List(_)) {
+                if !matches!(args[0].e(), Expression::List(_)) {
                     Ok(())
                 } else {
                     Err(anyhow!(
@@ -700,9 +710,9 @@ impl FuncVerifier<Expression> for Builtin {
             }
             Builtin::Begin => Ok(()),
             Builtin::ByteDecomposition => {
-                if matches!(args[0], Expression::Column(..))
-                    && matches!(args[1], Expression::Const(..))
-                    && matches!(args[2], Expression::Const(..))
+                if matches!(args[0].e(), Expression::Column(..))
+                    && matches!(args[1].e(), Expression::Const(..))
+                    && matches!(args[2].e(), Expression::Const(..))
                 {
                     Ok(())
                 } else {
@@ -829,7 +839,7 @@ impl ConstraintSet {
         Ok(())
     }
 
-    pub fn compute_composite(&mut self, exp: &Expression) -> Result<Vec<Fr>> {
+    pub fn compute_composite(&mut self, exp: &Node) -> Result<Vec<Fr>> {
         let cols_in_expr = exp.dependencies();
         for c in &cols_in_expr {
             self.compute_column(c)?
@@ -867,7 +877,7 @@ impl ConstraintSet {
         Ok(values)
     }
 
-    pub fn compute_composite_static(&self, exp: &Expression) -> Result<Vec<Fr>> {
+    pub fn compute_composite_static(&self, exp: &Node) -> Result<Vec<Fr>> {
         let cols_in_expr = exp.dependencies();
         for c in &cols_in_expr {
             if !self.get(c)?.is_computed() {
@@ -1129,7 +1139,7 @@ fn apply_form(
     root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
     settings: &CompileSettings,
-) -> Result<Option<(Expression, Type)>> {
+) -> Result<Option<Node>> {
     let args = f
         .validate_args(args.to_vec())
         .with_context(|| anyhow!("evaluating call to {:?}", f))?;
@@ -1156,16 +1166,19 @@ fn apply_form(
                     );
                     for_ctx.borrow_mut().insert_symbol(
                         i_name,
-                        Expression::Const(BigInt::from(*i), Fr::from_str(&i.to_string())),
+                        Expression::Const(BigInt::from(*i), Fr::from_str(&i.to_string())).into(),
                     )?;
 
-                    let (r, to) =
+                    let r =
                         reduce(&body.clone(), root_ctx.clone(), &mut for_ctx, settings)?.unwrap();
+                    t = t.max(&r.t());
                     l.push(r);
-                    t = t.max(&to)
                 }
 
-                Ok(Some((Expression::List(l), t)))
+                Ok(Some(Node {
+                    _e: Expression::List(l),
+                    _t: Some(t),
+                }))
             } else {
                 unreachable!()
             }
@@ -1182,10 +1195,10 @@ fn apply_form(
                     0 => Ok(None),
                     1 => Ok(reduced[0].to_owned()),
                     _ => Ok(Some(
-                        Builtin::Begin.call_t(
+                        Builtin::Begin.call(
                             &reduced
                                 .into_iter()
-                                .map(|e| e.map(|e| e.0).unwrap_or(Expression::Void))
+                                .map(|e| e.unwrap_or_else(|| Expression::Void.into()))
                                 .collect::<Vec<_>>(),
                         ),
                     )),
@@ -1201,7 +1214,7 @@ fn apply(
     root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
     settings: &CompileSettings,
-) -> Result<Option<(Expression, Type)>> {
+) -> Result<Option<Node>> {
     if let FunctionClass::SpecialForm(sf) = f.class {
         apply_form(sf, args, root_ctx, ctx, settings)
     } else {
@@ -1209,9 +1222,9 @@ fn apply(
         let mut traversed_args_t = vec![];
         for arg in args.iter() {
             let traversed = reduce(arg, root_ctx.clone(), ctx, settings)?;
-            if let Some((traversed, t)) = traversed {
+            if let Some(traversed) = traversed {
+                traversed_args_t.push(traversed.t());
                 traversed_args.push(traversed);
-                traversed_args_t.push(t);
             }
         }
 
@@ -1221,12 +1234,12 @@ fn apply(
                     anyhow!("validating arguments to {}", f.handle.to_string().blue())
                 })?;
                 match b {
-                    Builtin::Begin => Ok(Some((
-                        Expression::List(traversed_args.into_iter().fold(
+                    Builtin::Begin => Ok(Some(Node {
+                        _e: Expression::List(traversed_args.into_iter().fold(
                             vec![],
-                            |mut ax, e| match e {
-                                Expression::List(mut es) => {
-                                    ax.append(&mut es);
+                            |mut ax, mut e| match e.e_mut() {
+                                Expression::List(ref mut es) => {
+                                    ax.append(es);
                                     ax
                                 }
                                 _ => {
@@ -1235,34 +1248,36 @@ fn apply(
                                 }
                             },
                         )),
-                        traversed_args_t.iter().fold(Type::INFIMUM, |a, b| a.max(b)),
-                    ))),
+                        _t: Some(traversed_args_t.iter().fold(Type::INFIMUM, |a, b| a.max(b))),
+                    })),
 
-                    b @ (Builtin::IfZero | Builtin::IfNotZero) => {
-                        Ok(Some(b.call_t(&traversed_args)))
-                    }
+                    b @ (Builtin::IfZero | Builtin::IfNotZero) => Ok(Some(b.call(&traversed_args))),
 
                     Builtin::Nth => {
                         if let (Expression::ArrayColumn(handle, ..), Expression::Const(i, _)) =
-                            (&traversed_args[0], &traversed_args[1])
+                            (&traversed_args[0].e(), &traversed_args[1].e())
                         {
                             let x = i.to_usize().unwrap();
-                            match &ctx.borrow_mut().resolve_symbol(&handle.name)? {
-                                array @ (Expression::ArrayColumn(handle, range, t), _) => {
+                            let column = ctx.borrow_mut().resolve_symbol(&handle.name)?;
+                            match column.e() {
+                                Expression::ArrayColumn(handle, range) => {
                                     if range.contains(&x) {
-                                        Ok(Some((
-                                            Expression::Column(
+                                        Ok(Some(Node {
+                                            _e: Expression::Column(
                                                 Handle::new(
                                                     &handle.module,
                                                     format!("{}_{}", handle.name, i),
                                                 ),
-                                                *t,
                                                 Kind::Atomic,
                                             ),
-                                            *t,
-                                        )))
+                                            _t: Some(column.t().as_scalar()),
+                                        }))
                                     } else {
-                                        Err(anyhow!("tried to access `{:?}` at index {}", array, x))
+                                        Err(anyhow!(
+                                            "tried to access `{:?}` at index {}",
+                                            column,
+                                            x
+                                        ))
                                     }
                                 }
                                 _ => unimplemented!(),
@@ -1277,21 +1292,24 @@ fn apply(
                         Ok(None)
                     }
 
-                    Builtin::Not => Ok(Some(Builtin::Sub.call_t(&[
-                        Expression::Const(One::one(), Some(Fr::one())),
-                        traversed_args[0].to_owned(),
-                    ]))),
+                    Builtin::Not => Ok(Some(
+                        Builtin::Sub.call(&[Node::one(), traversed_args[0].to_owned()]),
+                    )),
 
                     Builtin::Eq => {
                         let x = &traversed_args[0];
                         let y = &traversed_args[1];
                         if traversed_args_t[0].is_bool() && traversed_args_t[1].is_bool() {
-                            Ok(Some(Builtin::Mul.call_t(&[
-                                Builtin::Sub.call(&[x.clone(), y.clone()]),
-                                Builtin::Sub.call(&[x.clone(), y.clone()]),
-                            ])))
+                            Ok(Some(Node {
+                                _e: Builtin::Mul.raw_call(&[
+                                    Builtin::Sub.call(&[x.clone(), y.clone()]),
+                                    Builtin::Sub.call(&[x.clone(), y.clone()]),
+                                ]),
+                                // NOTE in this very specific case, we are sure that (x - y)² is boolean
+                                _t: Some(x.t().same_scale(Magma::Boolean)),
+                            }))
                         } else {
-                            Ok(Some(Builtin::Sub.call_t(&[
+                            Ok(Some(Builtin::Sub.call(&[
                                 traversed_args[0].to_owned(),
                                 traversed_args[1].to_owned(),
                             ])))
@@ -1304,7 +1322,7 @@ fn apply(
                     | Builtin::Exp
                     | Builtin::Neg
                     | Builtin::Inv
-                    | Builtin::Shift) => Ok(Some(b.call_t(&traversed_args))),
+                    | Builtin::Shift) => Ok(Some(b.call(&traversed_args))),
                 }
             }
 
@@ -1344,17 +1362,17 @@ pub fn reduce(
     root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
     settings: &CompileSettings,
-) -> Result<Option<(Expression, Type)>> {
+) -> Result<Option<Node>> {
     match &e.class {
         Token::Keyword(_) | Token::Type(_) | Token::Range(_) => Ok(None),
-        Token::Value(x) => Ok(Some((
-            Expression::Const(x.clone(), Fr::from_str(&x.to_string())),
-            if *x >= Zero::zero() && *x <= One::one() {
+        Token::Value(x) => Ok(Some(Node {
+            _e: Expression::Const(x.clone(), Fr::from_str(&x.to_string())),
+            _t: Some(if *x >= Zero::zero() && *x <= One::one() {
                 Type::Scalar(Magma::Boolean)
             } else {
                 Type::Scalar(Magma::Integer)
-            },
-        ))),
+            }),
+        })),
         Token::Symbol(name) => {
             let r = ctx
                 .borrow_mut()
@@ -1365,7 +1383,7 @@ pub fn reduce(
 
         Token::List(args) => {
             if args.is_empty() {
-                Ok(Some((Expression::List(vec![]), Type::Void)))
+                Ok(Some(Expression::List(vec![]).into()))
             } else if let Token::Symbol(verb) = &args[0].class {
                 let func = ctx
                     .borrow()
@@ -1380,10 +1398,10 @@ pub fn reduce(
 
         Token::DefColumn(name, _, k) => match k {
             Kind::Composite(e) => {
-                let e = reduce(e, root_ctx, ctx, settings)?.unwrap();
+                let n = reduce(e, root_ctx, ctx, settings)?.unwrap();
                 ctx.borrow_mut().edit_symbol(name, &|x| {
-                    if let Expression::Column(_, _, kind) = x {
-                        *kind = Kind::Composite(Box::new(e.0.clone()))
+                    if let Expression::Column(_, kind) = x {
+                        *kind = Kind::Composite(Box::new(n.clone()))
                     }
                 })?;
                 Ok(None)
@@ -1418,26 +1436,18 @@ fn reduce_toplevel(
             name: name.into(),
             domain: domain.to_owned(),
             expr: Box::new(
-                reduce(expr, root_ctx, ctx, settings)?
-                    .unwrap_or((Expression::Void, Type::Void))
-                    .0,
+                reduce(expr, root_ctx, ctx, settings)?.unwrap_or_else(|| Expression::Void.into()),
             ), // the parser ensures that the body is never empty
         })),
         Token::DefPlookup(name, parent, child) => {
             let parents = parent
                 .iter()
-                .map(|e| reduce(e, root_ctx.clone(), ctx, settings))
-                .collect::<Result<Vec<_>>>()?
-                .into_iter()
-                .map(|e| e.unwrap().0)
-                .collect::<Vec<_>>();
+                .map(|e| reduce(e, root_ctx.clone(), ctx, settings).map(Option::unwrap))
+                .collect::<Result<Vec<_>>>()?;
             let children = child
                 .iter()
-                .map(|e| reduce(e, root_ctx.clone(), ctx, settings))
-                .collect::<Result<Vec<_>>>()?
-                .into_iter()
-                .map(|e| e.unwrap().0)
-                .collect::<Vec<_>>();
+                .map(|e| reduce(e, root_ctx.clone(), ctx, settings).map(Option::unwrap))
+                .collect::<Result<Vec<_>>>()?;
             if parents.len() != children.len() {
                 Err(anyhow!(
                     "in {}, parents and children have different lengths: {} and {}",
@@ -1451,7 +1461,7 @@ fn reduce_toplevel(
         }
         Token::DefInrange(e, range) => Ok(Some(Constraint::InRange(
             names::Generator::default().next().unwrap(),
-            reduce(e, root_ctx, ctx, settings)?.unwrap().0,
+            reduce(e, root_ctx, ctx, settings)?.unwrap(),
             *range,
         ))),
         Token::DefColumns(columns) => {
@@ -1498,9 +1508,7 @@ pub fn pass(
 
     let mut module = ctx.clone();
     for exp in ast.exprs.iter() {
-        if let Some(c) = reduce_toplevel(exp, ctx.clone(), &mut module, settings)
-            .with_context(|| make_ast_error(exp))?
-        {
+        if let Some(c) = reduce_toplevel(exp, ctx.clone(), &mut module, settings)? {
             r.push(c)
         }
     }

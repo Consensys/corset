@@ -15,11 +15,11 @@ use pairing_ce::{
 
 use crate::{
     column::ColumnSet,
-    compiler::{Constraint, ConstraintSet, EvalSettings, Expression, Handle},
+    compiler::{Constraint, ConstraintSet, EvalSettings, Expression, Handle, Node},
     pretty::*,
 };
 
-fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Result<()> {
+fn fail(expr: &Node, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Result<()> {
     let trace_span: isize = crate::SETTINGS.get().unwrap().context_span;
 
     let module = expr.dependencies().iter().next().unwrap().module.clone();
@@ -94,7 +94,7 @@ fn fail(expr: &Expression, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) 
 }
 
 fn check_constraint_at(
-    expr: &Expression,
+    expr: &Node,
     i: isize,
     l: Option<usize>,
     columns: &ColumnSet<Fr>,
@@ -118,7 +118,7 @@ fn check_constraint_at(
 }
 
 fn check_constraint(
-    expr: &Expression,
+    expr: &Node,
     domain: &Option<Vec<isize>>,
     columns: &ColumnSet<Fr>,
     name: &str,
@@ -190,11 +190,7 @@ fn check_constraint(
     Ok(())
 }
 
-fn check_plookup(
-    cs: &ConstraintSet,
-    parents: &[Expression],
-    children: &[Expression],
-) -> Result<()> {
+fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Result<()> {
     // Compute the LC \sum_k (k+1)×x_k[i]
     fn pseudo_rlc(cols: &[Vec<Fr>], i: usize) -> Fr {
         let mut ax = Fr::zero();
@@ -207,7 +203,7 @@ fn check_plookup(
     }
 
     // Given a list of column expression to PLookup, retrieve the corresponding values
-    fn compute_cols(exps: &[Expression], cs: &ConstraintSet) -> Result<Vec<Vec<Fr>>> {
+    fn compute_cols(exps: &[Node], cs: &ConstraintSet) -> Result<Vec<Vec<Fr>>> {
         let cols = exps
             .iter()
             .map(|e| cs.compute_composite_static(e))
@@ -314,11 +310,11 @@ pub fn check(
         .filter_map(|c| {
             match c {
                 Constraint::Vanishes { name, domain, expr } => {
-                    if name == "INV_CONSTRAINTS" || matches!(**expr, Expression::Void) {
+                    if name == "INV_CONSTRAINTS" || matches!(expr.e(), Expression::Void) {
                         return None;
                     }
 
-                    match expr.as_ref() {
+                    match expr.as_ref().e() {
                         Expression::List(es) => {
                             for e in es {
                                 if let Err(err) = check_constraint(

@@ -15,33 +15,34 @@ use crate::compiler::*;
 
 const SIZE: usize = 4_194_304;
 
-fn shift(e: &Expression, i: isize) -> Expression {
-    match e {
+fn shift(e: &Node, i: isize) -> Node {
+    match e.e() {
         Expression::Funcall { func, args } => match func {
             Builtin::Shift => {
                 let value = args[1].pure_eval().unwrap() + i;
                 Builtin::Shift.call(&[
                     args[0].clone(),
-                    Expression::Const(value.clone(), Fr::from_str(&value.to_string())),
+                    Expression::Const(value.clone(), Fr::from_str(&value.to_string())).into(),
                 ])
             }
             _ => Expression::Funcall {
                 func: *func,
                 args: args.iter().map(|a| shift(a, i)).collect(),
-            },
+            }
+            .into(),
         },
         Expression::Const(..) => e.clone(),
         Expression::Column(..) => Builtin::Shift.call(&[
             e.clone(),
-            Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())),
+            Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
         ]),
-        Expression::List(xs) => Expression::List(xs.iter().map(|x| shift(x, i)).collect()),
+        Expression::List(xs) => Expression::List(xs.iter().map(|x| shift(x, i)).collect()).into(),
         Expression::ArrayColumn(..) => unreachable!(),
-        Expression::Void => Expression::Void,
+        Expression::Void => Expression::Void.into(),
     }
 }
 
-fn make_chain(xs: &[Expression], operand: &str, surround: bool) -> String {
+fn make_chain(xs: &[Node], operand: &str, surround: bool) -> String {
     let head = render_expression(&xs[0]);
     let tail = &xs[1..];
     if xs.len() > 2 {
@@ -61,11 +62,11 @@ fn make_chain(xs: &[Expression], operand: &str, surround: bool) -> String {
     }
 }
 
-fn render_expression(e: &Expression) -> String {
-    match e {
+fn render_expression(e: &Node) -> String {
+    match e.e() {
         Expression::ArrayColumn(..) => unreachable!(),
         Expression::Const(x, _) => format!("symbolic.NewConstant(\"{}\")", x),
-        Expression::Column(handle, _, _) => format!("{}.AsVariable()", handle.mangle()),
+        Expression::Column(handle, ..) => format!("{}.AsVariable()", handle.mangle()),
         Expression::Funcall { func, args } => render_funcall(func, args),
         Expression::List(constraints) => constraints
             .iter()
@@ -85,7 +86,7 @@ fn render_expression(e: &Expression) -> String {
     }
 }
 
-fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
+fn render_funcall(func: &Builtin, args: &[Node]) -> String {
     match func {
         Builtin::Add => make_chain(args, "Add", true),
         Builtin::Mul => make_chain(args, "Mul", false),
@@ -112,7 +113,7 @@ fn render_funcall(func: &Builtin, args: &[Expression]) -> String {
         }
         Builtin::Neg => format!("({}).Neg()", render_expression(&args[0])),
         Builtin::Shift => {
-            let leaf = match &args[0] {
+            let leaf = match &args[0].e() {
                 Expression::Column(handle, ..) => handle.mangle(),
                 _ => unreachable!(),
             };
@@ -228,8 +229,8 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
     r
 }
 
-fn render_constraint(name: &str, domain: Option<Vec<isize>>, expr: &Expression) -> String {
-    match expr {
+fn render_constraint(name: &str, domain: Option<Vec<isize>>, expr: &Node) -> String {
+    match expr.e() {
         Expression::List(xs) => xs
             .iter()
             .enumerate()

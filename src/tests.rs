@@ -42,7 +42,10 @@ fn defun_too_many_args() {
 fn defpure_ok() {
     let inputs = vec![
         ("stdlib", include_str!("stdlib.lisp")),
-        ("defpurefun", "(defcolumns X Y) (defun (f A B) (eq A B))"),
+        (
+            "defpurefun",
+            "(defcolumns x y) (defpurefun (f a b) (eq a b))",
+        ),
     ];
 
     assert!(compiler::make(
@@ -53,6 +56,26 @@ fn defpure_ok() {
         },
     )
     .is_ok());
+}
+
+#[test]
+fn defpure_ok_const() -> Result<()> {
+    let inputs = vec![
+        ("stdlib", include_str!("stdlib.lisp")),
+        (
+            "defpurefun",
+            "(defconst A 123) (defcolumns x) (defpurefun (f a) (eq a A)) (defconstraint asdf () (f x))",
+        ),
+    ];
+
+    compiler::make(
+        inputs.as_slice(),
+        &CompileSettings {
+            debug: false,
+            allow_dups: false,
+        },
+    )?;
+    Ok(())
 }
 
 #[test]
