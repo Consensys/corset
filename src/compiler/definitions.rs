@@ -459,17 +459,6 @@ fn reduce(
                     _t: Some(*t),
                 },
             )?;
-            for i in range {
-                let column_name = format!("{}_{}", col, i);
-                let handle = Handle::new(&ctx.borrow().name, &column_name);
-                ctx.borrow_mut().insert_symbol(
-                    &column_name,
-                    Node {
-                        _e: Expression::Column(handle.clone(), Kind::Atomic),
-                        _t: Some(*t),
-                    },
-                )?;
-            }
             Ok(())
         }
         Token::DefPermutation(tos, froms) => {
