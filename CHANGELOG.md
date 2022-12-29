@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.0.0] - 2022-12-29
+
+### Features
+
+- Sort elements in WizardIOP export
+
+### Miscellaneous Tasks
+
+- Release corset version 3.0.0
+
+### Refactor
+
+- Overhaul implementation of typing system
+
+### Testing
+
+- Add an if-eq-else test
+
 ## [2.0.0] - 2022-12-18
 
 ### Miscellaneous Tasks
