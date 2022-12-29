@@ -149,6 +149,7 @@ impl SymbolTable {
         name: &str,
         ax: &mut HashSet<String>,
         absolute_path: bool,
+        pure: bool,
     ) -> Result<Node> {
         if ax.contains(name) {
             Err(anyhow!("Circular definitions found for {}", name))
@@ -156,22 +157,22 @@ impl SymbolTable {
             ax.insert(name.to_owned());
             // Ugly, but required for borrowing reasons
             if let Some(Symbol::Alias(target)) = self.symbols.get(name).cloned() {
-                self._resolve_symbol(&target, ax, absolute_path)
+                self._resolve_symbol(&target, ax, absolute_path, pure)
             } else {
                 match self.symbols.get_mut(name) {
                     Some(Symbol::Final(exp, visited)) => {
-                        // if pure && !matches!(exp, Expression::Const(..)) {
-                        //     Err(anyhow!(
-                        //         "symbol {} can not be used in a pure context",
-                        //         exp.to_string().blue()
-                        //     ))
-                        // } else {
-                        *visited = true;
-                        Ok(exp.clone())
-                        // }
+                        if pure && !matches!(exp.e(), Expression::Const(..)) {
+                            Err(anyhow!(
+                                "symbol {} can not be used in a pure context",
+                                exp.to_string().blue()
+                            ))
+                        } else {
+                            *visited = true;
+                            Ok(exp.clone())
+                        }
                     }
                     None => {
-                        if absolute_path || self.closed {
+                        if absolute_path {
                             Err(anyhow!(
                                 "symbol {} unknown in module {}",
                                 name.red(),
@@ -186,7 +187,14 @@ impl SymbolTable {
                                         name.red(),
                                         self.name.blue()
                                     )),
-                                    |parent| parent.borrow_mut().resolve_symbol(name),
+                                    |parent| {
+                                        parent.borrow_mut()._resolve_symbol(
+                                            name,
+                                            &mut HashSet::new(),
+                                            false,
+                                            self.closed || pure,
+                                        )
+                                    },
                                 )
                                 .with_context(|| {
                                     anyhow!("looking for {} in {}", name.red(), self.name.blue())
@@ -329,7 +337,7 @@ impl SymbolTable {
         if name.contains('.') {
             self.resolve_symbol_with_path(name.split('.').peekable())
         } else {
-            self._resolve_symbol(name, &mut HashSet::new(), false)
+            self._resolve_symbol(name, &mut HashSet::new(), false, false)
         }
     }
 
@@ -390,7 +398,7 @@ impl SymbolTable {
                     ))
                 }
             }
-            None => self._resolve_symbol(name, &mut HashSet::new(), true),
+            None => self._resolve_symbol(name, &mut HashSet::new(), true, false),
         }
     }
 }
