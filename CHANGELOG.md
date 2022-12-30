@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.1.1] - 2022-12-30
+
+### Bug Fixes
+
+- Array columns are not double-declared anymore
+
+### Documentation
+
+- Update README
+
+### Features
+
+- Primes are accepted in symbol names
+
 ## [3.1.0] - 2022-12-29
 
 ### Features
@@ -12,6 +26,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous Tasks
 
 - Release corset version 3.0.0
+- Release corset version 3.1.0
 
 ### Refactor
 
