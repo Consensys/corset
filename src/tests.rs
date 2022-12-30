@@ -175,3 +175,17 @@ fn array_ko() {
     ))
     .is_err());
 }
+
+#[test]
+fn prime_in_name() {
+    let inputs = vec![("prime", "(defcolumns A B C A' B' C')")];
+
+    assert!(dbg!(compiler::make(
+        inputs.as_slice(),
+        &CompileSettings {
+            debug: false,
+            allow_dups: false
+        }
+    ))
+    .is_ok());
+}
