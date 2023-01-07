@@ -641,21 +641,25 @@ impl FuncVerifier<Node> for Builtin {
                     ))
                 }
             }),
-            Builtin::Exp => (args[0].t().is_value() && args[1].t().is_scalar())
-                .then_some(())
-                .ok_or_else(|| {
-                    anyhow!(
+            Builtin::Exp => {
+                if args[0].t().is_value() && args[1].t().is_scalar() {
+                    Ok(())
+                } else {
+                    bail!(
                         "`{:?}` expects a scalar exponent; found `{}` of type {:?}",
                         &self,
                         args[1],
                         args[1].t()
                     )
-                }),
-            Builtin::Eq => args
-                .iter()
-                .all(|a| a.t().is_value())
-                .then_some(())
-                .ok_or_else(|| anyhow!("`{:?}` expects value arguments", Builtin::Eq)),
+                }
+            }
+            Builtin::Eq => {
+                if args.iter().all(|a| a.t().is_value()) {
+                    Ok(())
+                } else {
+                    bail!("`{:?}` expects value arguments", Builtin::Eq)
+                }
+            }
             Builtin::Not => args[0].t().is_bool().then_some(()).ok_or_else(|| {
                 anyhow!(
                     "`{:?}` expects a boolean; found `{}` of type {:?}",

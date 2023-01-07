@@ -271,10 +271,11 @@ impl SymbolTable {
         if self.constraints.contains(name) {
             warn!("redefining constraint `{}`", name.yellow());
         }
-        self.constraints
-            .insert(name.to_owned())
-            .then_some(())
-            .ok_or_else(|| anyhow!("Constraint `{}` already defined", name))
+        if self.constraints.insert(name.to_owned()) {
+            Ok(())
+        } else {
+            bail!("Constraint `{}` already defined", name)
+        }
     }
 
     pub fn insert_symbol(&mut self, name: &str, e: Node) -> Result<()> {

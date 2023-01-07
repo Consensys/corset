@@ -132,7 +132,7 @@ impl Arity {
     }
 
     fn validate(&self, l: usize) -> Result<()> {
-        match self {
+        if (match self {
             Arity::AtLeast(x) => l >= *x,
             // Arity::AtMost(x) => l <= *x,
             // Arity::Even => l % 2 == 0,
@@ -141,9 +141,11 @@ impl Arity {
             Arity::Dyadic => l == 2,
             Arity::Exactly(x) => l == *x,
             Arity::Between(x, y) => l >= *x && l <= *y,
+        }) {
+            Ok(())
+        } else {
+            bail!(self.make_error(l))
         }
-        .then_some(())
-        .ok_or_else(|| anyhow!(self.make_error(l)))
     }
 }
 pub trait FuncVerifier<T> {
