@@ -63,7 +63,10 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
                 if !xs.is_empty() {
                     if let Some(column) = columns.by_handle_mut(&handle) {
                         trace!("Inserting {} ({})", handle, xs.len());
-                        column.set_value(parse_column(xs, column.t)?)
+                        column.set_value(
+                            parse_column(xs, column.t)
+                                .with_context(|| anyhow!("while importing {}", handle))?,
+                        )
                     }
                 }
             }
