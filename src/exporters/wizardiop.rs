@@ -292,7 +292,7 @@ SIZE = {}
 {}
 )
 
-func Define(build *zkevm.Builder) {{
+func ZkEVMDefine(build *zkevm.Builder) {{
 //
 // Columns declarations
 //
