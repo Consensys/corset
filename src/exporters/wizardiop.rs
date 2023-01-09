@@ -267,7 +267,6 @@ pub struct WizardIOP {
 
 impl WizardIOP {
     pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
-        let consts = render_constants(&cs.constants);
         let columns = render_columns(cs, &mut self.sizes);
         let constraints = render_constraints(&cs.constraints);
 
@@ -286,8 +285,6 @@ const (
 SIZE = {}
 {}
 )
-
-{}
 
 func Define(build *zkevm.Builder) {{
 //
@@ -308,7 +305,6 @@ func Define(build *zkevm.Builder) {{
                 .iter()
                 .sorted()
                 .fold(String::new(), |ax, s| ax + &format!("{} = SIZE\n", s)),
-            consts,
             columns,
             constraints,
         );
