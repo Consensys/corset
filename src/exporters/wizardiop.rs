@@ -202,17 +202,19 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
     for (handle, column) in cs.modules.iter().sorted_by_cached_key(|(h, _)| h.mangle()) {
         match column.kind {
             Kind::Atomic | Kind::Composite(_) | Kind::Phantom => {
-                let size_multiplier = cs.length_multiplier(&handle);
-                r += &format!(
-                    "{} := build.RegisterCommit(\"{}\", {})\n",
-                    handle.mangle(),
-                    handle.mangle(),
-                    if size_multiplier == 1 {
-                        make_size(&handle, sizes)
-                    } else {
-                        format!("{}*{}", size_multiplier, make_size(&handle, sizes))
-                    }
-                )
+                if column.used {
+                    let size_multiplier = cs.length_multiplier(&handle);
+                    r += &format!(
+                        "{} := build.RegisterCommit(\"{}\", {})\n",
+                        handle.mangle(),
+                        handle.mangle(),
+                        if size_multiplier == 1 {
+                            make_size(&handle, sizes)
+                        } else {
+                            format!("{}*{}", size_multiplier, make_size(&handle, sizes))
+                        }
+                    )
+                }
             }
             _ => (),
         }

@@ -7,6 +7,7 @@ use std::collections::HashMap;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Column<T: Clone> {
     value: Option<Vec<T>>,
+    pub used: bool,
     pub kind: Kind<()>,
     pub t: Type,
 }
@@ -131,6 +132,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
         &mut self,
         handle: &Handle,
         t: Type,
+        used: bool,
         kind: Kind<()>,
         allow_dup: bool,
     ) -> Result<usize> {
@@ -149,6 +151,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
             let i = self._cols.len();
             self._cols.push(Column {
                 value: None,
+                used,
                 t,
                 kind,
             });
@@ -168,7 +171,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
         allow_dup: bool,
     ) -> Result<()> {
         for i in range.iter() {
-            self.insert_column(&handle.ith(*i), t, Kind::Atomic, allow_dup)?;
+            self.insert_column(&handle.ith(*i), t, true, Kind::Atomic, allow_dup)?;
         }
         Ok(())
     }

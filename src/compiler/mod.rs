@@ -25,6 +25,7 @@ pub struct CompileSettings {
 }
 
 pub enum PaddingStrategy {
+    #[allow(dead_code)]
     Full,
     OneLine,
     None,
@@ -68,7 +69,13 @@ pub fn make<S: AsRef<str>>(
             Symbol::Alias(_) => {}
             Symbol::Final(symbol, _) => match symbol.e() {
                 Expression::Column(handle, k) => {
-                    columns.insert_column(handle, symbol.t(), k.to_nil(), settings.allow_dups)?;
+                    columns.insert_column(
+                        handle,
+                        symbol.t(),
+                        false, // Columns use state is only known later on
+                        k.to_nil(),
+                        settings.allow_dups,
+                    )?;
                     match k {
                         Kind::Atomic | Kind::Phantom => (),
                         Kind::Composite(e) => computations.insert(
@@ -114,13 +121,18 @@ pub fn make<S: AsRef<str>>(
 
     ctx.borrow_mut()
         .visit_mut::<()>(&mut |module, handle, symbol| {
-            if let Symbol::Final(_, used) = symbol {
+            if let Symbol::Final(symbol, used) = symbol {
                 if !*used {
                     warn!(
-                        "{} {} is never used",
+                        "[{}] {} is never used",
                         module.blue(),
                         handle.name.bright_white().bold()
                     );
+                } else {
+                    if let Expression::Column(handle, _) = symbol.e() {
+                        println!("{} -> true", handle);
+                        columns.get_mut(&handle).unwrap().used = *used;
+                    }
                 }
             }
             Ok(())

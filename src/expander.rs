@@ -205,6 +205,7 @@ fn do_expand_inv<T: Clone + Ord>(
                     cols.insert_column(
                         &inverted_handle,
                         Type::Column(Magma::Integer),
+                        true,
                         Kind::Composite(()),
                         true,
                     )?;
@@ -242,6 +243,7 @@ fn do_expand_expr<T: Clone + Ord>(
             cols.insert_column(
                 &new_handle,
                 Type::Column(Magma::Integer),
+                true,
                 Kind::Phantom,
                 true,
             )?;
