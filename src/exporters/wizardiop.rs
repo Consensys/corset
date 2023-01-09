@@ -276,9 +276,8 @@ package {}
 
 
 import (
-    "github.com/consensys/accelerated-crypto-monorepo/example/zkevm"
-    "github.com/consensys/accelerated-crypto-monorepo/protocol/commitment"
     "github.com/consensys/accelerated-crypto-monorepo/symbolic"
+    "github.com/consensys/accelerated-crypto-monorepo/zkevm"
 )
 
 const (
