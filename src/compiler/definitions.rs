@@ -437,26 +437,30 @@ fn reduce(
             .fold(Ok(()), |ax, col| ax.and(reduce(col, root_ctx.clone(), ctx))),
         Token::DefColumn(col, t, kind) => {
             let module_name = ctx.borrow().name.to_owned();
-            ctx.borrow_mut().insert_symbol(
-                col,
-                Node {
-                    _e: Expression::Column(
-                        Handle::new(&module_name, col),
-                        // Convert Kind<AstNode> to Kind<Expression>
-                        match kind {
-                            Kind::Atomic => Kind::Atomic,
-                            Kind::Phantom => Kind::Phantom,
-                            Kind::Composite(_) => Kind::Phantom, // The actual expression is computed by the generator
-                            Kind::Interleaved(xs) => Kind::Interleaved(
-                                xs.iter()
-                                    .map(|h| Handle::new(&module_name, &h.name))
-                                    .collect(),
-                            ),
-                        },
-                    ),
-                    _t: Some(*t),
-                },
-            )
+            let symbol = Node {
+                _e: Expression::Column(
+                    Handle::new(&module_name, col),
+                    // Convert Kind<AstNode> to Kind<Expression>
+                    match kind {
+                        Kind::Atomic => Kind::Atomic,
+                        Kind::Phantom => Kind::Phantom,
+                        Kind::Composite(_) => Kind::Phantom, // The actual expression is computed by the generator
+                        Kind::Interleaved(xs) => {
+                            let froms = xs
+                                .iter()
+                                .map(|h| Handle::new(&module_name, &h.name))
+                                .collect::<Vec<_>>();
+                            let _ = froms
+                                .iter()
+                                .map(|from| ctx.borrow_mut().resolve_symbol(&from.name))
+                                .collect::<Result<Vec<_>>>()?;
+                            Kind::Interleaved(froms)
+                        }
+                    },
+                ),
+                _t: Some(*t),
+            };
+            ctx.borrow_mut().insert_symbol(col, symbol)
         }
         Token::DefArrayColumn(col, range, t) => {
             let handle = Handle::new(&ctx.borrow().name, col);

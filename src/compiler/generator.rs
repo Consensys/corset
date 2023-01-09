@@ -1441,7 +1441,7 @@ fn reduce_toplevel(
             domain: domain.to_owned(),
             expr: Box::new(
                 reduce(expr, root_ctx, ctx, settings)?.unwrap_or_else(|| Expression::Void.into()),
-            ), // the parser ensures that the body is never empty
+            ),
         })),
         Token::DefPlookup(name, parent, child) => {
             let parents = parent

@@ -130,7 +130,6 @@ pub fn make<S: AsRef<str>>(
                     );
                 } else {
                     if let Expression::Column(handle, _) = symbol.e() {
-                        println!("{} -> true", handle);
                         columns.get_mut(&handle).unwrap().used = *used;
                     }
                 }
