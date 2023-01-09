@@ -19,7 +19,13 @@ use crate::{
     pretty::*,
 };
 
-fn fail(expr: &Node, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Result<()> {
+fn fail(
+    expr: &Node,
+    i: isize,
+    l: Option<usize>,
+    columns: &ColumnSet<Fr>,
+    show_context: bool,
+) -> Result<()> {
     let trace_span: isize = crate::SETTINGS.get().unwrap().context_span;
 
     let module = expr.dependencies().iter().next().unwrap().module.clone();
@@ -56,17 +62,19 @@ fn fail(expr: &Node, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Res
         )
     }
 
-    for ii in 0..m_columns[0].len() {
-        for (j, col) in m_columns.iter().enumerate() {
-            let padding = col.iter().map(String::len).max().unwrap() + 2;
-            // - 1 to account for the first column
-            if j as isize + (i - trace_span).max(0) - 1 == i {
-                print!("{:width$}", m_columns[j][ii].red(), width = padding);
-            } else {
-                print!("{:width$}", m_columns[j][ii], width = padding);
+    if show_context {
+        for ii in 0..m_columns[0].len() {
+            for (j, col) in m_columns.iter().enumerate() {
+                let padding = col.iter().map(String::len).max().unwrap() + 2;
+                // - 1 to account for the first column
+                if j as isize + (i - trace_span).max(0) - 1 == i {
+                    print!("{:width$}", m_columns[j][ii].red(), width = padding);
+                } else {
+                    print!("{:width$}", m_columns[j][ii], width = padding);
+                }
             }
+            println!();
         }
-        println!();
     }
 
     let r = expr.eval(
@@ -79,7 +87,7 @@ fn fail(expr: &Node, i: isize, l: Option<usize>, columns: &ColumnSet<Fr>) -> Res
                 .cloned()
         },
         &mut None,
-        &EvalSettings::new().set_trace(true),
+        &EvalSettings::new().set_trace(show_context),
     );
 
     Err(anyhow!(
@@ -100,6 +108,7 @@ fn check_constraint_at(
     columns: &ColumnSet<Fr>,
     fail_on_oob: bool,
     cache: &mut Option<SizedCache<Fr, Fr>>,
+    show_context: bool,
 ) -> Result<()> {
     let r = expr.eval(
         i,
@@ -109,10 +118,10 @@ fn check_constraint_at(
     );
     if let Some(r) = r {
         if !r.is_zero() {
-            return fail(expr, i, l, columns);
+            return fail(expr, i, l, columns, show_context);
         }
     } else if fail_on_oob {
-        return fail(expr, i, l, columns);
+        return fail(expr, i, l, columns, show_context);
     }
     Ok(())
 }
@@ -123,6 +132,7 @@ fn check_constraint(
     columns: &ColumnSet<Fr>,
     name: &str,
     continue_on_error: bool,
+    show_context: bool,
 ) -> Result<()> {
     let cols_lens = expr
         .dependencies()
@@ -175,12 +185,13 @@ fn check_constraint(
     match domain {
         Some(is) => {
             for i in is {
-                check_constraint_at(expr, *i, None, columns, true, &mut cache)?;
+                check_constraint_at(expr, *i, None, columns, true, &mut cache, show_context)?;
             }
         }
         None => {
             for i in 0..l as isize {
-                let err = check_constraint_at(expr, i, Some(l), columns, false, &mut cache);
+                let err =
+                    check_constraint_at(expr, i, Some(l), columns, false, &mut cache, show_context);
                 if err.is_err() && !continue_on_error {
                     return err;
                 }
@@ -261,6 +272,7 @@ pub fn check(
     skip: &[String],
     with_bar: bool,
     continue_on_error: bool,
+    show_context: bool,
 ) -> Result<()> {
     if cs.modules.is_empty() {
         info!("Skipping empty trace");
@@ -323,6 +335,7 @@ pub fn check(
                                     &cs.modules,
                                     name,
                                     continue_on_error,
+                                    show_context,
                                 ) {
                                     error!("{} failed:\n{:?}", name, err);
                                     return Some(name.to_owned());
@@ -331,9 +344,14 @@ pub fn check(
                             None
                         }
                         _ => {
-                            if let Err(err) =
-                                check_constraint(expr, domain, &cs.modules, name, continue_on_error)
-                            {
+                            if let Err(err) = check_constraint(
+                                expr,
+                                domain,
+                                &cs.modules,
+                                name,
+                                continue_on_error,
+                                show_context,
+                            ) {
                                 error!("{} failed:\n{:?}", name, err);
                                 Some(name.to_owned())
                             } else {

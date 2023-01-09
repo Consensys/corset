@@ -544,6 +544,7 @@ fn main() -> Result<()> {
                 args.verbose.log_level_filter() >= log::Level::Warn
                     && std::io::stdout().is_terminal(),
                 continue_on_error,
+                args.verbose.log_level_filter() >= log::Level::Warn,
             )
             .with_context(|| format!("while checking `{}`", tracefile))?;
             info!("{}: SUCCESS", tracefile)
