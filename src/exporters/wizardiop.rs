@@ -166,7 +166,7 @@ fn render_constraints(constraints: &[Constraint]) -> String {
             Constraint::InRange(name, from, range) => format!(
                 "build.Range(\"{}\", {}, {})",
                 name.to_case(Case::Snake),
-                render_expression(from),
+                render_handle(from),
                 range
             ),
         })
