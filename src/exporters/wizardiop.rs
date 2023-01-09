@@ -62,6 +62,14 @@ fn make_chain(xs: &[Node], operand: &str, surround: bool) -> String {
     }
 }
 
+/// Render an expression, panicking if it is not a handle
+fn render_handle(e: &Node) -> String {
+    match e.e() {
+        Expression::Column(handle, ..) => handle.mangle(),
+        _ => unreachable!(),
+    }
+}
+
 fn render_expression(e: &Node) -> String {
     match e.e() {
         Expression::ArrayColumn(..) => unreachable!(),
@@ -141,13 +149,10 @@ fn render_constraints(constraints: &[Constraint]) -> String {
                 "build.Inclusion(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
                 name,
                 from.iter()
-                    .map(render_expression)
+                    .map(render_handle)
                     .collect::<Vec<_>>()
                     .join(", "),
-                to.iter()
-                    .map(render_expression)
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                to.iter().map(render_handle).collect::<Vec<_>>().join(", ")
             ),
             Constraint::Permutation(name, from, to) => format!(
                 "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
