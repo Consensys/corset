@@ -487,6 +487,8 @@ fn main() -> Result<()> {
                         &skip,
                         args.verbose.log_level_filter() >= log::Level::Warn
                             && std::io::stdout().is_terminal(),
+                        false,
+                        args.verbose.log_level_filter() >= log::Level::Warn,
                     ) {
                         Ok(_) => {
                             if remove {
