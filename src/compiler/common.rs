@@ -369,10 +369,10 @@ impl Handle {
             .replace(':', "_")
             .replace('%', "_")
             .replace('.', "_")
-            .replace('-', "_")
-            .replace('*', "mul_")
-            .replace('+', "add_")
-            .replace('/', "div_")
+            .replace('-', "sub")
+            .replace('*', "mul")
+            .replace('+', "add")
+            .replace('/', "div")
             .replace(|c: char| !c.is_ascii(), "_")
     }
 
