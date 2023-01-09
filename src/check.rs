@@ -337,7 +337,9 @@ pub fn check(
                                     continue_on_error,
                                     show_context,
                                 ) {
-                                    error!("{} failed:\n{:?}", name, err);
+                                    if show_context {
+                                        error!("{} failed:\n{:?}", name, err);
+                                    }
                                     return Some(name.to_owned());
                                 }
                             }
@@ -352,7 +354,9 @@ pub fn check(
                                 continue_on_error,
                                 show_context,
                             ) {
-                                error!("{} failed:\n{:?}", name, err);
+                                if show_context {
+                                    error!("{} failed:\n{:?}", name, err);
+                                }
                                 Some(name.to_owned())
                             } else {
                                 None
@@ -362,7 +366,9 @@ pub fn check(
                 }
                 Constraint::Plookup(name, parents, children) => {
                     if let Err(err) = check_plookup(cs, parents, children) {
-                        error!("{} failed:\n{:?}", name, err);
+                        if show_context {
+                            error!("{} failed:\n{:?}", name, err);
+                        }
                         Some(name.to_owned())
                     } else {
                         None
