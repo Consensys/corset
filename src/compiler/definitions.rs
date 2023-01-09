@@ -453,7 +453,8 @@ fn reduce(
                             let _ = froms
                                 .iter()
                                 .map(|from| ctx.borrow_mut().resolve_symbol(&from.name))
-                                .collect::<Result<Vec<_>>>()?;
+                                .collect::<Result<Vec<_>>>()
+                                .with_context(|| anyhow!("while defingin {}", col.red()))?;
                             Kind::Interleaved(froms)
                         }
                     },

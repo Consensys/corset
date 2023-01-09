@@ -1486,15 +1486,27 @@ fn reduce_toplevel(
         | Token::DefAliases(_)
         | Token::DefunAlias(..)
         | Token::DefConsts(..) => Ok(None),
-        Token::DefPermutation(to, from) => Ok(Some(Constraint::Permutation(
-            names::Generator::default().next().unwrap(),
+        Token::DefPermutation(to, from) => {
+            // This silly piece of code ensures that columns involved in permutations
+            // are marked as "used" in the symbol table
             from.iter()
-                .map(|f| Handle::new(&ctx.borrow().name, f.as_symbol().unwrap()))
-                .collect::<Vec<_>>(),
+                .map(|f| ctx.borrow_mut().resolve_symbol(&f.as_symbol().unwrap()))
+                .collect::<Result<Vec<_>>>()
+                .with_context(|| anyhow!("while defining permutation"))?;
             to.iter()
-                .map(|f| Handle::new(&ctx.borrow().name, f.as_symbol().unwrap()))
-                .collect::<Vec<_>>(),
-        ))),
+                .map(|f| ctx.borrow_mut().resolve_symbol(&f.as_symbol().unwrap()))
+                .collect::<Result<Vec<_>>>()
+                .with_context(|| anyhow!("while defining permutation"))?;
+            Ok(Some(Constraint::Permutation(
+                names::Generator::default().next().unwrap(),
+                from.iter()
+                    .map(|f| Handle::new(&ctx.borrow().name, f.as_symbol().unwrap()))
+                    .collect::<Vec<_>>(),
+                to.iter()
+                    .map(|f| Handle::new(&ctx.borrow().name, f.as_symbol().unwrap()))
+                    .collect::<Vec<_>>(),
+            )))
+        }
         _ => unreachable!("{:?}", e.src),
     }
 }
