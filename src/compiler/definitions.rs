@@ -336,7 +336,7 @@ impl SymbolTable {
 
     pub fn resolve_symbol(&mut self, name: &str) -> Result<Node> {
         if name.contains('.') {
-            self.resolve_symbol_with_path(name.split('.').peekable())
+            self.resolve_symbol_with_path(name)
         } else {
             self._resolve_symbol(name, &mut HashSet::new(), false, false)
         }
@@ -382,7 +382,14 @@ impl SymbolTable {
         }
     }
 
-    fn resolve_symbol_with_path<'a>(
+    fn resolve_symbol_with_path<'a>(&mut self, name: &str) -> Result<Node> {
+        self.parent.upgrade().map_or_else(
+            || self._resolve_symbol_with_path(name.split('.').peekable()),
+            |parent| parent.borrow_mut().resolve_symbol_with_path(name),
+        )
+    }
+
+    fn _resolve_symbol_with_path<'a>(
         &mut self,
         mut path: std::iter::Peekable<impl Iterator<Item = &'a str>>,
     ) -> Result<Node> {
@@ -390,7 +397,7 @@ impl SymbolTable {
         match path.peek() {
             Some(_) => {
                 if let Some(submodule) = self.children.get_mut(name) {
-                    submodule.borrow_mut().resolve_symbol_with_path(path)
+                    submodule.borrow_mut()._resolve_symbol_with_path(path)
                 } else {
                     Err(anyhow!(
                         "module {} not found in {}",
