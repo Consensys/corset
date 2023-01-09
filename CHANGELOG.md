@@ -2,11 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.2.1] - 2023-01-09
+
+### Features
+
+- Only show error context when logLevel >= warn
+
 ## [3.2.0] - 2023-01-09
 
 ### Bug Fixes
 
-- Remove use of bool::then_some for compatibility motives
 - Symbols with path should be resolved from the root context
 - Clarify mangling
 
@@ -16,8 +21,18 @@ All notable changes to this project will be documented in this file.
 
 ### Miscellaneous Tasks
 
-- Release corset version 3.1.2
 - Formatting
+- Release corset version 3.2.0
+
+## [3.1.2] - 2023-01-07
+
+### Bug Fixes
+
+- Remove use of bool::then_some for compatibility motives
+
+### Miscellaneous Tasks
+
+- Release corset version 3.1.2
 
 ## [3.1.1] - 2022-12-30
 
