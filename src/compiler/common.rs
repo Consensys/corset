@@ -387,11 +387,7 @@ impl Handle {
             },
             Self::purify(&self.name)
         );
-        if r.len() < 100 {
-            r
-        } else {
-            format!("H{:?}", md5::compute(r))
-        }
+        r
     }
 
     pub fn mangled_name(&self) -> String {
