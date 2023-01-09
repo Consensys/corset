@@ -413,7 +413,7 @@ fn main() -> Result<()> {
 
                 let mut tx = db.transaction()?;
                 for row in tx.query(
-                    "SELECT id, status, payload FROM blocks WHERE STATUS='to_corset' LIMIT 1 FOR UPDATE SKIP LOCKED",
+                    "SELECT id, status, payload FROM blocks WHERE STATUS='to_corset' ORDER BY length(payload) ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
                     &[],
                 )? {
                     let id: &str = row.get(0);
@@ -458,7 +458,7 @@ fn main() -> Result<()> {
 
                 let mut tx = db.transaction()?;
                 for row in tx.query(
-                    "SELECT id, status, payload FROM blocks WHERE STATUS='to_corset' LIMIT 1 FOR UPDATE SKIP LOCKED",
+                    "SELECT id, status, payload FROM blocks WHERE STATUS='to_corset' ORDER BY length(payload) ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
                     &[],
                 )? {
                     let id: &str = row.get(0);
@@ -492,6 +492,9 @@ fn main() -> Result<()> {
                             if remove {
                                 tx.execute("DELETE FROM blocks WHERE id=$1", &[&id])
                                     .with_context(|| "while inserting successful back row")?;
+                            } else {
+                                tx.execute("UPDATE blocks SET status='done' WHERE id=$1", &[&id])
+                                    .with_context(|| "while inserting failed back row")?;
                             }
                         },
                         Err(_) => {
