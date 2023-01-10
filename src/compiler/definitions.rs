@@ -382,7 +382,7 @@ impl SymbolTable {
         }
     }
 
-    fn resolve_symbol_with_path<'a>(&mut self, name: &str) -> Result<Node> {
+    fn resolve_symbol_with_path(&mut self, name: &str) -> Result<Node> {
         self.parent.upgrade().map_or_else(
             || self._resolve_symbol_with_path(name.split('.').peekable()),
             |parent| parent.borrow_mut().resolve_symbol_with_path(name),
