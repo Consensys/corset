@@ -325,7 +325,7 @@ impl std::cmp::PartialEq for Handle {
 impl std::hash::Hash for Handle {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.module.hash(state);
-        self.id.hash(state);
+        self.name.hash(state);
     }
 }
 impl Handle {
