@@ -1094,7 +1094,9 @@ impl ConstraintSet {
 
                 out.write_all(
                     value
-                        .par_iter()
+                        .iter()
+                        .skip(1) // skip the one line of padding
+                        .par_bridge()
                         .map(|x| {
                             format!(
                                 "\"0x0{}\"",
@@ -1107,11 +1109,10 @@ impl ConstraintSet {
                 )?;
 
                 out.write_all(b"],\n")?;
-                let padding_value = self.padding_value_for(&handle).pretty();
                 out.write_all(
                     format!(
                         "\"padding_strategy\": {{\"action\": \"prepend\", \"value\": \"{}\"}}",
-                        padding_value
+                        value[0].pretty() // padding is already in the first line
                     )
                     .as_bytes(),
                 )?;

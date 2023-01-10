@@ -381,7 +381,7 @@ fn main() -> Result<()> {
             compute::compute(
                 &read_trace(&tracefile)?,
                 &mut constraints,
-                compiler::PaddingStrategy::None,
+                compiler::PaddingStrategy::OneLine,
             )
             .with_context(|| format!("while computing from `{}`", tracefile))?;
 
@@ -424,7 +424,7 @@ fn main() -> Result<()> {
                         &utils::decompress(payload).with_context(|| "while decompressing payload")?,
                     )?;
 
-                    compute::compute(&v, &mut local_constraints, compiler::PaddingStrategy::None)
+                    compute::compute(&v, &mut local_constraints, compiler::PaddingStrategy::OneLine)
                         .with_context(|| "while computing columns")?;
 
                     let mut e = GzEncoder::new(Vec::new(), Compression::default());
