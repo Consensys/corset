@@ -1035,48 +1035,39 @@ impl ConstraintSet {
             .unwrap_or(1)
     }
 
-    pub fn pad(&mut self, s: PaddingStrategy) -> Result<()> {
+    fn pad_one(&mut self, h: &Handle, done: &mut HashSet<Handle>) {
+        if done.contains(h) {
+            return;
+        }
+
+        // Ensure that all dependent columns are already padded
+        if let Some(Computation::Composite { exp, .. }) = self.computations.computation_for(h) {
+            for h2 in exp.dependencies() {
+                self.pad_one(&h2, done)
+            }
+        }
+
+        let padding_value = self.padding_value_for(h);
+        let x = self.modules.by_handle_mut(h).unwrap();
+        if let Some(xs) = x.value_mut() {
+            xs.insert(0, padding_value);
+        } else {
+            x.set_value(vec![padding_value]);
+        }
+
+        done.insert(h.clone());
+    }
+
+    pub fn pad(&mut self, s: PaddingStrategy) {
         let _255 = Fr::from_str("255").unwrap();
         match s {
-            PaddingStrategy::Full => {
-                let max_len = self.modules.max_len();
-                let pad_to = (max_len + 1).next_power_of_two();
-                let binary_not_len = self
-                    .modules
-                    .by_handle(&Handle::new("binary", "NOT"))
-                    .and_then(|c| c.len());
-                self.modules.columns_mut().for_each(|x| {
-                    x.map(&|xs| {
-                        xs.reverse();
-                        xs.resize(pad_to, Fr::zero());
-                        xs.reverse();
-                    })
-                });
-                if let Some(col) = self.modules.by_handle_mut(&Handle::new("binary", "NOT")) {
-                    col.map(&|xs| {
-                        for x in xs.iter_mut().take(pad_to - binary_not_len.unwrap()) {
-                            *x = _255;
-                        }
-                    })
-                }
-                Ok(())
-            }
             PaddingStrategy::OneLine => {
-                self.modules.handles().iter().for_each(|h| {
-                    let padding_value = self.padding_value_for(h);
-                    let x = self.modules.by_handle_mut(h).unwrap();
-                    if let Some(xs) = x.value_mut() {
-                        xs.insert(0, padding_value);
-                    } else {
-                        x.set_value(vec![Fr::zero()]);
-                    }
-                });
-                if let Some(col) = self.modules.by_handle_mut(&Handle::new("binary", "NOT")) {
-                    col.map(&|xs| xs[0] = _255)
+                let mut done = HashSet::<Handle>::new();
+                for h in self.modules.handles().iter() {
+                    self.pad_one(h, &mut done)
                 }
-                Ok(())
             }
-            PaddingStrategy::None => Ok(()),
+            PaddingStrategy::None => {}
         }
     }
     pub fn write(&self, out: &mut impl Write) -> Result<()> {

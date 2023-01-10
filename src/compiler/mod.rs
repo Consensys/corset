@@ -25,8 +25,6 @@ pub struct CompileSettings {
 }
 
 pub enum PaddingStrategy {
-    #[allow(dead_code)]
-    Full,
     OneLine,
     None,
 }
