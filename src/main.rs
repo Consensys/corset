@@ -489,6 +489,7 @@ fn main() -> Result<()> {
                             && std::io::stdout().is_terminal(),
                         false,
                         args.verbose.log_level_filter() >= log::Level::Warn,
+                        false,
                     ) {
                         Ok(_) => {
                             if remove {
@@ -550,6 +551,7 @@ fn main() -> Result<()> {
                     && std::io::stdout().is_terminal(),
                 continue_on_error,
                 args.verbose.log_level_filter() >= log::Level::Warn,
+                expand,
             )
             .with_context(|| format!("while checking `{}`", tracefile))?;
             info!("{}: SUCCESS", tracefile)

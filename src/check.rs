@@ -273,6 +273,7 @@ pub fn check(
     with_bar: bool,
     continue_on_error: bool,
     show_context: bool,
+    expand: bool,
 ) -> Result<()> {
     if cs.modules.is_empty() {
         info!("Skipping empty trace");
@@ -322,7 +323,11 @@ pub fn check(
         .filter_map(|c| {
             match c {
                 Constraint::Vanishes { name, domain, expr } => {
-                    if name == "INV_CONSTRAINTS" || matches!(expr.e(), Expression::Void) {
+                    if matches!(expr.e(), Expression::Void) {
+                        return None;
+                    }
+
+                    if name == "INV_CONSTRAINTS" && !expand {
                         return None;
                     }
 
