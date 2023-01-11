@@ -264,7 +264,7 @@ fn read_trace<S: AsRef<str>>(tracefile: S) -> Result<Value> {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    stderrlog::new()
+    buche::new()
         .verbosity(args.verbose.log_level_filter())
         .quiet(args.verbose.is_silent())
         .init()

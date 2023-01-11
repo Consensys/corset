@@ -31,7 +31,7 @@ pest_derive = { version = "2.4", optional = true }
 postgres = { version = "0.19", optional = true }
 rayon = "1.5"
 ron = "0.8"
-stderrlog = { version = "0.5", default-features = false }
+buche = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
 
