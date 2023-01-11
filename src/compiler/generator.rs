@@ -1009,9 +1009,7 @@ impl ConstraintSet {
                             exp.eval(
                                 0,
                                 &mut |target, i, wrap| {
-                                    if *target == Handle::new("binary", "NOT") {
-                                        Some(Fr::from_str("255").unwrap())
-                                    } else if i == 0 {
+                                    if i == 0 {
                                         let r = self.padding_value_for(target).unwrap();
                                         Some(r)
                                     } else {
@@ -1056,7 +1054,6 @@ impl ConstraintSet {
     }
 
     pub fn pad_trace(&mut self, s: PaddingStrategy) -> Result<()> {
-        let _255 = Fr::from_str("255").unwrap();
         match s {
             PaddingStrategy::OneLine => {
                 self.modules.handles().iter().for_each(|h| {
@@ -1070,7 +1067,6 @@ impl ConstraintSet {
                 });
                 Ok(())
             }
-            PaddingStrategy::None => Ok(()),
             PaddingStrategy::Full => todo!(),
         }
     }

@@ -3,10 +3,7 @@ use log::*;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use pairing_ce::{bn256::Fr, ff::PrimeField};
-use std::{
-    collections::{HashMap, HashSet},
-    io::Write,
-};
+use std::{collections::HashSet, io::Write};
 
 use anyhow::*;
 use convert_case::{Case, Casing};
@@ -172,23 +169,6 @@ fn render_constraints(constraints: &[Constraint]) -> String {
         })
         .collect::<Vec<String>>()
         .join("\n")
-}
-
-fn render_constants(consts: &HashMap<Handle, BigInt>) -> String {
-    if consts.is_empty() {
-        String::default()
-    } else {
-        format!(
-            "const (\n{}\n)",
-            consts
-                .iter()
-                .sorted_by_cached_key(|(h, _)| h.mangle())
-                .fold(String::new(), |mut ax, (handle, value)| {
-                    ax.push_str(&format!("{} int = {}\n", handle.mangle(), value));
-                    ax
-                })
-        )
-    }
 }
 
 fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {

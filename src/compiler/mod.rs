@@ -28,7 +28,6 @@ pub enum PaddingStrategy {
     #[allow(dead_code)]
     Full,
     OneLine,
-    None,
 }
 
 #[cfg(feature = "interactive")]
@@ -128,10 +127,8 @@ pub fn make<S: AsRef<str>>(
                         module.blue(),
                         handle.name.bright_white().bold()
                     );
-                } else {
-                    if let Expression::Column(handle, _) = symbol.e() {
-                        columns.get_mut(&handle).unwrap().used = *used;
-                    }
+                } else if let Expression::Column(handle, _) = symbol.e() {
+                    columns.get_mut(handle).unwrap().used = *used;
                 }
             }
             Ok(())
