@@ -207,7 +207,7 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
                     r += &format!(
                         "{} := build.RegisterCommit(\"{}\", {})\n",
                         handle.mangle(),
-                        handle.mangle(),
+                        handle,
                         if size_multiplier == 1 {
                             make_size(&handle, sizes)
                         } else {
