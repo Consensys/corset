@@ -35,7 +35,7 @@ struct Settings {
 static SETTINGS: OnceCell<Settings> = OnceCell::new();
 
 #[derive(Parser)]
-#[command(author, version, propagate_version = true)]
+#[command(author, version = concat!(clap::crate_version!(), " ", std::env!("GIT_HASH")), propagate_version = true)]
 pub struct Args {
     #[clap(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
