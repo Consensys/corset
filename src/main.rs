@@ -378,12 +378,8 @@ fn main() -> Result<()> {
             expander::lower_shifts(&mut constraints);
             expander::expand_constraints(&mut constraints)?;
             expander::expand_invs(&mut constraints)?;
-            compute::compute(
-                &read_trace(&tracefile)?,
-                &mut constraints,
-                compiler::PaddingStrategy::None,
-            )
-            .with_context(|| format!("while computing from `{}`", tracefile))?;
+            compute::compute(&read_trace(&tracefile)?, &mut constraints, false)
+                .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let mut f = std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?;
@@ -424,7 +420,7 @@ fn main() -> Result<()> {
                         &utils::decompress(payload).with_context(|| "while decompressing payload")?,
                     )?;
 
-                    compute::compute(&v, &mut local_constraints, compiler::PaddingStrategy::None)
+                    compute::compute(&v, &mut local_constraints, false)
                         .with_context(|| "while computing columns")?;
 
                     let mut e = GzEncoder::new(Vec::new(), Compression::default());
@@ -477,7 +473,7 @@ fn main() -> Result<()> {
                     compute::compute(
                         &v,
                         &mut local_constraints,
-                        compiler::PaddingStrategy::OneLine,
+                        true
                     )
                         .with_context(|| format!("while expanding from {}", id))?;
 
@@ -536,12 +532,8 @@ fn main() -> Result<()> {
                 expander::expand_constraints(&mut constraints)?;
                 expander::expand_invs(&mut constraints)?;
             }
-            compute::compute(
-                &read_trace(&tracefile)?,
-                &mut constraints,
-                compiler::PaddingStrategy::OneLine,
-            )
-            .with_context(|| format!("while expanding `{}`", tracefile))?;
+            compute::compute(&read_trace(&tracefile)?, &mut constraints, true)
+                .with_context(|| format!("while expanding `{}`", tracefile))?;
 
             check::check(
                 &constraints,

@@ -76,16 +76,15 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
     }
 }
 
-pub fn compute(
-    v: &Value,
-    cs: &mut ConstraintSet,
-    padding_strategy: crate::compiler::PaddingStrategy,
-) -> Result<()> {
+pub fn compute(v: &Value, cs: &mut ConstraintSet, pad_trace: bool) -> Result<()> {
     fill_traces(v, vec![], &mut cs.modules).with_context(|| "while reading columns")?;
     cs.compute_all()
         .with_context(|| "while computing columns")?;
-    cs.pad(padding_strategy)
-        .with_context(|| "while padding columns")?;
+    cs.pad_columns();
+    if pad_trace {
+        cs.pad_trace(crate::compiler::PaddingStrategy::OneLine)
+            .with_context(|| "while padding trace")?;
+    }
     for h in cs.modules.handles() {
         if !cs.modules.get(&h).unwrap().is_computed() {
             error!("{} not found", h);

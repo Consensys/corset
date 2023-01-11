@@ -7,6 +7,7 @@ use std::collections::HashMap;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Column<T: Clone> {
     value: Option<Vec<T>>,
+    pub padding_value: Option<T>,
     pub used: bool,
     pub kind: Kind<()>,
     pub t: Type,
@@ -151,6 +152,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
             let i = self._cols.len();
             self._cols.push(Column {
                 value: None,
+                padding_value: None,
                 used,
                 t,
                 kind,

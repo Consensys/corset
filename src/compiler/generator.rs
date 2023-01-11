@@ -974,10 +974,23 @@ impl ConstraintSet {
         Ok(())
     }
 
+    pub fn padding_value_for(&self, h: &Handle) -> Option<Fr> {
+        self.modules.by_handle(h)?.padding_value
+    }
+
+    pub fn pad_columns(&mut self) {
+        for h in self.modules.handles().iter() {
+            self.pad_column(h);
+        }
+    }
     // The padding value is 0 for atomic columns.
     // However, it has to be computed for computed columns.
-    fn padding_value_for(&self, h: &Handle) -> Fr {
-        match &self.get(h).unwrap().kind {
+    fn pad_column(&mut self, h: &Handle) {
+        if self.get(h).unwrap().padding_value.is_some() {
+            return;
+        }
+
+        let r = match &self.get(h).unwrap().kind {
             Kind::Atomic | Kind::Interleaved(_) | Kind::Phantom => {
                 if *h == Handle::new("binary", "NOT") {
                     Fr::from_str("255").unwrap()
@@ -986,21 +999,26 @@ impl ConstraintSet {
                 }
             }
             Kind::Composite(_) => {
-                if let Some(comp) = self.computations.computation_for(h) {
+                let comp = self.computations.computation_for(h).cloned();
+                if let Some(comp) = comp {
                     match comp {
-                        Computation::Composite { exp, .. } => exp
-                            .eval(
+                        Computation::Composite { exp, .. } => {
+                            for h in exp.dependencies() {
+                                self.pad_column(&h);
+                            }
+                            exp.eval(
                                 0,
-                                &mut |h, i, wrap| {
-                                    if *h == Handle::new("binary", "NOT") {
+                                &mut |target, i, wrap| {
+                                    if *target == Handle::new("binary", "NOT") {
                                         Some(Fr::from_str("255").unwrap())
                                     } else if i == 0 {
-                                        Some(self.padding_value_for(h))
+                                        let r = self.padding_value_for(target).unwrap();
+                                        Some(r)
                                     } else {
                                         self.modules
-                                            .get(h)
+                                            .get(target)
                                             .ok()
-                                            .and_then(|c| c.get(i, wrap))
+                                            .and_then(|c| c.get(i - 1, wrap))
                                             .cloned()
                                     }
                                 },
@@ -1010,14 +1028,16 @@ impl ConstraintSet {
                                     wrap: false,
                                 },
                             )
-                            .unwrap(),
+                            .unwrap()
+                        }
                         _ => unreachable!(),
                     }
                 } else {
                     unreachable!()
                 }
             }
-        }
+        };
+        self.get_mut(h).unwrap().padding_value = Some(r);
     }
 
     pub fn length_multiplier(&self, h: &Handle) -> usize {
@@ -1035,51 +1055,26 @@ impl ConstraintSet {
             .unwrap_or(1)
     }
 
-    pub fn pad(&mut self, s: PaddingStrategy) -> Result<()> {
+    pub fn pad_trace(&mut self, s: PaddingStrategy) -> Result<()> {
         let _255 = Fr::from_str("255").unwrap();
         match s {
-            PaddingStrategy::Full => {
-                let max_len = self.modules.max_len();
-                let pad_to = (max_len + 1).next_power_of_two();
-                let binary_not_len = self
-                    .modules
-                    .by_handle(&Handle::new("binary", "NOT"))
-                    .and_then(|c| c.len());
-                self.modules.columns_mut().for_each(|x| {
-                    x.map(&|xs| {
-                        xs.reverse();
-                        xs.resize(pad_to, Fr::zero());
-                        xs.reverse();
-                    })
-                });
-                if let Some(col) = self.modules.by_handle_mut(&Handle::new("binary", "NOT")) {
-                    col.map(&|xs| {
-                        for x in xs.iter_mut().take(pad_to - binary_not_len.unwrap()) {
-                            *x = _255;
-                        }
-                    })
-                }
-                Ok(())
-            }
             PaddingStrategy::OneLine => {
                 self.modules.handles().iter().for_each(|h| {
-                    let padding_value = self.padding_value_for(h);
+                    let padding_value = self.padding_value_for(h).unwrap();
                     let x = self.modules.by_handle_mut(h).unwrap();
                     if let Some(xs) = x.value_mut() {
                         xs.insert(0, padding_value);
                     } else {
-                        x.set_value(vec![Fr::zero()]);
+                        x.set_value(vec![padding_value]);
                     }
                 });
-                if let Some(col) = self.modules.by_handle_mut(&Handle::new("binary", "NOT")) {
-                    col.map(&|xs| xs[0] = _255)
-                }
                 Ok(())
             }
             PaddingStrategy::None => Ok(()),
+            PaddingStrategy::Full => todo!(),
         }
     }
-    pub fn write(&self, out: &mut impl Write) -> Result<()> {
+    pub fn write(&mut self, out: &mut impl Write) -> Result<()> {
         // TODO encode the padding strategy behavior
         // serde_json::to_writer(out, self).with_context(|| "while serializing to JSON")
 
@@ -1116,7 +1111,10 @@ impl ConstraintSet {
                 )?;
 
                 out.write_all(b"],\n")?;
-                let padding_value = self.padding_value_for(&handle).pretty();
+                let padding_value = self
+                    .padding_value_for(&handle)
+                    .ok_or_else(|| anyhow!("column {handle} has no padding value"))?
+                    .pretty();
                 out.write_all(
                     format!(
                         "\"padding_strategy\": {{\"action\": \"prepend\", \"value\": \"{}\"}}",
