@@ -7,29 +7,45 @@ use std::collections::HashMap;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Column<T: Clone> {
     value: Option<Vec<T>>,
-    pub padding_value: Option<T>,
+    pub padding: Option<Vec<T>>,
     pub used: bool,
     pub kind: Kind<()>,
     pub t: Type,
 }
 impl<T: Clone> Column<T> {
     pub fn len(&self) -> Option<usize> {
-        self.value.as_ref().map(|v| v.len())
+        match (
+            self.padding.as_ref().map(|p| p.len()),
+            self.value.as_ref().map(|v| v.len()),
+        ) {
+            (Some(p), Some(v)) => Some(p + v),
+            (Some(p), None) => Some(p),
+            (None, None) => None,
+            (None, Some(v)) => Some(v),
+        }
     }
     pub fn is_computed(&self) -> bool {
-        self.value.is_some()
+        self.value.is_some() || self.padding.is_some()
     }
 
     pub fn get(&self, i: isize, wrap: bool) -> Option<&T> {
-        fn get_rel<T>(v: &[T], i: isize, wrap: bool) -> Option<&T> {
-            if wrap && i < 0 {
-                v.get(((i + v.len() as isize) % v.len() as isize) as usize)
+        if i < 0 {
+            if wrap {
+                let new_i = (i + self.len().unwrap() as isize) % self.len().unwrap() as isize;
+                self.get(new_i, wrap)
             } else {
-                v.get(i as usize)
+                None
+            }
+        } else {
+            let pad_len = self.padding.as_ref().map(|v| v.len()).unwrap_or(0) as isize;
+            if i < pad_len {
+                Some(&self.padding.as_ref().unwrap()[i as usize])
+            } else {
+                self.value
+                    .as_ref()
+                    .and_then(|v| v.get((i - pad_len) as usize))
             }
         }
-
-        self.value.as_ref().and_then(|v| get_rel(v, i, wrap))
     }
 
     pub fn set_value(&mut self, v: Vec<T>) {
@@ -39,20 +55,13 @@ impl<T: Clone> Column<T> {
     pub fn value(&self) -> Option<&Vec<T>> {
         self.value.as_ref()
     }
-
-    pub fn value_mut(&mut self) -> Option<&mut Vec<T>> {
-        self.value.as_mut()
-    }
-
-    pub fn map(&mut self, f: &dyn Fn(&mut Vec<T>)) {
-        self.value.as_mut().map(f);
-    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct ColumnSet<T: Clone> {
     pub _cols: Vec<Column<T>>,
-    pub cols: HashMap<String, HashMap<String, usize>>, // Module -> Name -> Column
+    pub cols: HashMap<String, HashMap<String, usize>>, // Module -> (Name, ColumnID)
+    pub spilling: HashMap<String, (isize, isize)>,     // Module -> (past_span, future_span)
 }
 
 impl<T: Clone> ColumnSet<T> {
@@ -152,7 +161,7 @@ impl<T: Ord + Clone> ColumnSet<T> {
             let i = self._cols.len();
             self._cols.push(Column {
                 value: None,
-                padding_value: None,
+                padding: None,
                 used,
                 t,
                 kind,
@@ -211,6 +220,7 @@ impl<T: Clone> std::convert::From<HashMap<String, HashMap<String, Column<T>>>> f
         let mut r = ColumnSet {
             cols: Default::default(),
             _cols: Vec::with_capacity(x.values().flat_map(|y| y.values()).count()),
+            spilling: Default::default(),
         };
         for (module, columns) in x.into_iter() {
             for (name, column) in columns.into_iter() {
@@ -219,6 +229,7 @@ impl<T: Clone> std::convert::From<HashMap<String, HashMap<String, Column<T>>>> f
                 r.cols.entry(module.to_owned()).or_default().insert(name, i);
             }
         }
+        // r.build_spilling();
         r
     }
 }

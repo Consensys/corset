@@ -164,6 +164,28 @@ impl Node {
         }
     }
 
+    /// Compute the maximum future-shifting in the node
+    pub fn future_span(&self) -> usize {
+        fn _future_span(e: &Node, ax: &mut isize) {
+            match e.e() {
+                Expression::Funcall { func, args } => {
+                    if let Builtin::Shift = func {
+                        let arg_big = args[1].pure_eval().expect(args[1].to_string().as_str());
+                        let arg = arg_big.to_isize().expect(arg_big.to_string().as_str());
+                        *ax = (*ax).max(*ax + arg);
+                    }
+                    args.iter().for_each(|e| _future_span(e, ax))
+                }
+                Expression::List(es) => es.iter().for_each(|e| _future_span(e, ax)),
+                _ => {}
+            }
+        }
+
+        let mut span = 0;
+        _future_span(self, &mut span);
+        span.max(0) as usize
+    }
+
     pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut Handle)) {
         match self.e_mut() {
             Expression::Funcall { args, .. } => {
@@ -737,6 +759,8 @@ pub struct ConstraintSet {
     pub constraints: Vec<Constraint>,
     pub constants: HashMap<Handle, BigInt>,
     pub computations: ComputationTable,
+
+    _spilling: HashMap<String, isize>, // module -> past-spilling
 }
 impl ConstraintSet {
     pub fn new(
@@ -750,10 +774,15 @@ impl ConstraintSet {
             modules: columns,
             constants,
             computations,
+
+            _spilling: Default::default(),
         };
         r.update_ids();
         r
     }
+    // pub fn update_futures_spilling(&self) {
+    //     for self.computations.
+    // }
     pub fn update_ids(&mut self) {
         let set_id = |h: &mut Handle| h.set_id(self.modules.id_of(h));
         self.constraints
@@ -974,8 +1003,8 @@ impl ConstraintSet {
         Ok(())
     }
 
-    pub fn padding_value_for(&self, h: &Handle) -> Option<Fr> {
-        self.modules.by_handle(h)?.padding_value
+    pub fn padding_for(&self, h: &Handle) -> Option<&Vec<Fr>> {
+        self.modules.by_handle(h)?.padding.as_ref()
     }
 
     pub fn pad_columns(&mut self) {
@@ -986,56 +1015,83 @@ impl ConstraintSet {
     // The padding value is 0 for atomic columns.
     // However, it has to be computed for computed columns.
     fn pad_column(&mut self, h: &Handle) {
-        if self.get(h).unwrap().padding_value.is_some() {
+        if self.get(h).unwrap().padding.is_some() {
             return;
         }
-
-        let r = match &self.get(h).unwrap().kind {
-            Kind::Atomic | Kind::Interleaved(_) | Kind::Phantom => {
-                if *h == Handle::new("binary", "NOT") {
-                    Fr::from_str("255").unwrap()
-                } else {
-                    Fr::zero()
-                }
-            }
-            Kind::Composite(_) => {
-                let comp = self.computations.computation_for(h).cloned();
-                if let Some(comp) = comp {
-                    match comp {
-                        Computation::Composite { exp, .. } => {
-                            for h in exp.dependencies() {
-                                self.pad_column(&h);
+        let spilling = self
+            ._spilling
+            .entry(h.module.to_owned())
+            .or_insert_with(|| {
+                self.computations
+                    .iter()
+                    .filter_map(|c| match c {
+                        Computation::Composite { target, exp } => {
+                            if target.module == h.module {
+                                Some(exp.future_span() as isize)
+                            } else {
+                                None
                             }
-                            exp.eval(
-                                0,
-                                &mut |target, i, wrap| {
-                                    if i == 0 {
-                                        let r = self.padding_value_for(target).unwrap();
-                                        Some(r)
-                                    } else {
-                                        self.modules
-                                            .get(target)
-                                            .ok()
-                                            .and_then(|c| c.get(i - 1, wrap))
-                                            .cloned()
-                                    }
-                                },
-                                &mut None,
-                                &EvalSettings {
-                                    trace: false,
-                                    wrap: false,
-                                },
-                            )
-                            .unwrap()
                         }
-                        _ => unreachable!(),
+                        _ => None,
+                    })
+                    .max()
+                    .unwrap_or(0)
+            });
+
+        let r = (0..=*spilling)
+            .map(|k| {
+                match &self.get(h).unwrap().kind {
+                    Kind::Atomic | Kind::Interleaved(_) | Kind::Phantom => {
+                        if *h == Handle::new("binary", "NOT") {
+                            Fr::from_str("255").unwrap()
+                        } else {
+                            Fr::zero()
+                        }
                     }
-                } else {
-                    unreachable!()
+                    Kind::Composite(_) => {
+                        let comp = self.computations.computation_for(h).cloned();
+                        if let Some(comp) = comp {
+                            match comp {
+                                Computation::Composite { exp, .. } => {
+                                    for h in exp.dependencies() {
+                                        self.pad_column(&h);
+                                    }
+                                    exp.eval(
+                                        k,
+                                        &mut |target, j, wrap| {
+                                            // if i == 0 {
+                                            //     let r = self.padding_value_for(target).unwrap();
+                                            //     Some(r)
+                                            // } else {
+                                            self.modules
+                                                .get(target)
+                                                .ok()
+                                                .and_then(|c| c.get(j, wrap))
+                                                .cloned()
+                                            // }
+                                        },
+                                        &mut None,
+                                        &EvalSettings {
+                                            trace: false,
+                                            wrap: false,
+                                        },
+                                    )
+                                    .unwrap()
+                                }
+                                _ => unreachable!(),
+                            }
+                        } else {
+                            unreachable!()
+                        }
+                    }
                 }
-            }
-        };
-        self.get_mut(h).unwrap().padding_value = Some(r);
+            })
+            .collect::<Vec<_>>();
+        if h.mangle() == "rom__INV__sub__shift_rom_CODE_FRAGMENT_INDEX_1__rom_CODE_FRAGMENT_INDEX_"
+        {
+            dbg!(&h, &r);
+        }
+        self.get_mut(h).unwrap().padding = Some(r);
     }
 
     pub fn length_multiplier(&self, h: &Handle) -> usize {
@@ -1053,23 +1109,24 @@ impl ConstraintSet {
             .unwrap_or(1)
     }
 
-    pub fn pad_trace(&mut self, s: PaddingStrategy) -> Result<()> {
-        match s {
-            PaddingStrategy::OneLine => {
-                self.modules.handles().iter().for_each(|h| {
-                    let padding_value = self.padding_value_for(h).unwrap();
-                    let x = self.modules.by_handle_mut(h).unwrap();
-                    if let Some(xs) = x.value_mut() {
-                        xs.insert(0, padding_value);
-                    } else {
-                        x.set_value(vec![padding_value]);
-                    }
-                });
-                Ok(())
-            }
-            PaddingStrategy::Full => todo!(),
-        }
-    }
+    // pub fn pad_trace(&mut self, s: PaddingStrategy) -> Result<()> {
+    //     match s {
+    //         PaddingStrategy::OneLine => {
+    //             self.modules.handles().iter().for_each(|h| {
+    //                 let padding = self.padding_for(h).unwrap();
+    //                 let x = self.modules.by_handle_mut(h).unwrap();
+    //                 if let Some(xs) = x.value_mut() {
+    //                     x.set_value(padding.into_iter().chain(xs.iter()).cloned().collect());
+    //                 } else {
+    //                     x.set_value(padding.to_vec());
+    //                 }
+    //             });
+    //             Ok(())
+    //         }
+    //         PaddingStrategy::Full => todo!(),
+    //     }
+    // }
+
     pub fn write(&mut self, out: &mut impl Write) -> Result<()> {
         // TODO encode the padding strategy behavior
         // serde_json::to_writer(out, self).with_context(|| "while serializing to JSON")
@@ -1088,13 +1145,17 @@ impl ConstraintSet {
                 trace!("Writing {}/{}", module, name);
                 let column = &self.modules._cols[i];
                 let handle = Handle::new(&module, &name);
+                let padding = self
+                    .padding_for(&handle)
+                    .ok_or_else(|| anyhow!("column {handle} has no padding value"))?;
                 let value = column.value().unwrap_or(&empty_vec);
-                out.write_all(format!("\"{}\":{{\n", handle.mangle()).as_bytes())?;
+                out.write_all(format!("\"{}\":{{\n", handle).as_bytes())?;
                 out.write_all("\"values\":[".as_bytes())?;
 
                 out.write_all(
-                    value
-                        .par_iter()
+                    padding
+                        .iter()
+                        .chain(value.iter())
                         .map(|x| {
                             format!(
                                 "\"0x0{}\"",
@@ -1107,14 +1168,10 @@ impl ConstraintSet {
                 )?;
 
                 out.write_all(b"],\n")?;
-                let padding_value = self
-                    .padding_value_for(&handle)
-                    .ok_or_else(|| anyhow!("column {handle} has no padding value"))?
-                    .pretty();
                 out.write_all(
                     format!(
                         "\"padding_strategy\": {{\"action\": \"prepend\", \"value\": \"{}\"}}",
-                        padding_value
+                        padding[0].pretty()
                     )
                     .as_bytes(),
                 )?;

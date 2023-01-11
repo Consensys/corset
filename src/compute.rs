@@ -81,13 +81,9 @@ pub fn compute(v: &Value, cs: &mut ConstraintSet, pad_trace: bool) -> Result<()>
     cs.compute_all()
         .with_context(|| "while computing columns")?;
     cs.pad_columns();
-    if pad_trace {
-        cs.pad_trace(crate::compiler::PaddingStrategy::OneLine)
-            .with_context(|| "while padding trace")?;
-    }
     for h in cs.modules.handles() {
         if !cs.modules.get(&h).unwrap().is_computed() {
-            error!("{} not found", h);
+            error!("{} not computed", h);
         }
     }
 
