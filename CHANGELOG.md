@@ -2,11 +2,53 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.0.0] - 2023-01-12
+
+### Bug Fixes
+
+- Sparse checking output
+- Forgotten arguments
+- WizardIOP export
+- Plookup rendering in WizardIOP
+- In range constraints in WizardIOP
+- Interleaved columns should actually exist
+- Ensure that columns involved in permuations are marked as used
+- Latest WizardIOP API
+- Clearer names in WizardIOP
+- Handle should be hashed on their name
+- Revamp the padding system to handle dependencies
+- Implement spilling in padding
+- Solve constraint names overlaps
+
+### Features
+
+- Improve SQL processing
+- Keep track of wheter columns are being used in exporters
+- Check inversion constraints when expanding
+- Prettier WizardIOP names
+- Add git hash in `--version`
+
+### Miscellaneous Tasks
+
+- No need to export inlined constant in the WizardIOP
+- Stderrlog -> buche
+- Clippy
+- Update dependencies
+
+### Refactor
+
+- Constraints are now identified by handle
+- Cleanup
+
 ## [3.2.1] - 2023-01-09
 
 ### Features
 
 - Only show error context when logLevel >= warn
+
+### Miscellaneous Tasks
+
+- Release corset version 3.2.1
 
 ## [3.2.0] - 2023-01-09
 
