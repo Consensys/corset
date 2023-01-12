@@ -19,7 +19,7 @@ use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 
 use super::definitions::ComputationTable;
-use super::{common::*, CompileSettings, Handle, PaddingStrategy};
+use super::{common::*, CompileSettings, Handle};
 use crate::column::{Column, ColumnSet, Computation};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
@@ -30,21 +30,21 @@ static COUNTER: OnceCell<AtomicUsize> = OnceCell::new();
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Constraint {
     Vanishes {
-        name: String,
+        handle: Handle,
         domain: Option<Vec<isize>>,
         expr: Box<Node>,
     },
-    Plookup(String, Vec<Node>, Vec<Node>),
-    Permutation(String, Vec<Handle>, Vec<Handle>),
-    InRange(String, Node, usize),
+    Plookup(Handle, Vec<Node>, Vec<Node>),
+    Permutation(Handle, Vec<Handle>, Vec<Handle>),
+    InRange(Handle, Node, usize),
 }
 impl Constraint {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> String {
         match self {
-            Constraint::Vanishes { name, .. } => name,
-            Constraint::Plookup(name, ..) => name,
-            Constraint::Permutation(name, ..) => name,
-            Constraint::InRange(name, ..) => name,
+            Constraint::Vanishes { handle: name, .. } => name.to_string(),
+            Constraint::Plookup(handle, ..) => handle.to_string(),
+            Constraint::Permutation(handle, ..) => handle.to_string(),
+            Constraint::InRange(handle, ..) => handle.to_string(),
         }
     }
 
@@ -1087,10 +1087,6 @@ impl ConstraintSet {
                 }
             })
             .collect::<Vec<_>>();
-        if h.mangle() == "rom__INV__sub__shift_rom_CODE_FRAGMENT_INDEX_1__rom_CODE_FRAGMENT_INDEX_"
-        {
-            dbg!(&h, &r);
-        }
         self.get_mut(h).unwrap().padding = Some(r);
     }
 
@@ -1487,14 +1483,19 @@ fn reduce_toplevel(
     settings: &CompileSettings,
 ) -> Result<Option<Constraint>> {
     match &e.class {
-        Token::DefConstraint(name, domain, expr) => Ok(Some(Constraint::Vanishes {
-            name: format!("{}_{}", ctx.borrow().name, name),
-            domain: domain.to_owned(),
-            expr: Box::new(
-                reduce(expr, root_ctx, ctx, settings)?.unwrap_or_else(|| Expression::Void.into()),
-            ),
-        })),
+        Token::DefConstraint(name, domain, expr) => {
+            let handle = Handle::new(&ctx.borrow().name, name);
+            Ok(Some(Constraint::Vanishes {
+                handle,
+                domain: domain.to_owned(),
+                expr: Box::new(
+                    reduce(expr, root_ctx, ctx, settings)?
+                        .unwrap_or_else(|| Expression::Void.into()),
+                ),
+            }))
+        }
         Token::DefPlookup(name, parent, child) => {
+            let handle = Handle::new(&ctx.borrow().name, name);
             let parents = parent
                 .iter()
                 .map(|e| reduce(e, root_ctx.clone(), ctx, settings).map(Option::unwrap))
@@ -1511,14 +1512,20 @@ fn reduce_toplevel(
                     children.len()
                 ))
             } else {
-                Ok(Some(Constraint::Plookup(name.clone(), parents, children)))
+                Ok(Some(Constraint::Plookup(handle, parents, children)))
             }
         }
-        Token::DefInrange(e, range) => Ok(Some(Constraint::InRange(
-            names::Generator::default().next().unwrap(),
-            reduce(e, root_ctx, ctx, settings)?.unwrap(),
-            *range,
-        ))),
+        Token::DefInrange(e, range) => {
+            let handle = Handle::new(
+                &ctx.borrow().name,
+                names::Generator::default().next().unwrap(),
+            );
+            Ok(Some(Constraint::InRange(
+                handle,
+                reduce(e, root_ctx, ctx, settings)?.unwrap(),
+                *range,
+            )))
+        }
         Token::DefColumns(columns) => {
             for _ in columns {
                 reduce(e, root_ctx.clone(), ctx, settings)?;
@@ -1549,7 +1556,10 @@ fn reduce_toplevel(
                 .collect::<Result<Vec<_>>>()
                 .with_context(|| anyhow!("while defining permutation"))?;
             Ok(Some(Constraint::Permutation(
-                names::Generator::default().next().unwrap(),
+                Handle::new(
+                    &ctx.borrow().name,
+                    names::Generator::default().next().unwrap(),
+                ),
                 from.iter()
                     .map(|f| Handle::new(&ctx.borrow().name, f.as_symbol().unwrap()))
                     .collect::<Vec<_>>(),

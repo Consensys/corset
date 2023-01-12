@@ -332,7 +332,7 @@ pub fn expand_invs(cs: &mut ConstraintSet) -> Result<()> {
     }
     if !new_cs_inv.is_empty() {
         cs.constraints.push(Constraint::Vanishes {
-            name: "INV_CONSTRAINTS".into(),
+            handle: Handle::new("RESERVED", "INV_CONSTRAINTS"),
             domain: None,
             expr: Box::new(Expression::List(new_cs_inv).into()),
         });
@@ -360,7 +360,7 @@ pub fn expand_constraints(cs: &mut ConstraintSet) -> Result<()> {
     }
     if !new_cs_exps.is_empty() {
         cs.constraints.push(Constraint::Vanishes {
-            name: "EXPANSION_CONSTRAINTS".into(),
+            handle: Handle::new("RESERVED", "EXPANSION_CONSTRAINTS"),
             domain: None,
             expr: Box::new(Expression::List(new_cs_exps).into()),
         });

@@ -259,7 +259,7 @@ import (
             .sorted_by_key(|c| c.name())
             .filter_map(|c| match c {
                 Constraint::Vanishes {
-                    name,
+                    handle: name,
                     domain: _,
                     expr,
                 } => Some(
@@ -272,7 +272,7 @@ import (
                         })
                         .map(|r| {
                             make_go_function(
-                                &name.to_case(Case::Snake),
+                                &name.mangle().to_case(Case::Snake),
                                 "r = []column.Expression {",
                                 &r,
                                 "}",
@@ -295,19 +295,19 @@ import (
                 .sorted_by_key(|c| c.name())
                 .map(|c| {
                     match c {
-                        Constraint::Vanishes { name, domain, .. } => {
+                        Constraint::Vanishes { handle: name, domain, .. } => {
                             match domain {
                                 None => {
                                     format!(
                                         "r = append(r, constraint.NewGlobalConstraintList({}()...)...)",
-                                        name.to_case(Case::Camel)
+                                        name.mangle().to_case(Case::Camel)
                                     )
                                 }
                                 Some(domain) => {
                                     format!(
                                         "r = append(r, constraint.NewLocalConstraintList([]int{{{}}}, {}()...)...)",
                                         domain.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", "),
-                                        name.to_case(Case::Camel)
+                                        name.mangle().to_case(Case::Camel)
                                     )
                                 }
                             }

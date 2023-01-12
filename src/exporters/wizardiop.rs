@@ -139,9 +139,11 @@ fn render_constraints(constraints: &[Constraint]) -> String {
         .iter()
         .sorted_by_key(|c| c.name())
         .map(|constraint| match constraint {
-            Constraint::Vanishes { name, domain, expr } => {
-                render_constraint(name, domain.clone(), expr)
-            }
+            Constraint::Vanishes {
+                handle: name,
+                domain,
+                expr,
+            } => render_constraint(&name.mangle(), domain.clone(), expr),
             Constraint::Plookup(name, from, to) => format!(
                 "build.Inclusion(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
                 name,
@@ -153,7 +155,7 @@ fn render_constraints(constraints: &[Constraint]) -> String {
             ),
             Constraint::Permutation(name, from, to) => format!(
                 "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
-                name.to_case(Case::Snake),
+                name.mangle().to_case(Case::Snake),
                 from.iter()
                     .map(Handle::mangle)
                     .collect::<Vec<_>>()
@@ -162,7 +164,7 @@ fn render_constraints(constraints: &[Constraint]) -> String {
             ),
             Constraint::InRange(name, from, range) => format!(
                 "build.Range(\"{}\", {}, {})",
-                name.to_case(Case::Snake),
+                name.mangle().to_case(Case::Snake),
                 render_handle(from),
                 range
             ),

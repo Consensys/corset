@@ -378,7 +378,7 @@ fn main() -> Result<()> {
             expander::lower_shifts(&mut constraints);
             expander::expand_constraints(&mut constraints)?;
             expander::expand_invs(&mut constraints)?;
-            compute::compute(&read_trace(&tracefile)?, &mut constraints, false)
+            compute::compute(&read_trace(&tracefile)?, &mut constraints)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let mut f = std::fs::File::create(&outfile)
@@ -420,7 +420,7 @@ fn main() -> Result<()> {
                         &utils::decompress(payload).with_context(|| "while decompressing payload")?,
                     )?;
 
-                    compute::compute(&v, &mut local_constraints, false)
+                    compute::compute(&v, &mut local_constraints)
                         .with_context(|| "while computing columns")?;
 
                     let mut e = GzEncoder::new(Vec::new(), Compression::default());
@@ -473,7 +473,6 @@ fn main() -> Result<()> {
                     compute::compute(
                         &v,
                         &mut local_constraints,
-                        true
                     )
                         .with_context(|| format!("while expanding from {}", id))?;
 
@@ -532,7 +531,7 @@ fn main() -> Result<()> {
                 expander::expand_constraints(&mut constraints)?;
                 expander::expand_invs(&mut constraints)?;
             }
-            compute::compute(&read_trace(&tracefile)?, &mut constraints, true)
+            compute::compute(&read_trace(&tracefile)?, &mut constraints)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
 
             check::check(

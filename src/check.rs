@@ -130,7 +130,7 @@ fn check_constraint(
     expr: &Node,
     domain: &Option<Vec<isize>>,
     columns: &ColumnSet<Fr>,
-    name: &str,
+    name: &Handle,
     continue_on_error: bool,
     show_context: bool,
 ) -> Result<()> {
@@ -298,12 +298,8 @@ pub fn check(
     let todo = cs
         .constraints
         .iter()
-        .filter(|c| {
-            only.as_ref()
-                .map(|o| o.contains(&c.name().to_string()))
-                .unwrap_or(true)
-        })
-        .filter(|c| !skip.contains(&c.name().to_string()))
+        .filter(|c| only.as_ref().map(|o| o.contains(&c.name())).unwrap_or(true))
+        .filter(|c| !skip.contains(&c.name()))
         .collect::<Vec<_>>();
     if todo.is_empty() {
         return Err(anyhow!("refusing to check an empty constraint set"));
@@ -322,12 +318,16 @@ pub fn check(
         })
         .filter_map(|c| {
             match c {
-                Constraint::Vanishes { name, domain, expr } => {
+                Constraint::Vanishes {
+                    handle: name,
+                    domain,
+                    expr,
+                } => {
                     if matches!(expr.e(), Expression::Void) {
                         return None;
                     }
 
-                    if name == "INV_CONSTRAINTS" && !expand {
+                    if name.name == "INV_CONSTRAINTS" && !expand {
                         return None;
                     }
 
@@ -398,7 +398,7 @@ pub fn check(
             "Constraints failed: {}",
             failed
                 .into_iter()
-                .map(|x| x.bold().red().to_string())
+                .map(|x| x.to_string().bold().red().to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
         ))

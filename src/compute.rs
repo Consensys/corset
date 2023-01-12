@@ -76,7 +76,7 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
     }
 }
 
-pub fn compute(v: &Value, cs: &mut ConstraintSet, pad_trace: bool) -> Result<()> {
+pub fn compute(v: &Value, cs: &mut ConstraintSet) -> Result<()> {
     fill_traces(v, vec![], &mut cs.modules).with_context(|| "while reading columns")?;
     cs.compute_all()
         .with_context(|| "while computing columns")?;

@@ -24,12 +24,6 @@ pub struct CompileSettings {
     pub allow_dups: bool,
 }
 
-pub enum PaddingStrategy {
-    #[allow(dead_code)]
-    Full,
-    OneLine,
-}
-
 #[cfg(feature = "interactive")]
 pub fn make<S: AsRef<str>>(
     sources: &[(&str, S)],
