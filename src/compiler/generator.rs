@@ -1488,7 +1488,7 @@ fn reduce_toplevel(
 ) -> Result<Option<Constraint>> {
     match &e.class {
         Token::DefConstraint(name, domain, expr) => Ok(Some(Constraint::Vanishes {
-            name: name.into(),
+            name: format!("{}_{}", ctx.borrow().name, name),
             domain: domain.to_owned(),
             expr: Box::new(
                 reduce(expr, root_ctx, ctx, settings)?.unwrap_or_else(|| Expression::Void.into()),
