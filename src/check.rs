@@ -39,7 +39,11 @@ fn fail(
             .sorted_by_key(|h| h.name.clone())
             .collect::<Vec<_>>()
     } else {
-        expr.dependencies().iter().cloned().collect::<Vec<_>>()
+        expr.dependencies()
+            .iter()
+            .cloned()
+            .sorted_by_cached_key(Handle::to_string)
+            .collect::<Vec<_>>()
     };
 
     let mut m_columns = vec![vec![String::new()]
@@ -77,7 +81,7 @@ fn fail(
         }
     }
 
-    let r = expr.eval(
+    let (r, content) = expr.eval_trace(
         i,
         &mut |handle, i, wrap| {
             columns
@@ -87,8 +91,18 @@ fn fail(
                 .cloned()
         },
         &mut None,
-        &EvalSettings::new().set_trace(show_context),
+        &EvalSettings::new(),
     );
+
+    for (exp, val) in content
+        .iter()
+        .sorted_by_cached_key(|e| e.0.to_string().len())
+    {
+        eprintln!(
+            "{exp:70} <- {}",
+            val.as_ref().map(|x| x.pretty()).unwrap_or("nil".into())
+        )
+    }
 
     Err(anyhow!(
         "{}|{}{}\n -> {}",
