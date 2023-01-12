@@ -1105,28 +1105,7 @@ impl ConstraintSet {
             .unwrap_or(1)
     }
 
-    // pub fn pad_trace(&mut self, s: PaddingStrategy) -> Result<()> {
-    //     match s {
-    //         PaddingStrategy::OneLine => {
-    //             self.modules.handles().iter().for_each(|h| {
-    //                 let padding = self.padding_for(h).unwrap();
-    //                 let x = self.modules.by_handle_mut(h).unwrap();
-    //                 if let Some(xs) = x.value_mut() {
-    //                     x.set_value(padding.into_iter().chain(xs.iter()).cloned().collect());
-    //                 } else {
-    //                     x.set_value(padding.to_vec());
-    //                 }
-    //             });
-    //             Ok(())
-    //         }
-    //         PaddingStrategy::Full => todo!(),
-    //     }
-    // }
-
     pub fn write(&mut self, out: &mut impl Write) -> Result<()> {
-        // TODO encode the padding strategy behavior
-        // serde_json::to_writer(out, self).with_context(|| "while serializing to JSON")
-
         out.write_all("{\"columns\":{\n".as_bytes())?;
 
         for (i, (module, columns)) in self.modules.cols.iter().enumerate() {
