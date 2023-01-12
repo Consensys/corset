@@ -73,23 +73,16 @@ impl Constraint {
 }
 
 pub struct EvalSettings {
-    pub trace: bool,
     pub wrap: bool,
 }
 impl Default for EvalSettings {
     fn default() -> Self {
-        EvalSettings {
-            trace: false,
-            wrap: true,
-        }
+        EvalSettings { wrap: true }
     }
 }
 impl EvalSettings {
     pub fn new() -> Self {
         Default::default()
-    }
-    pub fn set_trace(self, trace: bool) -> Self {
-        EvalSettings { trace, ..self }
     }
 }
 
@@ -265,6 +258,22 @@ impl Node {
         }
     }
 
+    pub fn eval_trace(
+        &self,
+        i: isize,
+        get: &mut dyn FnMut(&Handle, isize, bool) -> Option<Fr>,
+        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        settings: &EvalSettings,
+    ) -> (Option<Fr>, HashMap<String, Option<Fr>>) {
+        let mut trace = HashMap::new();
+        let r = self.eval_fold(i, get, cache, settings, &mut |n, v| {
+            if !matches!(n.e(), Expression::List(_) | Expression::Const(..)) {
+                trace.insert(n.to_string(), v.clone());
+            }
+        });
+        (r, trace)
+    }
+
     pub fn eval(
         &self,
         i: isize,
@@ -272,32 +281,43 @@ impl Node {
         cache: &mut Option<cached::SizedCache<Fr, Fr>>,
         settings: &EvalSettings,
     ) -> Option<Fr> {
+        self.eval_fold(i, get, cache, settings, &mut |_, _| {})
+    }
+
+    pub fn eval_fold(
+        &self,
+        i: isize,
+        get: &mut dyn FnMut(&Handle, isize, bool) -> Option<Fr>,
+        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        settings: &EvalSettings,
+        f: &mut dyn FnMut(&Node, &Option<Fr>),
+    ) -> Option<Fr> {
         let r = match self.e() {
             Expression::Funcall { func, args } => match func {
                 Builtin::Add => {
                     let mut ax = Fr::zero();
                     for arg in args.iter() {
-                        ax.add_assign(&arg.eval(i, get, cache, settings)?)
+                        ax.add_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
                 }
                 Builtin::Sub => {
-                    let mut ax = args[0].eval(i, get, cache, settings)?;
+                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
                     for arg in args.iter().skip(1) {
-                        ax.sub_assign(&arg.eval(i, get, cache, settings)?)
+                        ax.sub_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
                 }
                 Builtin::Mul => {
                     let mut ax = Fr::one();
                     for arg in args.iter() {
-                        ax.mul_assign(&arg.eval(i, get, cache, settings)?)
+                        ax.mul_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
                 }
                 Builtin::Exp => {
                     let mut ax = Fr::one();
-                    let mantissa = args[0].eval(i, get, cache, settings)?;
+                    let mantissa = args[0].eval_fold(i, get, cache, settings, f)?;
                     let exp = args[1].pure_eval().unwrap().to_usize().unwrap();
                     for _ in 0..exp {
                         ax.mul_assign(&mantissa);
@@ -306,7 +326,7 @@ impl Node {
                 }
                 Builtin::Shift => {
                     let shift = args[1].pure_eval().unwrap().to_isize().unwrap();
-                    args[0].eval(
+                    args[0].eval_fold(
                         i + shift,
                         get,
                         cache,
@@ -314,12 +334,13 @@ impl Node {
                             wrap: false,
                             ..*settings
                         },
+                        f,
                     )
                 }
                 Builtin::Eq => {
                     let (x, y) = (
-                        args[0].eval(i, get, cache, settings)?,
-                        args[1].eval(i, get, cache, settings)?,
+                        args[0].eval_fold(i, get, cache, settings, f)?,
+                        args[1].eval_fold(i, get, cache, settings, f)?,
                     );
                     if args[0].t().is_bool() && args[1].t().is_bool() {
                         Some(if x.eq(&y) { Fr::zero() } else { Fr::one() })
@@ -329,12 +350,12 @@ impl Node {
                         Some(ax)
                     }
                 }
-                Builtin::Neg => args[0].eval(i, get, cache, settings).map(|mut x| {
+                Builtin::Neg => args[0].eval_fold(i, get, cache, settings, f).map(|mut x| {
                     x.negate();
                     x
                 }),
                 Builtin::Inv => {
-                    let x = args[0].eval(i, get, cache, settings);
+                    let x = args[0].eval_fold(i, get, cache, settings, f);
                     if let Some(ref mut rcache) = cache {
                         x.map(|x| {
                             rcache
@@ -347,7 +368,7 @@ impl Node {
                 }
                 Builtin::Not => {
                     let mut r = Fr::one();
-                    if let Some(x) = args[0].eval(i, get, cache, settings) {
+                    if let Some(x) = args[0].eval_fold(i, get, cache, settings, f) {
                         r.sub_assign(&x);
                         Some(r)
                     } else {
@@ -369,20 +390,20 @@ impl Node {
                 }
                 Builtin::Begin => unreachable!(),
                 Builtin::IfZero => {
-                    if args[0].eval(i, get, cache, settings)?.is_zero() {
-                        args[1].eval(i, get, cache, settings)
+                    if args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
+                        args[1].eval_fold(i, get, cache, settings, f)
                     } else {
                         args.get(2)
-                            .map(|x| x.eval(i, get, cache, settings))
+                            .map(|x| x.eval_fold(i, get, cache, settings, f))
                             .unwrap_or_else(|| Some(Fr::zero()))
                     }
                 }
                 Builtin::IfNotZero => {
-                    if !args[0].eval(i, get, cache, settings)?.is_zero() {
-                        args[1].eval(i, get, cache, settings)
+                    if !args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
+                        args[1].eval_fold(i, get, cache, settings, f)
                     } else {
                         args.get(2)
-                            .map(|x| x.eval(i, get, cache, settings))
+                            .map(|x| x.eval_fold(i, get, cache, settings, f))
                             .unwrap_or_else(|| Some(Fr::zero()))
                     }
                 }
@@ -394,21 +415,12 @@ impl Node {
             Expression::Column(handle, ..) => get(handle, i, settings.wrap),
             Expression::List(xs) => xs
                 .iter()
-                .filter_map(|x| x.eval(i, get, cache, settings))
+                .filter_map(|x| x.eval_fold(i, get, cache, settings, f))
                 .find(|x| !x.is_zero())
                 .or_else(|| Some(Fr::zero())),
             _ => unreachable!("{:?}", self),
         };
-        if settings.trace && !matches!(self.e(), Expression::Const(..)) {
-            eprintln!(
-                "{:70} <- {}[{}]",
-                r.as_ref()
-                    .map(Pretty::pretty)
-                    .unwrap_or_else(|| "nil".to_owned()),
-                self,
-                i
-            );
-        }
+        f(self, &r);
         r
     }
 
@@ -898,10 +910,7 @@ impl ConstraintSet {
                             .cloned()
                     },
                     &mut None,
-                    &EvalSettings {
-                        trace: false,
-                        wrap: false,
-                    },
+                    &EvalSettings { wrap: false },
                 )
                 .unwrap_or_else(Fr::zero)
             })
@@ -946,10 +955,7 @@ impl ConstraintSet {
                             .cloned()
                     },
                     &mut None,
-                    &EvalSettings {
-                        trace: false,
-                        wrap: false,
-                    },
+                    &EvalSettings { wrap: false },
                 )
                 .unwrap_or_else(Fr::zero)
             })
@@ -1071,10 +1077,7 @@ impl ConstraintSet {
                                             // }
                                         },
                                         &mut None,
-                                        &EvalSettings {
-                                            trace: false,
-                                            wrap: false,
-                                        },
+                                        &EvalSettings { wrap: false },
                                     )
                                     .unwrap()
                                 }
