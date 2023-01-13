@@ -113,7 +113,7 @@ fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, settings: DebugSettings)
             if j as isize + (i - settings.context_span).max(0) - 1 == i {
                 trace.push_str(&format!(
                     "{:width$}",
-                    m_columns[j][ii].red(),
+                    m_columns[j][ii].red().bold(),
                     width = padding
                 ));
             } else {
