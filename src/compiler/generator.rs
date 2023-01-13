@@ -211,13 +211,14 @@ impl Node {
         })
     }
 
-    pub fn debug(&self, f: &dyn Fn(&Node) -> Option<Fr>) -> String {
+    pub fn debug(&self, f: &dyn Fn(&Node) -> Option<Fr>, unclutter: bool) -> String {
         fn _debug(
             n: &Node,
             tty: &mut Tty,
             f: &dyn Fn(&Node) -> Option<Fr>,
             dim: bool,
             faulty: &Fr,
+            unclutter: bool,
         ) {
             let colors = [
                 colored::Color::Red,
@@ -242,6 +243,10 @@ impl Node {
             match n.e() {
                 Expression::Funcall { func, args } => {
                     let v = f(n).unwrap();
+                    if v.is_zero() && unclutter {
+                        tty.write("...".color(colored::Color::BrightBlack).to_string());
+                        return;
+                    }
                     let fname = func.to_string();
                     let c = if v.is_zero() {
                         colored::Color::BrightBlack
@@ -260,11 +265,11 @@ impl Node {
                     tty.shift(fname.len() + 2);
                     if let Some(a) = args.get(0) {
                         tty.latch_indent();
-                        _debug(a, tty, f, v.is_zero() || dim, faulty);
+                        _debug(a, tty, f, v.is_zero() || dim, faulty, unclutter);
                     }
                     tty.cr();
                     for a in args.iter().skip(1) {
-                        _debug(a, tty, f, v.is_zero() || dim, faulty);
+                        _debug(a, tty, f, v.is_zero() || dim, faulty, unclutter);
                         tty.cr();
                     }
                     tty.unshift();
@@ -308,11 +313,15 @@ impl Node {
                     } else {
                         c
                     };
+                    if (dim || v.is_zero()) && unclutter {
+                        tty.write("...".color(c).to_string());
+                        return;
+                    }
                     tty.write("{begin".color(c).to_string());
                     tty.cr();
                     tty.shift(3);
                     for a in ns.iter() {
-                        _debug(a, tty, f, v.is_zero() || dim, faulty);
+                        _debug(a, tty, f, v.is_zero() || dim, faulty, unclutter);
                         tty.cr();
                     }
                     tty.unshift();
@@ -324,7 +333,7 @@ impl Node {
 
         let mut tty = Tty::new();
         let faulty = f(self).unwrap();
-        _debug(self, &mut tty, f, false, &faulty);
+        _debug(self, &mut tty, f, false, &faulty, unclutter);
         tty.page_feed()
     }
 

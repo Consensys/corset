@@ -19,7 +19,38 @@ use crate::{
     pretty::*,
 };
 
-fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, show_context: bool) -> Result<()> {
+#[derive(Clone, Copy, Debug)]
+pub struct DebugSettings {
+    unclutter: bool,
+    continue_on_error: bool,
+    report: bool,
+}
+impl DebugSettings {
+    pub fn new() -> Self {
+        DebugSettings {
+            unclutter: false,
+            continue_on_error: false,
+            report: false,
+        }
+    }
+    pub fn unclutter(self, x: bool) -> Self {
+        Self {
+            unclutter: x,
+            ..self
+        }
+    }
+    pub fn continue_on_error(self, x: bool) -> Self {
+        Self {
+            continue_on_error: x,
+            ..self
+        }
+    }
+    pub fn report(self, x: bool) -> Self {
+        Self { report: x, ..self }
+    }
+}
+
+fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, settings: DebugSettings) -> Result<()> {
     let trace_span: isize = crate::SETTINGS.get().unwrap().context_span;
 
     let module = expr.dependencies().iter().next().unwrap().module.clone();
@@ -60,7 +91,7 @@ fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, show_context: bool) -> R
         )
     }
 
-    if show_context {
+    if settings.report {
         for ii in 0..m_columns[0].len() {
             for (j, col) in m_columns.iter().enumerate() {
                 let padding = col.iter().map(String::len).max().unwrap() + 2;
@@ -75,12 +106,15 @@ fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, show_context: bool) -> R
         }
     }
 
-    Err(anyhow!(expr.debug(&|n| n.eval(
-        i,
-        &mut |handle, i, wrap| columns._cols[handle.id.unwrap()].get(i, wrap).cloned(),
-        &mut None,
-        &Default::default(),
-    ))))
+    Err(anyhow!(expr.debug(
+        &|n| n.eval(
+            i,
+            &mut |handle, i, wrap| columns._cols[handle.id.unwrap()].get(i, wrap).cloned(),
+            &mut None,
+            &Default::default(),
+        ),
+        settings.unclutter
+    )))
 }
 
 fn check_constraint_at(
@@ -89,7 +123,7 @@ fn check_constraint_at(
     columns: &ColumnSet<Fr>,
     fail_on_oob: bool,
     cache: &mut Option<SizedCache<Fr, Fr>>,
-    show_context: bool,
+    settings: DebugSettings,
 ) -> Result<()> {
     let r = expr.eval(
         i,
@@ -99,10 +133,10 @@ fn check_constraint_at(
     );
     if let Some(r) = r {
         if !r.is_zero() {
-            return fail(expr, i, columns, show_context);
+            return fail(expr, i, columns, settings);
         }
     } else if fail_on_oob {
-        return fail(expr, i, columns, show_context);
+        return fail(expr, i, columns, settings);
     }
     Ok(())
 }
@@ -112,8 +146,7 @@ fn check_constraint(
     domain: &Option<Vec<isize>>,
     columns: &ColumnSet<Fr>,
     name: &Handle,
-    continue_on_error: bool,
-    show_context: bool,
+    settings: DebugSettings,
 ) -> Result<()> {
     let cols_lens = expr
         .dependencies()
@@ -166,13 +199,13 @@ fn check_constraint(
     match domain {
         Some(is) => {
             for i in is {
-                check_constraint_at(expr, *i, columns, true, &mut cache, show_context)?;
+                check_constraint_at(expr, *i, columns, true, &mut cache, settings)?;
             }
         }
         None => {
             for i in 0..l as isize {
-                let err = check_constraint_at(expr, i, columns, false, &mut cache, show_context);
-                if err.is_err() && !continue_on_error {
+                let err = check_constraint_at(expr, i, columns, false, &mut cache, settings);
+                if err.is_err() && !settings.continue_on_error {
                     return err;
                 }
             }
@@ -251,9 +284,8 @@ pub fn check(
     only: &Option<Vec<String>>,
     skip: &[String],
     with_bar: bool,
-    continue_on_error: bool,
-    show_context: bool,
     expand: bool,
+    settings: DebugSettings,
 ) -> Result<()> {
     if cs.modules.is_empty() {
         info!("Skipping empty trace");
@@ -314,15 +346,10 @@ pub fn check(
                     match expr.as_ref().e() {
                         Expression::List(es) => {
                             for e in es {
-                                if let Err(err) = check_constraint(
-                                    e,
-                                    domain,
-                                    &cs.modules,
-                                    name,
-                                    continue_on_error,
-                                    show_context,
-                                ) {
-                                    if show_context {
+                                if let Err(err) =
+                                    check_constraint(e, domain, &cs.modules, name, settings)
+                                {
+                                    if settings.report {
                                         error!("{} failed:\n{:?}", name, err);
                                     }
                                     return Some(name.to_owned());
@@ -331,15 +358,10 @@ pub fn check(
                             None
                         }
                         _ => {
-                            if let Err(err) = check_constraint(
-                                expr,
-                                domain,
-                                &cs.modules,
-                                name,
-                                continue_on_error,
-                                show_context,
-                            ) {
-                                if show_context {
+                            if let Err(err) =
+                                check_constraint(expr, domain, &cs.modules, name, settings)
+                            {
+                                if settings.report {
                                     error!("{} failed:\n{:?}", name, err);
                                 }
                                 Some(name.to_owned())
@@ -351,7 +373,7 @@ pub fn check(
                 }
                 Constraint::Plookup(name, parents, children) => {
                     if let Err(err) = check_plookup(cs, parents, children) {
-                        if show_context {
+                        if settings.report {
                             error!("{} failed:\n{:?}", name, err);
                         }
                         Some(name.to_owned())

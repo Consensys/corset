@@ -197,6 +197,12 @@ enum Commands {
         continue_on_error: bool,
 
         #[arg(
+            long = "debug-unclutter",
+            help = "only disply debug annotations for non-zero paths in constraint system"
+        )]
+        unclutter: bool,
+
+        #[arg(
             long = "only",
             help = "only check these constraints",
             value_delimiter = ','
@@ -483,8 +489,7 @@ fn main() -> Result<()> {
                         args.verbose.log_level_filter() >= log::Level::Warn
                             && std::io::stdout().is_terminal(),
                         false,
-                        args.verbose.log_level_filter() >= log::Level::Warn,
-                        false,
+                        check::DebugSettings::new()
                     ) {
                         Ok(_) => {
                             if remove {
@@ -515,6 +520,7 @@ fn main() -> Result<()> {
             only,
             skip,
             continue_on_error,
+            unclutter,
         } => {
             settings.full_context = full_trace;
             settings.context_span = trace_span;
@@ -540,9 +546,11 @@ fn main() -> Result<()> {
                 &skip,
                 args.verbose.log_level_filter() >= log::Level::Warn
                     && std::io::stdout().is_terminal(),
-                continue_on_error,
-                args.verbose.log_level_filter() >= log::Level::Warn,
                 expand,
+                check::DebugSettings::new()
+                    .unclutter(unclutter)
+                    .continue_on_error(continue_on_error)
+                    .report(args.verbose.log_level_filter() >= log::Level::Warn),
             )
             .with_context(|| format!("while checking `{}`", tracefile))?;
             info!("{}: SUCCESS", tracefile)
