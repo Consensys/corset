@@ -65,14 +65,6 @@ pub struct ColumnSet<T: Clone> {
 }
 
 impl<T: Clone> ColumnSet<T> {
-    pub fn id_of(&self, handle: &Handle) -> usize {
-        *self
-            .cols
-            .get(&handle.module)
-            .and_then(|m| m.get(&handle.name))
-            .unwrap()
-    }
-
     pub fn by_handle(&self, handle: &Handle) -> Option<&Column<T>> {
         self.cols
             .get(&handle.module)
@@ -87,14 +79,6 @@ impl<T: Clone> ColumnSet<T> {
             .and_then(|i| self._cols.get_mut(*i))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (Handle, &Column<T>)> {
-        self.cols.iter().flat_map(|(module, columns)| {
-            columns
-                .iter()
-                .map(|(name, i)| (Handle::new(module.clone(), name), &self._cols[*i]))
-        })
-    }
-
     pub fn handles(&self) -> Vec<Handle> {
         self.cols
             .keys()
@@ -102,8 +86,20 @@ impl<T: Clone> ColumnSet<T> {
             .collect()
     }
 
-    pub fn columns_mut(&mut self) -> impl Iterator<Item = &mut Column<T>> {
-        self._cols.iter_mut()
+    pub fn id_of(&self, handle: &Handle) -> usize {
+        *self
+            .cols
+            .get(&handle.module)
+            .and_then(|m| m.get(&handle.name))
+            .unwrap()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (Handle, &Column<T>)> {
+        self.cols.iter().flat_map(|(module, columns)| {
+            columns
+                .iter()
+                .map(|(name, i)| (Handle::new(module.clone(), name), &self._cols[*i]))
+        })
     }
 }
 
@@ -185,20 +181,6 @@ impl<T: Ord + Clone> ColumnSet<T> {
             self.insert_column(&handle.ith(*i), t, true, Kind::Atomic, allow_dup)?;
         }
         Ok(())
-    }
-
-    pub fn max_len(&self) -> usize {
-        let lens = self
-            ._cols
-            .iter()
-            .filter_map(|c| c.len())
-            .collect::<Vec<_>>();
-
-        if lens.is_empty() {
-            return 0;
-        }
-
-        *lens.iter().max().unwrap()
     }
 
     pub fn is_empty(&self) -> bool {

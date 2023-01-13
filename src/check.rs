@@ -117,16 +117,14 @@ fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, settings: DebugSettings)
                     width = padding
                 ));
             } else {
-                if j == 0 {
-                    trace.push_str(
-                        &format!("{:width$}", m_columns[j][ii], width = padding)
-                            .bright_white()
-                            .bold()
-                            .to_string(),
-                    );
-                } else {
-                    trace.push_str(&format!("{:width$}", m_columns[j][ii], width = padding));
-                }
+                let s = format!("{:width$}", m_columns[j][ii], width = padding);
+                trace.push_str(
+                    &(if j == 0 {
+                        s.bright_white().bold().to_string()
+                    } else {
+                        s
+                    }),
+                )
             }
         }
         trace.push('\n');

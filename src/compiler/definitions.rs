@@ -11,8 +11,8 @@ use std::collections::{HashMap, HashSet};
 use std::rc::{Rc, Weak};
 
 use super::common::BUILTINS;
-use super::generator::{Defined, Expression, Function, FunctionClass};
-use super::{Handle, Magma, Node, Type};
+use super::generator::{Defined, Function, FunctionClass};
+use super::{Expression, Handle, Magma, Node, Type};
 use crate::column::Computation;
 use crate::compiler::parser::*;
 

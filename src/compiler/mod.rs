@@ -8,13 +8,16 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use common::*;
 pub use definitions::ComputationTable;
-pub use generator::{Builtin, Constraint, ConstraintSet, EvalSettings, Expression, Node};
+pub use generator::{Builtin, Constraint, ConstraintSet, EvalSettings};
+pub use node::{Expression, Node};
 pub use parser::{Ast, AstNode, Kind, Token};
 
+mod codetyper;
 mod common;
 mod compiletime;
 mod definitions;
 mod generator;
+mod node;
 mod parser;
 
 const MAIN_MODULE: &str = "<prelude>";
