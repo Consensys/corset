@@ -212,7 +212,13 @@ impl Node {
     }
 
     pub fn debug(&self, f: &dyn Fn(&Node) -> Option<Fr>) -> String {
-        fn _debug(n: &Node, tty: &mut Tty, f: &dyn Fn(&Node) -> Option<Fr>, dim: bool) {
+        fn _debug(
+            n: &Node,
+            tty: &mut Tty,
+            f: &dyn Fn(&Node) -> Option<Fr>,
+            dim: bool,
+            faulty: &Fr,
+        ) {
             let colors = [
                 colored::Color::Red,
                 colored::Color::Green,
@@ -242,21 +248,32 @@ impl Node {
                     } else {
                         c
                     };
+                    let c_v = if dim || v.is_zero() {
+                        colored::Color::BrightBlack
+                    } else if v.eq(faulty) {
+                        colored::Color::Red
+                    } else {
+                        colored::Color::White
+                    };
 
                     tty.write(format!("({fname} ").color(c).to_string());
                     tty.shift(fname.len() + 2);
                     if let Some(a) = args.get(0) {
                         tty.latch_indent();
-                        _debug(a, tty, f, v.is_zero() || dim);
+                        _debug(a, tty, f, v.is_zero() || dim, faulty);
                     }
                     tty.cr();
                     for a in args.iter().skip(1) {
-                        _debug(a, tty, f, v.is_zero() || dim);
+                        _debug(a, tty, f, v.is_zero() || dim, faulty);
                         tty.cr();
                     }
                     tty.unshift();
                     tty.write(")".color(c).to_string());
-                    tty.append(format!("[{}]", f(n).unwrap().pretty()).color(c).to_string())
+                    tty.append(
+                        format!("[{}]", f(n).unwrap().pretty())
+                            .color(c_v)
+                            .to_string(),
+                    )
                 }
                 Expression::Const(x, _) => {
                     let c = if dim {
@@ -267,11 +284,15 @@ impl Node {
                     tty.write(x.to_string().color(c).bold().to_string());
                 }
                 Expression::Column(h, _) => {
+                    let v = f(n).unwrap();
                     let c = if dim {
                         colored::Color::BrightBlack
+                    } else if v.eq(faulty) {
+                        colored::Color::Red
                     } else {
                         colored::Color::BrightWhite
                     };
+
                     tty.write(
                         format!("{}[{}]", h.name, f(n).unwrap().pretty())
                             .color(c)
@@ -282,16 +303,19 @@ impl Node {
                 Expression::ArrayColumn(h, _) => tty.write(h.to_string()),
                 Expression::List(ns) => {
                     let v = f(n).unwrap();
-                    tty.write("{".color(c).to_string());
+                    let c = if v.is_zero() {
+                        colored::Color::BrightBlack
+                    } else {
+                        c
+                    };
+                    tty.write("{begin".color(c).to_string());
                     tty.cr();
                     tty.shift(3);
                     for a in ns.iter() {
-                        _debug(a, tty, f, v.is_zero() || dim);
+                        _debug(a, tty, f, v.is_zero() || dim, faulty);
                         tty.cr();
                     }
-                    tty.uncr();
                     tty.unshift();
-                    tty.latch_indent();
                     tty.write("}".color(c).to_string());
                 }
                 Expression::Void => tty.write("∅"),
@@ -299,7 +323,8 @@ impl Node {
         }
 
         let mut tty = Tty::new();
-        _debug(self, &mut tty, f, false);
+        let faulty = f(self).unwrap();
+        _debug(self, &mut tty, f, false, &faulty);
         tty.page_feed()
     }
 
