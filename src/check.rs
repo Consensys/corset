@@ -15,17 +15,11 @@ use pairing_ce::{
 
 use crate::{
     column::ColumnSet,
-    compiler::{Constraint, ConstraintSet, EvalSettings, Expression, Handle, Node},
+    compiler::{Constraint, ConstraintSet, Expression, Handle, Node},
     pretty::*,
 };
 
-fn fail(
-    expr: &Node,
-    i: isize,
-    l: Option<usize>,
-    columns: &ColumnSet<Fr>,
-    show_context: bool,
-) -> Result<()> {
+fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, show_context: bool) -> Result<()> {
     let trace_span: isize = crate::SETTINGS.get().unwrap().context_span;
 
     let module = expr.dependencies().iter().next().unwrap().module.clone();
@@ -92,7 +86,6 @@ fn fail(
 fn check_constraint_at(
     expr: &Node,
     i: isize,
-    l: Option<usize>,
     columns: &ColumnSet<Fr>,
     fail_on_oob: bool,
     cache: &mut Option<SizedCache<Fr, Fr>>,
@@ -106,10 +99,10 @@ fn check_constraint_at(
     );
     if let Some(r) = r {
         if !r.is_zero() {
-            return fail(expr, i, l, columns, show_context);
+            return fail(expr, i, columns, show_context);
         }
     } else if fail_on_oob {
-        return fail(expr, i, l, columns, show_context);
+        return fail(expr, i, columns, show_context);
     }
     Ok(())
 }
@@ -173,13 +166,12 @@ fn check_constraint(
     match domain {
         Some(is) => {
             for i in is {
-                check_constraint_at(expr, *i, None, columns, true, &mut cache, show_context)?;
+                check_constraint_at(expr, *i, columns, true, &mut cache, show_context)?;
             }
         }
         None => {
             for i in 0..l as isize {
-                let err =
-                    check_constraint_at(expr, i, Some(l), columns, false, &mut cache, show_context);
+                let err = check_constraint_at(expr, i, columns, false, &mut cache, show_context);
                 if err.is_err() && !continue_on_error {
                     return err;
                 }

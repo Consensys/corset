@@ -63,7 +63,7 @@ impl Tty {
         self.o.last_mut().unwrap().push_str(s.as_ref())
     }
     fn writeln<S: AsRef<str>>(&mut self, l: S) {
-        self.write(l.as_ref().to_string());
+        self.write(l.as_ref());
         self.cr();
     }
     fn shift(&mut self, d: usize) {
@@ -282,7 +282,7 @@ impl Node {
                 Expression::ArrayColumn(h, _) => tty.write(h.to_string()),
                 Expression::List(ns) => {
                     let v = f(n).unwrap();
-                    tty.write(format!("(begin").color(c).to_string());
+                    tty.write("{".color(c).to_string());
                     tty.cr();
                     tty.shift(3);
                     for a in ns.iter() {
@@ -292,7 +292,7 @@ impl Node {
                     tty.uncr();
                     tty.unshift();
                     tty.latch_indent();
-                    tty.write(format!(")",).color(c).to_string());
+                    tty.write("}".color(c).to_string());
                 }
                 Expression::Void => tty.write("∅"),
             };
@@ -300,7 +300,7 @@ impl Node {
 
         let mut tty = Tty::new();
         _debug(self, &mut tty, f, false);
-        return tty.page_feed();
+        tty.page_feed()
     }
 
     pub fn size(&self) -> usize {
@@ -320,8 +320,12 @@ impl Node {
             match e.e() {
                 Expression::Funcall { func, args } => {
                     if let Builtin::Shift = func {
-                        let arg_big = args[1].pure_eval().expect(args[1].to_string().as_str());
-                        let arg = arg_big.to_isize().expect(arg_big.to_string().as_str());
+                        let arg_big = args[1]
+                            .pure_eval()
+                            .unwrap_or_else(|_| panic!("{}", args[1].to_string().as_str()));
+                        let arg = arg_big
+                            .to_isize()
+                            .unwrap_or_else(|| panic!("{}", arg_big.to_string().as_str()));
                         *ax = (*ax).max(*ax + arg);
                     }
                     args.iter().for_each(|e| _future_span(e, ax))
@@ -425,7 +429,7 @@ impl Node {
         let mut trace = HashMap::new();
         let r = self.eval_fold(i, get, cache, settings, &mut |n, v| {
             if !matches!(n.e(), Expression::List(_) | Expression::Const(..)) {
-                trace.insert(n.to_string(), v.clone());
+                trace.insert(n.to_string(), *v);
             }
         });
         (r, trace)
@@ -483,16 +487,7 @@ impl Node {
                 }
                 Builtin::Shift => {
                     let shift = args[1].pure_eval().unwrap().to_isize().unwrap();
-                    args[0].eval_fold(
-                        i + shift,
-                        get,
-                        cache,
-                        &EvalSettings {
-                            wrap: false,
-                            ..*settings
-                        },
-                        f,
-                    )
+                    args[0].eval_fold(i + shift, get, cache, &EvalSettings { wrap: false }, f)
                 }
                 Builtin::Eq => {
                     let (x, y) = (
