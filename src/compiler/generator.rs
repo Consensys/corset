@@ -145,11 +145,6 @@ impl Default for EvalSettings {
         EvalSettings { wrap: true }
     }
 }
-impl EvalSettings {
-    pub fn new() -> Self {
-        Default::default()
-    }
-}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Expression {

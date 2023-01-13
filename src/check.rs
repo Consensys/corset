@@ -24,6 +24,8 @@ pub struct DebugSettings {
     unclutter: bool,
     continue_on_error: bool,
     report: bool,
+    context_span: isize,
+    full_trace: bool,
 }
 impl DebugSettings {
     pub fn new() -> Self {
@@ -31,6 +33,8 @@ impl DebugSettings {
             unclutter: false,
             continue_on_error: false,
             report: false,
+            context_span: 2,
+            full_trace: false,
         }
     }
     pub fn unclutter(self, x: bool) -> Self {
@@ -48,13 +52,23 @@ impl DebugSettings {
     pub fn report(self, x: bool) -> Self {
         Self { report: x, ..self }
     }
+    pub fn context_span(self, x: isize) -> Self {
+        Self {
+            context_span: x,
+            ..self
+        }
+    }
+    pub fn full_trace(self, x: bool) -> Self {
+        Self {
+            full_trace: x,
+            ..self
+        }
+    }
 }
 
 fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, settings: DebugSettings) -> Result<()> {
-    let trace_span: isize = crate::SETTINGS.get().unwrap().context_span;
-
     let module = expr.dependencies().iter().next().unwrap().module.clone();
-    let handles = if crate::SETTINGS.get().unwrap().full_context {
+    let handles = if settings.full_trace {
         columns
             .cols
             .get(&module)
@@ -73,9 +87,9 @@ fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, settings: DebugSettings)
 
     let mut m_columns = vec![vec![String::new()]
         .into_iter()
-        .chain(handles.iter().map(|h| h.to_string()))
+        .chain(handles.iter().map(|h| h.name.to_string()))
         .collect::<Vec<_>>()];
-    for j in (i - trace_span).max(0)..=i + trace_span {
+    for j in (i - settings.context_span).max(0)..=i + settings.context_span {
         m_columns.push(
             vec![j.to_string()]
                 .into_iter()
@@ -91,30 +105,46 @@ fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, settings: DebugSettings)
         )
     }
 
-    if settings.report {
-        for ii in 0..m_columns[0].len() {
-            for (j, col) in m_columns.iter().enumerate() {
-                let padding = col.iter().map(String::len).max().unwrap() + 2;
-                // - 1 to account for the first column
-                if j as isize + (i - trace_span).max(0) - 1 == i {
-                    print!("{:width$}", m_columns[j][ii].red(), width = padding);
+    let mut trace = String::new();
+    for ii in 0..m_columns[0].len() {
+        for (j, col) in m_columns.iter().enumerate() {
+            let padding = col.iter().map(String::len).max().unwrap() + 2;
+            // - 1 to account for the first column
+            if j as isize + (i - settings.context_span).max(0) - 1 == i {
+                trace.push_str(&format!(
+                    "{:width$}",
+                    m_columns[j][ii].red(),
+                    width = padding
+                ));
+            } else {
+                if j == 0 {
+                    trace.push_str(
+                        &format!("{:width$}", m_columns[j][ii], width = padding)
+                            .bright_white()
+                            .bold()
+                            .to_string(),
+                    );
                 } else {
-                    print!("{:width$}", m_columns[j][ii], width = padding);
+                    trace.push_str(&format!("{:width$}", m_columns[j][ii], width = padding));
                 }
             }
-            println!();
         }
+        trace.push('\n');
     }
+    trace.push('\n');
 
-    Err(anyhow!(expr.debug(
-        &|n| n.eval(
-            i,
-            &mut |handle, i, wrap| columns._cols[handle.id.unwrap()].get(i, wrap).cloned(),
-            &mut None,
-            &Default::default(),
-        ),
-        settings.unclutter
-    )))
+    Err(anyhow!(
+        trace
+            + &expr.debug(
+                &|n| n.eval(
+                    i,
+                    &mut |handle, i, wrap| columns._cols[handle.id.unwrap()].get(i, wrap).cloned(),
+                    &mut None,
+                    &Default::default(),
+                ),
+                settings.unclutter
+            )
+    ))
 }
 
 fn check_constraint_at(
@@ -346,11 +376,15 @@ pub fn check(
                     match expr.as_ref().e() {
                         Expression::List(es) => {
                             for e in es {
-                                if let Err(err) =
+                                if let Err(trace) =
                                     check_constraint(e, domain, &cs.modules, name, settings)
                                 {
                                     if settings.report {
-                                        error!("{} failed:\n{:?}", name, err);
+                                        error!(
+                                            "{} failed:\n{}",
+                                            name.to_string().red().bold(),
+                                            trace
+                                        );
                                     }
                                     return Some(name.to_owned());
                                 }
@@ -358,11 +392,11 @@ pub fn check(
                             None
                         }
                         _ => {
-                            if let Err(err) =
+                            if let Err(trace) =
                                 check_constraint(expr, domain, &cs.modules, name, settings)
                             {
                                 if settings.report {
-                                    error!("{} failed:\n{:?}", name, err);
+                                    error!("{} failed:\n{}", name.to_string().red().bold(), trace);
                                 }
                                 Some(name.to_owned())
                             } else {
@@ -372,9 +406,9 @@ pub fn check(
                     }
                 }
                 Constraint::Plookup(name, parents, children) => {
-                    if let Err(err) = check_plookup(cs, parents, children) {
+                    if let Err(trace) = check_plookup(cs, parents, children) {
                         if settings.report {
-                            error!("{} failed:\n{:?}", name, err);
+                            error!("{} failed:\n{}", name, trace);
                         }
                         Some(name.to_owned())
                     } else {

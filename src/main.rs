@@ -4,7 +4,6 @@ extern crate pest_derive;
 use flate2::read::GzDecoder;
 use is_terminal::IsTerminal;
 use log::*;
-use once_cell::sync::OnceCell;
 use serde_json::Value;
 use std::{
     fs::File,
@@ -25,14 +24,6 @@ mod pretty;
 #[cfg(test)]
 mod tests;
 mod utils;
-
-#[derive(Default, Debug)]
-struct Settings {
-    pub full_context: bool,
-    pub context_span: isize,
-}
-
-static SETTINGS: OnceCell<Settings> = OnceCell::new();
 
 #[derive(Parser)]
 #[command(author, version = concat!(clap::crate_version!(), " ", std::env!("GIT_HASH")), propagate_version = true)]
@@ -212,7 +203,7 @@ enum Commands {
         #[arg(long = "skip", help = "skip these constraints", value_delimiter = ',')]
         skip: Vec<String>,
 
-        #[arg(short = 'S', long = "trace-span", help = "", default_value_t = 3)]
+        #[arg(short = 'S', long = "trace-span", help = "", default_value_t = 2)]
         trace_span: isize,
     },
     /// Given a set of constraints, indefinitely check the traces from an SQL table
@@ -275,7 +266,6 @@ fn main() -> Result<()> {
         .quiet(args.verbose.is_silent())
         .init()
         .unwrap();
-    let mut settings: Settings = Default::default();
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(args.threads)
@@ -450,8 +440,6 @@ fn main() -> Result<()> {
             only,
             skip,
         } => {
-            SETTINGS.set(settings).unwrap();
-
             let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
 
             info!("Initiating waiting loop");
@@ -522,10 +510,6 @@ fn main() -> Result<()> {
             continue_on_error,
             unclutter,
         } => {
-            settings.full_context = full_trace;
-            settings.context_span = trace_span;
-            SETTINGS.set(settings).unwrap();
-
             if utils::is_file_empty(&tracefile)? {
                 warn!("`{}` is empty, exiting", tracefile);
                 return Ok(());
@@ -550,7 +534,9 @@ fn main() -> Result<()> {
                 check::DebugSettings::new()
                     .unclutter(unclutter)
                     .continue_on_error(continue_on_error)
-                    .report(args.verbose.log_level_filter() >= log::Level::Warn),
+                    .report(args.verbose.log_level_filter() >= log::Level::Warn)
+                    .full_trace(full_trace)
+                    .context_span(trace_span),
             )
             .with_context(|| format!("while checking `{}`", tracefile))?;
             info!("{}: SUCCESS", tracefile)
