@@ -27,6 +27,71 @@ use crate::pretty::Pretty;
 
 static COUNTER: OnceCell<AtomicUsize> = OnceCell::new();
 
+struct Tty {
+    depths: Vec<usize>,
+    o: Vec<String>,
+    latch: usize,
+}
+impl Tty {
+    fn new() -> Self {
+        Self {
+            depths: vec![0],
+            o: vec![String::new()],
+            latch: 0,
+        }
+    }
+
+    fn write<S: AsRef<str>>(&mut self, l: S) {
+        if self.latch > 0 {
+            self.latch -= 1;
+            self.o.last_mut().unwrap().push_str(l.as_ref());
+        } else {
+            let indent = self
+                .depths
+                .iter()
+                .skip(1)
+                .map(|d| " ".repeat((*d as isize - 1).max(0) as usize))
+                .collect::<Vec<_>>()
+                .join("│".color(colored::Color::BrightBlack).to_string().as_str());
+            self.o
+                .last_mut()
+                .unwrap()
+                .push_str(&format!("{}{}", indent, l.as_ref()));
+        }
+    }
+    fn append<S: AsRef<str>>(&mut self, s: S) {
+        self.o.last_mut().unwrap().push_str(s.as_ref())
+    }
+    fn writeln<S: AsRef<str>>(&mut self, l: S) {
+        self.write(l.as_ref().to_string());
+        self.cr();
+    }
+    fn shift(&mut self, d: usize) {
+        self.depths.push(d);
+    }
+    fn unshift(&mut self) {
+        self.depths.pop();
+    }
+    fn cr(&mut self) {
+        self.o.push(String::new());
+    }
+    fn uncr(&mut self) {
+        self.o.pop();
+    }
+    fn page_feed(&self) -> String {
+        self.o.join("\n")
+    }
+    fn latch_indent(&mut self) {
+        self.latch += 1
+    }
+    fn indent(&self) -> usize {
+        self.depths.iter().sum()
+    }
+    fn depth(&self) -> usize {
+        self.depths.len()
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Constraint {
     Vanishes {
@@ -144,6 +209,98 @@ impl Node {
             ),
             Expression::Void => Type::Void,
         })
+    }
+
+    pub fn debug(&self, f: &dyn Fn(&Node) -> Option<Fr>) -> String {
+        fn _debug(n: &Node, tty: &mut Tty, f: &dyn Fn(&Node) -> Option<Fr>, dim: bool) {
+            let colors = [
+                colored::Color::Red,
+                colored::Color::Green,
+                colored::Color::Yellow,
+                colored::Color::Blue,
+                colored::Color::Magenta,
+                colored::Color::Cyan,
+                colored::Color::BrightRed,
+                colored::Color::BrightGreen,
+                colored::Color::BrightYellow,
+                colored::Color::BrightBlue,
+                colored::Color::BrightMagenta,
+                colored::Color::BrightCyan,
+            ];
+            let c = if dim {
+                colored::Color::BrightBlack
+            } else {
+                colors[tty.depth() % colors.len()]
+            };
+
+            match n.e() {
+                Expression::Funcall { func, args } => {
+                    let v = f(n).unwrap();
+                    let fname = func.to_string();
+                    let c = if v.is_zero() {
+                        colored::Color::BrightBlack
+                    } else {
+                        c
+                    };
+
+                    tty.write(format!("({fname} ").color(c).to_string());
+                    tty.shift(fname.len() + 2);
+                    if let Some(a) = args.get(0) {
+                        tty.latch_indent();
+                        _debug(a, tty, f, v.is_zero() || dim);
+                    }
+                    tty.cr();
+                    for a in args.iter().skip(1) {
+                        _debug(a, tty, f, v.is_zero() || dim);
+                        tty.cr();
+                    }
+                    tty.unshift();
+                    tty.write(")".color(c).to_string());
+                    tty.append(format!("[{}]", f(n).unwrap().pretty()).color(c).to_string())
+                }
+                Expression::Const(x, _) => {
+                    let c = if dim {
+                        colored::Color::BrightBlack
+                    } else {
+                        colored::Color::White
+                    };
+                    tty.write(x.to_string().color(c).bold().to_string());
+                }
+                Expression::Column(h, _) => {
+                    let c = if dim {
+                        colored::Color::BrightBlack
+                    } else {
+                        colored::Color::BrightWhite
+                    };
+                    tty.write(
+                        format!("{}[{}]", h.name, f(n).unwrap().pretty())
+                            .color(c)
+                            .bold()
+                            .to_string(),
+                    );
+                }
+                Expression::ArrayColumn(h, _) => tty.write(h.to_string()),
+                Expression::List(ns) => {
+                    let v = f(n).unwrap();
+                    tty.write(format!("(begin").color(c).to_string());
+                    tty.cr();
+                    tty.shift(3);
+                    for a in ns.iter() {
+                        _debug(a, tty, f, v.is_zero() || dim);
+                        tty.cr();
+                    }
+                    tty.uncr();
+                    tty.unshift();
+                    tty.latch_indent();
+                    tty.write(format!(")",).color(c).to_string());
+                }
+                Expression::Void => tty.write("∅"),
+            };
+        }
+
+        let mut tty = Tty::new();
+        _debug(self, &mut tty, f, false);
+        return tty.page_feed();
     }
 
     pub fn size(&self) -> usize {

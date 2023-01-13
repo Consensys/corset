@@ -81,38 +81,12 @@ fn fail(
         }
     }
 
-    let (r, content) = expr.eval_trace(
+    Err(anyhow!(expr.debug(&|n| n.eval(
         i,
-        &mut |handle, i, wrap| {
-            columns
-                .get(handle)
-                .ok()
-                .and_then(|c| c.get(i, wrap))
-                .cloned()
-        },
+        &mut |handle, i, wrap| columns._cols[handle.id.unwrap()].get(i, wrap).cloned(),
         &mut None,
-        &EvalSettings::new(),
-    );
-
-    for (exp, val) in content
-        .iter()
-        .sorted_by_cached_key(|e| e.0.to_string().len())
-    {
-        eprintln!(
-            "{exp:70} <- {}",
-            val.as_ref().map(|x| x.pretty()).unwrap_or("nil".into())
-        )
-    }
-
-    Err(anyhow!(
-        "{}|{}{}\n -> {}",
-        expr.pretty(),
-        i,
-        l.map(|l| format!("/{}", l)).unwrap_or_default(),
-        r.as_ref()
-            .map(Pretty::pretty)
-            .unwrap_or_else(|| "nil".to_owned()),
-    ))
+        &Default::default(),
+    ))))
 }
 
 fn check_constraint_at(
