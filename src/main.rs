@@ -484,6 +484,8 @@ fn main() -> Result<()> {
                             && std::io::stdout().is_terminal(),
                         false,
                         check::DebugSettings::new()
+                            .unclutter(true)
+                            .report(args.verbose.log_level_filter() >= log::Level::Warn)
                     ) {
                         Ok(_) => {
                             if remove {
