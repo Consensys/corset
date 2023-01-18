@@ -217,8 +217,12 @@ enum Commands {
         password: Option<String>,
         #[arg(long, default_value = "zkevm")]
         database: String,
+
         #[arg(long = "rm", help = "remove succesully validated blocks")]
         remove: bool,
+
+        #[arg(long)]
+        rerun: bool,
 
         #[arg(
             long = "only",
@@ -437,6 +441,7 @@ fn main() -> Result<()> {
             password,
             database,
             remove,
+            rerun,
             only,
             skip,
         } => {
@@ -447,8 +452,9 @@ fn main() -> Result<()> {
                 let mut local_constraints = constraints.clone();
 
                 let mut tx = db.transaction()?;
+                let todo = if rerun { "failed" } else { "to_corset" };
                 for row in tx.query(
-                    "SELECT id, status, payload FROM blocks WHERE STATUS='to_corset' ORDER BY length(payload) ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
+                    &format!("SELECT id, status, payload FROM blocks WHERE STATUS='{}' ORDER BY length(payload) ASC LIMIT 1 FOR UPDATE SKIP LOCKED", todo),
                     &[],
                 )? {
                     let id: &str = row.get(0);
