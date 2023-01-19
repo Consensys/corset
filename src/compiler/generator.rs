@@ -319,16 +319,16 @@ impl FuncVerifier<Node> for Builtin {
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct ConstraintSet {
-    pub modules: ColumnSet<Fr>,
+    pub modules: ColumnSet,
     pub constraints: Vec<Constraint>,
     pub constants: HashMap<Handle, BigInt>,
     pub computations: ComputationTable,
 
-    _spilling: HashMap<String, isize>, // module -> past-spilling
+    _spilling: HashMap<String, isize>, // module -> (past-spilling, future-spilling)
 }
 impl ConstraintSet {
     pub fn new(
-        columns: ColumnSet<Fr>,
+        columns: ColumnSet,
         constraints: Vec<Constraint>,
         constants: HashMap<Handle, BigInt>,
         computations: ComputationTable,
@@ -353,15 +353,15 @@ impl ConstraintSet {
         self.computations.update_ids(&set_id)
     }
 
-    fn get(&self, handle: &Handle) -> Result<&Column<Fr>> {
+    fn get(&self, handle: &Handle) -> Result<&Column> {
         self.modules.get(handle)
     }
 
-    fn get_mut(&mut self, handle: &Handle) -> Result<&mut Column<Fr>> {
+    fn get_mut(&mut self, handle: &Handle) -> Result<&mut Column> {
         self.modules.get_mut(handle)
     }
 
-    fn compute_interleaved(&mut self, froms: &[Handle]) -> Result<Vec<Fr>> {
+    fn compute_interleaved(&mut self, froms: &[Handle], target: &Handle) -> Result<()> {
         for from in froms.iter() {
             self.compute_column(from)?;
         }
@@ -376,21 +376,38 @@ impl ConstraintSet {
             return Err(anyhow!("interleaving columns of incoherent lengths"));
         }
 
-        let len = self.get(&froms[0])?.len().unwrap();
+        let final_len = froms
+            .iter()
+            .map(|h| self.get(h).unwrap().len().unwrap())
+            .sum();
         let count = froms.len();
-        let values = (0..(len * count))
+        let values = (0..final_len)
             .into_par_iter()
             .map(|k| {
                 let i = k / count;
                 let j = k % count;
-                *self.get(&froms[j]).unwrap().get(i as isize, false).unwrap()
+                *self
+                    .get(&froms[j as usize])
+                    .unwrap()
+                    .get(i as isize, false)
+                    .unwrap()
             })
-            .collect::<Vec<_>>();
+            .collect();
 
-        Ok(values)
+        self.get_mut(target)?.set_raw_value(values, 0);
+        assert!(
+            self.get(target).unwrap().len().unwrap()
+                == self.get(target).unwrap().padded_len().unwrap()
+        );
+        assert!(
+            self.get(target).unwrap().len().unwrap()
+                == froms.len() * self.get(&froms[0]).unwrap().len().unwrap()
+        );
+        Ok(())
     }
 
     fn compute_sorted(&mut self, froms: &[Handle], tos: &[Handle]) -> Result<()> {
+        let spilling = self.spilling_or_insert(&froms[0].module);
         for from in froms.iter() {
             self.compute_column(from)?;
         }
@@ -400,8 +417,11 @@ impl ConstraintSet {
             .map(|c| self.get(c).unwrap())
             .collect::<Vec<_>>();
 
-        if !from_cols.windows(2).all(|w| w[0].len() == w[1].len()) {
-            return Err(anyhow!("sorted columns of incoherent lengths"));
+        if !from_cols
+            .windows(2)
+            .all(|w| w[0].padded_len() == w[1].padded_len())
+        {
+            return Err(anyhow!("sorted columns are of incoherent lengths"));
         }
         let len = from_cols[0].len().unwrap();
 
@@ -418,23 +438,27 @@ impl ConstraintSet {
         });
 
         for (k, from) in froms.iter().enumerate() {
-            let value = sorted_is
-                .iter()
-                .map(|i| {
+            let value: Vec<Fr> = vec![Fr::zero(); spilling as usize]
+                .into_iter()
+                .chain(sorted_is.iter().map(|i| {
                     *self
                         .get(from)
                         .unwrap()
                         .get((*i).try_into().unwrap(), false)
                         .unwrap()
-                })
+                }))
                 .collect();
-            self.get_mut(&tos[k]).unwrap().set_value(value);
+
+            self.get_mut(&tos[k])
+                .unwrap()
+                .set_raw_value(value, spilling);
         }
 
         Ok(())
     }
 
-    pub fn compute_composite(&mut self, exp: &Node) -> Result<Vec<Fr>> {
+    pub fn compute_composite(&mut self, exp: &Node, target: &Handle) -> Result<()> {
+        let spilling = self.spilling_or_insert(&target.module);
         let cols_in_expr = exp.dependencies();
         for c in &cols_in_expr {
             self.compute_column(c)?
@@ -447,16 +471,14 @@ impl ConstraintSet {
             .max()
             .unwrap();
 
-        let values = (0..length as isize)
+        let values = (-spilling..length as isize)
             .into_par_iter()
             .map(|i| {
                 exp.eval(
                     i,
-                    &mut |handle, i, _| {
-                        // All the columns are guaranteed to have been computed
-                        // at the beginning of the function
+                    &mut |handle, j, _| {
                         self.modules._cols[handle.id.unwrap()]
-                            .get(i, false)
+                            .get(j, false)
                             .cloned()
                     },
                     &mut None,
@@ -464,9 +486,13 @@ impl ConstraintSet {
                 )
                 .unwrap_or_else(Fr::zero)
             })
-            .collect::<Vec<_>>();
+            .collect();
 
-        Ok(values)
+        self.modules
+            .get_mut(target)
+            .unwrap()
+            .set_raw_value(values, spilling);
+        Ok(())
     }
 
     pub fn compute_composite_static(&self, exp: &Node) -> Result<Vec<Fr>> {
@@ -497,11 +523,9 @@ impl ConstraintSet {
             .map(|i| {
                 exp.eval(
                     i,
-                    &mut |handle, i, _| {
-                        // All the columns are guaranteed to have been computed
-                        // at the begiinning of the function
+                    &mut |handle, j, _| {
                         self.modules._cols[handle.id.unwrap()]
-                            .get(i, false)
+                            .get(j, false)
                             .cloned()
                     },
                     &mut None,
@@ -533,17 +557,17 @@ impl ConstraintSet {
         match &comp {
             Computation::Composite { target, exp } => {
                 if !self.modules.get(target)?.is_computed() {
-                    let r = self.compute_composite(exp)?;
-                    self.modules.get_mut(target).unwrap().set_value(r);
+                    self.compute_composite(exp, target)
+                } else {
+                    Ok(())
                 }
-                Ok(())
             }
             Computation::Interleaved { target, froms } => {
                 if !self.modules.get(target)?.is_computed() {
-                    let r = self.compute_interleaved(froms)?;
-                    self.get_mut(target)?.set_value(r);
+                    self.compute_interleaved(froms, target)
+                } else {
+                    Ok(())
                 }
-                Ok(())
             }
             Computation::Sorted { froms, tos } => self.compute_sorted(froms, tos),
         }
@@ -559,88 +583,48 @@ impl ConstraintSet {
         Ok(())
     }
 
-    pub fn padding_for(&self, h: &Handle) -> Option<&Vec<Fr>> {
-        self.modules.by_handle(h)?.padding.as_ref()
+    pub fn raw_len_for_or_set(&mut self, m: &str, x: isize) -> isize {
+        *self.modules.raw_len.entry(m.to_string()).or_insert(x)
     }
 
-    pub fn pad_columns(&mut self) {
-        for h in self.modules.handles().iter() {
-            self.pad_column(h);
-        }
+    pub fn spilling(&self, m: &str) -> Option<isize> {
+        self._spilling.get(m).cloned()
     }
-    // The padding value is 0 for atomic columns.
-    // However, it has to be computed for computed columns.
-    fn pad_column(&mut self, h: &Handle) {
-        if self.get(h).unwrap().padding.is_some() {
-            return;
-        }
-        let spilling = self
-            ._spilling
-            .entry(h.module.to_owned())
-            .or_insert_with(|| {
-                self.computations
-                    .iter()
-                    .filter_map(|c| match c {
-                        Computation::Composite { target, exp } => {
-                            if target.module == h.module {
-                                Some(exp.future_span() as isize)
-                            } else {
-                                None
-                            }
-                        }
-                        _ => None,
-                    })
-                    .max()
-                    .unwrap_or(0)
-            });
 
-        let r = (0..=*spilling)
-            .map(|k| {
-                match &self.get(h).unwrap().kind {
-                    Kind::Atomic | Kind::Interleaved(_) | Kind::Phantom => {
-                        if *h == Handle::new("binary", "NOT") {
-                            Fr::from_str("255").unwrap()
+    pub fn spilling_or_insert(&mut self, m: &str) -> isize {
+        *self._spilling.entry(m.to_string()).or_insert_with(|| {
+            self.computations
+                .iter()
+                .filter_map(|c| match c {
+                    Computation::Composite { target, exp } => {
+                        if target.module == m {
+                            Some(exp.past_spill() as isize)
                         } else {
-                            Fr::zero()
+                            None
                         }
                     }
-                    Kind::Composite(_) => {
-                        let comp = self.computations.computation_for(h).cloned();
-                        if let Some(comp) = comp {
-                            match comp {
-                                Computation::Composite { exp, .. } => {
-                                    for h in exp.dependencies() {
-                                        self.pad_column(&h);
-                                    }
-                                    exp.eval(
-                                        k,
-                                        &mut |target, j, wrap| {
-                                            // if i == 0 {
-                                            //     let r = self.padding_value_for(target).unwrap();
-                                            //     Some(r)
-                                            // } else {
-                                            self.modules
-                                                .get(target)
-                                                .ok()
-                                                .and_then(|c| c.get(j, wrap))
-                                                .cloned()
-                                            // }
-                                        },
-                                        &mut None,
-                                        &EvalSettings { wrap: false },
-                                    )
-                                    .unwrap()
+                    _ => None,
+                })
+                .min()
+                .unwrap_or(0)
+                .abs()
+                .max(
+                    self.computations
+                        .iter()
+                        .filter_map(|c| match c {
+                            Computation::Composite { target, exp } => {
+                                if target.module == m {
+                                    Some(exp.future_spill() as isize)
+                                } else {
+                                    None
                                 }
-                                _ => unreachable!(),
                             }
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                }
-            })
-            .collect::<Vec<_>>();
-        self.get_mut(h).unwrap().padding = Some(r);
+                            _ => None,
+                        })
+                        .max()
+                        .unwrap_or(0),
+                )
+        })
     }
 
     pub fn length_multiplier(&self, h: &Handle) -> usize {
@@ -673,17 +657,33 @@ impl ConstraintSet {
                 trace!("Writing {}/{}", module, name);
                 let column = &self.modules._cols[i];
                 let handle = Handle::new(&module, &name);
-                let padding = self
-                    .padding_for(&handle)
-                    .ok_or_else(|| anyhow!("column {handle} has no padding value"))?;
                 let value = column.value().unwrap_or(&empty_vec);
+                let padding = value.get(0).cloned().unwrap_or_else(|| match &column.kind {
+                    Kind::Atomic | Kind::Interleaved(_) => Fr::zero(),
+                    Kind::Composite(_) => match self
+                        .computations
+                        .computation_for(&Handle::new(&module, &name))
+                        .unwrap()
+                    {
+                        Computation::Composite { exp, .. } => exp
+                            .eval(
+                                0,
+                                &mut |_, _, _| Some(Fr::zero()),
+                                &mut None,
+                                &EvalSettings::default(),
+                            )
+                            .unwrap_or_else(Fr::zero),
+                        Computation::Interleaved { .. } => Fr::zero(),
+                        Computation::Sorted { .. } => Fr::zero(),
+                    },
+                    _ => unreachable!(),
+                });
+
                 out.write_all(format!("\"{}\":{{\n", handle).as_bytes())?;
                 out.write_all("\"values\":[".as_bytes())?;
-
                 out.write_all(
-                    padding
-                        .iter()
-                        .chain(value.iter())
+                    value
+                        .par_iter()
                         .map(|x| {
                             format!(
                                 "\"0x0{}\"",
@@ -694,12 +694,11 @@ impl ConstraintSet {
                         .join(",")
                         .as_bytes(),
                 )?;
-
                 out.write_all(b"],\n")?;
                 out.write_all(
                     format!(
                         "\"padding_strategy\": {{\"action\": \"prepend\", \"value\": \"{}\"}}",
-                        padding[0].pretty()
+                        padding.pretty()
                     )
                     .as_bytes(),
                 )?;

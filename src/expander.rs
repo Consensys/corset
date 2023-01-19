@@ -179,9 +179,9 @@ fn do_expand_ifs(e: &mut Node) {
 
 /// For all Builtin::Inv encountered, create a new column and the associated constraints
 /// pre-computing and proving the inverted column.
-fn do_expand_inv<T: Clone + Ord>(
+fn do_expand_inv(
     e: &mut Node,
-    cols: &mut ColumnSet<T>,
+    cols: &mut ColumnSet,
     comps: &mut ComputationTable,
     new_cs: &mut Vec<Node>,
 ) -> Result<()> {
@@ -228,9 +228,9 @@ fn do_expand_inv<T: Clone + Ord>(
     }
 }
 
-fn do_expand_expr<T: Clone + Ord>(
+fn do_expand_expr(
     e: &Node,
-    cols: &mut ColumnSet<T>,
+    cols: &mut ColumnSet,
     comps: &mut ComputationTable,
     new_cs: &mut Vec<Node>,
 ) -> Result<Node> {

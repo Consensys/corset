@@ -46,7 +46,7 @@ pub fn make<S: AsRef<str>>(
         asts.push((name, ast));
     }
 
-    let mut columns: ColumnSet<pairing_ce::bn256::Fr> = Default::default();
+    let mut columns: ColumnSet = Default::default();
     let mut constants: HashMap<Handle, BigInt> = Default::default();
     let mut computations = ctx.borrow().computation_table.clone().take();
 

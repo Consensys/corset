@@ -108,7 +108,7 @@ impl Node {
 
             match n.e() {
                 Expression::Funcall { func, args } => {
-                    let v = f(n).unwrap();
+                    let v = f(n).unwrap_or_default();
                     if v.is_zero() && unclutter {
                         tty.write("...".color(colored::Color::BrightBlack).to_string());
                         return;
@@ -140,11 +140,7 @@ impl Node {
                     }
                     tty.unshift();
                     tty.write(")".color(c).to_string());
-                    tty.append(
-                        format!("[{}]", f(n).unwrap().pretty())
-                            .color(c_v)
-                            .to_string(),
-                    )
+                    tty.append(format!("[{}]", v.pretty()).color(c_v).to_string())
                 }
                 Expression::Const(x, _) => {
                     let c = if dim && should_dim {
@@ -155,7 +151,7 @@ impl Node {
                     tty.write(x.to_string().color(c).bold().to_string());
                 }
                 Expression::Column(h, _) => {
-                    let v = f(n).unwrap();
+                    let v = f(n).unwrap_or_default();
                     let c = if dim && should_dim {
                         colored::Color::BrightBlack
                     } else if v.eq(faulty) {
@@ -165,7 +161,7 @@ impl Node {
                     };
 
                     tty.write(
-                        format!("{}[{}]", h.name, f(n).unwrap().pretty())
+                        format!("{}[{}]", h.name, v.pretty())
                             .color(c)
                             .bold()
                             .to_string(),
@@ -198,7 +194,7 @@ impl Node {
         }
 
         let mut tty = Tty::new();
-        let faulty = f(self).unwrap();
+        let faulty = f(self).unwrap_or_default();
         _debug(self, &mut tty, f, &faulty, unclutter, dim, false);
         tty.page_feed()
     }
@@ -215,7 +211,33 @@ impl Node {
     }
 
     /// Compute the maximum future-shifting in the node
-    pub fn future_span(&self) -> usize {
+    pub fn past_spill(&self) -> isize {
+        fn _past_span(e: &Node, ax: &mut isize) {
+            match e.e() {
+                Expression::Funcall { func, args } => {
+                    if let Builtin::Shift = func {
+                        let arg_big = args[1]
+                            .pure_eval()
+                            .unwrap_or_else(|_| panic!("{}", args[1].to_string().as_str()));
+                        let arg = arg_big
+                            .to_isize()
+                            .unwrap_or_else(|| panic!("{}", arg_big.to_string().as_str()));
+                        *ax = (*ax).min(*ax + arg);
+                    }
+                    args.iter().for_each(|e| _past_span(e, ax))
+                }
+                Expression::List(es) => es.iter().for_each(|e| _past_span(e, ax)),
+                _ => {}
+            }
+        }
+
+        let mut span = 0;
+        _past_span(self, &mut span);
+        span.min(0) as isize
+    }
+
+    /// Compute the maximum future-shifting in the node
+    pub fn future_spill(&self) -> usize {
         fn _future_span(e: &Node, ax: &mut isize) {
             match e.e() {
                 Expression::Funcall { func, args } => {

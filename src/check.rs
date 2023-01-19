@@ -76,7 +76,7 @@ impl DebugSettings {
     }
 }
 
-fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, settings: DebugSettings) -> Result<()> {
+fn fail(expr: &Node, i: isize, columns: &ColumnSet, settings: DebugSettings) -> Result<()> {
     let module = expr.dependencies().iter().next().unwrap().module.clone();
     let handles = if settings.full_trace {
         columns
@@ -159,14 +159,14 @@ fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, settings: DebugSettings)
 fn check_constraint_at(
     expr: &Node,
     i: isize,
-    columns: &ColumnSet<Fr>,
+    columns: &ColumnSet,
     fail_on_oob: bool,
     cache: &mut Option<SizedCache<Fr, Fr>>,
     settings: DebugSettings,
 ) -> Result<()> {
     let r = expr.eval(
         i,
-        &mut |handle, i, wrap| columns._cols[handle.id.unwrap()].get(i, wrap).cloned(),
+        &mut |handle, i, wrap| columns._cols[handle.id.unwrap()].get_raw(i, wrap).cloned(),
         cache,
         &Default::default(),
     );
@@ -183,7 +183,7 @@ fn check_constraint_at(
 fn check_constraint(
     expr: &Node,
     domain: &Option<Vec<isize>>,
-    columns: &ColumnSet<Fr>,
+    columns: &ColumnSet,
     name: &Handle,
     settings: DebugSettings,
 ) -> Result<()> {
@@ -194,14 +194,14 @@ fn check_constraint(
             columns
                 .get(&handle)
                 .with_context(|| anyhow!("can not find column `{}`", handle))
-                .map(|c| c.len())
+                .map(|c| c.padded_len())
         })
         .collect::<Result<Vec<_>>>()?;
     if cols_lens.is_empty() {
         return Ok(());
     }
     // Early exit if all the columns are empty: the module is not triggered
-    // Ideally, this should be an `all` rather than an `any`, but the IC
+    // Ideally, this should be an `all` rather than an `any`, but the ID
     // pushes columns that will always be filled.
     if cols_lens.iter().any(|l| l.is_none()) {
         debug!("Skipping constraint `{}` with empty columns", name);
@@ -216,14 +216,15 @@ fn check_constraint(
             expr.dependencies()
                 .iter()
                 .map(|handle| format!(
-                    "\t{}: {}",
+                    "\t{}: {}/{:?}",
                     handle,
                     columns
                         .get(handle)
                         .unwrap()
-                        .len()
+                        .padded_len()
                         .map(|x| x.to_string())
-                        .unwrap_or_else(|| "nil".into())
+                        .unwrap_or_else(|| "nil".into()),
+                    columns.get(handle).unwrap().spilling
                 ))
                 .collect::<Vec<_>>()
                 .join("\n")
@@ -244,8 +245,13 @@ fn check_constraint(
         None => {
             for i in 0..l as isize {
                 let err = check_constraint_at(expr, i, columns, false, &mut cache, settings);
-                if err.is_err() && !settings.continue_on_error {
-                    return err;
+
+                if err.is_err() {
+                    if settings.continue_on_error {
+                        eprintln!("{:?}", err);
+                    } else {
+                        return err;
+                    }
                 }
             }
         }
@@ -254,7 +260,7 @@ fn check_constraint(
 }
 
 fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Result<()> {
-    // Compute the LC \sum_k (k+1)×x_k[i]
+    // Compute the LC \sum_k (k+1) × x_k[i]
     fn pseudo_rlc(cols: &[Vec<Fr>], i: usize) -> Fr {
         let mut ax = Fr::zero();
         for (j, col) in cols.iter().enumerate() {
@@ -279,9 +285,32 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
         Ok(cols)
     }
 
+    // Check that we have the same number of columns; should be guaranteed by the com
     if children.len() != parents.len() {
         return Err(anyhow!("parents and children are not of the same length"));
     }
+
+    // Check for emptiness in parents & children
+    let children_empty = children
+        .iter()
+        .flat_map(|e| e.dependencies().into_iter())
+        .map(|h| cs.modules.by_handle(&h).unwrap().len().unwrap_or_default())
+        .all(|l| l == 0);
+    let parent_empty = parents
+        .iter()
+        .flat_map(|n| n.dependencies().into_iter())
+        .map(|h| cs.modules.by_handle(&h).unwrap().len().unwrap_or_default())
+        .all(|l| l == 0);
+    match (children_empty, parent_empty) {
+        (true, true) | (true, false) => {
+            debug!("empty plookup found; skipping");
+            return Ok(());
+        }
+        (false, true) => return Err(anyhow!("parents are emypy, but not children")),
+        (false, false) => {}
+    }
+
+    // Compute the final columns
     let parent_cols = compute_cols(parents, cs)?;
     let child_cols = compute_cols(children, cs)?;
     if parent_cols.get(0).map(|c| c.len()).unwrap_or(0) == 0
@@ -390,7 +419,7 @@ pub fn check(
                                 {
                                     if settings.report {
                                         error!(
-                                            "{} failed:\n{}",
+                                            "{} failed:\n{}\n",
                                             name.to_string().red().bold(),
                                             trace
                                         );
@@ -405,7 +434,11 @@ pub fn check(
                                 check_constraint(expr, domain, &cs.modules, name, settings)
                             {
                                 if settings.report {
-                                    error!("{} failed:\n{}", name.to_string().red().bold(), trace);
+                                    error!(
+                                        "{} failed:\n{}\n",
+                                        name.to_string().red().bold(),
+                                        trace
+                                    );
                                 }
                                 Some(name.to_owned())
                             } else {
@@ -417,7 +450,7 @@ pub fn check(
                 Constraint::Plookup(name, parents, children) => {
                     if let Err(trace) = check_plookup(cs, parents, children) {
                         if settings.report {
-                            error!("{} failed:\n{}", name, trace);
+                            error!("{} failed:\n{:?}\n", name, trace);
                         }
                         Some(name.to_owned())
                     } else {

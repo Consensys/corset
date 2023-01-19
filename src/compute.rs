@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use colored::Colorize;
 use log::*;
 use pairing_ce::{
     bn256::Fr,
@@ -7,10 +8,7 @@ use pairing_ce::{
 use rayon::prelude::*;
 use serde_json::Value;
 
-use crate::{
-    column::ColumnSet,
-    compiler::{ConstraintSet, Handle, Type},
-};
+use crate::compiler::{ConstraintSet, Handle, Type};
 
 type F = Fr;
 
@@ -25,8 +23,11 @@ fn validate(t: Type, x: F) -> Result<F> {
         Ok(x)
     }
 }
+
 fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
-    xs.par_iter()
+    let mut r = vec![F::zero()];
+    let xs = xs
+        .par_iter()
         .map(|x| match x {
             Value::Number(n) => Fr::from_str(&n.to_string())
                 .with_context(|| format!("while parsing `{:?}`", x))
@@ -36,38 +37,50 @@ fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
                 .and_then(|x| validate(t, x)),
             _ => Err(anyhow!("expected numeric value, found `{}`", x)),
         })
-        .collect()
+        .collect::<Result<Vec<_>>>()?;
+    r.extend(xs);
+    Ok(r)
 }
 
-fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Result<()> {
+fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Result<()> {
     match v {
         Value::Object(map) => {
             for (k, v) in map.iter() {
                 if k == "Trace" {
                     info!("Importing {}", path[path.len() - 1]);
-                    fill_traces(v, path.clone(), columns)?;
+                    fill_traces(v, path.clone(), cs)?;
                 } else {
                     let mut path = path.clone();
                     path.push(k.to_owned());
-                    fill_traces(v, path, columns)?;
+                    fill_traces(v, path, cs)?;
                 }
             }
             Ok(())
         }
         Value::Array(xs) => {
-            if path.len() >= 2 {
-                let module = &path[path.len() - 2];
-                let colname = &path[path.len() - 1];
-                let handle = Handle::new(module, colname);
+            if !xs.is_empty() && path.len() >= 2 {
+                let handle = Handle::new(&path[path.len() - 2], &path[path.len() - 1]);
+                // The first column set the size of its module
+                let module_raw_size = cs.raw_len_for_or_set(&handle.module, xs.len() as isize);
+                let module_spilling = cs.spilling_or_insert(&handle.module);
 
-                if !xs.is_empty() {
-                    if let Some(column) = columns.by_handle_mut(&handle) {
-                        trace!("Inserting {} ({})", handle, xs.len());
-                        column.set_value(
-                            parse_column(xs, column.t)
-                                .with_context(|| anyhow!("while importing {}", handle))?,
-                        )
+                if let Some(column) = cs.modules.by_handle_mut(&handle) {
+                    trace!("Inserting {} ({})", handle, xs.len());
+
+                    if xs.len() as isize != module_raw_size {
+                        return Err(anyhow!(
+                            "{} has an incorrect length: expected {}, found {}",
+                            handle.to_string().blue(),
+                            xs.len().to_string().yellow().bold(),
+                            module_raw_size.to_string().red().bold()
+                        ));
                     }
+
+                    column.set_value(
+                        parse_column(xs, column.t)
+                            .with_context(|| anyhow!("while importing {}", handle))?,
+                        module_spilling,
+                    )
                 }
             }
             Ok(())
@@ -77,13 +90,12 @@ fn fill_traces(v: &Value, path: Vec<String>, columns: &mut ColumnSet<F>) -> Resu
 }
 
 pub fn compute(v: &Value, cs: &mut ConstraintSet) -> Result<()> {
-    fill_traces(v, vec![], &mut cs.modules).with_context(|| "while reading columns")?;
+    fill_traces(v, vec![], cs).with_context(|| "while reading columns")?;
     cs.compute_all()
         .with_context(|| "while computing columns")?;
-    cs.pad_columns();
     for h in cs.modules.handles() {
         if !cs.modules.get(&h).unwrap().is_computed() {
-            error!("{} not computed", h);
+            warn!("{} empty", h.to_string().bold().blue());
         }
     }
 
