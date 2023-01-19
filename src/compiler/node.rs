@@ -76,14 +76,15 @@ impl Node {
         })
     }
 
-    pub fn debug(&self, f: &dyn Fn(&Node) -> Option<Fr>, unclutter: bool) -> String {
+    pub fn debug(&self, f: &dyn Fn(&Node) -> Option<Fr>, unclutter: bool, dim: bool) -> String {
         fn _debug(
             n: &Node,
             tty: &mut Tty,
             f: &dyn Fn(&Node) -> Option<Fr>,
-            dim: bool,
-            faulty: &Fr,
+            faulty: &Fr, // the non-zero value of the constraint
             unclutter: bool,
+            dim: bool,        // whether the user enabled --debug-dim
+            should_dim: bool, // whether we are in a zero-path
         ) {
             let colors = [
                 colored::Color::Red,
@@ -99,7 +100,7 @@ impl Node {
                 colored::Color::BrightMagenta,
                 colored::Color::BrightCyan,
             ];
-            let c = if dim {
+            let c = if dim && should_dim {
                 colored::Color::BrightBlack
             } else {
                 colors[tty.depth() % colors.len()]
@@ -113,12 +114,12 @@ impl Node {
                         return;
                     }
                     let fname = func.to_string();
-                    let c = if v.is_zero() {
+                    let c = if v.is_zero() && dim {
                         colored::Color::BrightBlack
                     } else {
                         c
                     };
-                    let c_v = if dim || v.is_zero() {
+                    let c_v = if dim && (should_dim || v.is_zero()) {
                         colored::Color::BrightBlack
                     } else if v.eq(faulty) {
                         colored::Color::Red
@@ -130,11 +131,11 @@ impl Node {
                     tty.shift(fname.len() + 2);
                     if let Some(a) = args.get(0) {
                         tty.latch_indent();
-                        _debug(a, tty, f, v.is_zero() || dim, faulty, unclutter);
+                        _debug(a, tty, f, faulty, unclutter, dim, v.is_zero() || should_dim);
                     }
                     tty.cr();
                     for a in args.iter().skip(1) {
-                        _debug(a, tty, f, v.is_zero() || dim, faulty, unclutter);
+                        _debug(a, tty, f, faulty, unclutter, dim, v.is_zero() || should_dim);
                         tty.cr();
                     }
                     tty.unshift();
@@ -146,7 +147,7 @@ impl Node {
                     )
                 }
                 Expression::Const(x, _) => {
-                    let c = if dim {
+                    let c = if dim && should_dim {
                         colored::Color::BrightBlack
                     } else {
                         colored::Color::White
@@ -155,7 +156,7 @@ impl Node {
                 }
                 Expression::Column(h, _) => {
                     let v = f(n).unwrap();
-                    let c = if dim {
+                    let c = if dim && should_dim {
                         colored::Color::BrightBlack
                     } else if v.eq(faulty) {
                         colored::Color::Red
@@ -173,7 +174,7 @@ impl Node {
                 Expression::ArrayColumn(h, _) => tty.write(h.to_string()),
                 Expression::List(ns) => {
                     let v = f(n).unwrap();
-                    let c = if v.is_zero() {
+                    let c = if v.is_zero() && dim {
                         colored::Color::BrightBlack
                     } else {
                         c
@@ -186,7 +187,7 @@ impl Node {
                     tty.cr();
                     tty.shift(3);
                     for a in ns.iter() {
-                        _debug(a, tty, f, v.is_zero() || dim, faulty, unclutter);
+                        _debug(a, tty, f, faulty, unclutter, dim, v.is_zero() || should_dim);
                         tty.cr();
                     }
                     tty.unshift();
@@ -198,7 +199,7 @@ impl Node {
 
         let mut tty = Tty::new();
         let faulty = f(self).unwrap();
-        _debug(self, &mut tty, f, false, &faulty, unclutter);
+        _debug(self, &mut tty, f, &faulty, unclutter, dim, false);
         tty.page_feed()
     }
 

@@ -22,20 +22,30 @@ use crate::{
 #[derive(Clone, Copy, Debug)]
 pub struct DebugSettings {
     unclutter: bool,
+    /// whether to skip reporting s-exps reducing to 0
+    dim: bool,
+    /// whether to dim s-exps reducing to 0
     continue_on_error: bool,
+    /// whether to stop reporting a constraint on the first failure
     report: bool,
+    /// whether to report computation details on failing constraints
     context_span: isize,
+    /// whether to report all the module columns in a failing constraint or only the involved ones
     full_trace: bool,
 }
 impl DebugSettings {
     pub fn new() -> Self {
         DebugSettings {
             unclutter: false,
+            dim: false,
             continue_on_error: false,
             report: false,
             context_span: 2,
             full_trace: false,
         }
+    }
+    pub fn dim(self, x: bool) -> Self {
+        Self { dim: x, ..self }
     }
     pub fn unclutter(self, x: bool) -> Self {
         Self {
@@ -140,7 +150,8 @@ fn fail(expr: &Node, i: isize, columns: &ColumnSet<Fr>, settings: DebugSettings)
                     &mut None,
                     &Default::default(),
                 ),
-                settings.unclutter
+                settings.unclutter,
+                settings.dim
             )
     ))
 }

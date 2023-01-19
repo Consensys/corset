@@ -189,9 +189,15 @@ enum Commands {
 
         #[arg(
             long = "debug-unclutter",
-            help = "only disply debug annotations for non-zero paths in constraint system"
+            help = "only display debug annotations for non-zero expressions in failing constraint"
         )]
         unclutter: bool,
+
+        #[arg(
+            long = "debug-dim",
+            help = "when reporting on failing constraints, dim expressions reducing to 0"
+        )]
+        dim: bool,
 
         #[arg(
             long = "only",
@@ -517,6 +523,7 @@ fn main() -> Result<()> {
             skip,
             continue_on_error,
             unclutter,
+            dim,
         } => {
             if utils::is_file_empty(&tracefile)? {
                 warn!("`{}` is empty, exiting", tracefile);
@@ -541,6 +548,7 @@ fn main() -> Result<()> {
                 expand,
                 check::DebugSettings::new()
                     .unclutter(unclutter)
+                    .dim(dim)
                     .continue_on_error(continue_on_error)
                     .report(args.verbose.log_level_filter() >= log::Level::Warn)
                     .full_trace(full_trace)
