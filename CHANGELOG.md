@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.0.0] - 2023-01-20
+
+### Bug Fixes
+
+- Do not crash at build if git fails
+
+### Features
+
+- Sort expressions in failure traces
+- Add a better debugging view
+- Highlight failing path when debugging constraints
+- Bold-ize the failing columns in traces
+- Add a --rerun option to CheckLoop
+- CheckLoop can now report
+- Add the --debug-dim flag
+- Implement the new generalist padding system
+
+### Miscellaneous Tasks
+
+- Clippy
+
+### Refactor
+
+- Generalize the eval function
+- Unify the debugging settings
+- Tracing handling
+- Split generator.rs
+
 ## [4.0.0] - 2023-01-12
 
 ### Bug Fixes
@@ -34,6 +62,7 @@ All notable changes to this project will be documented in this file.
 - Stderrlog -> buche
 - Clippy
 - Update dependencies
+- Release corset version 4.0.0
 
 ### Refactor
 
