@@ -659,7 +659,7 @@ impl ConstraintSet {
                 let handle = Handle::new(&module, &name);
                 let value = column.value().unwrap_or(&empty_vec);
                 let padding = value.get(0).cloned().unwrap_or_else(|| match &column.kind {
-                    Kind::Atomic | Kind::Interleaved(_) => Fr::zero(),
+                    Kind::Atomic | Kind::Interleaved(_) | Kind::Phantom => Fr::zero(),
                     Kind::Composite(_) => match self
                         .computations
                         .computation_for(&Handle::new(&module, &name))
@@ -676,7 +676,6 @@ impl ConstraintSet {
                         Computation::Interleaved { .. } => Fr::zero(),
                         Computation::Sorted { .. } => Fr::zero(),
                     },
-                    _ => unreachable!(),
                 });
 
                 out.write_all(format!("\"{}\":{{\n", handle).as_bytes())?;
