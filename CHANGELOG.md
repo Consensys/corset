@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.0.1] - 2023-01-22
+
+### Bug Fixes
+
+- Erroneous padding for Phantom columns
+
 ## [5.0.0] - 2023-01-20
 
 ### Bug Fixes
@@ -22,6 +28,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous Tasks
 
 - Clippy
+- Release corset version 5.0.0
 
 ### Refactor
 
