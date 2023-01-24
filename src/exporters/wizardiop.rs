@@ -140,33 +140,42 @@ fn render_constraints(constraints: &[Constraint]) -> String {
         .sorted_by_key(|c| c.name())
         .map(|constraint| match constraint {
             Constraint::Vanishes {
-                handle: name,
+                handle,
                 domain,
                 expr,
-            } => render_constraint(&name.mangle(), domain.clone(), expr),
-            Constraint::Plookup(name, from, to) => format!(
+            } => render_constraint(&handle.mangle(), domain.clone(), expr),
+            Constraint::Plookup {
+                handle,
+                including,
+                included,
+            } => format!(
                 "build.Inclusion(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
-                name,
-                from.iter()
+                handle,
+                including
+                    .iter()
                     .map(render_handle)
                     .collect::<Vec<_>>()
                     .join(", "),
-                to.iter().map(render_handle).collect::<Vec<_>>().join(", ")
+                included
+                    .iter()
+                    .map(render_handle)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
-            Constraint::Permutation(name, from, to) => format!(
+            Constraint::Permutation { handle, from, to } => format!(
                 "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
-                name.mangle().to_case(Case::Snake),
+                handle.mangle().to_case(Case::Snake),
                 from.iter()
                     .map(Handle::mangle)
                     .collect::<Vec<_>>()
                     .join(", "),
                 to.iter().map(Handle::mangle).collect::<Vec<_>>().join(", ")
             ),
-            Constraint::InRange(name, from, range) => format!(
+            Constraint::InRange { handle, exp, max } => format!(
                 "build.Range(\"{}\", {}, {})",
-                name.mangle().to_case(Case::Snake),
-                render_handle(from),
-                range
+                handle.mangle().to_case(Case::Snake),
+                render_handle(exp),
+                max
             ),
         })
         .collect::<Vec<String>>()

@@ -280,9 +280,9 @@ import (
                             )
                         }),
                 ),
-                Constraint::Plookup(..) => None,
-                Constraint::Permutation(..) => None,
-                Constraint::InRange(..) => None,
+                Constraint::Plookup { .. } => None,
+                Constraint::Permutation { .. } => None,
+                Constraint::InRange { .. } => None,
             })
             .collect::<Result<Vec<_>>>()?
             .join("\n");
@@ -312,15 +312,15 @@ import (
                                 }
                             }
                         },
-                        Constraint::Plookup(name, parents, children)  => {
+                        Constraint::Plookup { handle: name, including: parents, included: children }  => {
                             format!("// New Plookup {}\n// Parents:\n// {:?}\n// Children:\n// {:?}", name, parents, children)
                         },
-                        Constraint::Permutation(_name, from, to) =>
+                        Constraint::Permutation { handle: _name, from, to } =>
                             format!("// Permutation \n// Parents:\n// {}\n// Children:\n// {:?}",
                                     from.iter().map(|h| h.to_string()).intersperse(", ".to_string()).collect::<String>(),
                                     to.iter().map(|h| h.to_string()).intersperse(", ".to_string()).collect::<String>()
                             ),
-                        Constraint::InRange(.. ) => "".into()
+                        Constraint::InRange {  .. } => "".into()
                     }
                 })
                 .collect::<Vec<_>>()

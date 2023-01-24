@@ -44,7 +44,11 @@ impl LatexExporter {
         match &n.class {
             Token::List(xs) => xs.iter().for_each(|x| self._flatten(ax, x)),
             Token::DefColumns(xs) => xs.iter().for_each(|x| self._flatten(ax, x)),
-            Token::DefConstraint(_, _, x) => self._flatten(ax, x),
+            Token::DefConstraint {
+                name: _,
+                domain: _,
+                exp: x,
+            } => self._flatten(ax, x),
             _ => (),
         }
     }
@@ -237,11 +241,11 @@ impl LatexExporter {
                     }
                 ))
             }
-            Token::DefColumn(name, t, _) => Ok(format!("\\text{{{} \\emph{{{:?}}}}}", name, t)),
-            Token::DefArrayColumn(name, range, t) => {
+            Token::DefColumn { name, t, kind: _ } => Ok(format!("\\text{{{} \\emph{{{:?}}}}}", name, t)),
+            Token::DefArrayColumn { name, domain: range, t } => {
                 Ok(format!("\\text{{{}{:?} \\emph{{{:?}}}}}", name, range, t))
             }
-            Token::DefConstraint(name, domain, body) => Ok(format!(
+            Token::DefConstraint { name, domain, exp: body } => Ok(format!(
                 "\n\\begin{{constraint}}[{} {}]\n\\begin{{gather*}}\n{}\n\\end{{gather*}}\n\\end{{constraint}}\n",
                 name.to_case(Case::Title),
                 if domain.is_none() {

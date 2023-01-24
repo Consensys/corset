@@ -302,13 +302,21 @@ pub fn lower_shifts(cs: &mut ConstraintSet) {
             Constraint::Vanishes { expr: e, .. } => {
                 do_lower_shifts(e, 0);
             }
-            Constraint::Plookup(_name, parents, children) => {
+            Constraint::Plookup {
+                handle: _name,
+                including: parents,
+                included: children,
+            } => {
                 for e in parents.iter_mut().chain(children.iter_mut()) {
                     do_lower_shifts(e, 0);
                 }
             }
-            Constraint::Permutation(..) => (),
-            Constraint::InRange(_, e, _) => {
+            Constraint::Permutation { .. } => (),
+            Constraint::InRange {
+                handle: _,
+                exp: e,
+                max: _,
+            } => {
                 do_lower_shifts(e, 0);
             }
         }
@@ -346,13 +354,21 @@ pub fn expand_constraints(cs: &mut ConstraintSet) -> Result<()> {
     let mut new_cs_exps = vec![];
     for c in cs.constraints.iter_mut() {
         match c {
-            Constraint::Plookup(_name, parents, children) => {
+            Constraint::Plookup {
+                handle: _name,
+                including: parents,
+                included: children,
+            } => {
                 for e in parents.iter_mut().chain(children.iter_mut()) {
                     *e =
                         do_expand_expr(e, &mut cs.modules, &mut cs.computations, &mut new_cs_exps)?;
                 }
             }
-            Constraint::InRange(_, e, _) => {
+            Constraint::InRange {
+                handle: _,
+                exp: e,
+                max: _,
+            } => {
                 *e = do_expand_expr(e, &mut cs.modules, &mut cs.computations, &mut new_cs_exps)?;
             }
             _ => (),

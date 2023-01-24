@@ -38,16 +38,14 @@ pub struct Ast {
     pub exprs: Vec<AstNode>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
-struct Verb {
-    name: String,
-}
-
 type LinCol = (usize, usize);
 #[derive(PartialEq, Clone)]
 pub struct AstNode {
+    /// the token in which this node devolves
     pub class: Token,
+    /// the piece of code that produced this node
     pub src: String,
+    /// position in the source file of the code of this node
     pub lc: LinCol,
 }
 impl AstNode {
@@ -71,9 +69,14 @@ impl Debug for AstNode {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Kind<T> {
+    /// an atomic column is directly filled from traces
     Atomic,
+    /// a phantom column is present, but will be filled later on
     Phantom,
+    /// a composite column is similar to a phantom columns, but the expression
+    /// computing it is known
     Composite(T),
+    /// an interleaved column maintain references to its components
     Interleaved(Vec<Handle>),
 }
 impl<T> Kind<T> {
@@ -89,6 +92,9 @@ impl<T> Kind<T> {
 
 #[allow(dead_code)]
 #[derive(PartialEq, Eq, Clone)]
+/// a symbol can either be:
+///   - Symbol::Local, i.e. relative to the current symbol table;
+///   - Symbol::Path, i.e. a fully specified path (especially useful for plookups)
 pub enum Symbol {
     Local(String),
     Path(Vec<String>),
@@ -104,28 +110,77 @@ impl std::fmt::Display for Symbol {
 
 #[derive(PartialEq, Clone)]
 pub enum Token {
+    /// an immediate value; can be “arbitrarily” large
     Value(BigInt),
+    /// a symbol referencing another element of the tree
     Symbol(String),
+    /// a keyword (typically a def*) that will be interpreted later on
     Keyword(String),
+    /// a list of nodes
     List(Vec<AstNode>),
+    /// a range; typically used in discrete constraints declaration and loops
     Range(Vec<usize>),
+    /// the type of the node
     Type(Type),
 
+    /// definition of a module; this will derive a symbol table
     DefModule(String),
+    /// a list of constant definition: (name, value)
     DefConsts(Vec<(String, Box<AstNode>)>),
+    /// a list of columns declaration, normally only DefColumn
     DefColumns(Vec<AstNode>),
-    DefColumn(String, Type, Kind<Box<AstNode>>),
-    DefPermutation(Vec<AstNode>, Vec<AstNode>),
-
-    DefInrange(Box<AstNode>, usize),
-    DefArrayColumn(String, Vec<usize>, Type),
-    DefConstraint(String, Option<Vec<isize>>, Box<AstNode>),
-    Defun(String, Vec<String>, Box<AstNode>),
+    DefColumn {
+        /// name of the column; unique in its module
+        name: String,
+        /// type of the column
+        t: Type,
+        /// how the values of the column are filled
+        kind: Kind<Box<AstNode>>,
+    },
+    /// defines an array
+    DefArrayColumn {
+        name: String,
+        domain: Vec<usize>,
+        t: Type,
+    },
+    /// definition of a function
+    Defun {
+        /// name of the function; must be unique in its module
+        name: String,
+        /// the arguments are free strings, that will be resolved at evaluation
+        args: Vec<String>,
+        /// the body is any reasonable expression (should it be enforced?)
+        body: Box<AstNode>,
+    },
     Defpurefun(String, Vec<String>, Box<AstNode>),
+    /// a list of aliases declaration, normally only DefAlias -- XXX should probably be removed
     DefAliases(Vec<AstNode>),
     DefAlias(String, String),
+    /// Declaration of a function alias -- XXX should probably be removed
     DefunAlias(String, String),
-    DefPlookup(String, Vec<AstNode>, Vec<AstNode>),
+
+    /// Declaration of a constraint;
+    DefConstraint {
+        /// the given name of the constraint -- TODO enforce uniqueness
+        name: String,
+        /// if the domain of the constraint is `None`, it is supposed to hold everywhere
+        domain: Option<Vec<isize>>,
+        /// this expression has to reduce to 0 for the constraint to be satisfied
+        exp: Box<AstNode>,
+    },
+    /// declaration of a permutation constraint between two sets of columns
+    DefPermutation {
+        from: Vec<AstNode>,
+        to: Vec<AstNode>,
+    },
+    /// declaration of a plookup constraint between two sets of columns
+    DefPlookup {
+        name: String,
+        including: Vec<AstNode>,
+        included: Vec<AstNode>,
+    },
+    /// this constraint ensures that exp remains lesser than max
+    DefInrange(Box<AstNode>, usize),
 }
 impl Token {
     pub fn depth(&self) -> usize {
@@ -159,8 +214,8 @@ impl Debug for Token {
         }
 
         match self {
-            Token::Value(x) => write!(f, "{}:IMMEDIATE", x),
-            Token::Symbol(ref name) => write!(f, "{}:SYMBOL", name),
+            Token::Value(x) => write!(f, "{}", x),
+            Token::Symbol(ref name) => write!(f, "{}", name),
             Token::Keyword(ref name) => write!(f, "{}", name),
             Token::List(ref args) => write!(f, "({})", format_list(args)),
             Token::Range(ref args) => write!(f, "{:?}", args),
@@ -178,14 +233,26 @@ impl Debug for Token {
                 )
             }
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
-            Token::DefColumn(name, t, kind) => write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind),
-            Token::DefPermutation(to, from) => write!(f, "({:?}):PERMUTATION({:?})", to, from),
+            Token::DefColumn { name, t, kind } => {
+                write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind)
+            }
+            Token::DefPermutation { from, to } => {
+                write!(f, "({:?}):PERMUTATION({:?})", to, from)
+            }
             Token::DefInrange(exp, max) => write!(f, "{:?}E{}", exp, max),
-            Token::DefArrayColumn(name, range, t) => {
+            Token::DefArrayColumn {
+                name,
+                domain: range,
+                t,
+            } => {
                 write!(f, "DECLARATION {}{:?}{{{:?}}}", name, range, t)
             }
-            Token::DefConstraint(name, ..) => write!(f, "{:?}:CONSTRAINT", name),
-            Token::Defun(name, args, content) => {
+            Token::DefConstraint { name, .. } => write!(f, "{:?}:CONSTRAINT", name),
+            Token::Defun {
+                name,
+                args,
+                body: content,
+            } => {
                 write!(f, "{}:({:?}) -> {:?}", name, args, content)
             }
             Token::Defpurefun(name, args, content) => {
@@ -194,8 +261,12 @@ impl Debug for Token {
             Token::DefAliases(cols) => write!(f, "ALIASES {:?}", cols),
             Token::DefAlias(from, to) => write!(f, "{} -> {}", from, to),
             Token::DefunAlias(from, to) => write!(f, "{} -> {}", from, to),
-            Token::DefPlookup(name, parent, child) => {
-                write!(f, "{}: {:?} ⊂ {:?}", name, parent, child)
+            Token::DefPlookup {
+                name,
+                including,
+                included,
+            } => {
+                write!(f, "{}: {:?} ⊂ {:?}", name, including, included)
             }
         }
     }
@@ -233,7 +304,7 @@ impl AstNode {
                             ));
                         }
                     }
-                    ":NATURAL" | ":BYTE" => {
+                    ":NATURAL" => {
                         if let Some(tt) = t {
                             return Err(anyhow!(
                                 "{} is already of type {:?}; can not be of type {:?}",
@@ -243,6 +314,18 @@ impl AstNode {
                             ));
                         } else {
                             t = Some(Type::Column(Magma::Integer))
+                        }
+                    }
+                    ":BYTE" => {
+                        if let Some(tt) = t {
+                            return Err(anyhow!(
+                                "{} is already of type {:?}; can not be of type {:?}",
+                                name,
+                                tt,
+                                x.as_str()
+                            ));
+                        } else {
+                            t = Some(Type::Column(Magma::Byte))
                         }
                     }
                     ":NIBBLE" => {
@@ -341,22 +424,22 @@ impl AstNode {
                 Err(anyhow!("array columns must be atomic"))
             } else {
                 Ok(AstNode {
-                    class: Token::DefArrayColumn(
-                        name.into(),
-                        range,
-                        t.unwrap_or(Type::Column(Magma::Integer)),
-                    ),
+                    class: Token::DefArrayColumn {
+                        name: name.into(),
+                        domain: range,
+                        t: t.unwrap_or(Type::Column(Magma::Integer)),
+                    },
                     lc,
                     src,
                 })
             }
         } else {
             Ok(AstNode {
-                class: Token::DefColumn(
-                    name.into(),
-                    t.unwrap_or(Type::Column(Magma::Integer)),
+                class: Token::DefColumn {
+                    name: name.into(),
+                    t: t.unwrap_or(Type::Column(Magma::Integer)),
                     kind,
-                ),
+                },
                 lc,
                 src,
             })
@@ -404,13 +487,13 @@ impl AstNode {
                             && fargs.iter().all(|x| matches!(x.class, Token::Symbol(_))) =>
                     {
                         Ok(AstNode {
-                            class: Token::Defun(
-                                if let Token::Symbol(ref name) = fargs[0].class {
+                            class: Token::Defun {
+                                name: if let Token::Symbol(ref name) = fargs[0].class {
                                     name.to_string()
                                 } else {
                                     unreachable!()
                                 },
-                                fargs
+                                args: fargs
                                     .iter()
                                     .skip(1)
                                     .map(|a| {
@@ -421,8 +504,8 @@ impl AstNode {
                                         }
                                     })
                                     .collect::<Vec<_>>(),
-                                Box::new(args[2].clone()),
-                            ),
+                                body: Box::new(args[2].clone()),
+                            },
                             src: src.into(),
                             lc,
                         })
@@ -512,11 +595,11 @@ impl AstNode {
                             )
                         };
                         Ok(AstNode {
-                            class: Token::DefConstraint(
-                                name.into(),
+                            class: Token::DefConstraint {
+                                name: name.into(),
                                 domain,
-                                Box::new(args[3].clone()),
-                            ),
+                                exp: Box::new(args[3].clone()),
+                            },
                             src: src.into(),
                             lc,
                         })
@@ -573,14 +656,14 @@ impl AstNode {
                 match (tokens.get(1), tokens.get(2), tokens.get(3)) {
                     (
                         Some(Token::Symbol(name)),
-                        Some(Token::List(parent)),
-                        Some(Token::List(child)),
+                        Some(Token::List(including)),
+                        Some(Token::List(included)),
                     ) => Ok(AstNode {
-                        class: Token::DefPlookup(
-                            name.to_owned(),
-                            parent.to_owned(),
-                            child.to_owned(),
-                        ),
+                        class: Token::DefPlookup {
+                            name: name.to_owned(),
+                            including: including.to_owned(),
+                            included: included.to_owned(),
+                        },
                         src: src.into(),
                         lc,
                     }),
@@ -611,7 +694,10 @@ impl AstNode {
             Some(Token::Symbol(defkw)) if defkw == "defpermutation" => {
                 match (tokens.get(1), tokens.get(2)) {
                     (Some(Token::List(to)), Some(Token::List(from))) => Ok(AstNode {
-                        class: Token::DefPermutation(to.to_owned(), from.to_owned()),
+                        class: Token::DefPermutation {
+                            from: from.to_owned(),
+                            to: to.to_owned(),
+                        },
                         src: src.into(),
                         lc,
                     }),

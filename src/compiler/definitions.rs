@@ -423,11 +423,11 @@ fn reduce(
         | Token::List(_)
         | Token::Range(_)
         | Token::Type(_)
-        | Token::DefPlookup(..)
+        | Token::DefPlookup { .. }
         | Token::DefConsts(..)
         | Token::DefInrange(..) => Ok(()),
 
-        Token::DefConstraint(name, ..) => ctx.borrow_mut().insert_constraint(name),
+        Token::DefConstraint { name, .. } => ctx.borrow_mut().insert_constraint(name),
         Token::DefModule(name) => {
             *ctx = SymbolTable::derived(root_ctx, name, name, false);
             Ok(())
@@ -435,7 +435,7 @@ fn reduce(
         Token::DefColumns(cols) => cols
             .iter()
             .fold(Ok(()), |ax, col| ax.and(reduce(col, root_ctx.clone(), ctx))),
-        Token::DefColumn(col, t, kind) => {
+        Token::DefColumn { name: col, t, kind } => {
             let module_name = ctx.borrow().name.to_owned();
             let symbol = Node {
                 _e: Expression::Column(
@@ -463,7 +463,11 @@ fn reduce(
             };
             ctx.borrow_mut().insert_symbol(col, symbol)
         }
-        Token::DefArrayColumn(col, range, t) => {
+        Token::DefArrayColumn {
+            name: col,
+            domain: range,
+            t,
+        } => {
             let handle = Handle::new(&ctx.borrow().name, col);
             ctx.borrow_mut().insert_symbol(
                 col,
@@ -474,7 +478,10 @@ fn reduce(
             )?;
             Ok(())
         }
-        Token::DefPermutation(tos, froms) => {
+        Token::DefPermutation {
+            from: tos,
+            to: froms,
+        } => {
             if tos.len() != froms.len() {
                 return Err(anyhow!(
                     "cardinality mismatch in permutation declaration: {:?} vs. {:?}",
@@ -540,7 +547,7 @@ fn reduce(
         Token::DefAliases(aliases) => aliases.iter().fold(Ok(()), |ax, alias| {
             ax.and(reduce(alias, root_ctx.clone(), ctx))
         }),
-        Token::Defun(name, args, body) => {
+        Token::Defun { name, args, body } => {
             let module_name = ctx.borrow().name.to_owned();
             ctx.borrow_mut().insert_function(
                 name,

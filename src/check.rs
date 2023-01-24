@@ -447,7 +447,11 @@ pub fn check(
                         }
                     }
                 }
-                Constraint::Plookup(name, parents, children) => {
+                Constraint::Plookup {
+                    handle: name,
+                    including: parents,
+                    included: children,
+                } => {
                     if let Err(trace) = check_plookup(cs, parents, children) {
                         if settings.report {
                             error!("{} failed:\n{:?}\n", name, trace);
@@ -457,11 +461,19 @@ pub fn check(
                         None
                     }
                 }
-                Constraint::Permutation(_name, _from, _to) => {
+                Constraint::Permutation {
+                    handle: _name,
+                    from: _from,
+                    to: _to,
+                } => {
                     // warn!("Permutation validation not yet implemented");
                     None
                 }
-                Constraint::InRange(_, _e, _range) => {
+                Constraint::InRange {
+                    handle: _,
+                    exp: _e,
+                    max: _range,
+                } => {
                     // warn!("Range validation not yet implemented")
                     None
                 }

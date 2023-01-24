@@ -12,6 +12,7 @@ const ARRAY_SEPARATOR: &str = "_";
 
 lazy_static::lazy_static! {
     pub static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
+        // special functions
         "nth" => Function {
             handle: Handle::new(super::MAIN_MODULE, "nth"),
             class: FunctionClass::Builtin(Builtin::Nth),
@@ -96,9 +97,6 @@ pub enum Form {
 
 pub enum Arity {
     AtLeast(usize),
-    // AtMost(usize),
-    // Even,
-    // Odd,
     Monadic,
     Dyadic,
     Exactly(usize),
@@ -111,9 +109,6 @@ impl Arity {
         }
         match self {
             Arity::AtLeast(x) => format!("expected at least {}, but received {}", arg_count(*x), l),
-            // Arity::AtMost(x) => format!("expected at most {}, but received {}", arg_count(*x), l),
-            // Arity::Even => format!("expected an even numer of arguments, but received {}", l),
-            // Arity::Odd => format!("expected an odd numer of arguments, but received {}", l),
             Arity::Monadic => format!("expected {}, but received {}", arg_count(1), l),
             Arity::Dyadic => format!("expected {}, but received {}", arg_count(2), l),
             Arity::Exactly(x) => format!("expected {}, but received {}", arg_count(*x), l),
@@ -129,9 +124,6 @@ impl Arity {
     fn validate(&self, l: usize) -> Result<()> {
         if match self {
             Arity::AtLeast(x) => l >= *x,
-            // Arity::AtMost(x) => l <= *x,
-            // Arity::Even => l % 2 == 0,
-            // Arity::Odd => l % 2 == 1,
             Arity::Monadic => l == 1,
             Arity::Dyadic => l == 2,
             Arity::Exactly(x) => l == *x,
@@ -143,15 +135,21 @@ impl Arity {
         }
     }
 }
+/// The `FuncVerifier` trait defines a function that can check that
+/// it is called with valid arguments
 pub trait FuncVerifier<T> {
+    /// The arity of the function
     fn arity(&self) -> Arity;
 
-    fn validate_types(&self, args: &[T]) -> Result<()>;
-
+    /// Returns `Ok(())` if the arguments are of correct arity; `Err` otherwise
     fn validate_arity(&self, args: &[T]) -> Result<()> {
         self.arity().validate(args.len())
     }
 
+    /// Returns `Ok(())` if the arguments are of correct type; `Err` otherwise
+    fn validate_types(&self, args: &[T]) -> Result<()>;
+
+    /// Checks that the arguments are of correct arity and type
     fn validate_args(&self, args: Vec<T>) -> Result<Vec<T>> {
         self.validate_arity(&args)
             .and_then(|_| self.validate_types(&args))
@@ -187,7 +185,8 @@ impl FuncVerifier<AstNode> for Form {
     }
 }
 
-/// The type of a column in the IR
+/// The type of a column in the IR. This struct contains both the dimensionality
+/// of the type and its underlying magma.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Type {
     Void,
@@ -276,10 +275,15 @@ impl std::cmp::PartialOrd for Type {
     }
 }
 
+/// [ill-named] A magma is a set where operations stay within the itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Magma {
     Boolean,
+    /// 4-bits
     Nibble,
+    /// 8-bits
+    Byte,
+    /// a field element
     Integer,
 }
 impl std::cmp::Ord for Magma {
@@ -287,17 +291,29 @@ impl std::cmp::Ord for Magma {
         self.partial_cmp(other).unwrap()
     }
 }
+/// The ordering relation defines the casting rules for inter-magmas operations
+/// e.g. boolean × boolean = boolean, but boolean × integer = Integer
 impl std::cmp::PartialOrd for Magma {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
             (Magma::Boolean, Magma::Boolean) => Some(Ordering::Equal),
             (Magma::Boolean, Magma::Nibble) => Some(Ordering::Less),
+            (Magma::Boolean, Magma::Byte) => Some(Ordering::Less),
             (Magma::Boolean, Magma::Integer) => Some(Ordering::Less),
+
             (Magma::Nibble, Magma::Boolean) => Some(Ordering::Greater),
             (Magma::Nibble, Magma::Nibble) => Some(Ordering::Equal),
+            (Magma::Nibble, Magma::Byte) => Some(Ordering::Less),
             (Magma::Nibble, Magma::Integer) => Some(Ordering::Less),
+
+            (Magma::Byte, Magma::Boolean) => Some(Ordering::Greater),
+            (Magma::Byte, Magma::Nibble) => Some(Ordering::Greater),
+            (Magma::Byte, Magma::Byte) => Some(Ordering::Equal),
+            (Magma::Byte, Magma::Integer) => Some(Ordering::Less),
+
             (Magma::Integer, Magma::Boolean) => Some(Ordering::Greater),
             (Magma::Integer, Magma::Nibble) => Some(Ordering::Greater),
+            (Magma::Integer, Magma::Byte) => Some(Ordering::Greater),
             (Magma::Integer, Magma::Integer) => Some(Ordering::Equal),
         }
     }
@@ -306,12 +322,19 @@ impl Magma {
     const SUPREMUM: Self = Magma::Integer;
 }
 
+/// A handle uniquely and absolutely defines a symbol
 #[derive(Clone, Eq, Serialize, Deserialize)]
 pub struct Handle {
+    /// the module to which the symbol belongs
+    /// NOTE multi-level paths are not yet implemented
     pub module: String,
+    /// the name of the symbol within its module
     pub name: String,
+    /// a wart for optimization when evaluating constraints, where
+    /// addressing symbold by ID is faster than string comparison.
     pub id: Option<usize>,
 }
+// The equality relation is only used in a semantic way, not computational
 impl std::cmp::PartialEq for Handle {
     fn eq(&self, other: &Self) -> bool {
         (self.module == other.module) && (self.name == other.name)
@@ -344,6 +367,7 @@ impl Handle {
         self.id = Some(i)
     }
 
+    /// Generate a symbol corresponding to the ith column of an ArrayColumn
     pub fn ith(&self, i: usize) -> Handle {
         Handle {
             module: self.module.clone(),
@@ -352,6 +376,7 @@ impl Handle {
         }
     }
 
+    /// Remove all symbols in a symbol which are invalid in Go identifiers
     fn purify(s: &str) -> String {
         s.replace('(', "_")
             .replace(')', "_")
@@ -371,6 +396,7 @@ impl Handle {
             .replace(|c: char| !c.is_ascii(), "_")
     }
 
+    /// Uniquely mangle a symbol into something usable in Go
     pub fn mangle(&self) -> String {
         let r = format!(
             "{}{}{}",
@@ -385,10 +411,12 @@ impl Handle {
         r
     }
 
+    /// Uniquely mangle the name of a symbol into something usable in Go
     pub fn mangled_name(&self) -> String {
         Self::purify(&self.name)
     }
 
+    /// Uniquely mangle the module of a symbol into something usable in Go
     pub fn mangled_module(&self) -> String {
         Self::purify(&self.module)
     }

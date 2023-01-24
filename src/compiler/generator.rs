@@ -33,45 +33,70 @@ pub enum Constraint {
         domain: Option<Vec<isize>>,
         expr: Box<Node>,
     },
-    Plookup(Handle, Vec<Node>, Vec<Node>),
-    Permutation(Handle, Vec<Handle>, Vec<Handle>),
-    InRange(Handle, Node, usize),
+    Plookup {
+        handle: Handle,
+        including: Vec<Node>,
+        included: Vec<Node>,
+    },
+    Permutation {
+        handle: Handle,
+        from: Vec<Handle>,
+        to: Vec<Handle>,
+    },
+    InRange {
+        handle: Handle,
+        exp: Node,
+        max: usize,
+    },
 }
 impl Constraint {
     pub fn name(&self) -> String {
         match self {
-            Constraint::Vanishes { handle: name, .. } => name.to_string(),
-            Constraint::Plookup(handle, ..) => handle.to_string(),
-            Constraint::Permutation(handle, ..) => handle.to_string(),
-            Constraint::InRange(handle, ..) => handle.to_string(),
+            Constraint::Vanishes { handle, .. } => handle.to_string(),
+            Constraint::Plookup { handle, .. } => handle.to_string(),
+            Constraint::Permutation { handle, .. } => handle.to_string(),
+            Constraint::InRange { handle, .. } => handle.to_string(),
         }
     }
 
     pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut Handle)) {
         match self {
             Constraint::Vanishes { expr, .. } => expr.add_id_to_handles(set_id),
-            Constraint::Plookup(_, xs, ys) => xs
+            Constraint::Plookup {
+                handle: _,
+                including: xs,
+                included: ys,
+            } => xs
                 .iter_mut()
                 .chain(ys.iter_mut())
                 .for_each(|e| e.add_id_to_handles(set_id)),
-            Constraint::Permutation(_, hs1, hs2) => {
-                hs1.iter_mut().chain(hs2.iter_mut()).for_each(|h| set_id(h))
-            }
-            Constraint::InRange(_, _, _) => {}
+            Constraint::Permutation {
+                handle: _,
+                from: hs1,
+                to: hs2,
+            } => hs1.iter_mut().chain(hs2.iter_mut()).for_each(|h| set_id(h)),
+            Constraint::InRange {
+                handle: _,
+                exp: _,
+                max: _,
+            } => {}
         }
     }
 
     pub(crate) fn size(&self) -> usize {
         match self {
             Constraint::Vanishes { expr, .. } => expr.size(),
-            Constraint::Plookup(_, _, _) => 1,
-            Constraint::Permutation(_, _, _) => 1,
-            Constraint::InRange(_, _, _) => 1,
+            Constraint::Plookup { .. } => 1,
+            Constraint::Permutation { .. } => 1,
+            Constraint::InRange { .. } => 1,
         }
     }
 }
 
+/// Options used when evaluating an expression
 pub struct EvalSettings {
+    /// If true, negative indices will loop from the end of the column;
+    /// otherwise, they will go up in the padding.
     pub wrap: bool,
 }
 impl Default for EvalSettings {
@@ -305,6 +330,9 @@ pub struct ConstraintSet {
     pub constants: HashMap<Handle, BigInt>,
     pub computations: ComputationTable,
 
+    /// The spilling of a module is the maximum of the absolute values
+    /// of the forward- and backward-shift observed in its constraints.
+    /// The spilling is used to compute the padding of its columns.
     _spilling: HashMap<String, isize>, // module -> (past-spilling, future-spilling)
 }
 impl ConstraintSet {
@@ -953,7 +981,11 @@ pub fn reduce(
             }
         }
 
-        Token::DefColumn(name, _, k) => match k {
+        Token::DefColumn {
+            name,
+            t: _,
+            kind: k,
+        } => match k {
             Kind::Composite(e) => {
                 let n = reduce(e, root_ctx, ctx, settings)?.unwrap();
                 ctx.borrow_mut().edit_symbol(name, &|x| {
@@ -966,17 +998,17 @@ pub fn reduce(
             _ => Ok(None),
         },
         Token::DefColumns(_)
-        | Token::DefConstraint(..)
-        | Token::DefArrayColumn(..)
+        | Token::DefConstraint { .. }
+        | Token::DefArrayColumn { .. }
         | Token::DefModule(_)
         | Token::DefAliases(_)
         | Token::DefAlias(..)
         | Token::DefunAlias(..)
         | Token::DefConsts(..)
-        | Token::Defun(..)
+        | Token::Defun { .. }
         | Token::Defpurefun(..)
-        | Token::DefPermutation(..)
-        | Token::DefPlookup(..)
+        | Token::DefPermutation { .. }
+        | Token::DefPlookup { .. }
         | Token::DefInrange(..) => Ok(None),
     }
     .with_context(|| make_ast_error(e))
@@ -989,7 +1021,11 @@ fn reduce_toplevel(
     settings: &CompileSettings,
 ) -> Result<Option<Constraint>> {
     match &e.class {
-        Token::DefConstraint(name, domain, expr) => {
+        Token::DefConstraint {
+            name,
+            domain,
+            exp: expr,
+        } => {
             let handle = Handle::new(&ctx.borrow().name, name);
             Ok(Some(Constraint::Vanishes {
                 handle,
@@ -1000,7 +1036,11 @@ fn reduce_toplevel(
                 ),
             }))
         }
-        Token::DefPlookup(name, parent, child) => {
+        Token::DefPlookup {
+            name,
+            including: parent,
+            included: child,
+        } => {
             let handle = Handle::new(&ctx.borrow().name, name);
             let parents = parent
                 .iter()
@@ -1018,7 +1058,11 @@ fn reduce_toplevel(
                     children.len()
                 ))
             } else {
-                Ok(Some(Constraint::Plookup(handle, parents, children)))
+                Ok(Some(Constraint::Plookup {
+                    handle,
+                    including: parents,
+                    included: children,
+                }))
             }
         }
         Token::DefInrange(e, range) => {
@@ -1026,11 +1070,11 @@ fn reduce_toplevel(
                 &ctx.borrow().name,
                 names::Generator::default().next().unwrap(),
             );
-            Ok(Some(Constraint::InRange(
+            Ok(Some(Constraint::InRange {
                 handle,
-                reduce(e, root_ctx, ctx, settings)?.unwrap(),
-                *range,
-            )))
+                exp: reduce(e, root_ctx, ctx, settings)?.unwrap(),
+                max: *range,
+            }))
         }
         Token::DefColumns(columns) => {
             for _ in columns {
@@ -1045,12 +1089,12 @@ fn reduce_toplevel(
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
             Err(anyhow!("Unexpected top-level form: {:?}", e))
         }
-        Token::Defun(..)
+        Token::Defun { .. }
         | Token::Defpurefun(..)
         | Token::DefAliases(_)
         | Token::DefunAlias(..)
         | Token::DefConsts(..) => Ok(None),
-        Token::DefPermutation(to, from) => {
+        Token::DefPermutation { from, to } => {
             // This silly piece of code ensures that columns involved in permutations
             // are marked as "used" in the symbol table
             from.iter()
@@ -1061,18 +1105,20 @@ fn reduce_toplevel(
                 .map(|f| ctx.borrow_mut().resolve_symbol(&f.as_symbol().unwrap()))
                 .collect::<Result<Vec<_>>>()
                 .with_context(|| anyhow!("while defining permutation"))?;
-            Ok(Some(Constraint::Permutation(
-                Handle::new(
+            Ok(Some(Constraint::Permutation {
+                handle: Handle::new(
                     &ctx.borrow().name,
                     names::Generator::default().next().unwrap(),
                 ),
-                from.iter()
+                from: from
+                    .iter()
                     .map(|f| Handle::new(&ctx.borrow().name, f.as_symbol().unwrap()))
                     .collect::<Vec<_>>(),
-                to.iter()
+                to: to
+                    .iter()
                     .map(|f| Handle::new(&ctx.borrow().name, f.as_symbol().unwrap()))
                     .collect::<Vec<_>>(),
-            )))
+            }))
         }
         _ => unreachable!("{:?}", e.src),
     }
