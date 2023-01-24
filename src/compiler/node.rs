@@ -481,7 +481,6 @@ impl Node {
                             .unwrap_or_else(|| Some(Fr::zero()))
                     }
                 }
-                Builtin::ByteDecomposition => unreachable!(),
             },
             Expression::Const(v, x) => {
                 Some(x.unwrap_or_else(|| panic!("{} is not an Fr element.", v)))

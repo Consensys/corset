@@ -97,8 +97,6 @@ pub enum Builtin {
 
     IfZero,
     IfNotZero,
-
-    ByteDecomposition,
 }
 impl Builtin {
     pub fn call(self, args: &[Node]) -> Node {
@@ -136,7 +134,6 @@ impl Builtin {
                 Type::List(argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)).magma())
             }
             Builtin::Shift | Builtin::Nth => argtype[0],
-            Builtin::ByteDecomposition => Type::Void,
         }
     }
 }
@@ -159,7 +156,6 @@ impl std::fmt::Display for Builtin {
                 Builtin::Begin => "begin",
                 Builtin::IfZero => "if-zero",
                 Builtin::IfNotZero => "if-not-zero",
-                Builtin::ByteDecomposition => "make-byte-decomposition",
             }
         )
     }
@@ -210,7 +206,6 @@ impl FuncVerifier<Node> for Builtin {
             Builtin::IfZero => Arity::Between(2, 3),
             Builtin::IfNotZero => Arity::Between(2, 3),
             Builtin::Nth => Arity::Dyadic,
-            Builtin::ByteDecomposition => Arity::Exactly(3),
         }
     }
     fn validate_types(&self, args: &[Node]) -> Result<()> {
@@ -299,20 +294,6 @@ impl FuncVerifier<Node> for Builtin {
                 }
             }
             Builtin::Begin => Ok(()),
-            Builtin::ByteDecomposition => {
-                if matches!(args[0].e(), Expression::Column(..))
-                    && matches!(args[1].e(), Expression::Const(..))
-                    && matches!(args[2].e(), Expression::Const(..))
-                {
-                    Ok(())
-                } else {
-                    Err(anyhow!(
-                        "`{:?}` expects COLUMN ELEM_SIZE ELEM_COUNT but received {:?}",
-                        self,
-                        args
-                    ))
-                }
-            }
         }
     }
 }
@@ -866,11 +847,6 @@ fn apply(
                         } else {
                             unreachable!()
                         }
-                    }
-
-                    Builtin::ByteDecomposition => {
-                        warn!("BYTEDECOMPOSITION constraints not yet implemented");
-                        Ok(None)
                     }
 
                     Builtin::Not => Ok(Some(

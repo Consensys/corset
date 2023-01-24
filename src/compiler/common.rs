@@ -84,11 +84,6 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "if-not-zero"),
             class: FunctionClass::Builtin(Builtin::IfNotZero)
         },
-
-        "make-decomposition" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "make-decomposition"),
-            class: FunctionClass::Builtin(Builtin::ByteDecomposition)
-        }
     };
 }
 
