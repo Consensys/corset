@@ -18,11 +18,11 @@ mod check;
 mod column;
 mod compiler;
 mod compute;
-mod expander;
 mod exporters;
 mod pretty;
 #[cfg(test)]
 mod tests;
+mod transformer;
 mod utils;
 
 #[derive(Parser)]
@@ -339,8 +339,8 @@ fn main() -> Result<()> {
             columns_assignment,
             fname,
         } => {
-            expander::expand_ifs(&mut constraints);
-            expander::lower_shifts(&mut constraints);
+            transformer::expand_ifs(&mut constraints);
+            transformer::lower_shifts(&mut constraints);
             let mut go_exporter = exporters::GoExporter {
                 constraints_filename,
                 package,
@@ -355,10 +355,10 @@ fn main() -> Result<()> {
             out_filename,
             package,
         } => {
-            expander::expand_ifs(&mut constraints);
-            expander::lower_shifts(&mut constraints);
-            expander::expand_constraints(&mut constraints)?;
-            expander::expand_invs(&mut constraints)?;
+            transformer::expand_ifs(&mut constraints);
+            transformer::lower_shifts(&mut constraints);
+            transformer::expand_constraints(&mut constraints)?;
+            transformer::expand_invs(&mut constraints)?;
             let mut wiop_exporter = exporters::WizardIOP {
                 out_filename,
                 package,
@@ -380,10 +380,10 @@ fn main() -> Result<()> {
         Commands::Compute { tracefile, outfile } => {
             let outfile = outfile.as_ref().unwrap();
 
-            expander::expand_ifs(&mut constraints);
-            expander::lower_shifts(&mut constraints);
-            expander::expand_constraints(&mut constraints)?;
-            expander::expand_invs(&mut constraints)?;
+            transformer::expand_ifs(&mut constraints);
+            transformer::lower_shifts(&mut constraints);
+            transformer::expand_constraints(&mut constraints)?;
+            transformer::expand_invs(&mut constraints)?;
             compute::compute(&read_trace(&tracefile)?, &mut constraints)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
 
@@ -404,10 +404,10 @@ fn main() -> Result<()> {
             use flate2::write::GzEncoder;
             use flate2::Compression;
 
-            expander::expand_ifs(&mut constraints);
-            expander::lower_shifts(&mut constraints);
-            expander::expand_constraints(&mut constraints)?;
-            expander::expand_invs(&mut constraints)?;
+            transformer::expand_ifs(&mut constraints);
+            transformer::lower_shifts(&mut constraints);
+            transformer::expand_constraints(&mut constraints)?;
+            transformer::expand_invs(&mut constraints)?;
             let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
 
             loop {
@@ -531,10 +531,10 @@ fn main() -> Result<()> {
             }
 
             if expand {
-                expander::lower_shifts(&mut constraints);
-                expander::expand_ifs(&mut constraints);
-                expander::expand_constraints(&mut constraints)?;
-                expander::expand_invs(&mut constraints)?;
+                transformer::lower_shifts(&mut constraints);
+                transformer::expand_ifs(&mut constraints);
+                transformer::expand_constraints(&mut constraints)?;
+                transformer::expand_invs(&mut constraints)?;
             }
             compute::compute(&read_trace(&tracefile)?, &mut constraints)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
