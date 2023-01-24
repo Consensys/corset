@@ -1,10 +1,12 @@
 mod ifs;
 mod inverses;
+mod nhood;
 mod selectors;
 mod shifter;
 
 pub use ifs::expand_ifs;
 pub use inverses::expand_invs;
+pub use nhood::validate_nhood;
 pub use selectors::expand_constraints;
 pub use shifter::lower_shifts;
 

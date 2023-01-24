@@ -194,6 +194,7 @@ import (
                         ))
                     }
                 }
+                crate::column::Computation::CyclicFrom { .. } => unreachable!(),
             }
         }
 
@@ -223,6 +224,7 @@ import (
                         r.push_str(&format!("{},\n", to.mangled_name()))
                     }
                 }
+                crate::column::Computation::CyclicFrom { .. } => unreachable!(),
             }
         }
         r += "}\n\n";

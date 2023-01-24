@@ -2,9 +2,9 @@ use anyhow::*;
 use cached::Cached;
 use colored::Colorize;
 use num_bigint::BigInt;
-use num_traits::{One, ToPrimitive, Zero};
-use pairing_ce::bn256::Fr;
+use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use pairing_ce::ff::Field;
+use pairing_ce::{bn256::Fr, ff::PrimeField};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -40,6 +40,18 @@ impl Node {
     pub fn from_expr(e: Expression) -> Node {
         Node { _e: e, _t: None }
     }
+    pub fn from_const(x: usize) -> Node {
+        Node {
+            _e: Expression::Const(
+                BigInt::from_usize(x).unwrap(),
+                Some(Fr::from_str(&x.to_string()).unwrap()),
+            ),
+            _t: Some(Type::Scalar(match x {
+                0 | 1 => Magma::Boolean,
+                _ => Magma::Integer,
+            })),
+        }
+    }
     pub fn one() -> Node {
         Self::from_expr(Expression::Const(One::one(), Some(Fr::one())))
     }
@@ -64,8 +76,8 @@ impl Node {
                     Type::Scalar(Magma::Integer)
                 }
             }
-            Expression::Column(..) => unreachable!(),
-            Expression::ArrayColumn(..) => unreachable!(),
+            Expression::Column(..) => Type::Void,
+            Expression::ArrayColumn(..) => Type::Void,
             Expression::List(xs) => Type::List(
                 xs.iter()
                     .map(Node::t)
@@ -579,7 +591,7 @@ impl Debug for Node {
         match self.e() {
             Expression::Const(x, _) => write!(f, "{}", x),
             Expression::Column(handle, ..) => {
-                write!(f, "{:?}:{:?}", handle, self.t())
+                write!(f, "{:?}:{:?}", handle, self._t)
             }
             Expression::ArrayColumn(handle, range, ..) => {
                 write!(

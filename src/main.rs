@@ -355,10 +355,12 @@ fn main() -> Result<()> {
             out_filename,
             package,
         } => {
+            transformer::validate_nhood(&mut constraints)?;
             transformer::expand_ifs(&mut constraints);
             transformer::lower_shifts(&mut constraints);
             transformer::expand_constraints(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
+
             let mut wiop_exporter = exporters::WizardIOP {
                 out_filename,
                 package,
@@ -378,8 +380,7 @@ fn main() -> Result<()> {
             latex_exporter.render(&ast)?
         }
         Commands::Compute { tracefile, outfile } => {
-            let outfile = outfile.as_ref().unwrap();
-
+            transformer::validate_nhood(&mut constraints)?;
             transformer::expand_ifs(&mut constraints);
             transformer::lower_shifts(&mut constraints);
             transformer::expand_constraints(&mut constraints)?;
@@ -387,6 +388,7 @@ fn main() -> Result<()> {
             compute::compute(&read_trace(&tracefile)?, &mut constraints)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
 
+            let outfile = outfile.as_ref().unwrap();
             let mut f = std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?;
 
@@ -405,9 +407,9 @@ fn main() -> Result<()> {
             use flate2::Compression;
 
             transformer::expand_ifs(&mut constraints);
-            transformer::lower_shifts(&mut constraints);
             transformer::expand_constraints(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
+            transformer::lower_shifts(&mut constraints);
             let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
 
             loop {
@@ -531,6 +533,7 @@ fn main() -> Result<()> {
             }
 
             if expand {
+                transformer::validate_nhood(&mut constraints)?;
                 transformer::lower_shifts(&mut constraints);
                 transformer::expand_ifs(&mut constraints);
                 transformer::expand_constraints(&mut constraints)?;

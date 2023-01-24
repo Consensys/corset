@@ -254,6 +254,11 @@ pub enum Computation {
         froms: Vec<Handle>,
         tos: Vec<Handle>,
     },
+    CyclicFrom {
+        target: Handle,
+        froms: Vec<Handle>,
+        modulo: usize,
+    },
 }
 impl Computation {
     pub fn target(&self) -> String {
@@ -265,6 +270,7 @@ impl Computation {
                 .map(|t| t.to_string())
                 .collect::<Vec<_>>()
                 .join(", "),
+            Computation::CyclicFrom { target, .. } => target.to_string(),
         }
     }
     pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut Handle)) {

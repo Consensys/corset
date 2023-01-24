@@ -466,6 +466,27 @@ impl ConstraintSet {
         Ok(())
     }
 
+    fn compute_cyclic(&mut self, froms: &[Handle], to: &Handle, modulo: usize) -> Result<()> {
+        let spilling = self.spilling_or_insert(&froms[0].module);
+        for from in froms.iter() {
+            self.compute_column(from)?;
+        }
+        let len = self.get(&froms[0]).unwrap().len().unwrap();
+
+        let value: Vec<Fr> = vec![Fr::zero(); spilling as usize]
+            .into_iter()
+            .chain(
+                (0..len)
+                    .map(|i| (i % modulo).to_string())
+                    .map(|i| Fr::from_str(&i.to_string()).unwrap()),
+            )
+            .collect();
+
+        self.get_mut(to).unwrap().set_raw_value(value, spilling);
+
+        Ok(())
+    }
+
     pub fn compute_composite(&mut self, exp: &Node, target: &Handle) -> Result<()> {
         let spilling = self.spilling_or_insert(&target.module);
         let cols_in_expr = exp.dependencies();
@@ -579,6 +600,11 @@ impl ConstraintSet {
                 }
             }
             Computation::Sorted { froms, tos } => self.compute_sorted(froms, tos),
+            Computation::CyclicFrom {
+                target,
+                froms,
+                modulo,
+            } => self.compute_cyclic(froms, target, *modulo),
         }
     }
 
@@ -646,7 +672,9 @@ impl ConstraintSet {
                 Computation::Interleaved { froms, .. } => {
                     self.length_multiplier(&froms[0]) * froms.len()
                 }
-                Computation::Sorted { froms, .. } => self.length_multiplier(&froms[0]),
+                Computation::Sorted { froms, .. } | Computation::CyclicFrom { froms, .. } => {
+                    self.length_multiplier(&froms[0])
+                }
             })
             .unwrap_or(1)
     }
@@ -684,6 +712,7 @@ impl ConstraintSet {
                             .unwrap_or_else(Fr::zero),
                         Computation::Interleaved { .. } => Fr::zero(),
                         Computation::Sorted { .. } => Fr::zero(),
+                        Computation::CyclicFrom { .. } => Fr::zero(),
                     },
                 });
 
