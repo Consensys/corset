@@ -21,14 +21,15 @@ use crate::{
 
 #[derive(Clone, Copy, Debug)]
 pub struct DebugSettings {
-    unclutter: bool,
     /// whether to skip reporting s-exps reducing to 0
-    dim: bool,
+    unclutter: bool,
     /// whether to dim s-exps reducing to 0
-    continue_on_error: bool,
+    dim: bool,
     /// whether to stop reporting a constraint on the first failure
-    report: bool,
+    continue_on_error: bool,
     /// whether to report computation details on failing constraints
+    report: bool,
+    /// how many lines to show left and right of the failure point
     context_span: isize,
     /// whether to report all the module columns in a failing constraint or only the involved ones
     full_trace: bool,
@@ -76,7 +77,23 @@ impl DebugSettings {
     }
 }
 
-fn fail(expr: &Node, i: isize, columns: &ColumnSet, settings: DebugSettings) -> Result<()> {
+/// Pretty print an expresion and all its intermediate value for debugging (or
+/// eye-candy) purposes
+///
+/// # Arguments
+///
+/// * `expr`     - The expression to dissect
+/// * `i`        - The evaluation point; may be negative
+/// * `wrap`     - If set, negative indices wrap; otherwise they go into the padding
+/// * `columns`  - The numeric values for evaluation of `expr` at `i`
+/// * `settings` - The global debugging settings
+fn fail(
+    expr: &Node,
+    i: isize,
+    wrap: bool,
+    columns: &ColumnSet,
+    settings: DebugSettings,
+) -> Result<()> {
     let module = expr.dependencies().iter().next().unwrap().module.clone();
     let handles = if settings.full_trace {
         columns
@@ -99,7 +116,20 @@ fn fail(expr: &Node, i: isize, columns: &ColumnSet, settings: DebugSettings) -> 
         .into_iter()
         .chain(handles.iter().map(|h| h.name.to_string()))
         .collect::<Vec<_>>()];
-    for j in (i - settings.context_span).max(0)..=i + settings.context_span {
+
+    let (eval_columns_range, idx_highlight) = if wrap {
+        (
+            (i - settings.context_span)..=i + settings.context_span,
+            // - 1 to account for the title column
+            (i - settings.context_span) - 1,
+        )
+    } else {
+        (
+            (i - settings.context_span).max(0)..=i + settings.context_span,
+            (i - settings.context_span).max(0) - 1,
+        )
+    };
+    for j in eval_columns_range {
         m_columns.push(
             vec![j.to_string()]
                 .into_iter()
@@ -107,7 +137,7 @@ fn fail(expr: &Node, i: isize, columns: &ColumnSet, settings: DebugSettings) -> 
                     columns
                         .get(handle)
                         .unwrap()
-                        .get(j, false)
+                        .get(j, true)
                         .map(|x| x.pretty())
                         .unwrap_or_else(|| "nil".into())
                 }))
@@ -119,8 +149,7 @@ fn fail(expr: &Node, i: isize, columns: &ColumnSet, settings: DebugSettings) -> 
     for ii in 0..m_columns[0].len() {
         for (j, col) in m_columns.iter().enumerate() {
             let padding = col.iter().map(String::len).max().unwrap() + 2;
-            // - 1 to account for the first column
-            if j as isize + (i - settings.context_span).max(0) - 1 == i {
+            if j as isize + idx_highlight == i {
                 trace.push_str(&format!(
                     "{:width$}",
                     m_columns[j][ii].red().bold(),
@@ -159,6 +188,7 @@ fn fail(expr: &Node, i: isize, columns: &ColumnSet, settings: DebugSettings) -> 
 fn check_constraint_at(
     expr: &Node,
     i: isize,
+    wrap: bool,
     columns: &ColumnSet,
     fail_on_oob: bool,
     cache: &mut Option<SizedCache<Fr, Fr>>,
@@ -172,10 +202,10 @@ fn check_constraint_at(
     );
     if let Some(r) = r {
         if !r.is_zero() {
-            return fail(expr, i, columns, settings);
+            return fail(expr, i, wrap, columns, settings);
         }
     } else if fail_on_oob {
-        return fail(expr, i, columns, settings);
+        return fail(expr, i, wrap, columns, settings);
     }
     Ok(())
 }
@@ -239,12 +269,12 @@ fn check_constraint(
     match domain {
         Some(is) => {
             for i in is {
-                check_constraint_at(expr, *i, columns, true, &mut cache, settings)?;
+                check_constraint_at(expr, *i, true, columns, true, &mut cache, settings)?;
             }
         }
         None => {
             for i in 0..l as isize {
-                let err = check_constraint_at(expr, i, columns, false, &mut cache, settings);
+                let err = check_constraint_at(expr, i, false, columns, false, &mut cache, settings);
 
                 if err.is_err() {
                     if settings.continue_on_error {
