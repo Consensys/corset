@@ -53,7 +53,7 @@ impl ComputationTable {
             .insert(target.to_owned(), self.computations.len() - 1);
         Ok(())
     }
-    pub fn insert_multiple(&mut self, targets: &[Handle], computation: Computation) -> Result<()> {
+    pub fn insert_many(&mut self, targets: &[Handle], computation: Computation) -> Result<()> {
         self.computations.push(computation);
         for target in targets.iter() {
             self.dependencies
@@ -535,7 +535,7 @@ fn reduce(
             ctx.borrow_mut()
                 .computation_table
                 .borrow_mut()
-                .insert_multiple(
+                .insert_many(
                     &_tos,
                     Computation::Sorted {
                         froms: _froms,

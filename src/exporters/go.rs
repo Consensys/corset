@@ -6,7 +6,7 @@ use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 
-use crate::compiler::*;
+use crate::{column::Computation, compiler::*};
 
 fn make_go_function(name: &str, prelude: &str, content: &str, postlude: &str, ret: &str) -> String {
     format!(
@@ -175,8 +175,8 @@ import (
 
         for comp in cs.computations.iter() {
             match &comp {
-                crate::column::Computation::Composite { .. } => (),
-                crate::column::Computation::Interleaved { target, froms } => r.push_str(&format!(
+                Computation::Composite { .. } => (),
+                Computation::Interleaved { target, froms } => r.push_str(&format!(
                     "var {} = column.Interleaved{{\n{}\n}}\n",
                     target.name,
                     froms
@@ -185,7 +185,7 @@ import (
                         .collect::<Vec<_>>()
                         .join("\n")
                 )),
-                crate::column::Computation::Sorted { froms, tos } => {
+                Computation::Sorted { froms, tos } => {
                     for (from, to) in froms.iter().zip(tos.iter()) {
                         r.push_str(&format!(
                             "var {}  = column.NewSorted({})\n",
@@ -194,7 +194,7 @@ import (
                         ))
                     }
                 }
-                crate::column::Computation::CyclicFrom { .. } => unreachable!(),
+                Computation::CyclicFrom { .. } => unreachable!(),
             }
         }
 
@@ -215,16 +215,16 @@ import (
         ));
         for comp in cs.computations.iter() {
             match &comp {
-                crate::column::Computation::Composite { .. } => (),
-                crate::column::Computation::Interleaved { target, .. } => {
+                Computation::Composite { .. } => (),
+                Computation::Interleaved { target, .. } => {
                     r.push_str(&format!("{},\n", target.name))
                 }
-                crate::column::Computation::Sorted { tos, .. } => {
+                Computation::Sorted { tos, .. } => {
                     for to in tos.iter() {
                         r.push_str(&format!("{},\n", to.mangled_name()))
                     }
                 }
-                crate::column::Computation::CyclicFrom { .. } => unreachable!(),
+                Computation::CyclicFrom { .. } => unreachable!(),
             }
         }
         r += "}\n\n";
