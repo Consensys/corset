@@ -479,8 +479,8 @@ fn reduce(
             Ok(())
         }
         Token::DefPermutation {
-            from: tos,
-            to: froms,
+            from: froms,
+            to: tos,
         } => {
             if tos.len() != froms.len() {
                 return Err(anyhow!(
