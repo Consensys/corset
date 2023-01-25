@@ -13,29 +13,35 @@ use crate::compiler::*;
 const SIZE: usize = 4_194_304;
 
 fn shift(e: &Node, i: isize) -> Node {
-    match e.e() {
-        Expression::Funcall { func, args } => match func {
-            Builtin::Shift => {
-                let value = args[1].pure_eval().unwrap() + i;
-                Builtin::Shift.call(&[
-                    args[0].clone(),
-                    Expression::Const(value.clone(), Fr::from_str(&value.to_string())).into(),
-                ])
+    if i == 0 {
+        return e.to_owned();
+    } else {
+        match e.e() {
+            Expression::Funcall { func, args } => match func {
+                Builtin::Shift => {
+                    let value = args[1].pure_eval().unwrap() + i;
+                    Builtin::Shift.call(&[
+                        args[0].clone(),
+                        Expression::Const(value.clone(), Fr::from_str(&value.to_string())).into(),
+                    ])
+                }
+                _ => Expression::Funcall {
+                    func: *func,
+                    args: args.iter().map(|a| shift(a, i)).collect(),
+                }
+                .into(),
+            },
+            Expression::Const(..) => e.clone(),
+            Expression::Column(..) => Builtin::Shift.call(&[
+                e.clone(),
+                Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
+            ]),
+            Expression::List(xs) => {
+                Expression::List(xs.iter().map(|x| shift(x, i)).collect()).into()
             }
-            _ => Expression::Funcall {
-                func: *func,
-                args: args.iter().map(|a| shift(a, i)).collect(),
-            }
-            .into(),
-        },
-        Expression::Const(..) => e.clone(),
-        Expression::Column(..) => Builtin::Shift.call(&[
-            e.clone(),
-            Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
-        ]),
-        Expression::List(xs) => Expression::List(xs.iter().map(|x| shift(x, i)).collect()).into(),
-        Expression::ArrayColumn(..) => unreachable!(),
-        Expression::Void => Expression::Void.into(),
+            Expression::ArrayColumn(..) => unreachable!(),
+            Expression::Void => Expression::Void.into(),
+        }
     }
 }
 
@@ -143,7 +149,7 @@ fn render_constraints(constraints: &[Constraint]) -> String {
                 handle,
                 domain,
                 expr,
-            } => render_constraint(&handle.mangle(), domain.clone(), expr),
+            } => render_constraint(&handle.to_string(), domain.clone(), expr),
             Constraint::Plookup {
                 handle,
                 including,
@@ -280,8 +286,7 @@ import (
 
 const (
 SIZE = {}
-{}
-)
+{})
 
 func ZkEVMDefine(build *zkevm.Builder) {{
 //
