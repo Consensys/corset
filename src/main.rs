@@ -249,6 +249,9 @@ enum Commands {
             help = "compiled Corset file to create"
         )]
         outfile: String,
+
+        #[arg(long, help = "human-readably serialize the constraint system")]
+        pretty: bool,
     },
 }
 
@@ -560,10 +563,18 @@ fn main() -> Result<()> {
             .with_context(|| format!("while checking `{}`", tracefile))?;
             info!("{}: SUCCESS", tracefile)
         }
-        Commands::Compile { outfile } => {
+        Commands::Compile { outfile, pretty } => {
             std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?
-                .write_all(ron::to_string(&constraints).unwrap().as_bytes())
+                .write_all(
+                    if pretty {
+                        ron::ser::to_string_pretty(&constraints, ron::ser::PrettyConfig::default())
+                    } else {
+                        ron::ser::to_string(&constraints)
+                    }
+                    .unwrap()
+                    .as_bytes(),
+                )
                 .with_context(|| format!("while writing to `{}`", &outfile))?;
         }
     }
