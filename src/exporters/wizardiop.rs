@@ -14,7 +14,7 @@ const SIZE: usize = 4_194_304;
 
 fn shift(e: &Node, i: isize) -> Node {
     if i == 0 {
-        return e.to_owned();
+        e.to_owned()
     } else {
         match e.e() {
             Expression::Funcall { func, args } => match func {

@@ -476,11 +476,7 @@ impl ConstraintSet {
 
         let value: Vec<Fr> = vec![Fr::zero(); spilling as usize]
             .into_iter()
-            .chain(
-                (0..len)
-                    .map(|i| (i % modulo).to_string())
-                    .map(|i| Fr::from_str(&i.to_string()).unwrap()),
-            )
+            .chain((0..len).map(|i| Fr::from_str(&((i % modulo).to_string())).unwrap()))
             .collect();
 
         self.get_mut(to).unwrap().set_raw_value(value, spilling);
@@ -632,7 +628,7 @@ impl ConstraintSet {
             let mut delta = Fr::zero();
             if eq_values.last().unwrap().is_zero() {
                 for l in 0..ats.len() {
-                    let mut term = sorted_cols[l].get(i, false).unwrap().clone();
+                    let mut term = *sorted_cols[l].get(i, false).unwrap();
                     term.sub_assign(sorted_cols[l].get(i - 1, false).unwrap());
                     term.mul_assign(at_values[l].last().unwrap());
                     if !signs[l] {
@@ -648,7 +644,7 @@ impl ConstraintSet {
                 .into_repr()
                 .as_ref()
                 .iter()
-                .flat_map(|u| u.to_le_bytes().clone().into_iter())
+                .flat_map(|u| u.to_le_bytes().into_iter())
                 .map(|i| Fr::from_str(&i.to_string()).unwrap())
                 .enumerate()
                 .take(16)

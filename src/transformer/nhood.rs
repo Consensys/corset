@@ -41,7 +41,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         &intrld_aux_xs_handle,
         Computation::Interleaved {
             target: intrld_aux_xs_handle.clone(),
-            froms: interleaving.to_owned(),
+            froms: interleaving,
         },
     )?;
 
@@ -95,7 +95,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
             // SRT_ILD_[i+1] - (SRT_ILD_[i] + 1)
             Builtin::Sub.call(&[
                 Builtin::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)]),
-                Builtin::Add.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)]),
+                Builtin::Add.call(&[srt_intrld_aux_xs_node, Node::from_const(1)]),
             ]),
         ])),
     });
@@ -125,11 +125,11 @@ pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
     }
 
     for (module, handles) in nibble_columns.iter() {
-        process_nhood(&module, handles, 4, cs)?;
+        process_nhood(module, handles, 4, cs)?;
     }
 
     for (module, handles) in byte_columns.iter() {
-        process_nhood(&module, handles, 8, cs)?;
+        process_nhood(module, handles, 8, cs)?;
     }
 
     cs.update_ids();

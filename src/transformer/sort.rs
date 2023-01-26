@@ -200,7 +200,7 @@ fn create_sort_constraint(
                 Builtin::Add.call(
                     &vec![Node::from_handle(&eq)]
                         .into_iter()
-                        .chain(ats.iter().map(|at| Node::from_handle(at)))
+                        .chain(ats.iter().map(Node::from_handle))
                         .collect::<Vec<_>>(),
                 ),
             ]),

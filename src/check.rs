@@ -134,7 +134,7 @@ fn columns_len(
     }
     let l = cols_lens[0].unwrap_or(0);
     if l == 0 {
-        return Err(anyhow!("empty trace, aborting"));
+        Err(anyhow!("empty trace, aborting"))
     } else {
         Ok(Some(l))
     }
@@ -298,7 +298,7 @@ fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Fr) -> R
         }
         Ok(())
     } else {
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -335,7 +335,7 @@ fn check_constraint(
         };
         Ok(())
     } else {
-        return Ok(());
+        Ok(())
     }
 }
 
