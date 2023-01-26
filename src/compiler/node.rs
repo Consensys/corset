@@ -49,6 +49,16 @@ impl Node {
             })),
         }
     }
+    pub fn from_bigint(x: BigInt) -> Node {
+        Node {
+            _e: Expression::Const(x.to_owned(), Fr::from_str(&x.to_string())),
+            _t: Some(Type::Scalar(if x.is_one() || x.is_zero() {
+                Magma::Boolean
+            } else {
+                Magma::Integer
+            })),
+        }
+    }
     pub fn from_handle(x: &Handle) -> Node {
         Node {
             _e: Expression::Column(x.clone(), Kind::Phantom),

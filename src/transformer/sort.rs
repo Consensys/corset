@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use num_bigint::BigInt;
 use pairing_ce::ff::PrimeField;
 
 use crate::{
@@ -112,7 +113,7 @@ fn create_sort_constraint(
                         .enumerate()
                         .map(|(i, byte)| {
                             Builtin::Mul.call(&[
-                                Node::from_const(256_isize.pow(i as u32)),
+                                Node::from_bigint(BigInt::from(256).pow(i as u32)),
                                 Node::from_handle(byte),
                             ])
                         })
