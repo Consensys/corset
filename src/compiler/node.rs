@@ -40,17 +40,29 @@ impl Node {
     pub fn from_expr(e: Expression) -> Node {
         Node { _e: e, _t: None }
     }
-    pub fn from_const(x: usize) -> Node {
+    pub fn from_const(x: isize) -> Node {
         Node {
-            _e: Expression::Const(
-                BigInt::from_usize(x).unwrap(),
-                Some(Fr::from_str(&x.to_string()).unwrap()),
-            ),
+            _e: Expression::Const(BigInt::from_isize(x).unwrap(), Fr::from_str(&x.to_string())),
             _t: Some(Type::Scalar(match x {
                 0 | 1 => Magma::Boolean,
                 _ => Magma::Integer,
             })),
         }
+    }
+    pub fn from_handle(x: &Handle) -> Node {
+        Node {
+            _e: Expression::Column(x.clone(), Kind::Phantom),
+            _t: None,
+        }
+    }
+    pub fn with_type(self, t: Type) -> Self {
+        Node {
+            _t: Some(t),
+            ..self
+        }
+    }
+    pub fn from_typed_handle(x: &Handle, t: Type) -> Node {
+        Self::from_handle(x).with_type(t)
     }
     pub fn one() -> Node {
         Self::from_expr(Expression::Const(One::one(), Some(Fr::one())))

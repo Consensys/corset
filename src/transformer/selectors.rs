@@ -76,6 +76,5 @@ pub fn expand_constraints(cs: &mut ConstraintSet) -> Result<()> {
     }
 
     cs.update_ids();
-
     Ok(())
 }
