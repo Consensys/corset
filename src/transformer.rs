@@ -3,14 +3,16 @@ mod inverses;
 mod nhood;
 mod selectors;
 mod shifter;
+mod sort;
 
 pub use ifs::expand_ifs;
 pub use inverses::expand_invs;
 pub use nhood::validate_nhood;
 pub use selectors::expand_constraints;
 pub use shifter::lower_shifts;
+pub use sort::sorts;
 
-use crate::compiler::{Builtin, Expression, Handle, Kind, Magma, Node, Type};
+use crate::compiler::{Builtin, ConstraintSet, Expression, Handle, Kind, Magma, Node, Type};
 
 fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
     cs.push(Builtin::Sub.call(&[
@@ -20,6 +22,18 @@ fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
             _t: Some(Type::Column(Magma::Integer)),
         },
     ]))
+}
+
+fn create_column(
+    module: &str,
+    name: &str,
+    cs: &mut ConstraintSet,
+    kind: Kind<()>,
+    t: Type,
+) -> anyhow::Result<(Handle, usize)> {
+    let handle = Handle::new(module, name);
+    let id = cs.modules.insert_column(&handle, t, true, kind, false)?;
+    Ok((handle, id))
 }
 
 fn expression_to_name(e: &Node, prefix: &str) -> String {

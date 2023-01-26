@@ -259,6 +259,15 @@ pub enum Computation {
         froms: Vec<Handle>,
         modulo: usize,
     },
+    SortingConstraints {
+        ats: Vec<Handle>,
+        eq: Handle,
+        delta: Handle,
+        delta_bytes: Vec<Handle>,
+        signs: Vec<bool>,
+        froms: Vec<Handle>,
+        sorted: Vec<Handle>,
+    },
 }
 impl Computation {
     pub fn target(&self) -> String {
@@ -271,6 +280,11 @@ impl Computation {
                 .collect::<Vec<_>>()
                 .join(", "),
             Computation::CyclicFrom { target, .. } => target.to_string(),
+            Computation::SortingConstraints { ats: target, .. } => target
+                .iter()
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
         }
     }
     pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut Handle)) {

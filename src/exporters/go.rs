@@ -194,7 +194,8 @@ import (
                         ))
                     }
                 }
-                Computation::CyclicFrom { .. } => unreachable!(),
+                Computation::CyclicFrom { .. } => (),
+                Computation::SortingConstraints { .. } => (),
             }
         }
 
@@ -224,7 +225,8 @@ import (
                         r.push_str(&format!("{},\n", to.mangled_name()))
                     }
                 }
-                Computation::CyclicFrom { .. } => unreachable!(),
+                Computation::CyclicFrom { .. } => (),
+                Computation::SortingConstraints { .. } => (),
             }
         }
         r += "}\n\n";

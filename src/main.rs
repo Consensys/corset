@@ -564,6 +564,8 @@ fn main() -> Result<()> {
             info!("{}: SUCCESS", tracefile)
         }
         Commands::Compile { outfile, pretty } => {
+            transformer::sorts(&mut constraints)?;
+            constraints.update_ids();
             std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?
                 .write_all(

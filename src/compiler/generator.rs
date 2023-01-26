@@ -354,6 +354,7 @@ impl ConstraintSet {
         r
     }
 
+    // TODO I hate this, see if we can automate it
     pub fn update_ids(&mut self) {
         let set_id = |h: &mut Handle| h.set_id(self.modules.id_of(h));
         self.constraints
@@ -568,6 +569,107 @@ impl ConstraintSet {
         Ok(values)
     }
 
+    fn compute_sorting_auxs(
+        &mut self,
+        ats: &[Handle],
+        eq: &Handle,
+        delta: &Handle,
+        delta_bytes: &[Handle],
+        signs: &[bool],
+        from: &[Handle],
+        sorted: &[Handle],
+    ) -> Result<()> {
+        assert!(delta_bytes.len() == 16);
+        for c in from.iter().chain(sorted.iter()) {
+            self.compute_column(c)?;
+        }
+        let spilling = self.spilling_or_insert(&from[0].module);
+        let len = self.modules.by_handle(&from[0]).unwrap().len().unwrap();
+
+        let mut at_values = std::iter::repeat_with(|| vec![Fr::zero(); spilling as usize])
+            .take(ats.len())
+            .collect::<Vec<_>>();
+        let mut eq_values = vec![Fr::zero(); spilling as usize];
+        let mut delta_values = vec![Fr::zero(); spilling as usize];
+        let mut delta_bytes_values = std::iter::repeat_with(|| vec![Fr::zero(); spilling as usize])
+            .take(delta_bytes.len())
+            .collect::<Vec<_>>();
+        let sorted_cols = sorted
+            .iter()
+            .map(|f| {
+                self.modules
+                    .by_handle(f)
+                    .ok_or_else(|| anyhow!("column `{}` not found", f))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for i in 0..len as isize {
+            // Compute @s
+            let mut found = false;
+            for l in 0..ats.len() {
+                let eq = sorted_cols[l]
+                    .get(i, false)
+                    .unwrap()
+                    .eq(sorted_cols[l].get(i - 1, false).unwrap());
+
+                let v = if !eq {
+                    if found {
+                        Fr::zero()
+                    } else {
+                        found = true;
+                        Fr::one()
+                    }
+                } else {
+                    Fr::zero()
+                };
+
+                at_values[l].push(v);
+            }
+
+            // Compute Eq
+            eq_values.push(if found { Fr::zero() } else { Fr::one() });
+
+            // Compute Delta
+            let mut delta = Fr::zero();
+            if eq_values.last().unwrap().is_zero() {
+                for l in 0..ats.len() {
+                    let mut term = sorted_cols[l].get(i, false).unwrap().clone();
+                    term.sub_assign(sorted_cols[l].get(i - 1, false).unwrap());
+                    term.mul_assign(at_values[l].last().unwrap());
+                    if !signs[l] {
+                        term.negate();
+                    }
+                    delta.add_assign(&term);
+                }
+            }
+            // delta.sub_assign(&Fr::one());
+            delta_values.push(delta);
+
+            delta
+                .into_repr()
+                .as_ref()
+                .iter()
+                .flat_map(|u| u.to_le_bytes().clone().into_iter())
+                .map(|i| Fr::from_str(&i.to_string()).unwrap())
+                .enumerate()
+                .take(16)
+                .for_each(|(i, b)| delta_bytes_values[i].push(b));
+        }
+
+        for (at, value) in ats.iter().zip(at_values.into_iter()) {
+            self.get_mut(at).unwrap().set_raw_value(value, spilling);
+        }
+        self.get_mut(eq).unwrap().set_raw_value(eq_values, spilling);
+        self.get_mut(delta)
+            .unwrap()
+            .set_raw_value(delta_values, spilling);
+        for (delta_byte, value) in delta_bytes.iter().zip(delta_bytes_values.into_iter()) {
+            self.get_mut(delta_byte)
+                .unwrap()
+                .set_raw_value(value, spilling);
+        }
+        Ok(())
+    }
+
     fn compute_column(&mut self, target: &Handle) -> Result<()> {
         if self.get(target).unwrap().is_computed() {
             Ok(())
@@ -605,6 +707,15 @@ impl ConstraintSet {
                 froms,
                 modulo,
             } => self.compute_cyclic(froms, target, *modulo),
+            Computation::SortingConstraints {
+                ats,
+                eq,
+                delta,
+                delta_bytes,
+                signs,
+                froms,
+                sorted,
+            } => self.compute_sorting_auxs(ats, eq, delta, delta_bytes, signs, froms, sorted),
         }
     }
 
@@ -672,7 +783,9 @@ impl ConstraintSet {
                 Computation::Interleaved { froms, .. } => {
                     self.length_multiplier(&froms[0]) * froms.len()
                 }
-                Computation::Sorted { froms, .. } | Computation::CyclicFrom { froms, .. } => {
+                Computation::Sorted { froms, .. }
+                | Computation::CyclicFrom { froms, .. }
+                | Computation::SortingConstraints { froms, .. } => {
                     self.length_multiplier(&froms[0])
                 }
             })
@@ -713,6 +826,7 @@ impl ConstraintSet {
                         Computation::Interleaved { .. } => Fr::zero(),
                         Computation::Sorted { .. } => Fr::zero(),
                         Computation::CyclicFrom { .. } => Fr::zero(),
+                        Computation::SortingConstraints { .. } => Fr::zero(),
                     },
                 });
 
