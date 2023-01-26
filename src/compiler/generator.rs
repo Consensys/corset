@@ -473,6 +473,14 @@ impl ConstraintSet {
             self.compute_column(from)?;
         }
         let len = self.get(&froms[0]).unwrap().len().unwrap();
+        if len < modulo {
+            bail!(
+                "unable to compute cyclic column {}: {} < {}",
+                to.to_string().bold().white(),
+                len,
+                modulo
+            )
+        }
 
         let value: Vec<Fr> = vec![Fr::zero(); spilling as usize]
             .into_iter()
