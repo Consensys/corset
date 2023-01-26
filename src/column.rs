@@ -270,7 +270,7 @@ pub enum Computation {
     },
 }
 impl Computation {
-    pub fn target(&self) -> String {
+    pub fn pretty_target(&self) -> String {
         match self {
             Computation::Composite { target, .. } => target.to_string(),
             Computation::Interleaved { target, .. } => target.to_string(),

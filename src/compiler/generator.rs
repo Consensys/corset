@@ -676,12 +676,15 @@ impl ConstraintSet {
     }
 
     fn compute_column(&mut self, target: &Handle) -> Result<()> {
-        if self.get(target).unwrap().is_computed() {
+        let target_col = self.get(target).unwrap();
+        if target_col.is_computed() {
             Ok(())
+        } else if matches!(target_col.kind, Kind::Atomic) {
+            bail!("column {} is empty", target.to_string().bold().white())
         } else {
             self.compute(
                 self.computations
-                    .dep(target)
+                    .dependencies(target)
                     .ok_or_else(|| anyhow!("No computations found for `{}`", target))?,
             )
         }
@@ -689,7 +692,7 @@ impl ConstraintSet {
 
     fn compute(&mut self, i: usize) -> Result<()> {
         let comp = self.computations.get(i).unwrap().clone();
-        debug!("Computing `{}`", comp.target());
+        debug!("Computing `{}`", comp.pretty_target());
 
         match &comp {
             Computation::Composite { target, exp } => {

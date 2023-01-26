@@ -32,7 +32,7 @@ impl ComputationTable {
             .iter_mut()
             .for_each(|x| x.add_id_to_handles(set_id));
     }
-    pub fn dep(&self, target: &Handle) -> Option<usize> {
+    pub fn dependencies(&self, target: &Handle) -> Option<usize> {
         self.dependencies.get(target).cloned()
     }
     pub fn get(&self, i: usize) -> Option<&Computation> {
