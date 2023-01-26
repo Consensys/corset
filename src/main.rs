@@ -68,39 +68,19 @@ enum Commands {
     /// Produce a Go-based constraint system
     Go {
         #[arg(
-            short = 'C',
-            long = "columns",
-            help = "whether to render columns definition"
-        )]
-        render_columns: bool,
-
-        #[arg(
-            short = 'o',
-            long = "constraints-file",
-            help = "where to render the constraints"
-        )]
-        constraints_filename: Option<String>,
-
-        #[arg(long = "columns-file", help = "where to render the columns")]
-        columns_filename: Option<String>,
-
-        #[arg(long = "assignment", default_value = "CE")]
-        columns_assignment: String,
-
-        #[arg(
-            short = 'F',
-            long = "function-name",
-            help = "The name of the function to be generated"
-        )]
-        fname: String,
-
-        #[arg(
             short = 'P',
             long = "package",
             required = true,
             help = "In which package the function will be generated"
         )]
         package: String,
+
+        #[arg(
+            short = 'o',
+            long = "columns-file",
+            help = "where to render the columns"
+        )]
+        filename: Option<String>,
     },
     /// Produce a WizardIOP constraint system
     WizardIOP {
@@ -334,24 +314,10 @@ fn main() -> Result<()> {
     };
 
     match args.command {
-        Commands::Go {
-            constraints_filename,
-            columns_filename,
-            render_columns,
-            package,
-            columns_assignment,
-            fname,
-        } => {
+        Commands::Go { package, filename } => {
             transformer::expand_ifs(&mut constraints);
             transformer::lower_shifts(&mut constraints);
-            let mut go_exporter = exporters::GoExporter {
-                constraints_filename,
-                package,
-                ce: columns_assignment,
-                render_columns,
-                columns_filename,
-                fname,
-            };
+            let mut go_exporter = exporters::GoExporter { package, filename };
             go_exporter.render(&constraints)?;
         }
         Commands::WizardIOP {

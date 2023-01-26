@@ -4,128 +4,15 @@ use anyhow::*;
 use convert_case::{Case, Casing};
 use itertools::Itertools;
 use num_bigint::BigInt;
-use num_traits::ToPrimitive;
 
 use crate::{column::Computation, compiler::*};
 
-fn make_go_function(name: &str, prelude: &str, content: &str, postlude: &str, ret: &str) -> String {
-    format!(
-        r#"func {}() (r {}) {{
-{}
-{}
-{}
-return
-}}
-"#,
-        name.to_case(Case::Camel),
-        ret,
-        prelude,
-        content,
-        postlude,
-    )
-}
-
 #[derive(Debug)]
 pub struct GoExporter {
-    pub fname: String,
     pub package: String,
-    pub ce: String,
-
-    pub constraints_filename: Option<String>,
-    pub columns_filename: Option<String>,
-    pub render_columns: bool,
+    pub filename: Option<String>,
 }
 impl GoExporter {
-    fn make_chain(&self, xs: &[Node], operand: &str, surround: bool) -> Result<String> {
-        let head = self.render_node(&xs[0])?;
-        let tail = &xs[1..];
-        if xs.len() > 2 {
-            let tail = tail
-                .iter()
-                .map(|x| self.render_node(x).map(|s| format!("{}({})", operand, s)))
-                .collect::<Result<Vec<_>>>()?
-                .join(".");
-            let chain = format!("{}.{}", head, tail);
-            Ok(if surround {
-                format!("({})", chain)
-            } else {
-                chain
-            })
-        } else {
-            Ok(format!(
-                "{}.{}({})",
-                head,
-                operand,
-                self.render_node(&xs[1])?
-            ))
-        }
-    }
-
-    pub fn render_node(&self, node: &Node) -> Result<String> {
-        let r = match node.e() {
-            Expression::ArrayColumn(..) => unreachable!(),
-            Expression::Const(x, _) => Ok(format!("column.CONST_STRING(\"{}\")", x)),
-            Expression::Column(handle, ..) => {
-                Ok(format!("{}[{}.Name()]", self.ce, handle.mangled_name()))
-            }
-            Expression::Funcall { func, args } => self.render_funcall(func, args),
-            Expression::List(constraints) => Ok(constraints
-                .iter()
-                .map(|x| self.render_node(x))
-                .map(|x| {
-                    x.map(|mut r| {
-                        if let Some(true) = r.chars().last().map(|c| c != ',') {
-                            r.push(',');
-                        }
-                        r
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?
-                .join("\n")),
-            Expression::Void => return Ok(String::new()),
-        }?;
-
-        Ok(r)
-    }
-    pub fn render_funcall(&self, func: &Builtin, args: &[Node]) -> Result<String> {
-        let r = match func {
-            Builtin::Add => self.make_chain(args, "Add", true),
-            Builtin::Mul => self.make_chain(args, "Mul", false),
-            Builtin::Sub => self.make_chain(args, "Sub", true),
-            Builtin::Exp => {
-                let exp = args[1]
-                    .pure_eval()
-                    .with_context(|| anyhow!("Exponent `{}` is not evaluable", &args[1]))?
-                    .to_usize()
-                    .with_context(|| {
-                        anyhow!("Exponent `{}` is too large", &args[1].pure_eval().unwrap())
-                    })?;
-                match exp {
-                    0 => Ok("column.CONST_STRING(\"1\")".to_string()),
-                    1 => self.render_node(&args[0]),
-                    _ => self.make_chain(
-                        &std::iter::repeat(args[0].clone())
-                            .take(exp)
-                            .collect::<Vec<_>>(),
-                        "Mul",
-                        false,
-                    ),
-                }
-            }
-            Builtin::Inv => Ok(format!("({}).Inv()", self.render_node(&args[0])?)),
-            Builtin::Neg => Ok(format!("({}).Neg()", self.render_node(&args[0])?)),
-            Builtin::Shift => Ok(format!(
-                "({}).Shift({})",
-                self.render_node(&args[0])?,
-                &args[1].pure_eval()?,
-            )),
-            x => {
-                unimplemented!("{:?}", x)
-            }
-        }?;
-        Ok(r)
-    }
-
     fn render_consts(&self, consts: &HashMap<Handle, BigInt>) -> String {
         consts
             .iter()
@@ -147,11 +34,12 @@ package {}
 
 import (
     "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"
-    "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/module"
 )
 "#,
             self.package,
         );
+
+        r += &self.render_consts(&cs.constants);
 
         r += "const (\n";
 
@@ -244,138 +132,22 @@ import (
                 .collect::<Vec<_>>()
                 .join("\n")
         ));
-        r.push_str(&format!(
-            "\nvar {} = module.BuildColumnExpressions(AllColumns)\n",
-            self.ce
-        ));
         r
     }
 
     pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
-        let columns = if self.render_columns {
-            self.render_columns(cs)
-        } else {
-            String::new()
-        };
-        let constraints = cs
-            .constraints
-            .iter()
-            .sorted_by_key(|c| c.name())
-            .filter_map(|c| match c {
-                Constraint::Vanishes {
-                    handle: name,
-                    domain: _,
-                    expr,
-                } => Some(
-                    self.render_node(expr)
-                        .map(|mut r| {
-                            if let Some(true) = r.chars().last().map(|c| c != ',') {
-                                r.push(',');
-                            }
-                            r
-                        })
-                        .map(|r| {
-                            make_go_function(
-                                &name.mangle().to_case(Case::Snake),
-                                "r = []column.Expression {",
-                                &r,
-                                "}",
-                                "[]column.Expression",
-                            )
-                        }),
-                ),
-                Constraint::Plookup { .. } => None,
-                Constraint::Permutation { .. } => None,
-                Constraint::InRange { .. } => None,
-            })
-            .collect::<Result<Vec<_>>>()?
-            .join("\n");
+        let columns = self.render_columns(cs);
 
-        let main_function = make_go_function(
-            &self.fname.to_case(Case::Pascal),
-            "",
-            &cs.constraints
-                .iter()
-                .sorted_by_key(|c| c.name())
-                .map(|c| {
-                    match c {
-                        Constraint::Vanishes { handle: name, domain, .. } => {
-                            match domain {
-                                None => {
-                                    format!(
-                                        "r = append(r, constraint.NewGlobalConstraintList({}()...)...)",
-                                        name.mangle().to_case(Case::Camel)
-                                    )
-                                }
-                                Some(domain) => {
-                                    format!(
-                                        "r = append(r, constraint.NewLocalConstraintList([]int{{{}}}, {}()...)...)",
-                                        domain.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", "),
-                                        name.mangle().to_case(Case::Camel)
-                                    )
-                                }
-                            }
-                        },
-                        Constraint::Plookup { handle: name, including: parents, included: children }  => {
-                            format!("// New Plookup {}\n// Parents:\n// {:?}\n// Children:\n// {:?}", name, parents, children)
-                        },
-                        Constraint::Permutation { handle: _name, from, to } =>
-                            format!("// Permutation \n// Parents:\n// {}\n// Children:\n// {:?}",
-                                    from.iter().map(|h| h.to_string()).intersperse(", ".to_string()).collect::<String>(),
-                                    to.iter().map(|h| h.to_string()).intersperse(", ".to_string()).collect::<String>()
-                            ),
-                        Constraint::InRange {  .. } => "".into()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("\n"),
-            "",
-            "module.Constraints"
-        );
-
-        let r = format!(
-            r#"
-package {}
-
-import (
-    "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"
-    "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/constraint"
-    "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/module"
-)
-
-{}
-
-{}
-
-{}
-"#,
-            self.package,
-            self.render_consts(&cs.constants),
-            constraints,
-            main_function,
-        );
-
-        if let Some(ref filename) = self.columns_filename {
-            if self.render_columns {
-                std::fs::File::create(filename)
-                    .with_context(|| format!("while creating `{}`", filename))?
-                    .write_all(columns.as_bytes())
-                    .with_context(|| format!("while writing to `{}`", filename))?;
-                super::gofmt(filename);
-            }
+        if let Some(ref filename) = self.filename {
+            std::fs::File::create(filename)
+                .with_context(|| format!("while creating `{}`", filename))?
+                .write_all(columns.as_bytes())
+                .with_context(|| format!("while writing to `{}`", filename))?;
+            super::gofmt(filename);
         } else {
             println!("{}", columns);
         };
 
-        if let Some(filename) = self.constraints_filename.as_ref() {
-            std::fs::File::create(filename)
-                .with_context(|| format!("while creating `{}`", filename))?
-                .write_all(r.as_bytes())
-                .with_context(|| format!("while writing to `{}`", filename))?;
-            super::gofmt(filename);
-        } else {
-            println!("{}", r);
-        }
         Ok(())
     }
 }
