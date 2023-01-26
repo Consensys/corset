@@ -604,8 +604,9 @@ impl ConstraintSet {
             for l in 0..ats.len() {
                 let eq = sorted_cols[l]
                     .get(i, false)
-                    .unwrap()
-                    .eq(sorted_cols[l].get(i - 1, false).unwrap());
+                    .zip(sorted_cols[l].get(i - 1, false)) // may fail @0 if no padding; in this case, @ = 0
+                    .map(|(v1, v2)| v1.eq(v2))
+                    .unwrap_or(true);
 
                 let v = if !eq {
                     if found {
