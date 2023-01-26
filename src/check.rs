@@ -77,6 +77,69 @@ impl DebugSettings {
     }
 }
 
+fn columns_len(
+    expr: &Node,
+    columns: &ColumnSet,
+    name: &Handle,
+    with_padding: bool,
+) -> Result<Option<usize>> {
+    let cols_lens = expr
+        .dependencies()
+        .into_iter()
+        .map(|handle| {
+            columns
+                .get(&handle)
+                .with_context(|| anyhow!("can not find column `{}`", handle))
+                .map(|c| {
+                    if with_padding {
+                        c.padded_len()
+                    } else {
+                        c.len()
+                    }
+                })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    if cols_lens.is_empty() {
+        return Ok(None);
+    }
+    // Early exit if all the columns are empty: the module is not triggered
+    // Ideally, this should be an `all` rather than an `any`, but the ID
+    // pushes columns that will always be filled.
+    if cols_lens.iter().any(|l| l.is_none()) {
+        debug!("Skipping constraint `{}` with empty columns", name);
+        return Ok(None);
+    }
+    if !cols_lens
+        .iter()
+        .all(|&l| l.unwrap_or_default() == cols_lens[0].unwrap_or_default())
+    {
+        error!(
+            "all columns are not of the same length:\n{}",
+            expr.dependencies()
+                .iter()
+                .map(|handle| format!(
+                    "\t{}: {}/{:?}",
+                    handle,
+                    columns
+                        .get(handle)
+                        .unwrap()
+                        .padded_len()
+                        .map(|x| x.to_string())
+                        .unwrap_or_else(|| "nil".into()),
+                    columns.get(handle).unwrap().spilling
+                ))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
+    let l = cols_lens[0].unwrap_or(0);
+    if l == 0 {
+        return Err(anyhow!("empty trace, aborting"));
+    } else {
+        Ok(Some(l))
+    }
+}
+
 /// Pretty print an expresion and all its intermediate value for debugging (or
 /// eye-candy) purposes
 ///
@@ -210,6 +273,35 @@ fn check_constraint_at(
     Ok(())
 }
 
+fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Fr) -> Result<()> {
+    let l = columns_len(expr, columns, name, false)?;
+    if let Some(l) = l {
+        for i in 0..l as isize {
+            let r = expr
+                .eval(
+                    i,
+                    &mut |handle, i, wrap| {
+                        columns._cols[handle.id.unwrap()].get_raw(i, wrap).cloned()
+                    },
+                    &mut None,
+                    &Default::default(),
+                )
+                .unwrap();
+            if !r.le(max) {
+                bail!(
+                    "{} = {} > {}",
+                    expr.to_string().white().bold(),
+                    r.pretty().red().bold(),
+                    max.pretty().blue()
+                )
+            }
+        }
+        Ok(())
+    } else {
+        return Ok(());
+    }
+}
+
 fn check_constraint(
     expr: &Node,
     domain: &Option<Vec<isize>>,
@@ -217,76 +309,34 @@ fn check_constraint(
     name: &Handle,
     settings: DebugSettings,
 ) -> Result<()> {
-    let cols_lens = expr
-        .dependencies()
-        .into_iter()
-        .map(|handle| {
-            columns
-                .get(&handle)
-                .with_context(|| anyhow!("can not find column `{}`", handle))
-                .map(|c| c.padded_len())
-        })
-        .collect::<Result<Vec<_>>>()?;
-    if cols_lens.is_empty() {
-        return Ok(());
-    }
-    // Early exit if all the columns are empty: the module is not triggered
-    // Ideally, this should be an `all` rather than an `any`, but the ID
-    // pushes columns that will always be filled.
-    if cols_lens.iter().any(|l| l.is_none()) {
-        debug!("Skipping constraint `{}` with empty columns", name);
-        return Ok(());
-    }
-    if !cols_lens
-        .iter()
-        .all(|&l| l.unwrap_or_default() == cols_lens[0].unwrap_or_default())
-    {
-        error!(
-            "all columns are not of the same length:\n{}",
-            expr.dependencies()
-                .iter()
-                .map(|handle| format!(
-                    "\t{}: {}/{:?}",
-                    handle,
-                    columns
-                        .get(handle)
-                        .unwrap()
-                        .padded_len()
-                        .map(|x| x.to_string())
-                        .unwrap_or_else(|| "nil".into()),
-                    columns.get(handle).unwrap().spilling
-                ))
-                .collect::<Vec<_>>()
-                .join("\n")
-        );
-    }
-    let l = cols_lens[0].unwrap_or(0);
-    if l == 0 {
-        return Err(anyhow!("empty trace, aborting"));
-    }
-
-    let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
-    match domain {
-        Some(is) => {
-            for i in is {
-                check_constraint_at(expr, *i, true, columns, true, &mut cache, settings)?;
+    let l = columns_len(expr, columns, name, true)?;
+    if let Some(l) = l {
+        let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
+        match domain {
+            Some(is) => {
+                for i in is {
+                    check_constraint_at(expr, *i, true, columns, true, &mut cache, settings)?;
+                }
             }
-        }
-        None => {
-            for i in 0..l as isize {
-                let err = check_constraint_at(expr, i, false, columns, false, &mut cache, settings);
+            None => {
+                for i in 0..l as isize {
+                    let err =
+                        check_constraint_at(expr, i, false, columns, false, &mut cache, settings);
 
-                if err.is_err() {
-                    if settings.continue_on_error {
-                        eprintln!("{:?}", err);
-                    } else {
-                        return err;
+                    if err.is_err() {
+                        if settings.continue_on_error {
+                            eprintln!("{:?}", err);
+                        } else {
+                            return err;
+                        }
                     }
                 }
             }
-        }
-    };
-    Ok(())
+        };
+        Ok(())
+    } else {
+        return Ok(());
+    }
 }
 
 fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Result<()> {
@@ -499,13 +549,15 @@ pub fn check(
                     // warn!("Permutation validation not yet implemented");
                     None
                 }
-                Constraint::InRange {
-                    handle: _,
-                    exp: _e,
-                    max: _range,
-                } => {
-                    // warn!("Range validation not yet implemented")
-                    None
+                Constraint::InRange { handle, exp, max } => {
+                    if let Err(trace) = check_inrange(handle, exp, &cs.modules, max) {
+                        if settings.report {
+                            error!("{} failed:\n{:?}\n", handle, trace);
+                        }
+                        Some(handle.to_owned())
+                    } else {
+                        None
+                    }
                 }
             }
         })

@@ -46,7 +46,7 @@ pub enum Constraint {
     InRange {
         handle: Handle,
         exp: Node,
-        max: usize,
+        max: Fr,
     },
 }
 impl Constraint {
@@ -77,9 +77,9 @@ impl Constraint {
             } => hs1.iter_mut().chain(hs2.iter_mut()).for_each(|h| set_id(h)),
             Constraint::InRange {
                 handle: _,
-                exp: _,
+                exp,
                 max: _,
-            } => {}
+            } => exp.add_id_to_handles(set_id),
         }
     }
 
@@ -1102,7 +1102,8 @@ fn reduce_toplevel(
             Ok(Some(Constraint::InRange {
                 handle,
                 exp: reduce(e, root_ctx, ctx, settings)?.unwrap(),
-                max: *range,
+                max: Fr::from_str(&range.to_string())
+                    .ok_or_else(|| anyhow!("`{range}` is not representable in Fr"))?,
             }))
         }
         Token::DefColumns(columns) => {

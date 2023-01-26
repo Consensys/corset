@@ -79,7 +79,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
                 srt_intrld_aux_xs_handle.to_owned(),
                 Kind::Phantom,
             )),
-            Node::from_const(modulo - 1),
+            Node::from_const((modulo - 1).try_into().unwrap()),
         ])),
     });
 
