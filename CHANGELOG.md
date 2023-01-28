@@ -2,11 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.1.0] - 2023-01-28
+
+### Bug Fixes
+
+- Inverted permutation definition
+- Sort constraint should not fail when there is no padding
+- Do not fail while validating too short cyclic columns
+- Better error messages on empty columns
+- Overflow in powers of 256 projected on isize
+
+### Documentation
+
+- Add documentation to common types
+
+### Features
+
+- Avoid useless shift in WizardIOP local constraints
+- Implement the n-hood constraints
+- Detailed debugging now works with negative indices
+- Add a --pretty flag to the compiler
+- Check in-range constraints
+- Implement sort constraint proving
+- Remove data generation not required by zkGeth anymore
+
+### Miscellaneous Tasks
+
+- Renaming
+- Add helper functions
+- Clippy
+- Go export of constraints is not required anymore
+
+### Refactor
+
+- Drop the make-decomposition builtin
+- Consolidate post-compilation transformations
+
 ## [5.0.1] - 2023-01-22
 
 ### Bug Fixes
 
 - Erroneous padding for Phantom columns
+
+### Miscellaneous Tasks
+
+- Release corset version 5.0.1
 
 ## [5.0.0] - 2023-01-20
 
