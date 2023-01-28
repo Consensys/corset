@@ -5,7 +5,7 @@ use convert_case::{Case, Casing};
 use itertools::Itertools;
 use num_bigint::BigInt;
 
-use crate::{column::Computation, compiler::*};
+use crate::compiler::*;
 
 #[derive(Debug)]
 pub struct GoExporter {
@@ -42,96 +42,41 @@ import (
         r += &self.render_consts(&cs.constants);
 
         r += "const (\n";
-
         r += &cs
             .modules
             .iter()
-            .filter_map(|(handle, col)| match col.kind {
-                Kind::Atomic => Some(format!(
-                    "{} column.Column = \"{}\"",
-                    handle.mangled_name(),
-                    handle.mangled_name()
-                )),
-                Kind::Phantom => None,
-                Kind::Composite(_) => None,
-                Kind::Interleaved(_) => None,
+            .filter_map(|(handle, col)| {
+                if let Kind::Atomic = col.kind {
+                    Some(format!(
+                        "{} column.Column = \"{}\"",
+                        handle.mangled_name(),
+                        handle.mangled_name()
+                    ))
+                } else {
+                    None
+                }
             })
             .sorted()
             .collect::<Vec<_>>()
             .join("\n");
         r += ")\n\n";
 
-        for comp in cs.computations.iter() {
-            match &comp {
-                Computation::Composite { .. } => (),
-                Computation::Interleaved { target, froms } => r.push_str(&format!(
-                    "var {} = column.Interleaved{{\n{}\n}}\n",
-                    target.name,
-                    froms
-                        .iter()
-                        .map(|f| format!("{},", f.name))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                )),
-                Computation::Sorted { froms, tos } => {
-                    for (from, to) in froms.iter().zip(tos.iter()) {
-                        r.push_str(&format!(
-                            "var {}  = column.NewSorted({})\n",
-                            to.mangled_name(),
-                            from.mangled_name()
-                        ))
-                    }
-                }
-                Computation::CyclicFrom { .. } => (),
-                Computation::SortingConstraints { .. } => (),
-            }
-        }
+        // r += "var AllColumns = []column.Description{";
+        // r.push_str(&format!(
+        //     "\n{}\n",
+        //     cs.modules
+        //         .iter()
+        //         .filter_map(|(handle, col)| if let Kind::Atomic = col.kind {
+        //             Some(format!("{},", handle.mangled_name()))
+        //         } else {
+        //             None
+        //         })
+        //         .sorted()
+        //         .collect::<Vec<_>>()
+        //         .join("\n")
+        // ));
+        // r += "}\n\n";
 
-        r += "var AllColumns = []column.Description{";
-        r.push_str(&format!(
-            "\n{}\n",
-            cs.modules
-                .iter()
-                .filter_map(|(handle, col)| match col.kind {
-                    Kind::Atomic => Some(format!("{},", handle.mangled_name())),
-                    Kind::Phantom => None,
-                    Kind::Composite(_) => None,
-                    Kind::Interleaved(_) => Some(format!("{},", handle.mangled_name())),
-                })
-                .sorted()
-                .collect::<Vec<_>>()
-                .join("\n")
-        ));
-        for comp in cs.computations.iter() {
-            match &comp {
-                Computation::Composite { .. } => (),
-                Computation::Interleaved { target, .. } => {
-                    r.push_str(&format!("{},\n", target.name))
-                }
-                Computation::Sorted { tos, .. } => {
-                    for to in tos.iter() {
-                        r.push_str(&format!("{},\n", to.mangled_name()))
-                    }
-                }
-                Computation::CyclicFrom { .. } => (),
-                Computation::SortingConstraints { .. } => (),
-            }
-        }
-        r += "}\n\n";
-
-        r.push_str(&format!(
-            "var InterleavedColumns = []column.Description{{\n{}\n}}\n",
-            cs.modules
-                .iter()
-                .filter_map(|(handle, col)| match col.kind {
-                    Kind::Atomic => None,
-                    Kind::Phantom => None,
-                    Kind::Composite(_) => None,
-                    Kind::Interleaved(_) => Some(format!("{},", handle.mangled_name())),
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
-        ));
         r
     }
 

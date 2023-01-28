@@ -1,7 +1,7 @@
 (defunalias = eq)
 (defunalias sub -)
 
-(defunalias and *)
+(defunalias and +)
 (defunalias mul *)
 
 (defunalias add +)
