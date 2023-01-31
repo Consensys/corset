@@ -179,26 +179,21 @@ impl SymbolTable {
                                 self.name.blue()
                             ))
                         } else {
-                            self.parent
-                                .upgrade()
-                                .map_or(
-                                    Err(anyhow!(
-                                        "symbol {} unknown in module {}",
-                                        name.red(),
-                                        self.name.blue()
-                                    )),
-                                    |parent| {
-                                        parent.borrow_mut()._resolve_symbol(
-                                            name,
-                                            &mut HashSet::new(),
-                                            false,
-                                            self.closed || pure,
-                                        )
-                                    },
-                                )
-                                .with_context(|| {
-                                    anyhow!("looking for {} in {}", name.red(), self.name.blue())
-                                })
+                            self.parent.upgrade().map_or(
+                                Err(anyhow!(
+                                    "symbol {} unknown in module {}",
+                                    name.red(),
+                                    self.name.blue()
+                                )),
+                                |parent| {
+                                    parent.borrow_mut()._resolve_symbol(
+                                        name,
+                                        &mut HashSet::new(),
+                                        false,
+                                        self.closed || pure,
+                                    )
+                                },
+                            )
                         }
                     }
                     _ => unimplemented!(),
