@@ -117,8 +117,8 @@ impl Node {
             f: &dyn Fn(&Node) -> Option<Fr>,
             faulty: &Fr, // the non-zero value of the constraint
             unclutter: bool,
-            dim: bool,        // whether the user enabled --debug-dim
-            should_dim: bool, // whether we are in a zero-path
+            dim: bool,          // whether the user enabled --debug-dim
+            zero_context: bool, // whether we are in a zero-path
         ) {
             let colors = [
                 colored::Color::Red,
@@ -134,7 +134,7 @@ impl Node {
                 colored::Color::BrightMagenta,
                 colored::Color::BrightCyan,
             ];
-            let c = if dim && should_dim {
+            let c = if dim && zero_context {
                 colored::Color::BrightBlack
             } else {
                 colors[tty.depth() % colors.len()]
@@ -148,12 +148,12 @@ impl Node {
                         return;
                     }
                     let fname = func.to_string();
-                    let c = if v.is_zero() && dim {
+                    let c = if v.is_zero() && zero_context {
                         colored::Color::BrightBlack
                     } else {
                         c
                     };
-                    let c_v = if dim && (should_dim || v.is_zero()) {
+                    let c_v = if dim && (zero_context || v.is_zero()) {
                         colored::Color::BrightBlack
                     } else if v.eq(faulty) {
                         colored::Color::Red
@@ -165,11 +165,27 @@ impl Node {
                     tty.shift(fname.len() + 2);
                     if let Some(a) = args.get(0) {
                         tty.latch_indent();
-                        _debug(a, tty, f, faulty, unclutter, dim, v.is_zero() || should_dim);
+                        _debug(
+                            a,
+                            tty,
+                            f,
+                            faulty,
+                            unclutter,
+                            dim,
+                            v.is_zero() || zero_context,
+                        );
                     }
                     tty.cr();
                     for a in args.iter().skip(1) {
-                        _debug(a, tty, f, faulty, unclutter, dim, v.is_zero() || should_dim);
+                        _debug(
+                            a,
+                            tty,
+                            f,
+                            faulty,
+                            unclutter,
+                            dim,
+                            v.is_zero() || zero_context,
+                        );
                         tty.cr();
                     }
                     tty.unshift();
@@ -177,7 +193,7 @@ impl Node {
                     tty.append(format!("[{}]", v.pretty()).color(c_v).to_string())
                 }
                 Expression::Const(x, _) => {
-                    let c = if dim && should_dim {
+                    let c = if dim && zero_context {
                         colored::Color::BrightBlack
                     } else {
                         colored::Color::White
@@ -186,7 +202,7 @@ impl Node {
                 }
                 Expression::Column(h, _) => {
                     let v = f(n).unwrap_or_default();
-                    let c = if dim && should_dim {
+                    let c = if dim && zero_context {
                         colored::Color::BrightBlack
                     } else if v.eq(faulty) {
                         colored::Color::Red
@@ -209,7 +225,7 @@ impl Node {
                     } else {
                         c
                     };
-                    if (dim || v.is_zero()) && unclutter {
+                    if v.is_zero() && unclutter {
                         tty.write("...".color(c).to_string());
                         return;
                     }
@@ -217,7 +233,15 @@ impl Node {
                     tty.cr();
                     tty.shift(3);
                     for a in ns.iter() {
-                        _debug(a, tty, f, faulty, unclutter, dim, v.is_zero() || should_dim);
+                        _debug(
+                            a,
+                            tty,
+                            f,
+                            faulty,
+                            unclutter,
+                            dim,
+                            v.is_zero() || zero_context,
+                        );
                         tty.cr();
                     }
                     tty.unshift();
