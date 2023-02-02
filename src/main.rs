@@ -125,18 +125,6 @@ enum Commands {
         )]
         outfile: Option<String>,
     },
-    /// Given a set of constraints, indefinitely fill the computed columns from/to an SQL table
-    #[cfg(feature = "postgres")]
-    ComputeLoop {
-        #[arg(long, default_value = "localhost")]
-        host: String,
-        #[arg(long, default_value = "postgres")]
-        user: String,
-        #[arg(long)]
-        password: Option<String>,
-        #[arg(long, default_value = "zkevm")]
-        database: String,
-    },
     /// Given a set of constraints and a filled trace, check the validity of the constraints
     Check {
         #[arg(
@@ -366,52 +354,6 @@ fn main() -> Result<()> {
                 .with_context(|| format!("while writing to `{}`", &outfile))?;
         }
         #[cfg(feature = "postgres")]
-        Commands::ComputeLoop {
-            host,
-            user,
-            password,
-            database,
-        } => {
-            use flate2::write::GzEncoder;
-            use flate2::Compression;
-
-            transformer::expand_ifs(&mut constraints);
-            transformer::expand_constraints(&mut constraints)?;
-            transformer::expand_invs(&mut constraints)?;
-            transformer::lower_shifts(&mut constraints);
-            let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
-
-            loop {
-                let mut local_constraints = constraints.clone();
-
-                let mut tx = db.transaction()?;
-                for row in tx.query(
-                    "SELECT id, status, payload FROM blocks WHERE STATUS='to_corset' ORDER BY length(payload) ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
-                    &[],
-                )? {
-                    let id: &str = row.get(0);
-                    let payload: &[u8] = row.get(2);
-                    info!("Processing {}", id);
-
-                    let v: Value = serde_json::from_str(
-                        &utils::decompress(payload).with_context(|| "while decompressing payload")?,
-                    )?;
-
-                    compute::compute(&v, &mut local_constraints)
-                        .with_context(|| "while computing columns")?;
-
-                    let mut e = GzEncoder::new(Vec::new(), Compression::default());
-                    local_constraints.write(&mut e)?;
-
-                    tx.execute("UPDATE blocks SET payload=$1, status='to_prover' WHERE id=$2", &[&e.finish()?, &id])
-                        .with_context(|| "while inserting back row")?;
-                }
-                tx.commit()?;
-
-                std::thread::sleep(std::time::Duration::from_secs(1));
-            }
-        }
-        #[cfg(feature = "postgres")]
         Commands::CheckLoop {
             host,
             user,
@@ -480,7 +422,9 @@ fn main() -> Result<()> {
                     }
 
                 }
-                tx.commit()?;
+                if let Err(e) = tx.commit() {
+                    error!("{:?}", e);
+                }
 
                 std::thread::sleep(std::time::Duration::from_secs(1));
             }
