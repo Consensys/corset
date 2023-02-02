@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [5.1.0] - 2023-01-28
+## [6.0.0] - 2023-02-02
 
 ### Bug Fixes
 
@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 - Do not fail while validating too short cyclic columns
 - Better error messages on empty columns
 - Overflow in powers of 256 projected on isize
+- Unclutter lookup errors
 
 ### Documentation
 
@@ -25,6 +26,7 @@ All notable changes to this project will be documented in this file.
 - Check in-range constraints
 - Implement sort constraint proving
 - Remove data generation not required by zkGeth anymore
+- Introduce a new :guard/:domain feature
 
 ### Miscellaneous Tasks
 
@@ -32,11 +34,15 @@ All notable changes to this project will be documented in this file.
 - Add helper functions
 - Clippy
 - Go export of constraints is not required anymore
+- Release corset version 5.1.0
+- Reformat the stdlib
 
 ### Refactor
 
 - Drop the make-decomposition builtin
 - Consolidate post-compilation transformations
+- Better variable name
+- Drop ComputeLoop
 
 ## [5.0.1] - 2023-01-22
 
