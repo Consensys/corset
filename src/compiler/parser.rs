@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use colored::Colorize;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
@@ -119,7 +119,7 @@ pub enum Token {
     /// a list of nodes
     List(Vec<AstNode>),
     /// a range; typically used in discrete constraints declaration and loops
-    Range(Vec<usize>),
+    Range(Vec<isize>),
     /// the type of the node
     Type(Type),
 
@@ -165,6 +165,8 @@ pub enum Token {
         name: String,
         /// if the domain of the constraint is `None`, it is supposed to hold everywhere
         domain: Option<Vec<isize>>,
+        /// an expression that enables the constraint only when it is non zero
+        guard: Option<Box<AstNode>>,
         /// this expression has to reduce to 0 for the constraint to be satisfied
         exp: Box<AstNode>,
     },
@@ -414,7 +416,7 @@ impl AstNode {
                     x => return Err(anyhow!("unknown column attribute {:?}", x)),
                 },
                 _ => {
-                    return Err(anyhow!("expected :KEYWORD, found `{}`", x.as_str()));
+                    return Err(anyhow!("expected :KEYWORD, found `{:?}`", x.as_rule()));
                 }
             }
         }
@@ -426,7 +428,10 @@ impl AstNode {
                 Ok(AstNode {
                     class: Token::DefArrayColumn {
                         name: name.into(),
-                        domain: range,
+                        domain: range
+                            .iter()
+                            .map(|&x| x.try_into().map_err(|e| anyhow!("{:?}", e)))
+                            .collect::<Result<Vec<_>>>()?,
                         t: t.unwrap_or(Type::Column(Magma::Integer)),
                     },
                     lc,
@@ -561,54 +566,80 @@ impl AstNode {
             }
 
             Some(Token::Symbol(defkw)) if defkw == "defconstraint" => {
-                match (tokens.get(1), tokens.get(2), tokens.get(3)) {
-                    (Some(Token::Symbol(name)), Some(Token::List(domain)), Some(_))
-                        if domain.is_empty()
-                            || domain.iter().all(|d| {
-                                matches!(
-                                    d,
-                                    AstNode {
-                                        class: Token::Value(_),
-                                        ..
-                                    }
-                                )
-                            }) =>
-                    {
-                        let domain = if domain.is_empty() {
-                            None
-                        } else {
-                            Some(
-                                domain
-                                    .iter()
-                                    .map(|d| {
-                                        if let AstNode {
-                                            class: Token::Value(x),
-                                            ..
-                                        } = d
-                                        {
-                                            x.to_isize().unwrap()
-                                        } else {
-                                            unreachable!()
-                                        }
-                                    })
-                                    .collect::<Vec<_>>(),
-                            )
-                        };
-                        Ok(AstNode {
-                            class: Token::DefConstraint {
-                                name: name.into(),
-                                domain,
-                                exp: Box::new(args[3].clone()),
-                            },
-                            src: src.into(),
-                            lc,
-                        })
-                    }
-                    _ => Err(anyhow!(
-                        "DEFCONSTRAINT expects (NAME DOMAIN (EXP)); received {:?}",
-                        &tokens[1..]
-                    )),
+                let name = if let Some(Token::Symbol(name)) = tokens.get(1) {
+                    name.to_owned()
+                } else {
+                    bail!("expected name, found `{:?}`", tokens.get(1).unwrap());
+                };
+
+                enum GuardParser {
+                    Begin,
+                    Guard,
+                    Domain,
                 }
+                let (domain, guard) = if let Some(Token::List(xs)) = tokens.get(2) {
+                    let mut status = GuardParser::Begin;
+                    let mut tokens = xs.iter();
+                    let mut domain = None;
+                    let mut guard = None;
+                    while let Some(x) = tokens.next() {
+                        match status {
+                            GuardParser::Begin => match x.class {
+                                Token::Keyword(ref kw) if kw == ":guard" => {
+                                    status = GuardParser::Guard
+                                }
+                                Token::Keyword(ref kw) if kw == ":domain" => {
+                                    status = GuardParser::Domain
+                                }
+                                _ => bail!("expected :guard or :domain, found `{:?}`", x),
+                            },
+                            GuardParser::Guard => {
+                                if guard.is_some() {
+                                    bail!("guard already defined: `{:?}`", guard.unwrap())
+                                } else {
+                                    guard = Some(Box::new(x.clone()));
+                                    status = GuardParser::Begin;
+                                }
+                            }
+                            GuardParser::Domain => {
+                                if domain.is_some() {
+                                    bail!("domain already defined: `{:?}`", domain.unwrap())
+                                } else {
+                                    if let Token::Range(range) = &x.class {
+                                        domain = Some(range.to_owned())
+                                    } else {
+                                        bail!("expected range, found `{:?}`", x)
+                                    }
+                                    status = GuardParser::Begin;
+                                }
+                            }
+                        }
+                    }
+
+                    match status {
+                        GuardParser::Begin => {}
+                        GuardParser::Guard => bail!("expected guard expression, found nothing"),
+                        GuardParser::Domain => bail!("expected domain value, found nothing"),
+                    }
+
+                    (domain, guard)
+                } else {
+                    bail!(
+                        "expected restrictions, found `{:?}`",
+                        tokens.get(2).unwrap()
+                    );
+                };
+
+                Ok(AstNode {
+                    class: Token::DefConstraint {
+                        name,
+                        domain,
+                        guard,
+                        exp: Box::new(args[3].clone()),
+                    },
+                    src: src.into(),
+                    lc,
+                })
             }
 
             Some(Token::Symbol(defkw)) if defkw == "defalias" => {
@@ -729,7 +760,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
 
             Ok(AstNode::def_from(args, &src, lc).with_context(|| make_src_error(&src, lc))?)
         }
-        Rule::list => {
+        Rule::sexpr => {
             let args = pair
                 .into_inner()
                 .map(rec_parse)
@@ -791,19 +822,21 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             let x1 = pairs
                 .next()
                 .map(|x| x.as_str())
-                .and_then(|x| x.parse::<usize>().ok());
+                .and_then(|x| x.parse::<isize>().ok());
             let x2 = pairs
                 .next()
                 .map(|x| x.as_str())
-                .and_then(|x| x.parse::<usize>().ok());
+                .and_then(|x| x.parse::<isize>().ok());
             let x3 = pairs
                 .next()
                 .map(|x| x.as_str())
-                .and_then(|x| x.parse::<usize>().ok());
+                .and_then(|x| x.parse::<isize>().ok());
             let range = match (x1, x2, x3) {
                 (Some(start), None, None) => (1..=start).collect(),
                 (Some(start), Some(stop), None) => (start..=stop).collect(),
-                (Some(start), Some(stop), Some(step)) => (start..=stop).step_by(step).collect(),
+                (Some(start), Some(stop), Some(step)) => {
+                    (start..=stop).step_by(step.try_into()?).collect()
+                }
                 x => unimplemented!("{:?}", x),
             };
             Ok(AstNode {
@@ -815,7 +848,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
         Rule::immediate_range => Ok(AstNode {
             class: Token::Range(
                 pair.into_inner()
-                    .map(|x| x.as_str().parse::<usize>().unwrap())
+                    .map(|x| x.as_str().parse::<isize>().unwrap())
                     .collect(),
             ),
             lc,

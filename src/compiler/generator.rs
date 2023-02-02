@@ -1175,16 +1175,24 @@ fn reduce_toplevel(
         Token::DefConstraint {
             name,
             domain,
+            guard,
             exp: expr,
         } => {
             let handle = Handle::new(&ctx.borrow().name, name);
             Ok(Some(Constraint::Vanishes {
                 handle,
                 domain: domain.to_owned(),
-                expr: Box::new(
-                    reduce(expr, root_ctx, ctx, settings)?
-                        .unwrap_or_else(|| Expression::Void.into()),
-                ),
+                expr: Box::new({
+                    let expr = reduce(expr, root_ctx.clone(), ctx, settings)?
+                        .unwrap_or_else(|| Expression::Void.into());
+                    if let Some(guard) = guard {
+                        let guard_expr = reduce(guard, root_ctx.clone(), ctx, settings)?
+                            .with_context(|| anyhow!("guard `{:?}` is empty", guard))?;
+                        Builtin::Mul.call(&[guard_expr, expr])
+                    } else {
+                        expr
+                    }
+                }),
             }))
         }
         Token::DefPlookup {

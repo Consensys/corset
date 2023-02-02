@@ -4,30 +4,30 @@ COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* }
 
 corset = { SOI ~ (top_level)* ~ EOI }
 
-constraint = { list }
+constraint = { sexpr }
 
 top_level = _{ defcolumns | definition | defmodule }
 
-definition = { "(" ~ definition_kw ~ expr* ~ ")"}
+definition = { "(" ~ definition_kw ~ (sexpr | expr)* ~ ")"}
 definition_kw = { "defconstraint" | "defunalias" | "defun" | "defpurefun" | "defconst" | "defalias" | "defplookup" | "defpermutation" | "definrange" }
 defmodule = {"(module" ~ symbol ~ ")"}
 
 
 defcolumns = { "(" ~ "defcolumns" ~ defcolumn* ~ ")" }
-defcolumn = { symbol | init_list }
-computed = { ":" ~ computation ~ "[" ~ expr+ ~ "]" }
-computation = _{ "INTERLEAVED" | "COMP" }
+defcolumn = { symbol | init_sexpr }
+computed = { computation ~ "[" ~ expr+ ~ "]" }
+computation = _{ ":INTERLEAVED" | ":COMP" }
 
 
 
-list = { "(" ~ expr* ~ ")" }
-init_list = _{ "(" ~ symbol ~ (expr | keyword | range)* ~ ")" }
-expr = { integer | symbol | list | form }
+sexpr = { "(" ~ (expr | keyword | range)* ~ ")" }
+init_sexpr = _{ "(" ~ symbol ~ (expr | keyword | range)* ~ ")" }
+expr = { integer | symbol | sexpr | form }
 form = _{ forloop }
 
 forloop = { "(" ~ "for" ~ symbol ~ range ~ expr ~ ")" }
 range = _{ immediate_range | interval }
-immediate_range = { "{" ~ natural+ ~ "}" }
+immediate_range = { "{" ~ integer+ ~ "}" }
 interval = { "[" ~ natural ~ (":" ~ natural ~ (":" ~ natural)?)? ~ "]" }
 typing = @{ "NATURAL" | "BOOLEAN" | "BYTE" | "NIBBLE" }
 

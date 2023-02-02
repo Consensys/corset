@@ -47,6 +47,7 @@ impl LatexExporter {
             Token::DefConstraint {
                 name: _,
                 domain: _,
+                guard: _,
                 exp: x,
             } => self._flatten(ax, x),
             _ => (),
@@ -245,7 +246,7 @@ impl LatexExporter {
             Token::DefArrayColumn { name, domain: range, t } => {
                 Ok(format!("\\text{{{}{:?} \\emph{{{:?}}}}}", name, range, t))
             }
-            Token::DefConstraint { name, domain, exp: body } => Ok(format!(
+            Token::DefConstraint { name, domain, guard: _, exp: body } => Ok(format!(
                 "\n\\begin{{constraint}}[{} {}]\n\\begin{{gather*}}\n{}\n\\end{{gather*}}\n\\end{{constraint}}\n",
                 name.to_case(Case::Title),
                 if domain.is_none() {
