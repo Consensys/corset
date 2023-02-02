@@ -36,30 +36,30 @@
 
 ;; counter constancy constraint
 (defpurefun (counter-constancy ct X)
-            (if-not-zero ct
-                (didnt-change X)))
+  (if-not-zero ct
+               (didnt-change X)))
 
 ;; byte decomposition constraint
 (defpurefun (byte-decomposition ct acc bytes)
-            (if-zero ct
-                (eq acc bytes)
-                (eq acc (+ (* 256 (prev acc)) bytes))))
+  (if-zero ct
+           (eq acc bytes)
+           (eq acc (+ (* 256 (prev acc)) bytes))))
 
 ;; plateau constraints
 ;; underlying assumptions:
 ;;  - C is counter constant wrt CT
 ;;  - X is binary
 (defpurefun (plateau-constraint CT X C)
-            (if-zero C
-                (eq X 1)
-                    (if-zero CT
-                        (vanishes X)
-                        (if-eq-else CT C
-                            (eq X (+ (prev X) 1))
-                            (didnt-change X)))))
+  (if-zero C
+           (eq X 1)
+           (if-zero CT
+                    (vanishes X)
+                    (if-eq-else CT C
+                                (eq X (+ (prev X) 1))
+                                (didnt-change X)))))
 
 ;; stamp constancy imposes that the column C may only
 ;; change at rows where the STAMP column changes.
 (defpurefun (stamp-constancy STAMP C)
-                (if-zero (remains-constant STAMP)
-                    (remains-constant C)))
+  (if-zero (remains-constant STAMP)
+           (remains-constant C)))
