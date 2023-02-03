@@ -294,7 +294,7 @@ impl std::convert::TryFrom<&str> for Magma {
             ":boolean" | ":bool" => Ok(Magma::Boolean),
             ":nibble" => Ok(Magma::Nibble),
             ":byte" => Ok(Magma::Byte),
-            ":integer" => Ok(Magma::Integer),
+            ":integer" | ":natural" => Ok(Magma::Integer),
             _ => bail!("unknown type: `{}`", s),
         }
     }

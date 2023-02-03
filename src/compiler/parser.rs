@@ -428,7 +428,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                         // e.g. (A ... :integer ...)
                                         match kw.to_lowercase().as_str() {
                                             ":boolean" | ":bool" | ":nibble" | ":byte"
-                                                | ":integer" => {
+                                                | ":integer" | ":natural" => {
                                                     if t.is_some() {
                                                         bail!(
                                                             "trying to redefine column {} of type {:?} as {}",
