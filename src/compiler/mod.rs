@@ -120,7 +120,7 @@ pub fn make<S: AsRef<str>>(
             if let Symbol::Final(symbol, used) = symbol {
                 if !*used {
                     warn!(
-                        "[{}] {} is never used",
+                        "{}::{} is never used",
                         module.blue(),
                         handle.name.bright_white().bold()
                     );

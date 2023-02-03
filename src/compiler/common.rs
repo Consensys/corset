@@ -286,6 +286,19 @@ pub enum Magma {
     /// a field element
     Integer,
 }
+impl std::convert::TryFrom<&str> for Magma {
+    type Error = anyhow::Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s.to_lowercase().as_str() {
+            ":boolean" | ":bool" => Ok(Magma::Boolean),
+            ":nibble" => Ok(Magma::Nibble),
+            ":byte" => Ok(Magma::Byte),
+            ":integer" => Ok(Magma::Integer),
+            _ => bail!("unknown type: `{}`", s),
+        }
+    }
+}
 impl std::cmp::Ord for Magma {
     fn cmp(&self, other: &Self) -> Ordering {
         self.partial_cmp(other).unwrap()

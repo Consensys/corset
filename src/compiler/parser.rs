@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Context, Result};
 use colored::Colorize;
+use itertools::Itertools;
 use num_bigint::BigInt;
-use num_traits::ToPrimitive;
 #[cfg(feature = "interactive")]
 use pest::{iterators::Pair, Parser};
 use serde::{Deserialize, Serialize};
@@ -49,15 +49,35 @@ pub struct AstNode {
     pub lc: LinCol,
 }
 impl AstNode {
-    pub fn as_symbol(&self) -> Option<String> {
-        if let AstNode {
-            class: Token::Symbol(x),
-            ..
-        } = self
-        {
-            Some(x.to_owned())
+    pub fn depth(&self) -> usize {
+        self.class.depth()
+    }
+    pub fn as_u64(&self) -> Result<u64> {
+        if let Token::Value(r) = &self.class {
+            r.try_into().map_err(|e| anyhow!("{:?}", e))
         } else {
-            None
+            Err(anyhow!("expected usize, found `{:?}`", self))
+        }
+    }
+    pub fn as_range(&self) -> Result<&[isize]> {
+        if let Token::Range(r) = &self.class {
+            Ok(r)
+        } else {
+            Err(anyhow!("expected range, found `{:?}`", self))
+        }
+    }
+    pub fn as_symbol(&self) -> Result<&str> {
+        if let Token::Symbol(x) = &self.class {
+            Ok(x)
+        } else {
+            Err(anyhow!("expected symbol, found `{:?}`", self))
+        }
+    }
+    pub fn as_list(&self) -> Result<&[AstNode]> {
+        if let Token::List(xs) = &self.class {
+            Ok(xs)
+        } else {
+            Err(anyhow!("expected list, found `{:?}`", self))
         }
     }
 }
@@ -152,7 +172,11 @@ pub enum Token {
         /// the body is any reasonable expression (should it be enforced?)
         body: Box<AstNode>,
     },
-    Defpurefun(String, Vec<String>, Box<AstNode>),
+    Defpurefun {
+        name: String,
+        args: Vec<String>,
+        body: Box<AstNode>,
+    },
     /// a list of aliases declaration, normally only DefAlias -- XXX should probably be removed
     DefAliases(Vec<AstNode>),
     DefAlias(String, String),
@@ -168,12 +192,12 @@ pub enum Token {
         /// an expression that enables the constraint only when it is non zero
         guard: Option<Box<AstNode>>,
         /// this expression has to reduce to 0 for the constraint to be satisfied
-        exp: Box<AstNode>,
+        body: Box<AstNode>,
     },
     /// declaration of a permutation constraint between two sets of columns
     DefPermutation {
-        from: Vec<AstNode>,
-        to: Vec<AstNode>,
+        from: Vec<String>,
+        to: Vec<String>,
     },
     /// declaration of a plookup constraint between two sets of columns
     DefPlookup {
@@ -257,8 +281,8 @@ impl Debug for Token {
             } => {
                 write!(f, "{}:({:?}) -> {:?}", name, args, content)
             }
-            Token::Defpurefun(name, args, content) => {
-                write!(f, "{}:({:?}) -> {:?}", name, args, content)
+            Token::Defpurefun { name, args, body } => {
+                write!(f, "{}:({:?}) -> {:?}", name, args, body)
             }
             Token::DefAliases(cols) => write!(f, "ALIASES {:?}", cols),
             Token::DefAlias(from, to) => write!(f, "{} -> {}", from, to),
@@ -274,473 +298,428 @@ impl Debug for Token {
     }
 }
 
-impl AstNode {
-    pub fn depth(&self) -> usize {
-        self.class.depth()
+fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
+    mut tokens: I,
+    lc: (usize, usize),
+    src: String,
+) -> Result<AstNode> {
+    enum GuardParser {
+        Begin,
+        Guard,
+        Domain,
     }
-    #[cfg(feature = "interactive")]
-    fn column_from(args: Vec<Pair<Rule>>, src: String, lc: LinCol) -> Result<Self> {
-        let mut pairs = args.into_iter();
-        let name = pairs.next().unwrap().as_str();
 
-        let mut t: Option<Type> = None;
-        let mut range = None;
-        let mut kind = Kind::Atomic;
+    let name = tokens
+        .next()
+        .with_context(|| anyhow!("missing constraint name"))??
+        .as_symbol()?
+        .to_owned();
 
-        while let Some(x) = pairs.next() {
-            match x.as_rule() {
-                Rule::keyword => match x.as_str() {
-                    ":ARRAY" => {
-                        let n = pairs.next().map(rec_parse);
-                        if let Some(Ok(AstNode {
-                            class: Token::Range(r),
-                            ..
-                        })) = n
-                        {
-                            range = Some(r);
-                        } else {
-                            return Err(anyhow!(
-                                "expected RANGE, found `{}`",
-                                n.map(|n| format!("{:?}", n.unwrap().class))
-                                    .unwrap_or_else(|| "nothing".to_string())
-                            ));
-                        }
-                    }
-                    ":NATURAL" => {
-                        if let Some(tt) = t {
-                            return Err(anyhow!(
-                                "{} is already of type {:?}; can not be of type {:?}",
-                                name,
-                                tt,
-                                x.as_str()
-                            ));
-                        } else {
-                            t = Some(Type::Column(Magma::Integer))
-                        }
-                    }
-                    ":BYTE" => {
-                        if let Some(tt) = t {
-                            return Err(anyhow!(
-                                "{} is already of type {:?}; can not be of type {:?}",
-                                name,
-                                tt,
-                                x.as_str()
-                            ));
-                        } else {
-                            t = Some(Type::Column(Magma::Byte))
-                        }
-                    }
-                    ":NIBBLE" => {
-                        if let Some(tt) = t {
-                            return Err(anyhow!(
-                                "{} is already of type {:?}; can not be of type {:?}",
-                                name,
-                                tt,
-                                x.as_str()
-                            ));
-                        } else {
-                            t = Some(Type::Column(Magma::Nibble))
-                        }
-                    }
-                    ":BOOLEAN" => {
-                        if let Some(tt) = t {
-                            return Err(anyhow!(
-                                "{} is already of type {:?}; can not be of type {:?}",
-                                name,
-                                tt,
-                                x.as_str()
-                            ));
-                        } else {
-                            t = Some(Type::Column(Magma::Boolean))
-                        }
-                    }
-                    ":COMP" => {
-                        let n = pairs.next().map(rec_parse);
-                        if let Some(Ok(AstNode {
-                            class: Token::List(_),
-                            ..
-                        })) = n
-                        {
-                            kind = Kind::Composite(Box::new(n.unwrap().unwrap()))
-                        } else {
-                            return Err(anyhow!(
-                                ":COMP expects FORM, found `{}`",
-                                n.map(|n| format!("{:?}", n.unwrap().class))
-                                    .unwrap_or_else(|| "nothing".to_string())
-                            ));
-                        }
-                    }
-                    ":INTERLEAVED" => {
-                        let p = pairs.next().map(rec_parse);
-                        if let Some(Ok(AstNode {
-                            class: Token::List(ref froms),
-                            ..
-                        })) = p
-                        {
-                            if froms.iter().all(|f| {
-                                matches!(
-                                    f,
-                                    AstNode {
-                                        class: Token::Symbol(_),
-                                        ..
-                                    }
-                                )
-                            }) {
-                                if kind != Kind::Atomic {
-                                    return Err(anyhow!(
-                                        "`{}` can not be interleaved; is already {:?}",
-                                        name,
-                                        kind
-                                    ));
-                                } else {
-                                    kind = Kind::Interleaved(
-                                        froms
-                                            .iter()
-                                            .map(|f| Handle::new("??", f.as_symbol().unwrap()))
-                                            .collect(),
-                                    );
-                                }
-                            } else {
-                                return Err(anyhow!(
-                                    ":INTERLEAVED expects (SYMBOLS...), found `{:?}`",
-                                    p
-                                ));
-                            }
-                        } else {
-                            return Err(anyhow!(
-                                ":INTERLEAVED expects (SYMBOLS...), found `{:?}`",
-                                p
-                            ));
-                        }
-                    }
-                    x => return Err(anyhow!("unknown column attribute {:?}", x)),
+    let (domain, guard) = {
+        let guards = tokens
+            .next()
+            .with_context(|| anyhow!("missing guards in constraint definitions"))??
+            .as_list()?
+            .to_vec();
+        let mut status = GuardParser::Begin;
+        let mut guard_tokens = guards.iter();
+        let mut domain = None;
+        let mut guard = None;
+        while let Some(x) = guard_tokens.next() {
+            match status {
+                GuardParser::Begin => match x.class {
+                    Token::Keyword(ref kw) if kw == ":guard" => status = GuardParser::Guard,
+                    Token::Keyword(ref kw) if kw == ":domain" => status = GuardParser::Domain,
+                    _ => bail!("expected :guard or :domain, found `{:?}`", x),
                 },
-                _ => {
-                    return Err(anyhow!("expected :KEYWORD, found `{:?}`", x.as_rule()));
+                GuardParser::Guard => {
+                    if guard.is_some() {
+                        bail!("guard already defined: `{:?}`", guard.unwrap())
+                    } else {
+                        guard = Some(Box::new(x.clone()));
+                        status = GuardParser::Begin;
+                    }
+                }
+                GuardParser::Domain => {
+                    if domain.is_some() {
+                        bail!("domain already defined: `{:?}`", domain.unwrap())
+                    } else {
+                        if let Token::Range(range) = &x.class {
+                            domain = Some(range.to_owned())
+                        } else {
+                            bail!("expected range, found `{:?}`", x)
+                        }
+                        status = GuardParser::Begin;
+                    }
                 }
             }
         }
 
-        if let Some(range) = range {
-            if kind != Kind::Atomic {
-                Err(anyhow!("array columns must be atomic"))
-            } else {
-                Ok(AstNode {
-                    class: Token::DefArrayColumn {
-                        name: name.into(),
-                        domain: range
-                            .iter()
-                            .map(|&x| x.try_into().map_err(|e| anyhow!("{:?}", e)))
-                            .collect::<Result<Vec<_>>>()?,
-                        t: t.unwrap_or(Type::Column(Magma::Integer)),
-                    },
-                    lc,
-                    src,
-                })
-            }
-        } else {
+        match status {
+            GuardParser::Begin => {}
+            GuardParser::Guard => bail!("expected guard expression, found nothing"),
+            GuardParser::Domain => bail!("expected domain value, found nothing"),
+        }
+
+        (domain, guard)
+    };
+
+    let body = Box::new(
+        tokens
+            .next()
+            .with_context(|| anyhow!("missing constraint name"))??
+            .to_owned(),
+    );
+
+    Ok(AstNode {
+        class: Token::DefConstraint {
+            name,
+            domain,
+            guard,
+            body,
+        },
+        src: src.into(),
+        lc,
+    })
+}
+
+fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
+    pair: I,
+    lc: (usize, usize),
+    src: String,
+) -> Result<AstNode> {
+    enum ColumnParser {
+        Begin,
+        Array,
+        Computation,
+        Interleaved,
+    }
+
+    // A columns definition is a list of column definition
+    let columns = pair
+        .map(|c| {
+            c.and_then(|c| {
+                let name;
+                let mut t = None;
+                let mut kind = Kind::Atomic;
+                let mut range = None;
+                let mut state = ColumnParser::Begin;
+                // A column is either defined by...
+                match c.class {
+                    // ...a name, in which case the column is an atomic fr column...
+                    Token::Symbol(_name) => name = _name.to_owned(),
+                    // ...or a list, specifying attributes for this column.
+                    Token::List(xs) => {
+                        let mut xs = xs.iter();
+                        let name_token = xs
+                            .next()
+                            .ok_or(anyhow!("expected column name, found empty list"))?;
+                        // The first element of the llist *has* to be the name of the column
+                        if let Token::Symbol(ref _name) = name_token.class {
+                            name = _name.to_owned();
+                        } else {
+                            bail!("expected column name, found `{:?}`", name_token)
+                        }
+                        // Then can come all the attributes, in no particular order.
+                        while let Some(x) = xs.next() {
+                            state = match state {
+                                ColumnParser::Begin => match x.class {
+                                    Token::Keyword(ref kw) => {
+                                        // e.g. (A ... :integer ...)
+                                        match kw.to_lowercase().as_str() {
+                                            ":boolean" | ":bool" | ":nibble" | ":byte"
+                                                | ":integer" => {
+                                                    if t.is_some() {
+                                                        bail!(
+                                                            "trying to redefine column {} of type {:?} as {}",
+                                                            name, t.unwrap(), kw
+                                                        )
+                                                    } else {
+                                                        t = Some(Type::Column(
+                                                            kw.as_str().try_into()?,
+                                                        ));
+                                                    }
+                                                    ColumnParser::Begin
+                                                }
+                                            // e.g. (A ... :interleaved (X Y Z) ...)
+                                            ":interleaved" => ColumnParser::Interleaved,
+                                            // not really used for now.
+                                            ":comp" => ColumnParser::Computation,
+                                            // e.g. (A :array {1 3 5}) or (A :array [5])
+                                            ":array" => ColumnParser::Array,
+                                            _ => {
+                                                bail!("unexpected keyword found: {}", kw)
+                                            }
+                                        }
+                                    }
+                                    // A range alone treated as if it were preceded by :array
+                                    Token::Range(ref _range) => {
+                                        range = Some(_range.to_owned());
+                                        ColumnParser::Begin
+                                    },
+                                    _ => bail!("expected keyword, found `{:?}`", x),
+                                },
+                                // :array expects a range defining the domain of the column array
+                                ColumnParser::Array => {
+                                    range = Some(x.as_range()?.to_owned());
+                                    ColumnParser::Begin
+                                }
+                                ColumnParser::Computation => todo!(),
+                                // :interleaved expects a list of column to interleave into the one
+                                // being defined
+                                ColumnParser::Interleaved => {
+                                    if kind != Kind::Atomic {
+                                        bail!("column {} can not be interleaved; is already {:?}", name, kind)
+                                    }
+                                    kind = Kind::Interleaved(
+                                        x.as_list()?
+                                            .iter()
+                                            .map(|f| {
+                                                f.as_symbol().map(|n| Handle::new("??", n))
+                                            })
+                                            .collect::<Result<Vec<_>>>()?,
+                                    );
+                                    ColumnParser::Begin
+                                }
+                            };
+                        }
+                    }
+                    _ => unreachable!(),
+                };
+                // Ensure that we are in a clean state
+                match state {
+                    ColumnParser::Begin =>
+                        Ok(AstNode {
+                            class: if let Some(range) = range {
+                                if kind != Kind::Atomic {
+                                    bail!("array columns must be atomic")
+                                }
+                                Token::DefArrayColumn {
+                                    name,
+                                    t: t.unwrap_or(Type::Column(Magma::Integer)),
+                                    domain: range
+                                        .iter()
+                                        .map(|&x| x.try_into().map_err(|e| anyhow!("{:?}", e)))
+                                        .collect::<Result<Vec<_>>>()?,
+                                }
+                            } else {
+                                Token::DefColumn {
+                                    name,
+                                    t: t.unwrap_or(Type::Column(Magma::Integer)),
+                                    kind,
+                                }
+                            },
+                            lc: c.lc,
+                            src: c.src.clone(),
+                        }),
+                    ColumnParser::Array => bail!("incomplete :array definition"),
+                    ColumnParser::Computation => bail!("incomplate :comp definition"),
+                    ColumnParser::Interleaved => bail!("incomplete :interleaved definition"),
+                }
+            })
+        })
+        .collect::<Result<Vec<_>>>()
+        .with_context(|| make_src_error(&src, lc))?;
+
+    Ok(AstNode {
+        class: Token::DefColumns(columns),
+        lc,
+        src,
+    })
+}
+
+fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
+    let lc = pair.as_span().start_pos().line_col();
+    let src = pair.as_str().to_owned();
+
+    let mut tokens = pair.into_inner().map(rec_parse);
+
+    match tokens.next().unwrap().unwrap().as_symbol()? {
+        "module" => {
+            let name = tokens
+                .next()
+                .with_context(|| anyhow!("module name missing"))??
+                .as_symbol()?
+                .to_owned();
             Ok(AstNode {
-                class: Token::DefColumn {
-                    name: name.into(),
-                    t: t.unwrap_or(Type::Column(Magma::Integer)),
-                    kind,
-                },
+                class: Token::DefModule(name),
                 lc,
                 src,
             })
         }
-    }
-    fn def_from(args: Vec<AstNode>, src: &str, lc: LinCol) -> Result<Self> {
-        let tokens = args.iter().map(|x| x.class.clone()).collect::<Vec<_>>();
-        match tokens.get(0) {
-            Some(Token::Symbol(defkw)) if defkw == "defconst" => {
-                if tokens.len() % 2 != 1 {
-                    Err(anyhow!("DEFCONST expects an even number of arguments"))
-                } else {
-                    Ok(AstNode {
-                        class: Token::DefConsts(
-                            args[1..]
-                                .chunks(2)
-                                .map(|w| match &w[0] {
-                                    AstNode {
-                                        class: Token::Symbol(name),
-                                        ..
-                                    } => Ok((name.to_owned(), Box::new(w[1].clone()))),
-                                    _ => Err(anyhow!(
-                                        "DEFCONST expects (SYMBOL VALUE); received {:?}",
-                                        &tokens[1..]
-                                    )),
-                                })
-                                .collect::<Result<Vec<_>>>()?,
-                        ),
-                        lc,
-                        src: src.to_string(),
+        "defcolumns" => parse_defcolumns(tokens, lc, src),
+        "defconst" => Ok(AstNode {
+            class: Token::DefConsts(
+                tokens
+                    .chunks(2)
+                    .into_iter()
+                    .map(|mut chunk| {
+                        let name = chunk
+                            .next()
+                            .ok_or_else(|| anyhow!("adsf"))??
+                            .as_symbol()
+                            .with_context(|| anyhow!("invalid constant name"))?
+                            .to_owned();
+                        let value = chunk
+                            .next()
+                            .ok_or_else(|| anyhow!("expected value for {}", name))??;
+                        Ok((name, Box::new(value)))
                     })
-                }
-            }
+                    .collect::<Result<Vec<_>>>()?,
+            ),
+            lc,
+            src: src.to_string(),
+        }),
+        kw @ ("defun" | "defpurefun") => {
+            let mut decl = tokens
+                .next()
+                .ok_or(anyhow!("expected function declaration"))??
+                .as_list()
+                .with_context(|| anyhow!("invalid function declaration"))?
+                .to_vec()
+                .into_iter();
 
-            Some(Token::Symbol(defkw)) if defkw == "defun" => {
-                if tokens.len() > 3 {
-                    return Err(anyhow!(
-                        "DEFUN expects one body, {} found",
-                        tokens.len() - 2,
-                    ));
-                }
-                match (&tokens.get(1), tokens.get(2)) {
-                    (Some(Token::List(fargs)), Some(_))
-                        if !fargs.is_empty()
-                            && fargs.iter().all(|x| matches!(x.class, Token::Symbol(_))) =>
-                    {
-                        Ok(AstNode {
-                            class: Token::Defun {
-                                name: if let Token::Symbol(ref name) = fargs[0].class {
-                                    name.to_string()
-                                } else {
-                                    unreachable!()
-                                },
-                                args: fargs
-                                    .iter()
-                                    .skip(1)
-                                    .map(|a| {
-                                        if let Token::Symbol(ref aa) = a.class {
-                                            aa.to_owned()
-                                        } else {
-                                            unreachable!()
-                                        }
-                                    })
-                                    .collect::<Vec<_>>(),
-                                body: Box::new(args[2].clone()),
-                            },
-                            src: src.into(),
-                            lc,
-                        })
-                    }
-                    _ => Err(anyhow!(
-                        "DEFUN expects ((SYMBOL SYMBOL*) FORM); received {:?}",
-                        &tokens[1..]
-                    )),
-                }
-            }
+            let name = decl
+                .next()
+                .with_context(|| anyhow!("missing function name"))?
+                .as_symbol()
+                .with_context(|| anyhow!("invalid function name"))?
+                .to_owned();
 
-            Some(Token::Symbol(defkw)) if defkw == "defpurefun" => {
-                if tokens.len() > 3 {
-                    return Err(anyhow!(
-                        "DEFPUREFUN expects one body, {} found",
-                        tokens.len() - 2,
-                    ));
-                }
-                match (&tokens.get(1), tokens.get(2)) {
-                    (Some(Token::List(fargs)), Some(_))
-                        if !fargs.is_empty()
-                            && fargs.iter().all(|x| matches!(x.class, Token::Symbol(_))) =>
-                    {
-                        Ok(AstNode {
-                            class: Token::Defpurefun(
-                                if let Token::Symbol(ref name) = fargs[0].class {
-                                    name.to_string()
-                                } else {
-                                    unreachable!()
-                                },
-                                fargs
-                                    .iter()
-                                    .skip(1)
-                                    .map(|a| {
-                                        if let Token::Symbol(ref aa) = a.class {
-                                            aa.to_owned()
-                                        } else {
-                                            unreachable!()
-                                        }
-                                    })
-                                    .collect::<Vec<_>>(),
-                                Box::new(args[2].clone()),
-                            ),
-                            src: src.into(),
-                            lc,
-                        })
-                    }
-                    _ => Err(anyhow!(
-                        "DEFUN expects ((SYMBOL SYMBOL*) FORM); received {:?}",
-                        &tokens[1..]
-                    )),
-                }
-            }
-
-            Some(Token::Symbol(defkw)) if defkw == "defconstraint" => {
-                let name = if let Some(Token::Symbol(name)) = tokens.get(1) {
-                    name.to_owned()
-                } else {
-                    bail!("expected name, found `{:?}`", tokens.get(1).unwrap());
-                };
-
-                enum GuardParser {
-                    Begin,
-                    Guard,
-                    Domain,
-                }
-                let (domain, guard) = if let Some(Token::List(xs)) = tokens.get(2) {
-                    let mut status = GuardParser::Begin;
-                    let mut tokens = xs.iter();
-                    let mut domain = None;
-                    let mut guard = None;
-                    while let Some(x) = tokens.next() {
-                        match status {
-                            GuardParser::Begin => match x.class {
-                                Token::Keyword(ref kw) if kw == ":guard" => {
-                                    status = GuardParser::Guard
-                                }
-                                Token::Keyword(ref kw) if kw == ":domain" => {
-                                    status = GuardParser::Domain
-                                }
-                                _ => bail!("expected :guard or :domain, found `{:?}`", x),
-                            },
-                            GuardParser::Guard => {
-                                if guard.is_some() {
-                                    bail!("guard already defined: `{:?}`", guard.unwrap())
-                                } else {
-                                    guard = Some(Box::new(x.clone()));
-                                    status = GuardParser::Begin;
-                                }
-                            }
-                            GuardParser::Domain => {
-                                if domain.is_some() {
-                                    bail!("domain already defined: `{:?}`", domain.unwrap())
-                                } else {
-                                    if let Token::Range(range) = &x.class {
-                                        domain = Some(range.to_owned())
-                                    } else {
-                                        bail!("expected range, found `{:?}`", x)
-                                    }
-                                    status = GuardParser::Begin;
-                                }
-                            }
-                        }
-                    }
-
-                    match status {
-                        GuardParser::Begin => {}
-                        GuardParser::Guard => bail!("expected guard expression, found nothing"),
-                        GuardParser::Domain => bail!("expected domain value, found nothing"),
-                    }
-
-                    (domain, guard)
-                } else {
-                    bail!(
-                        "expected restrictions, found `{:?}`",
-                        tokens.get(2).unwrap()
-                    );
-                };
-
-                Ok(AstNode {
-                    class: Token::DefConstraint {
-                        name,
-                        domain,
-                        guard,
-                        exp: Box::new(args[3].clone()),
-                    },
-                    src: src.into(),
-                    lc,
+            let args = decl
+                .map(|a| {
+                    a.as_symbol()
+                        .with_context(|| anyhow!("invalid function argument"))
+                        .map(|x| x.to_owned())
                 })
-            }
+                .collect::<Result<Vec<_>>>()?;
 
-            Some(Token::Symbol(defkw)) if defkw == "defalias" => {
-                if tokens.len() % 2 != 1 {
-                    Err(anyhow!("DEFALIAS expects an even number of arguments"))
-                } else if tokens.iter().skip(1).all(|x| matches!(x, Token::Symbol(_))) {
-                    let mut defs = vec![];
-                    for pair in tokens[1..].chunks(2) {
-                        if let (Token::Symbol(from), Token::Symbol(to)) = (&pair[0], &pair[1]) {
-                            defs.push(AstNode {
-                                class: Token::DefAlias(from.into(), to.into()),
-                                src: src.to_string(),
-                                lc,
-                            })
-                        }
-                    }
-                    Ok(AstNode {
-                        class: Token::DefAliases(defs),
-                        src: src.into(),
-                        lc,
-                    })
+            let body = Box::new(
+                tokens
+                    .next()
+                    .with_context(|| anyhow!("missing function body"))??,
+            );
+            Ok(AstNode {
+                class: if kw == "defun" {
+                    Token::Defun { name, args, body }
                 } else {
-                    Err(anyhow!(
-                        "DEFALIAS expects (SYMBOL SYMBOL)*; received {:?}",
-                        &tokens[1..]
-                    ))
-                }
-            }
-
-            Some(Token::Symbol(defkw)) if defkw == "defunalias" => {
-                match (tokens.get(1), tokens.get(2)) {
-                    (Some(Token::Symbol(from)), Some(Token::Symbol(to))) => Ok(AstNode {
-                        class: Token::DefunAlias(from.into(), to.into()),
-                        src: src.into(),
-                        lc,
-                    }),
-                    _ => Err(anyhow!(
-                        "DEFUNALIAS expects (SYMBOL SYMBOL); received {:?}",
-                        &tokens[1..]
-                    )),
-                }
-            }
-
-            Some(Token::Symbol(defkw)) if defkw == "defplookup" => {
-                match (tokens.get(1), tokens.get(2), tokens.get(3)) {
-                    (
-                        Some(Token::Symbol(name)),
-                        Some(Token::List(including)),
-                        Some(Token::List(included)),
-                    ) => Ok(AstNode {
-                        class: Token::DefPlookup {
-                            name: name.to_owned(),
-                            including: including.to_owned(),
-                            included: included.to_owned(),
-                        },
-                        src: src.into(),
-                        lc,
-                    }),
-                    _ => Err(anyhow!(
-                        "DEFPLOOKUP expects (NAME PARENT:LIST CHILD:LIST); received {:?}",
-                        &tokens[1..]
-                    )),
-                }
-            }
-
-            Some(Token::Symbol(defkw)) if defkw == "definrange" => {
-                match (tokens.get(1), tokens.get(2)) {
-                    (Some(_), Some(Token::Value(range))) => Ok(AstNode {
-                        class: Token::DefInrange(
-                            Box::new(args[1].to_owned()),
-                            range.to_usize().unwrap(),
-                        ),
-                        src: src.into(),
-                        lc,
-                    }),
-                    _ => Err(anyhow!(
-                        "DEFINRANGE expects (EXPRESSION RANGE); received {:?}",
-                        &tokens[1..]
-                    )),
-                }
-            }
-
-            Some(Token::Symbol(defkw)) if defkw == "defpermutation" => {
-                match (tokens.get(1), tokens.get(2)) {
-                    (Some(Token::List(to)), Some(Token::List(from))) => Ok(AstNode {
-                        class: Token::DefPermutation {
-                            from: from.to_owned(),
-                            to: to.to_owned(),
-                        },
-                        src: src.into(),
-                        lc,
-                    }),
-                    _ => Err(anyhow!(
-                        "DEFPERMUTATION expects (TO:LIST FROM:LIST SORTERS:LIST); received {:?}",
-                        &tokens[1..]
-                    )),
-                }
-            }
-
-            x => unimplemented!("{:?}", x),
+                    Token::Defpurefun { name, args, body }
+                },
+                src: src.into(),
+                lc,
+            })
         }
+        "defalias" => {
+            let mut defs = vec![];
+            while let Some(from) = tokens.next() {
+                let from = from?.as_symbol()?.to_owned();
+                let to = tokens
+                    .next()
+                    .with_context(|| anyhow!("missing alias target"))??
+                    .as_symbol()?
+                    .to_owned();
+                defs.push(AstNode {
+                    class: Token::DefAlias(from, to),
+                    src: src.to_string(),
+                    lc,
+                });
+            }
+
+            Ok(AstNode {
+                class: Token::DefAliases(defs),
+                src: src.into(),
+                lc,
+            })
+        }
+        "defunalias" => {
+            let from = tokens
+                .next()
+                .with_context(|| anyhow!("missing function alias source"))??
+                .as_symbol()?
+                .to_owned();
+
+            let to = tokens
+                .next()
+                .with_context(|| anyhow!("missing function alias target"))??
+                .as_symbol()?
+                .to_owned();
+
+            Ok(AstNode {
+                class: Token::DefunAlias(from, to),
+                src: src.into(),
+                lc,
+            })
+        }
+        "defconstraint" => parse_defconstraint(tokens, lc, src),
+        "definrange" => {
+            let exp = tokens
+                .next()
+                .with_context(|| anyhow!("expected expression"))??;
+
+            let range = tokens
+                .next()
+                .with_context(|| anyhow!("missing maximal value"))??
+                .as_u64()?;
+
+            Ok(AstNode {
+                class: Token::DefInrange(Box::new(exp), range as usize),
+                src: src.into(),
+                lc,
+            })
+        }
+        "defplookup" => {
+            let name = tokens
+                .next()
+                .with_context(|| anyhow!("expected plookup name"))??
+                .as_symbol()?
+                .to_owned();
+
+            let including = tokens
+                .next()
+                .with_context(|| anyhow!("missing including columns"))??
+                .as_list()?
+                .to_vec();
+
+            let included = tokens
+                .next()
+                .with_context(|| anyhow!("missing included columns"))??
+                .as_list()?
+                .to_vec();
+
+            Ok(AstNode {
+                class: Token::DefPlookup {
+                    name,
+                    including,
+                    included,
+                },
+                src: src.into(),
+                lc,
+            })
+        }
+        "defpermutation" => {
+            let to = tokens
+                .next()
+                .with_context(|| anyhow!("missing target columns"))??
+                .as_list()?
+                .iter()
+                .map(|t| t.as_symbol().map(|x| x.to_owned()))
+                .collect::<Result<Vec<_>>>()?;
+
+            let from = tokens
+                .next()
+                .with_context(|| anyhow!("missing source columns"))??
+                .as_list()?
+                .iter()
+                .map(|t| t.as_symbol().map(|x| x.to_owned()))
+                .collect::<Result<Vec<_>>>()?;
+
+            Ok(AstNode {
+                class: Token::DefPermutation { from, to },
+                src: src.into(),
+                lc,
+            })
+        }
+        x => unimplemented!("{:?}", x),
     }
 }
 
@@ -750,16 +729,8 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
     let src = pair.as_str().to_owned();
 
     match pair.as_rule() {
-        Rule::expr | Rule::constraint => rec_parse(pair.into_inner().next().unwrap()),
-        Rule::definition => {
-            let args = pair
-                .into_inner()
-                .into_iter()
-                .map(rec_parse)
-                .collect::<Result<Vec<_>>>()?;
-
-            Ok(AstNode::def_from(args, &src, lc).with_context(|| make_src_error(&src, lc))?)
-        }
+        Rule::expr => rec_parse(pair.into_inner().next().unwrap()),
+        Rule::definition => parse_definition(pair).with_context(|| make_src_error(&src, lc)),
         Rule::sexpr => {
             let args = pair
                 .into_inner()
@@ -778,21 +749,6 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             lc,
             src,
         }),
-        Rule::defcolumns => {
-            let columns = pair
-                .into_inner()
-                .map(rec_parse)
-                .collect::<Result<Vec<_>>>()?;
-            Ok(AstNode {
-                class: Token::DefColumns(columns),
-                lc,
-                src,
-            })
-        }
-        Rule::defcolumn => {
-            let pairs = pair.into_inner().collect::<Vec<_>>();
-            AstNode::column_from(pairs, src.clone(), lc).with_context(|| make_src_error(&src, lc))
-        }
         Rule::integer => Ok(AstNode {
             class: Token::Value(pair.as_str().parse().unwrap()),
             lc,
@@ -862,11 +818,6 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             }),
             src,
             lc,
-        }),
-        Rule::defmodule => Ok(AstNode {
-            class: Token::DefModule(pair.into_inner().next().unwrap().as_str().to_owned()),
-            lc,
-            src,
         }),
         Rule::keyword => Ok(AstNode {
             class: Token::Keyword(pair.as_str().to_owned()),

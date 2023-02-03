@@ -1157,7 +1157,7 @@ pub fn reduce(
         | Token::DefunAlias(..)
         | Token::DefConsts(..)
         | Token::Defun { .. }
-        | Token::Defpurefun(..)
+        | Token::Defpurefun { .. }
         | Token::DefPermutation { .. }
         | Token::DefPlookup { .. }
         | Token::DefInrange(..) => Ok(None),
@@ -1176,7 +1176,7 @@ fn reduce_toplevel(
             name,
             domain,
             guard,
-            exp: expr,
+            body: expr,
         } => {
             let handle = Handle::new(&ctx.borrow().name, name);
             Ok(Some(Constraint::Vanishes {
@@ -1250,21 +1250,22 @@ fn reduce_toplevel(
             Err(anyhow!("Unexpected top-level form: {:?}", e))
         }
         Token::Defun { .. }
-        | Token::Defpurefun(..)
+        | Token::Defpurefun { .. }
         | Token::DefAliases(_)
         | Token::DefunAlias(..)
         | Token::DefConsts(..) => Ok(None),
         Token::DefPermutation { from, to } => {
-            // This silly piece of code ensures that columns involved in permutations
+            // We look up the columns involved in the permutation just to ensure that they
             // are marked as "used" in the symbol table
             from.iter()
-                .map(|f| ctx.borrow_mut().resolve_symbol(&f.as_symbol().unwrap()))
+                .map(|f| ctx.borrow_mut().resolve_symbol(&f))
                 .collect::<Result<Vec<_>>>()
                 .with_context(|| anyhow!("while defining permutation"))?;
             to.iter()
-                .map(|f| ctx.borrow_mut().resolve_symbol(&f.as_symbol().unwrap()))
+                .map(|f| ctx.borrow_mut().resolve_symbol(&f))
                 .collect::<Result<Vec<_>>>()
                 .with_context(|| anyhow!("while defining permutation"))?;
+
             Ok(Some(Constraint::Permutation {
                 handle: Handle::new(
                     &ctx.borrow().name,
@@ -1272,11 +1273,11 @@ fn reduce_toplevel(
                 ),
                 from: from
                     .iter()
-                    .map(|f| Handle::new(&ctx.borrow().name, f.as_symbol().unwrap()))
+                    .map(|f| Handle::new(&ctx.borrow().name, f))
                     .collect::<Vec<_>>(),
                 to: to
                     .iter()
-                    .map(|f| Handle::new(&ctx.borrow().name, f.as_symbol().unwrap()))
+                    .map(|f| Handle::new(&ctx.borrow().name, f))
                     .collect::<Vec<_>>(),
             }))
         }

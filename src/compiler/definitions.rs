@@ -487,44 +487,23 @@ fn reduce(
 
             let mut _froms = Vec::new();
             let mut _tos = Vec::new();
-            for pair in tos.iter().zip(froms.iter()) {
-                match pair {
-                    (
-                        AstNode {
-                            class: Token::Symbol(to),
-                            ..
+            for (to, from) in tos.iter().zip(froms.iter()) {
+                let from_handle = Handle::new(&ctx.borrow().name, &from);
+                let to_handle = Handle::new(&ctx.borrow().name, &to);
+                ctx.borrow_mut()
+                    .resolve_symbol(from)
+                    .with_context(|| "while defining permutation")?;
+                ctx.borrow_mut()
+                    .insert_symbol(
+                        to,
+                        Node {
+                            _e: Expression::Column(to_handle.clone(), Kind::Phantom),
+                            _t: Some(Type::Column(Magma::Integer)),
                         },
-                        AstNode {
-                            class: Token::Symbol(from),
-                            ..
-                        },
-                    ) => {
-                        let from_handle = Handle::new(&ctx.borrow().name, &from);
-                        let to_handle = Handle::new(&ctx.borrow().name, &to);
-                        ctx.borrow_mut()
-                            .resolve_symbol(from)
-                            .with_context(|| "while defining permutation")?;
-                        ctx.borrow_mut()
-                            .insert_symbol(
-                                to,
-                                Node {
-                                    _e: Expression::Column(to_handle.clone(), Kind::Phantom),
-                                    _t: Some(Type::Column(Magma::Integer)),
-                                },
-                            )
-                            .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
-                        _froms.push(from_handle);
-                        _tos.push(to_handle);
-                    }
-                    _ => {
-                        return Err(anyhow!(
-                            "expected symbol, found `{:?}, {:?}`",
-                            pair.0,
-                            pair.1
-                        ))
-                        .with_context(|| "while defining permutation")
-                    }
-                }
+                    )
+                    .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
+                _froms.push(from_handle);
+                _tos.push(to_handle);
             }
 
             ctx.borrow_mut()
@@ -556,7 +535,7 @@ fn reduce(
                 },
             )
         }
-        Token::Defpurefun(name, args, body) => {
+        Token::Defpurefun { name, args, body } => {
             let module_name = ctx.borrow().name.to_owned();
             ctx.borrow_mut().insert_function(
                 name,
