@@ -1,6 +1,6 @@
 [package]
 name = "corset"
-version = "6.0.0"
+version = "6.1.0"
 edition = "2021"
 authors = [ "Franklin Delehelle <franklin.delehelle@consensys.net>" ]
 build = "build.rs"

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.1.0] - 2023-02-03
+
+### Refactor
+
+- Streamline the parsing phase
+- Switch from `Err(anyhow!(...))` to `bail!(...)`
+
 ## [6.0.0] - 2023-02-02
 
 ### Bug Fixes
@@ -36,6 +43,7 @@ All notable changes to this project will be documented in this file.
 - Go export of constraints is not required anymore
 - Release corset version 5.1.0
 - Reformat the stdlib
+- Release corset version 6.0.0
 
 ### Refactor
 
