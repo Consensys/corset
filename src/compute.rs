@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use colored::Colorize;
 use log::*;
 use pairing_ce::{
@@ -17,7 +17,7 @@ fn validate(t: Type, x: F) -> Result<F> {
         if x.is_zero() || x == F::one() {
             Ok(x)
         } else {
-            Err(anyhow!("expected bool, found {}", x))
+            bail!("expected bool, found {}", x)
         }
     } else {
         Ok(x)
@@ -35,7 +35,7 @@ fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
             Value::String(s) => Fr::from_str(s)
                 .with_context(|| format!("while parsing `{:?}`", x))
                 .and_then(|x| validate(t, x)),
-            _ => Err(anyhow!("expected numeric value, found `{}`", x)),
+            _ => bail!("expected numeric value, found `{}`", x),
         })
         .collect::<Result<Vec<_>>>()?;
     r.extend(xs);
@@ -68,12 +68,12 @@ fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Result<(
                     trace!("Inserting {} ({})", handle, xs.len());
 
                     if xs.len() as isize != module_raw_size {
-                        return Err(anyhow!(
+                        bail!(
                             "{} has an incorrect length: expected {}, found {}",
                             handle.to_string().blue(),
                             xs.len().to_string().yellow().bold(),
                             module_raw_size.to_string().red().bold()
-                        ));
+                        );
                     }
 
                     column.set_value(

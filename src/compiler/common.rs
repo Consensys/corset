@@ -173,11 +173,11 @@ impl FuncVerifier<AstNode> for Form {
                 {
                     Ok(())
                 } else {
-                    Err(anyhow!(
+                    bail!(
                         "`{:?}` expects [SYMBOL VALUE] but received {:?}",
                         self,
                         args
-                    ))
+                    )
                 }
             }
             Form::Debug => Ok(()),

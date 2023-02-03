@@ -386,16 +386,10 @@ impl Node {
                     Ok(args.iter().fold(BigInt::one(), |ax, x| ax * x))
                 }
                 Builtin::Neg => Ok(-args[0].pure_eval()?),
-                x => Err(anyhow!(
-                    "{} is not known at compile-time",
-                    x.to_string().red()
-                )),
+                x => bail!("{} is not known at compile-time", x.to_string().red()),
             },
             Expression::Const(v, _) => Ok(v.to_owned()),
-            _ => Err(anyhow!(
-                "{} is not known at compile-time",
-                self.to_string().red()
-            )),
+            _ => bail!("{} is not known at compile-time", self.to_string().red()),
         }
     }
 

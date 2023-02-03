@@ -134,7 +134,7 @@ fn columns_len(
     }
     let l = cols_lens[0].unwrap_or(0);
     if l == 0 {
-        Err(anyhow!("empty trace, aborting"))
+        bail!("empty trace, aborting")
     } else {
         Ok(Some(l))
     }
@@ -233,7 +233,7 @@ fn fail(
     }
     trace.push('\n');
 
-    Err(anyhow!(
+    bail!(
         trace
             + &expr.debug(
                 &|n| n.eval(
@@ -245,7 +245,7 @@ fn fail(
                 settings.unclutter,
                 settings.dim
             )
-    ))
+    )
 }
 
 fn check_constraint_at(
@@ -359,7 +359,7 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
             .collect::<Result<Vec<_>>>()
             .with_context(|| anyhow!("while computing {:?}", exps))?;
         if !cols.iter().all(|p| p.len() == cols[0].len()) {
-            return Err(anyhow!("all columns should be of the same length"));
+            bail!("all columns should be of the same length")
         }
 
         Ok(cols)
@@ -367,7 +367,7 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
 
     // Check that we have the same number of columns; should be guaranteed by the com
     if children.len() != parents.len() {
-        return Err(anyhow!("parents and children are not of the same length"));
+        bail!("parents and children are not of the same length")
     }
 
     // Check for emptiness in parents & children
@@ -386,7 +386,7 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
             debug!("empty plookup found; skipping");
             return Ok(());
         }
-        (false, true) => return Err(anyhow!("parents are emypy, but not children")),
+        (false, true) => bail!("parents are emypy, but not children"),
         (false, false) => {}
     }
 
@@ -406,7 +406,7 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
 
     for i in 0..child_cols[0].len() {
         if !hashes.contains(&pseudo_rlc(&child_cols, i)) {
-            return Err(anyhow!(
+            bail!(
                 "@{}: {{\n{}\n}} not found in {{{}}}",
                 i,
                 children
@@ -420,7 +420,7 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
                     .map(|k| format!("{}", k))
                     .collect::<Vec<_>>()
                     .join(", ")
-            ));
+            );
         }
     }
 
@@ -462,7 +462,7 @@ pub fn check(
         .filter(|c| !skip.contains(&c.name()))
         .collect::<Vec<_>>();
     if todo.is_empty() {
-        return Err(anyhow!("refusing to check an empty constraint set"));
+        bail!("refusing to check an empty constraint set")
     }
 
     let failed = todo
@@ -566,13 +566,13 @@ pub fn check(
         info!("Validation successful");
         Ok(())
     } else {
-        Err(anyhow!(
+        bail!(
             "Constraints failed: {}",
             failed
                 .into_iter()
                 .map(|x| x.to_string().bold().red().to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
-        ))
+        )
     }
 }

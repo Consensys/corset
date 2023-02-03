@@ -43,10 +43,7 @@ impl ComputationTable {
     }
     pub fn insert(&mut self, target: &Handle, computation: Computation) -> Result<()> {
         if self.dependencies.contains_key(target) {
-            return Err(anyhow!(
-                "`{}` already present as a computation target",
-                target
-            ));
+            bail!("`{}` already present as a computation target", target);
         }
         self.computations.push(computation);
         self.dependencies
@@ -152,7 +149,7 @@ impl SymbolTable {
         pure: bool,
     ) -> Result<Node> {
         if ax.contains(name) {
-            Err(anyhow!("Circular definitions found for {}", name))
+            bail!("circular definition found for {}", name)
         } else {
             ax.insert(name.to_owned());
             // Ugly, but required for borrowing reasons
@@ -162,10 +159,10 @@ impl SymbolTable {
                 match self.symbols.get_mut(name) {
                     Some(Symbol::Final(exp, visited)) => {
                         if pure && !matches!(exp.e(), Expression::Const(..)) {
-                            Err(anyhow!(
+                            bail!(
                                 "symbol {} can not be used in a pure context",
                                 exp.to_string().blue()
-                            ))
+                            )
                         } else {
                             *visited = true;
                             Ok(exp.clone())
@@ -173,11 +170,11 @@ impl SymbolTable {
                     }
                     None => {
                         if absolute_path {
-                            Err(anyhow!(
+                            bail!(
                                 "symbol {} unknown in module {}",
                                 name.red(),
                                 self.name.blue()
-                            ))
+                            )
                         } else {
                             self.parent.upgrade().map_or(
                                 Err(anyhow!(
@@ -209,10 +206,7 @@ impl SymbolTable {
         ax: &mut HashSet<String>,
     ) -> Result<()> {
         if ax.contains(name) {
-            Err(anyhow!(
-                "Circular definitions found for {}",
-                name.to_string().red()
-            ))
+            bail!("Circular definitions found for {}", name.to_string().red())
         } else {
             ax.insert(name.to_owned());
             // Ugly, but required for borrowing reasons
@@ -240,10 +234,7 @@ impl SymbolTable {
 
     fn _resolve_function(&self, name: &str, ax: &mut HashSet<String>) -> Result<Function> {
         if ax.contains(name) {
-            Err(anyhow!(
-                "Circular definitions found for {}",
-                name.to_string().red()
-            ))
+            bail!("Circular definitions found for {}", name.to_string().red())
         } else {
             ax.insert(name.to_owned());
             match self.funcs.get(name) {
@@ -275,11 +266,11 @@ impl SymbolTable {
 
     pub fn insert_symbol(&mut self, name: &str, e: Node) -> Result<()> {
         if self.symbols.contains_key(name) {
-            Err(anyhow!(
+            bail!(
                 "column `{}` already exists in module `{}`",
                 name.red(),
                 self.name.blue()
-            ))
+            )
         } else {
             self.symbols
                 .insert(name.to_owned(), Symbol::Final(e, false));
@@ -289,10 +280,7 @@ impl SymbolTable {
 
     pub fn insert_function(&mut self, name: &str, f: Function) -> Result<()> {
         if self.funcs.contains_key(name) {
-            Err(anyhow!(
-                "function {} already defined",
-                name.to_string().red()
-            ))
+            bail!("function {} already defined", name.to_string().red())
         } else {
             self.funcs.insert(name.to_owned(), f);
             Ok(())
@@ -301,7 +289,7 @@ impl SymbolTable {
 
     pub fn insert_alias(&mut self, from: &str, to: &str) -> Result<()> {
         if self.symbols.contains_key(from) {
-            Err(anyhow!("`{}` already exists", from))
+            bail!("`{}` already exists", from)
         } else {
             self.symbols
                 .insert(from.to_owned(), Symbol::Alias(to.to_owned()));
@@ -311,12 +299,12 @@ impl SymbolTable {
 
     pub fn insert_funalias(&mut self, from: &str, to: &str) -> Result<()> {
         if self.funcs.contains_key(from) {
-            Err(anyhow!(
+            bail!(
                 "{} already exists: {} -> {}",
                 from.to_string().red(),
                 from.to_string().red(),
                 to.to_string().magenta(),
-            ))
+            )
         } else {
             self.funcs.insert(
                 from.to_owned(),
@@ -352,11 +340,7 @@ impl SymbolTable {
             Type::Scalar(Magma::Integer)
         };
         if self.symbols.contains_key(name) {
-            Err(anyhow!(
-                "`{}` already exists in `{}`",
-                name.red(),
-                self.name.blue()
-            ))
+            bail!("`{}` already exists in `{}`", name.red(), self.name.blue())
         } else if let Some(fr) = Fr::from_str(&value.to_string()) {
             self.symbols.insert(
                 name.to_owned(),
@@ -370,10 +354,7 @@ impl SymbolTable {
             );
             Ok(())
         } else {
-            Err(anyhow!(
-                "{} is not an Fr element",
-                value.to_string().red().bold()
-            ))
+            bail!("{} is not an Fr element", value.to_string().red().bold())
         }
     }
 
@@ -394,11 +375,7 @@ impl SymbolTable {
                 if let Some(submodule) = self.children.get_mut(name) {
                     submodule.borrow_mut()._resolve_symbol_with_path(path)
                 } else {
-                    Err(anyhow!(
-                        "module {} not found in {}",
-                        name.red(),
-                        self.name.blue()
-                    ))
+                    bail!("module {} not found in {}", name.red(), self.name.blue())
                 }
             }
             None => self._resolve_symbol(name, &mut HashSet::new(), true, false),
@@ -478,11 +455,11 @@ fn reduce(
             to: tos,
         } => {
             if tos.len() != froms.len() {
-                return Err(anyhow!(
+                bail!(
                     "cardinality mismatch in permutation declaration: {:?} vs. {:?}",
                     tos,
                     froms
-                ));
+                );
             }
 
             let mut _froms = Vec::new();

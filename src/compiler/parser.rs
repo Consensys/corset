@@ -56,28 +56,28 @@ impl AstNode {
         if let Token::Value(r) = &self.class {
             r.try_into().map_err(|e| anyhow!("{:?}", e))
         } else {
-            Err(anyhow!("expected usize, found `{:?}`", self))
+            bail!("expected usize, found `{:?}`", self)
         }
     }
     pub fn as_range(&self) -> Result<&[isize]> {
         if let Token::Range(r) = &self.class {
             Ok(r)
         } else {
-            Err(anyhow!("expected range, found `{:?}`", self))
+            bail!("expected range, found `{:?}`", self)
         }
     }
     pub fn as_symbol(&self) -> Result<&str> {
         if let Token::Symbol(x) = &self.class {
             Ok(x)
         } else {
-            Err(anyhow!("expected symbol, found `{:?}`", self))
+            bail!("expected symbol, found `{:?}`", self)
         }
     }
     pub fn as_list(&self) -> Result<&[AstNode]> {
         if let Token::List(xs) = &self.class {
             Ok(xs)
         } else {
-            Err(anyhow!("expected list, found `{:?}`", self))
+            bail!("expected list, found `{:?}`", self)
         }
     }
 }

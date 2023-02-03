@@ -1,5 +1,5 @@
 use crate::compiler::{Handle, Kind, Node, Type};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use colored::Colorize;
 use pairing_ce::{bn256::Fr, ff::Field};
 use serde::{Deserialize, Serialize};
@@ -192,10 +192,7 @@ impl ColumnSet {
             .unwrap_or(false)
             && !allow_dup
         {
-            Err(anyhow!(
-                "{} already exists",
-                handle.to_string().red().bold()
-            ))
+            bail!("{} already exists", handle.to_string().red().bold())
         } else {
             let i = self._cols.len();
             self._cols.push(Column {

@@ -239,12 +239,12 @@ impl FuncVerifier<Node> for Builtin {
                 if a.t().is_value() {
                     Ok(())
                 } else {
-                    Err(anyhow!(
+                    bail!(
                         "`{:?}` received unexepcted argument {} of type {:?}",
                         f,
                         a.pretty(),
                         a.t(),
-                    ))
+                    )
                 }
             }),
             Builtin::Exp => {
@@ -278,21 +278,18 @@ impl FuncVerifier<Node> for Builtin {
                 if args.iter().all(|a| a.t().is_value()) {
                     Ok(())
                 } else {
-                    Err(anyhow!(
-                        "`{:?}` expects value arguments but received a list",
-                        self
-                    ))
+                    bail!("`{:?}` expects value arguments but received a list", self)
                 }
             }
             Builtin::Shift => {
                 if args[0].t().is_column() && args[1].t().is_scalar() {
                     Ok(())
                 } else {
-                    Err(anyhow!(
+                    bail!(
                         "`{:?}` expects a COLUMN and a VALUE but received {:?}",
                         self,
                         args.iter().map(Node::t).collect::<Vec<_>>()
-                    ))
+                    )
                 }
             }
             Builtin::Nth => {
@@ -301,21 +298,18 @@ impl FuncVerifier<Node> for Builtin {
                 {
                     Ok(())
                 } else {
-                    Err(anyhow!(
+                    bail!(
                         "`{:?}` expects [SYMBOL CONST] but received {:?}",
                         self,
                         args
-                    ))
+                    )
                 }
             }
             Builtin::IfZero | Builtin::IfNotZero => {
                 if !matches!(args[0].e(), Expression::List(_)) {
                     Ok(())
                 } else {
-                    Err(anyhow!(
-                        "`{:?}` expects an expression as its condition",
-                        self
-                    ))
+                    bail!("`{:?}` expects an expression as its condition", self)
                 }
             }
             Builtin::Begin => Ok(()),
@@ -383,7 +377,7 @@ impl ConstraintSet {
             .windows(2)
             .all(|w| w[0] == w[1])
         {
-            return Err(anyhow!("interleaving columns of incoherent lengths"));
+            bail!("interleaving columns of incoherent lengths")
         }
 
         let final_len = froms
@@ -431,7 +425,7 @@ impl ConstraintSet {
             .windows(2)
             .all(|w| w[0].padded_len() == w[1].padded_len())
         {
-            return Err(anyhow!("sorted columns are of incoherent lengths"));
+            bail!("sorted columns are of incoherent lengths")
         }
         let len = from_cols[0].len().unwrap();
 
@@ -534,7 +528,7 @@ impl ConstraintSet {
         let cols_in_expr = exp.dependencies();
         for c in &cols_in_expr {
             if !self.get(c)?.is_computed() {
-                return Err(anyhow!("column {} not yet computed", c.to_string().red()));
+                bail!("column {} not yet computed", c.to_string().red())
             }
         }
 
@@ -1014,11 +1008,7 @@ fn apply(
                                             _t: Some(column.t().as_scalar()),
                                         }))
                                     } else {
-                                        Err(anyhow!(
-                                            "tried to access `{:?}` at index {}",
-                                            column,
-                                            x
-                                        ))
+                                        bail!("tried to access `{:?}` at index {}", column, x)
                                     }
                                 }
                                 _ => unimplemented!(),
@@ -1210,12 +1200,12 @@ fn reduce_toplevel(
                 .map(|e| reduce(e, root_ctx.clone(), ctx, settings).map(Option::unwrap))
                 .collect::<Result<Vec<_>>>()?;
             if parents.len() != children.len() {
-                Err(anyhow!(
+                bail!(
                     "in {}, parents and children have different lengths: {} and {}",
                     name.red(),
                     parents.len(),
                     children.len()
-                ))
+                )
             } else {
                 Ok(Some(Constraint::Plookup {
                     handle,
@@ -1247,7 +1237,7 @@ fn reduce_toplevel(
             Ok(None)
         }
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
-            Err(anyhow!("Unexpected top-level form: {:?}", e))
+            bail!("Unexpected top-level form: {:?}", e)
         }
         Token::Defun { .. }
         | Token::Defpurefun { .. }
