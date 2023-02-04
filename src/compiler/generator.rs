@@ -940,6 +940,20 @@ fn apply_form(
                 }
             }
         }
+        Form::Let => {
+            let sub_ctx_name = format!("let-{}", ctx.borrow().name);
+            let mut sub_ctx =
+                SymbolTable::derived(ctx.clone(), &sub_ctx_name, &sub_ctx_name, false);
+            for pair in args[0].as_list().unwrap().iter() {
+                let pair = pair.as_list().unwrap();
+                let name = pair[0].as_symbol().unwrap();
+                let value = reduce(&pair[1], root_ctx.clone(), &mut sub_ctx, settings)?.unwrap();
+                sub_ctx.borrow_mut().insert_symbol(name, value)?;
+            }
+            let body = reduce(&args[1], root_ctx.clone(), &mut sub_ctx, settings)?.unwrap();
+
+            Ok(Some(body))
+        }
     }
 }
 

@@ -371,6 +371,10 @@ fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
             .to_owned(),
     );
 
+    if let Some(last) = tokens.next() {
+        bail!("too many arguments found for DEFCONSTRAINT: {}", last?.src)
+    }
+
     Ok(AstNode {
         class: Token::DefConstraint {
             name,

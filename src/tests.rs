@@ -16,6 +16,9 @@ fn make(name: &str, source: &str) -> Result<()> {
 
 fn must_run(name: &str, source: &str) {
     let r = make(name, source);
+    if let Err(err) = &r {
+        eprintln!("{}", err);
+    }
     assert!(r.is_ok());
 }
 
@@ -102,4 +105,40 @@ fn array_ko() {
 #[test]
 fn prime_in_name() {
     must_run("quotes in names", "(defcolumns A B C A' B' C')");
+}
+
+#[test]
+fn ok_let() {
+    must_run("let-1", "(defcolumns a b c) (defconstraint test () (let ((x (+ a b)) (y (+ c x)) (z y)) (+ a b c x y z)))");
+    must_run(
+        "let-2",
+        "(defcolumns a b c) (defconstraint test () (let () (+ a b c)))",
+    );
+    must_run(
+        "let-2",
+        "(defcolumns a b c) (defconstraint test () (let ((a c) (b c)) (+ a b c)))",
+    );
+}
+
+#[test]
+fn ko_let() {
+    must_fail(
+        "let-1",
+        "(defcolumns a b c) (defconstraint test () (let  (+ a b c x y z)))",
+    );
+
+    must_fail(
+        "let-2",
+        "(defcolumns a b c) (defconstraint test () (let  ((z y))))",
+    );
+
+    must_fail(
+        "let-3",
+        "(defcolumns a b c) (defconstraint test () (let  ((z )) (+ a b c)))",
+    );
+
+    must_fail(
+        "let-4",
+        "(defcolumns a b c) (defconstraint test () (let  ((z 1) (q 3)) (+ a b c) (eq 3 4)))",
+    );
 }

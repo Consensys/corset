@@ -17,15 +17,17 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "nth"),
             class: FunctionClass::Builtin(Builtin::Nth),
         },
-
         "for" => Function {
             handle: Handle::new(super::MAIN_MODULE, "for"),
             class: FunctionClass::SpecialForm(Form::For),
         },
-
         "debug" => Function {
             handle: Handle::new(super::MAIN_MODULE, "debug"),
             class: FunctionClass::SpecialForm(Form::Debug),
+        },
+        "let" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "let"),
+            class: FunctionClass::SpecialForm(Form::Let),
         },
 
 
@@ -92,6 +94,7 @@ lazy_static::lazy_static! {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Form {
     For,
+    Let,
     Debug,
 }
 
@@ -162,6 +165,7 @@ impl FuncVerifier<AstNode> for Form {
         match self {
             Form::For => Arity::Exactly(3),
             Form::Debug => Arity::AtLeast(1),
+            Form::Let => Arity::Exactly(2),
         }
     }
     fn validate_types(&self, args: &[AstNode]) -> Result<()> {
@@ -181,6 +185,22 @@ impl FuncVerifier<AstNode> for Form {
                 }
             }
             Form::Debug => Ok(()),
+            Form::Let => {
+                if let Result::Ok(pairs) = args[0].as_list() {
+                    for pair in pairs {
+                        if let Result::Ok(pair) = pair.as_list() {
+                            if !(pair.len() == 2 && matches!(pair[0].class, Token::Symbol(_))) {
+                                bail!("LET expects a pair of bindings, found `{:?}`", pair)
+                            }
+                        } else {
+                            bail!("LET expects a pair of bindings, found `{:?}`", pair)
+                        }
+                    }
+                    Ok(())
+                } else {
+                    bail!("LET expects a list of bindings, found `{:?}`", args[0])
+                }
+            }
         }
     }
 }
