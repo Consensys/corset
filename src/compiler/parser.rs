@@ -599,6 +599,11 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                     .next()
                     .with_context(|| anyhow!("missing function body"))??,
             );
+
+            if let Some(last) = tokens.next() {
+                bail!("too many arguments found for DEFUN: {}", last?.src)
+            }
+
             Ok(AstNode {
                 class: if kw == "defun" {
                     Token::Defun { name, args, body }
