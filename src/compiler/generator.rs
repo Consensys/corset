@@ -1030,7 +1030,7 @@ fn apply(
                                                 ),
                                                 Kind::Atomic,
                                             ),
-                                            _t: Some(column.t().as_scalar()),
+                                            _t: Some(column.t()),
                                         }))
                                     } else {
                                         bail!("tried to access `{:?}` at index {}", column, x)
