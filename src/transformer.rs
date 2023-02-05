@@ -4,6 +4,7 @@ mod nhood;
 mod selectors;
 mod shifter;
 mod sort;
+mod statics;
 
 pub use ifs::expand_ifs;
 pub use inverses::expand_invs;
@@ -11,6 +12,7 @@ pub use nhood::validate_nhood;
 pub use selectors::expand_constraints;
 pub use shifter::lower_shifts;
 pub use sort::sorts;
+pub use statics::precompute;
 
 use crate::compiler::{Builtin, ConstraintSet, Expression, Handle, Kind, Magma, Node, Type};
 

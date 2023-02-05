@@ -7,7 +7,32 @@ use super::{
     Ast, AstNode, CompileSettings, Token,
 };
 
-fn reduce_compiletime(
+fn compile_time_constants(
+    e: &AstNode,
+    root_ctx: Rc<RefCell<SymbolTable>>,
+    ctx: &mut Rc<RefCell<SymbolTable>>,
+    settings: &CompileSettings,
+) -> Result<()> {
+    match &e.class {
+        Token::DefModule(name) => {
+            *ctx = SymbolTable::derived(root_ctx, name, name, false);
+            Ok(())
+        }
+        Token::DefConsts(cs) => {
+            for (name, exp) in cs.iter() {
+                let value = reduce(exp, root_ctx.clone(), ctx, settings)?.unwrap();
+                ctx.borrow_mut().insert_constant(
+                    name,
+                    value.pure_eval().with_context(|| make_ast_error(exp))?,
+                )?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn static_exprs(
     e: &AstNode,
     root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
@@ -35,7 +60,7 @@ fn reduce_compiletime(
 pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>, settings: &CompileSettings) -> Result<()> {
     let mut module = ctx.clone();
     for exp in ast.exprs.iter() {
-        reduce_compiletime(exp, ctx.clone(), &mut module, settings)
+        compile_time_constants(exp, ctx.clone(), &mut module, settings)
             .with_context(|| make_ast_error(exp))?;
     }
 

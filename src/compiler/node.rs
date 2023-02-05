@@ -394,6 +394,15 @@ impl Node {
                         unreachable!()
                     }
                 }
+                Builtin::Exp => {
+                    let args = args
+                        .iter()
+                        .map(|x| x.pure_eval())
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok(args[0].pow(args[1].to_u32().ok_or_else(|| {
+                        anyhow!("exponent {} is not an u32", args[1].to_string())
+                    })?))
+                }
                 x => bail!("{} is not known at compile-time", x.to_string().red()),
             },
             Expression::Const(v, _) => Ok(v.to_owned()),
