@@ -142,3 +142,19 @@ fn ko_let() {
         "(defcolumns a b c) (defconstraint test () (let  ((z 1) (q 3)) (+ a b c) (eq 3 4)))",
     );
 }
+
+#[test]
+fn array_len() {
+    must_run(
+        "len ok",
+        "(defcolumns (a[5]) b c) (defconstraint test () (eq (len a) 5))",
+    );
+    must_fail(
+        "not an array",
+        "(defcolumns (a[5]) b c) (defconstraint test () (eq (len b) 5))",
+    );
+    must_fail(
+        "not an array 2",
+        "(defcolumns (a[5]) b c) (defconstraint test () (eq (len (nth a 2)) 5))",
+    );
+}

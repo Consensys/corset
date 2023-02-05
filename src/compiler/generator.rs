@@ -117,6 +117,7 @@ pub enum Builtin {
     Not,
 
     Nth,
+    Len,
     Eq,
     Begin,
 
@@ -159,6 +160,7 @@ impl Builtin {
                 Type::List(argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)).magma())
             }
             Builtin::Shift | Builtin::Nth => argtype[0],
+            Builtin::Len => Type::Scalar(Magma::Integer),
         }
     }
 }
@@ -181,6 +183,7 @@ impl std::fmt::Display for Builtin {
                 Builtin::Begin => "begin",
                 Builtin::IfZero => "if-zero",
                 Builtin::IfNotZero => "if-not-zero",
+                Builtin::Len => "len",
             }
         )
     }
@@ -231,6 +234,7 @@ impl FuncVerifier<Node> for Builtin {
             Builtin::IfZero => Arity::Between(2, 3),
             Builtin::IfNotZero => Arity::Between(2, 3),
             Builtin::Nth => Arity::Dyadic,
+            Builtin::Len => Arity::Monadic,
         }
     }
     fn validate_types(&self, args: &[Node]) -> Result<()> {
@@ -313,6 +317,13 @@ impl FuncVerifier<Node> for Builtin {
                 }
             }
             Builtin::Begin => Ok(()),
+            Builtin::Len => {
+                if matches!(args[0].e(), Expression::ArrayColumn(..)) {
+                    Ok(())
+                } else {
+                    bail!("LEN expects an array but received {:?}", args[0])
+                }
+            }
         }
     }
 }
@@ -1063,6 +1074,13 @@ fn apply(
                     | Builtin::Neg
                     | Builtin::Inv
                     | Builtin::Shift) => Ok(Some(b.call(&traversed_args))),
+                    Builtin::Len => {
+                        if let Expression::ArrayColumn(_, domain) = traversed_args[0].e() {
+                            Ok(Some(Node::from_const(domain.len().try_into().unwrap())))
+                        } else {
+                            unreachable!()
+                        }
+                    }
                 }
             }
 

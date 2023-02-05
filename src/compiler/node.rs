@@ -386,6 +386,14 @@ impl Node {
                     Ok(args.iter().fold(BigInt::one(), |ax, x| ax * x))
                 }
                 Builtin::Neg => Ok(-args[0].pure_eval()?),
+                Builtin::Len => {
+                    if let Expression::ArrayColumn(_, domain) = &args[0].e() {
+                        BigInt::from_usize(domain.len())
+                            .ok_or_else(|| anyhow!("{} is not convertible to BigInt", domain.len()))
+                    } else {
+                        unreachable!()
+                    }
+                }
                 x => bail!("{} is not known at compile-time", x.to_string().red()),
             },
             Expression::Const(v, _) => Ok(v.to_owned()),
@@ -507,7 +515,7 @@ impl Node {
                     {
                         let idx = idx.to_usize().unwrap();
                         if !range.contains(&idx) {
-                            panic!("trying to access `{}` ad index `{}`", h, idx);
+                            panic!("trying to access `{}` at index `{}`", h, idx);
                         }
                         get(&h.ith(idx), i, settings.wrap)
                     } else {
@@ -531,6 +539,13 @@ impl Node {
                         args.get(2)
                             .map(|x| x.eval_fold(i, get, cache, settings, f))
                             .unwrap_or_else(|| Some(Fr::zero()))
+                    }
+                }
+                Builtin::Len => {
+                    if let Expression::ArrayColumn(_, domain) = &args[0].e() {
+                        Fr::from_str(&format!("{}", domain.len()))
+                    } else {
+                        unreachable!()
                     }
                 }
             },

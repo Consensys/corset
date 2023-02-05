@@ -12,11 +12,7 @@ const ARRAY_SEPARATOR: &str = "_";
 
 lazy_static::lazy_static! {
     pub static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
-        // special functions
-        "nth" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "nth"),
-            class: FunctionClass::Builtin(Builtin::Nth),
-        },
+        // forms
         "for" => Function {
             handle: Handle::new(super::MAIN_MODULE, "for"),
             class: FunctionClass::SpecialForm(Form::For),
@@ -30,6 +26,15 @@ lazy_static::lazy_static! {
             class: FunctionClass::SpecialForm(Form::Let),
         },
 
+        // special functions
+        "nth" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "nth"),
+            class: FunctionClass::Builtin(Builtin::Nth),
+        },
+        "len" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "len"),
+            class: FunctionClass::Builtin(Builtin::Len),
+        },
 
         // monadic
         "inv" => Function {
