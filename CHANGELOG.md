@@ -2,7 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.2.0] - 2023-02-05
+
+### Bug Fixes
+
+- Alias natural to integer
+- Regression on supernumerary `DEFUN` arguments
+- Wrong typing of array columns
+
+### Features
+
+- Add the `LET` form
+- Add the `LEN` builtin function
+- Compute static expressions at compile time
+
+### Refactor
+
+- Introduce testing helpers
+
 ## [6.1.0] - 2023-02-03
+
+### Miscellaneous Tasks
+
+- Release corset version 6.1.0
 
 ### Refactor
 
@@ -13,12 +35,31 @@ All notable changes to this project will be documented in this file.
 
 ### Bug Fixes
 
+- Unclutter lookup errors
+
+### Features
+
+- Introduce a new :guard/:domain feature
+
+### Miscellaneous Tasks
+
+- Reformat the stdlib
+- Release corset version 6.0.0
+
+### Refactor
+
+- Better variable name
+- Drop ComputeLoop
+
+## [5.1.0] - 2023-01-28
+
+### Bug Fixes
+
 - Inverted permutation definition
 - Sort constraint should not fail when there is no padding
 - Do not fail while validating too short cyclic columns
 - Better error messages on empty columns
 - Overflow in powers of 256 projected on isize
-- Unclutter lookup errors
 
 ### Documentation
 
@@ -33,7 +74,6 @@ All notable changes to this project will be documented in this file.
 - Check in-range constraints
 - Implement sort constraint proving
 - Remove data generation not required by zkGeth anymore
-- Introduce a new :guard/:domain feature
 
 ### Miscellaneous Tasks
 
@@ -42,15 +82,11 @@ All notable changes to this project will be documented in this file.
 - Clippy
 - Go export of constraints is not required anymore
 - Release corset version 5.1.0
-- Reformat the stdlib
-- Release corset version 6.0.0
 
 ### Refactor
 
 - Drop the make-decomposition builtin
 - Consolidate post-compilation transformations
-- Better variable name
-- Drop ComputeLoop
 
 ## [5.0.1] - 2023-01-22
 
