@@ -8,12 +8,13 @@ definition = { "(" ~ definition_kw ~ (sexpr | expr)* ~ ")"}
 definition_kw = { "module" | "defconstraint" | "defunalias" | "defun" | "defpurefun" | "defconst" | "defalias" | "defplookup" | "defpermutation" | "definrange" | "defcolumns" }
 
 sexpr = { "(" ~ (expr | keyword | range)* ~ ")" }
-expr = { integer | symbol | sexpr | form }
+expr = { integer | symbol | sexpr | form | nth }
 
 form = _{ forloop }
 
 forloop = { "(" ~ "for" ~ symbol ~ range ~ expr ~ ")" }
 
+nth = { "[" ~ symbol ~ expr ~ "]" }
 range = _{ immediate_range | interval }
 immediate_range = { "{" ~ integer+ ~ "}" }
 interval = { "[" ~ natural ~ (":" ~ natural ~ (":" ~ natural)?)? ~ "]" }

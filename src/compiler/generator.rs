@@ -297,15 +297,16 @@ impl FuncVerifier<Node> for Builtin {
                 }
             }
             Builtin::Nth => {
-                if matches!(args[0].e(), Expression::ArrayColumn(..))
-                    && matches!(&args[1].e(), Expression::Const(x, _) if x.sign() != num_bigint::Sign::Minus)
-                {
+                if matches!(args[0].e(), Expression::ArrayColumn(..)) && args[1].t().is_scalar() {
                     Ok(())
                 } else {
                     bail!(
-                        "`{:?}` expects [SYMBOL CONST] but received {:?}",
-                        self,
-                        args
+                        "{} expects (Column(..) Scalar(..)) but received ({})",
+                        "nth".white().bold(),
+                        args.iter()
+                            .map(|a| format!("{:?}", a.t()))
+                            .collect::<Vec<_>>()
+                            .join(" ")
                     )
                 }
             }
@@ -1014,14 +1015,14 @@ fn apply(
                     b @ (Builtin::IfZero | Builtin::IfNotZero) => Ok(Some(b.call(&traversed_args))),
 
                     Builtin::Nth => {
-                        if let (Expression::ArrayColumn(handle, ..), Expression::Const(i, _)) =
-                            (&traversed_args[0].e(), &traversed_args[1].e())
-                        {
-                            let x = i.to_usize().unwrap();
+                        if let Expression::ArrayColumn(handle, ..) = &traversed_args[0].e() {
+                            let i = traversed_args[1].pure_eval()?.to_usize().ok_or_else(|| {
+                                anyhow!("{:?} is not a valid indice", traversed_args[1].pure_eval())
+                            })?;
                             let column = ctx.borrow_mut().resolve_symbol(&handle.name)?;
                             match column.e() {
                                 Expression::ArrayColumn(handle, range) => {
-                                    if range.contains(&x) {
+                                    if range.contains(&i) {
                                         Ok(Some(Node {
                                             _e: Expression::Column(
                                                 Handle::new(
@@ -1033,7 +1034,7 @@ fn apply(
                                             _t: Some(column.t()),
                                         }))
                                     } else {
-                                        bail!("tried to access `{:?}` at index {}", column, x)
+                                        bail!("tried to access `{:?}` at index {}", column, i)
                                     }
                                 }
                                 _ => unimplemented!(),
@@ -1042,7 +1043,6 @@ fn apply(
                             unreachable!()
                         }
                     }
-
                     Builtin::Not => Ok(Some(
                         Builtin::Sub.call(&[Node::one(), traversed_args[0].to_owned()]),
                     )),

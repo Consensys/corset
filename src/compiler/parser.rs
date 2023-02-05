@@ -833,7 +833,25 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             src,
             lc,
         }),
-        x => unimplemented!("{:?}", x),
+        Rule::nth => {
+            let nth_token = AstNode {
+                class: Token::Symbol("nth".into()),
+                lc,
+                src: src.clone(),
+            };
+            let args = pair
+                .into_inner()
+                .map(rec_parse)
+                .collect::<Result<Vec<_>>>()?;
+            Ok(AstNode {
+                class: Token::List(vec![nth_token, args[0].clone(), args[1].clone()]),
+                lc,
+                src,
+            })
+        }
+        x => {
+            unimplemented!("{:?}", x)
+        }
     }
 }
 
