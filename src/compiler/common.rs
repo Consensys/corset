@@ -212,7 +212,7 @@ impl FuncVerifier<AstNode> for Form {
 
 /// The type of a column in the IR. This struct contains both the dimensionality
 /// of the type and its underlying magma.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, Serialize, Deserialize)]
 pub enum Type {
     Void,
     Scalar(Magma),

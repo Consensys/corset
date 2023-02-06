@@ -140,24 +140,26 @@ impl Builtin {
         match self {
             Builtin::Add | Builtin::Sub | Builtin::Neg | Builtin::Inv => {
                 // Boolean is a corner case, as it is not stable under these operations
-                match argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)) {
+                match argtype.iter().fold(Type::INFIMUM, |a, b| a.max(*b)) {
                     Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::Integer),
                     Type::Column(Magma::Boolean) => Type::Column(Magma::Integer),
                     x => x,
                 }
             }
             Builtin::Exp => argtype[0],
-            Builtin::Eq => argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)),
+            Builtin::Eq => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
             Builtin::Not => argtype
                 .iter()
-                .fold(Type::INFIMUM, |a, b| a.max(b))
+                .max()
+                .cloned()
+                .unwrap_or(Type::INFIMUM)
                 .same_scale(Magma::Boolean),
-            Builtin::Mul => argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)),
+            Builtin::Mul => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
             Builtin::IfZero | Builtin::IfNotZero => {
-                argtype[1].max(argtype.get(2).unwrap_or(&Type::INFIMUM))
+                argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
             }
             Builtin::Begin => {
-                Type::List(argtype.iter().fold(Type::INFIMUM, |a, b| a.max(b)).magma())
+                Type::List(argtype.iter().fold(Type::INFIMUM, |a, b| a.max(*b)).magma())
             }
             Builtin::Shift | Builtin::Nth => argtype[0],
             Builtin::Len => Type::Scalar(Magma::Integer),
@@ -1009,7 +1011,11 @@ fn apply(
                                 }
                             },
                         )),
-                        _t: Some(traversed_args_t.iter().fold(Type::INFIMUM, |a, b| a.max(b))),
+                        _t: Some(
+                            traversed_args_t
+                                .iter()
+                                .fold(Type::INFIMUM, |a, b| a.max(*b)),
+                        ),
                     })),
 
                     b @ (Builtin::IfZero | Builtin::IfNotZero) => Ok(Some(b.call(&traversed_args))),

@@ -103,7 +103,8 @@ impl Node {
             Expression::List(xs) => Type::List(
                 xs.iter()
                     .map(Node::t)
-                    .fold(Type::INFIMUM, |a, b| a.max(&b))
+                    .max()
+                    .unwrap_or(Type::INFIMUM)
                     .magma(),
             ),
             Expression::Void => Type::Void,
