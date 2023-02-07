@@ -18,7 +18,8 @@ use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 
 use super::definitions::ComputationTable;
-use super::{common::*, CompileSettings, Expression, Handle, Node};
+use super::errors::CompileError;
+use super::{common::*, CompileSettings, Expression, Handle, Magma, Node, Type};
 use crate::column::{Column, ColumnSet, Computation};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
@@ -161,7 +162,8 @@ impl Builtin {
             Builtin::Begin => {
                 Type::List(argtype.iter().fold(Type::INFIMUM, |a, b| a.max(*b)).magma())
             }
-            Builtin::Shift | Builtin::Nth => argtype[0],
+            Builtin::Nth => Type::Column(argtype[0].magma()),
+            Builtin::Shift => argtype[0],
             Builtin::Len => Type::Scalar(Magma::Integer),
         }
     }
@@ -179,7 +181,7 @@ impl std::fmt::Display for Builtin {
                 Builtin::Exp => "^",
                 Builtin::Shift => "shift",
                 Builtin::Neg => "-",
-                Builtin::Inv => "INV",
+                Builtin::Inv => "inv",
                 Builtin::Not => "not",
                 Builtin::Nth => "nth",
                 Builtin::Begin => "begin",
@@ -240,93 +242,55 @@ impl FuncVerifier<Node> for Builtin {
         }
     }
     fn validate_types(&self, args: &[Node]) -> Result<()> {
-        match self {
-            f @ (Builtin::Add | Builtin::Sub | Builtin::Mul) => args.iter().try_for_each(|a| {
-                if a.t().is_value() {
-                    Ok(())
-                } else {
-                    bail!(
-                        "`{:?}` received unexepcted argument {} of type {:?}",
-                        f,
-                        a.pretty(),
-                        a.t(),
-                    )
-                }
-            }),
-            Builtin::Exp => {
-                if args[0].t().is_value() && args[1].t().is_scalar() {
-                    Ok(())
-                } else {
-                    bail!(
-                        "`{:?}` expects a scalar exponent; found `{}` of type {:?}",
-                        &self,
-                        args[1],
-                        args[1].t()
-                    )
-                }
+        let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
+        let expected_t: &[&[Type]] = match self {
+            Builtin::Add | Builtin::Sub | Builtin::Mul => {
+                &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]]
             }
-            Builtin::Eq => {
-                if args.iter().all(|a| a.t().is_value()) {
-                    Ok(())
-                } else {
-                    bail!("`{:?}` expects value arguments", Builtin::Eq)
-                }
-            }
-            Builtin::Not => args[0].t().is_bool().then_some(()).ok_or_else(|| {
-                anyhow!(
-                    "`{:?}` expects a boolean; found `{}` of type {:?}",
-                    &self,
-                    args[0],
-                    args[0].t()
-                )
-            }),
-            Builtin::Neg | Builtin::Inv => {
-                if args.iter().all(|a| a.t().is_value()) {
-                    Ok(())
-                } else {
-                    bail!("`{:?}` expects value arguments but received a list", self)
-                }
-            }
-            Builtin::Shift => {
-                if args[0].t().is_column() && args[1].t().is_scalar() {
-                    Ok(())
-                } else {
-                    bail!(
-                        "`{:?}` expects a COLUMN and a VALUE but received {:?}",
-                        self,
-                        args.iter().map(Node::t).collect::<Vec<_>>()
-                    )
-                }
-            }
-            Builtin::Nth => {
-                if matches!(args[0].e(), Expression::ArrayColumn(..)) && args[1].t().is_scalar() {
-                    Ok(())
-                } else {
-                    bail!(
-                        "{} expects (Column(..) Scalar(..)) but received ({})",
-                        "nth".white().bold(),
-                        args.iter()
-                            .map(|a| format!("{:?}", a.t()))
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                    )
-                }
-            }
-            Builtin::IfZero | Builtin::IfNotZero => {
-                if !matches!(args[0].e(), Expression::List(_)) {
-                    Ok(())
-                } else {
-                    bail!("`{:?}` expects an expression as its condition", self)
-                }
-            }
-            Builtin::Begin => Ok(()),
-            Builtin::Len => {
-                if matches!(args[0].e(), Expression::ArrayColumn(..)) {
-                    Ok(())
-                } else {
-                    bail!("LEN expects an array but received {:?}", args[0])
-                }
-            }
+            Builtin::Exp => &[
+                &[Type::Scalar(Magma::Any), Type::Column(Magma::Any)],
+                &[Type::Scalar(Magma::Any)],
+            ],
+            Builtin::Eq => &[&[Type::Column(Magma::Any), Type::Scalar(Magma::Any)]],
+            Builtin::Not => &[
+                &[Type::Scalar(Magma::Boolean)],
+                &[Type::Column(Magma::Boolean)],
+            ],
+            Builtin::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
+            Builtin::Inv => &[&[Type::Column(Magma::Any)]],
+            Builtin::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
+            Builtin::Nth => &[
+                &[Type::ArrayColumn(Magma::Any)],
+                &[Type::Scalar(Magma::Any)],
+            ],
+            Builtin::IfZero | Builtin::IfNotZero => &[
+                &[
+                    Type::Scalar(Magma::Any),
+                    Type::Column(Magma::Any),
+                    Type::List(Magma::Any),
+                ],
+                &[
+                    Type::Scalar(Magma::Any),
+                    Type::Column(Magma::Any),
+                    Type::List(Magma::Any),
+                ],
+            ],
+            Builtin::Begin => &[&[
+                Type::Scalar(Magma::Any),
+                Type::Column(Magma::Any),
+                Type::List(Magma::Any),
+            ]],
+            Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
+        };
+
+        if super::compatible_with(expected_t, &args_t) {
+            Ok(())
+        } else {
+            bail!(CompileError::TypeError(
+                self.to_string(),
+                expected_t,
+                args_t.clone()
+            ))
         }
     }
 }
@@ -920,7 +884,7 @@ fn apply_form(
 
                     let r =
                         reduce(&body.clone(), root_ctx.clone(), &mut for_ctx, settings)?.unwrap();
-                    t = t.max(&r.t());
+                    t = t.max(r.t());
                     l.push(r);
                 }
 
@@ -993,10 +957,9 @@ fn apply(
 
         match &f.class {
             FunctionClass::Builtin(b) => {
-                let traversed_args = b.validate_args(traversed_args).with_context(|| {
-                    anyhow!("validating arguments to {}", f.handle.to_string().blue())
-                })?;
+                let traversed_args = b.validate_args(traversed_args)?;
                 match b {
+                    // Begin flattens & concatenate any list argument
                     Builtin::Begin => Ok(Some(Node {
                         _e: Expression::List(traversed_args.into_iter().fold(
                             vec![],
@@ -1025,8 +988,8 @@ fn apply(
                             let i = traversed_args[1].pure_eval()?.to_usize().ok_or_else(|| {
                                 anyhow!("{:?} is not a valid indice", traversed_args[1].pure_eval())
                             })?;
-                            let column = ctx.borrow_mut().resolve_symbol(&handle.name)?;
-                            match column.e() {
+                            let array = ctx.borrow_mut().resolve_symbol(&handle.name)?;
+                            match array.e() {
                                 Expression::ArrayColumn(handle, range) => {
                                     if range.contains(&i) {
                                         Ok(Some(Node {
@@ -1037,10 +1000,10 @@ fn apply(
                                                 ),
                                                 Kind::Atomic,
                                             ),
-                                            _t: Some(column.t()),
+                                            _t: Some(Type::Column(array.t().magma())),
                                         }))
                                     } else {
-                                        bail!("tried to access `{:?}` at index {}", column, i)
+                                        bail!("tried to access `{:?}` at index {}", array, i)
                                     }
                                 }
                                 _ => unimplemented!(),

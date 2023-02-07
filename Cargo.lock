@@ -269,6 +269,7 @@ dependencies = [
  "ron",
  "serde",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]

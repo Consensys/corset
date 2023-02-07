@@ -11,14 +11,17 @@ pub use definitions::ComputationTable;
 pub use generator::{Builtin, Constraint, ConstraintSet, EvalSettings};
 pub use node::{Expression, Node};
 pub use parser::{Ast, AstNode, Kind, Token};
+pub use types::*;
 
 mod codetyper;
 mod common;
 mod compiletime;
 mod definitions;
+mod errors;
 mod generator;
 mod node;
 mod parser;
+mod types;
 
 const MAIN_MODULE: &str = "<prelude>";
 

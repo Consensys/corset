@@ -16,7 +16,7 @@ use crate::pretty::Pretty;
 
 use super::{Builtin, EvalSettings, Handle, Kind, Magma, Type};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum Expression {
     Funcall { func: Builtin, args: Vec<Node> },
     Const(BigInt, Option<Fr>),
@@ -87,7 +87,7 @@ impl Node {
         &mut self._e
     }
     pub fn t(&self) -> Type {
-        self._t.unwrap_or_else(|| match self.e() {
+        self._t.unwrap_or_else(|| match &self.e() {
             Expression::Funcall { func, args } => {
                 func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
             }

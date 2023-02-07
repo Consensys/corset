@@ -8,8 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Debug;
 
-use super::common::Type;
-use super::{Handle, Magma};
+use super::{Handle, Magma, Type};
 
 #[cfg(feature = "interactive")]
 #[derive(Parser)]
@@ -500,7 +499,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                 }
                                 Token::DefArrayColumn {
                                     name,
-                                    t: t.unwrap_or(Type::Column(Magma::Integer)),
+                                    t: t.unwrap_or(Type::ArrayColumn(Magma::Integer)),
                                     domain: range
                                         .iter()
                                         .map(|&x| x.try_into().map_err(|e| anyhow!("{:?}", e)))

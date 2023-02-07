@@ -35,6 +35,7 @@ ron = "0.8"
 buche = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
+thiserror = "1.0.38"
 
 [features]
 default = [ "interactive" ]
