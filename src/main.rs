@@ -318,6 +318,7 @@ fn main() -> Result<()> {
             transformer::expand_constraints(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
             transformer::precompute(&mut constraints);
+            transformer::sorts(&mut constraints)?;
 
             let mut wiop_exporter = exporters::WizardIOP {
                 out_filename,
@@ -477,7 +478,7 @@ fn main() -> Result<()> {
         Commands::Compile { outfile, pretty } => {
             transformer::sorts(&mut constraints)?;
             transformer::precompute(&mut constraints);
-            constraints.update_ids();
+
             std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?
                 .write_all(

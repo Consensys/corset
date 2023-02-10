@@ -143,6 +143,7 @@ fn create_sort_constraint(
                     Builtin::Sub.call(&[
                         Node::from_const(1),
                         Builtin::Add.call(
+                            // FIXME TODO what if i == 0?
                             &(0..i)
                                 .map(|j| Node::from_handle(&ats[j]))
                                 .collect::<Vec<_>>(),

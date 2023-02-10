@@ -788,26 +788,24 @@ impl ConstraintSet {
                 let column = &self.modules._cols[i];
                 let handle = Handle::new(&module, &name);
                 let value = column.value().unwrap_or(&empty_vec);
-                let padding = value.get(0).cloned().unwrap_or_else(|| match &column.kind {
-                    Kind::Atomic | Kind::Interleaved(_) | Kind::Phantom => Fr::zero(),
-                    Kind::Composite(_) => match self
-                        .computations
+                let padding = value.get(0).cloned().unwrap_or_else(|| {
+                    self.computations
                         .computation_for(&Handle::new(&module, &name))
-                        .unwrap()
-                    {
-                        Computation::Composite { exp, .. } => exp
-                            .eval(
-                                0,
-                                &mut |_, _, _| Some(Fr::zero()),
-                                &mut None,
-                                &EvalSettings::default(),
-                            )
-                            .unwrap_or_else(Fr::zero),
-                        Computation::Interleaved { .. } => Fr::zero(),
-                        Computation::Sorted { .. } => Fr::zero(),
-                        Computation::CyclicFrom { .. } => Fr::zero(),
-                        Computation::SortingConstraints { .. } => Fr::zero(),
-                    },
+                        .map(|c| match c {
+                            Computation::Composite { exp, .. } => exp
+                                .eval(
+                                    0,
+                                    &mut |_, _, _| Some(Fr::zero()),
+                                    &mut None,
+                                    &EvalSettings::default(),
+                                )
+                                .unwrap_or_else(Fr::zero),
+                            Computation::Interleaved { .. } => Fr::zero(),
+                            Computation::Sorted { .. } => Fr::zero(),
+                            Computation::CyclicFrom { .. } => Fr::zero(),
+                            Computation::SortingConstraints { .. } => Fr::zero(),
+                        })
+                        .unwrap_or(Fr::zero())
                 });
 
                 out.write_all(format!("\"{}\":{{\n", handle).as_bytes())?;
