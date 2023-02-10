@@ -70,6 +70,9 @@ pub struct SymbolTable {
     // The parent relationship is only used for contextual
     // semantics (i.e. for & functions), not modules
     closed: bool,
+    // If true, then those are module definition.
+    // Otherwise, this table is a private table, e.g. function arguments
+    public: bool,
     pub name: String,
     pub pretty_name: String,
     parent: Weak<RefCell<Self>>,
@@ -83,6 +86,7 @@ impl SymbolTable {
     pub fn new_root() -> SymbolTable {
         SymbolTable {
             closed: true,
+            public: true,
             name: super::MAIN_MODULE.to_owned(),
             pretty_name: "".into(),
             parent: Weak::new(),
@@ -102,6 +106,7 @@ impl SymbolTable {
         name: &str,
         pretty_name: &str,
         closed: bool,
+        public: bool,
     ) -> Rc<RefCell<Self>> {
         let ct = parent.borrow().computation_table.clone();
         parent
@@ -111,6 +116,7 @@ impl SymbolTable {
             .or_insert_with(|| {
                 Rc::new(RefCell::new(SymbolTable {
                     closed,
+                    public,
                     name: name.to_owned(),
                     pretty_name: pretty_name.to_owned(),
                     parent: Rc::downgrade(&parent),
@@ -136,7 +142,10 @@ impl SymbolTable {
             f(module, handle, symbol)?;
         }
         for c in self.children.values_mut() {
-            c.borrow_mut().visit_mut::<T>(f)?;
+            let public = c.borrow().public;
+            if public {
+                c.borrow_mut().visit_mut::<T>(f)?;
+            }
         }
         Ok(())
     }
@@ -401,7 +410,7 @@ fn reduce(
 
         Token::DefConstraint { name, .. } => ctx.borrow_mut().insert_constraint(name),
         Token::DefModule(name) => {
-            *ctx = SymbolTable::derived(root_ctx, name, name, false);
+            *ctx = SymbolTable::derived(root_ctx, name, name, false, true);
             Ok(())
         }
         Token::DefColumns(cols) => cols

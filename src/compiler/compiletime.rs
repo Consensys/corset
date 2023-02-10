@@ -15,7 +15,7 @@ fn compile_time_constants(
 ) -> Result<()> {
     match &e.class {
         Token::DefModule(name) => {
-            *ctx = SymbolTable::derived(root_ctx, name, name, false);
+            *ctx = SymbolTable::derived(root_ctx, name, name, false, true);
             Ok(())
         }
         Token::DefConsts(cs) => {

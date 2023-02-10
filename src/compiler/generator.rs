@@ -876,6 +876,7 @@ fn apply_form(
                         ),
                         &ctx.borrow().pretty_name.clone(),
                         false,
+                        false,
                     );
                     for_ctx.borrow_mut().insert_symbol(
                         i_name,
@@ -921,7 +922,7 @@ fn apply_form(
         Form::Let => {
             let sub_ctx_name = format!("let-{}", ctx.borrow().name);
             let mut sub_ctx =
-                SymbolTable::derived(ctx.clone(), &sub_ctx_name, &sub_ctx_name, false);
+                SymbolTable::derived(ctx.clone(), &sub_ctx_name, &sub_ctx_name, false, false);
             for pair in args[0].as_list().unwrap().iter() {
                 let pair = pair.as_list().unwrap();
                 let name = pair[0].as_symbol().unwrap();
@@ -1070,8 +1071,13 @@ fn apply(
                 let traversed_args = b
                     .validate_args(traversed_args)
                     .with_context(|| anyhow!("validating call to `{}`", f.handle))?;
-                let mut f_ctx =
-                    SymbolTable::derived(ctx.clone(), &f_mangle, &f.handle.to_string(), *pure);
+                let mut f_ctx = SymbolTable::derived(
+                    ctx.clone(),
+                    &f_mangle,
+                    &f.handle.to_string(),
+                    *pure,
+                    false,
+                );
                 for (i, f_arg) in f_args.iter().enumerate() {
                     f_ctx
                         .borrow_mut()
@@ -1234,7 +1240,7 @@ fn reduce_toplevel(
             Ok(None)
         }
         Token::DefModule(name) => {
-            *ctx = SymbolTable::derived(root_ctx, name, name, false);
+            *ctx = SymbolTable::derived(root_ctx, name, name, false, true);
             Ok(None)
         }
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
