@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Debug;
 
-use super::{Handle, Magma, Type};
+use super::{Magma, Type};
 
 #[cfg(feature = "interactive")]
 #[derive(Parser)]
@@ -92,19 +92,18 @@ pub enum Kind<T> {
     Atomic,
     /// a phantom column is present, but will be filled later on
     Phantom,
-    /// a composite column is similar to a phantom columns, but the expression
+    /// a composite column is similar to a phantom column, but the expression
     /// computing it is known
-    Composite(T),
-    /// an interleaved column maintain references to its components
-    Interleaved(Vec<Handle>),
+    Composite(Box<T>),
+    Interleaved(Vec<T>, Option<Vec<super::Handle>>),
 }
 impl<T> Kind<T> {
     pub fn to_nil(&self) -> Kind<()> {
         match self {
             Kind::Atomic => Kind::Atomic,
             Kind::Phantom => Kind::Phantom,
-            Kind::Composite(_) => Kind::Composite(()),
-            Kind::Interleaved(froms) => Kind::Interleaved(froms.clone()),
+            Kind::Composite(_) => Kind::Composite(Box::new(())),
+            Kind::Interleaved(_, xs) => Kind::Interleaved(vec![], xs.clone()),
         }
     }
 }
@@ -154,7 +153,7 @@ pub enum Token {
         /// type of the column
         t: Type,
         /// how the values of the column are filled
-        kind: Kind<Box<AstNode>>,
+        kind: Kind<AstNode>,
     },
     /// defines an array
     DefArrayColumn {
@@ -438,9 +437,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                                             name, t.unwrap(), kw
                                                         )
                                                     } else {
-                                                        t = Some(Type::Column(
-                                                            kw.as_str().try_into()?,
-                                                        ));
+                                                        t = Some(kw.as_str().try_into()?);
                                                     }
                                                     ColumnParser::Begin
                                                 }
@@ -475,12 +472,8 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                         bail!("column {} can not be interleaved; is already {:?}", name, kind)
                                     }
                                     kind = Kind::Interleaved(
-                                        x.as_list()?
-                                            .iter()
-                                            .map(|f| {
-                                                f.as_symbol().map(|n| Handle::new("??", n))
-                                            })
-                                            .collect::<Result<Vec<_>>>()?,
+                                        x.as_list()?.to_vec(),
+                                        None
                                     );
                                     ColumnParser::Begin
                                 }
@@ -499,7 +492,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                 }
                                 Token::DefArrayColumn {
                                     name,
-                                    t: t.unwrap_or(Type::ArrayColumn(Magma::Integer)),
+                                    t: Type::ArrayColumn(t.unwrap_or(Magma::Integer)),
                                     domain: range
                                         .iter()
                                         .map(|&x| x.try_into().map_err(|e| anyhow!("{:?}", e)))
@@ -508,7 +501,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                             } else {
                                 Token::DefColumn {
                                     name,
-                                    t: t.unwrap_or(Type::Column(Magma::Integer)),
+                                    t: Type::Column(t.unwrap_or(Magma::Integer)),
                                     kind,
                                 }
                             },

@@ -42,7 +42,7 @@ fn do_expand_inv(
                         &inverted_handle,
                         Type::Column(Magma::Integer),
                         true,
-                        Kind::Composite(()),
+                        Kind::Composite(Box::new(())),
                         true,
                     )?;
                     comps.insert(

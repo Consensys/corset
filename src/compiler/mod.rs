@@ -63,48 +63,6 @@ pub fn make<S: AsRef<str>>(
         })?
     }
 
-    ctx.borrow_mut().visit_mut::<()>(&mut |_, handle, symbol| {
-        match symbol {
-            Symbol::Alias(_) => {}
-            Symbol::Final(symbol, _) => match symbol.e() {
-                Expression::Column(handle, k) => {
-                    columns.insert_column(
-                        handle,
-                        symbol.t(),
-                        false, // Columns use state is only known later on
-                        k.to_nil(),
-                        settings.allow_dups,
-                    )?;
-                    match k {
-                        Kind::Atomic | Kind::Phantom => (),
-                        Kind::Composite(e) => computations.insert(
-                            handle,
-                            Computation::Composite {
-                                target: handle.clone(),
-                                exp: *e.clone(),
-                            },
-                        )?,
-                        Kind::Interleaved(froms) => computations.insert(
-                            handle,
-                            Computation::Interleaved {
-                                target: handle.clone(),
-                                froms: froms.clone(),
-                            },
-                        )?,
-                    }
-                }
-                Expression::ArrayColumn(handle, range) => {
-                    columns.insert_array(handle, range, symbol.t(), settings.allow_dups)?
-                }
-                Expression::Const(ref x, _) => {
-                    constants.insert(handle, x.clone());
-                }
-                _ => todo!("{:?}", symbol),
-            },
-        }
-        Ok(())
-    })?;
-
     let constraints = asts
         .iter()
         .map(|(name, ast)| {
@@ -120,15 +78,55 @@ pub fn make<S: AsRef<str>>(
 
     ctx.borrow_mut()
         .visit_mut::<()>(&mut |module, handle, symbol| {
-            if let Symbol::Final(symbol, used) = symbol {
-                if !*used {
-                    warn!(
-                        "{}::{} is never used",
-                        module.blue(),
-                        handle.name.bright_white().bold()
-                    );
-                } else if let Expression::Column(handle, _) = symbol.e() {
-                    columns.get_mut(handle).unwrap().used = *used;
+            match symbol {
+                Symbol::Alias(_) => {}
+                Symbol::Final(symbol, used) => {
+                    if *used {
+                        match symbol.e() {
+                            Expression::Column(handle, k) => {
+                                columns.insert_column(
+                                    handle,
+                                    symbol.t(),
+                                    *used,
+                                    k.to_nil(),
+                                    settings.allow_dups,
+                                )?;
+                                match k {
+                                    Kind::Atomic | Kind::Phantom => (),
+                                    Kind::Composite(e) => computations.insert(
+                                        handle,
+                                        Computation::Composite {
+                                            target: handle.clone(),
+                                            exp: *e.clone(),
+                                        },
+                                    )?,
+                                    Kind::Interleaved(_, froms) => computations.insert(
+                                        handle,
+                                        Computation::Interleaved {
+                                            target: handle.clone(),
+                                            froms: froms.as_ref().unwrap().to_owned(),
+                                        },
+                                    )?,
+                                }
+                            }
+                            Expression::ArrayColumn(handle, range) => columns.insert_array(
+                                handle,
+                                range,
+                                symbol.t(),
+                                settings.allow_dups,
+                            )?,
+                            Expression::Const(ref x, _) => {
+                                constants.insert(handle, x.clone());
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        warn!(
+                            "{}::{} is never used",
+                            module.blue(),
+                            handle.name.bright_white().bold()
+                        );
+                    }
                 }
             }
             Ok(())

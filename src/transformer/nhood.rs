@@ -34,7 +34,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         &intrld_aux_xs_handle,
         Type::Column(Magma::Integer),
         true,
-        Kind::Interleaved(interleaving.to_owned()),
+        Kind::Interleaved(vec![], Some(interleaving.to_owned())),
         false,
     );
     cs.computations.insert(

@@ -217,11 +217,13 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
         }
     }
     for (handle, column) in cs.modules.iter() {
-        if let Kind::Interleaved(ref froms) = column.kind {
+        if let Kind::Interleaved(_, ref froms) = column.kind {
             r += &format!(
                 "{} := zkevm.Interleave({})\n",
                 handle.mangle(),
                 froms
+                    .as_ref()
+                    .unwrap()
                     .iter()
                     .map(Handle::mangle)
                     .collect::<Vec<_>>()

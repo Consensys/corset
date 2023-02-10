@@ -426,18 +426,7 @@ fn reduce(
                         Kind::Atomic => Kind::Atomic,
                         Kind::Phantom => Kind::Phantom,
                         Kind::Composite(_) => Kind::Phantom, // The actual expression is computed by the generator
-                        Kind::Interleaved(xs) => {
-                            let froms = xs
-                                .iter()
-                                .map(|h| Handle::new(&module_name, &h.name))
-                                .collect::<Vec<_>>();
-                            let _ = froms
-                                .iter()
-                                .map(|from| ctx.borrow_mut().resolve_symbol(&from.name))
-                                .collect::<Result<Vec<_>>>()
-                                .with_context(|| anyhow!("while defining {}", col.red()))?;
-                            Kind::Interleaved(froms)
-                        }
+                        Kind::Interleaved(_, _) => Kind::Phantom, // The interleaving is later on set by the generator
                     },
                 ),
                 _t: Some(*t),

@@ -1143,6 +1143,25 @@ pub fn reduce(
                 })?;
                 Ok(None)
             }
+            Kind::Interleaved(froms, _) => {
+                let from_handles = froms
+                    .iter()
+                    .map(
+                        |f| match reduce(f, root_ctx.clone(), ctx, settings)?.unwrap().e() {
+                            Expression::Column(h, _) => Ok(h.to_owned()),
+                            x => Err(anyhow!("expected column, found {:?}", x)),
+                        },
+                    )
+                    .collect::<Result<Vec<_>>>()
+                    .with_context(|| anyhow!("while defining {}", name))?;
+
+                ctx.borrow_mut().edit_symbol(name, &|x| {
+                    if let Expression::Column(_, kind) = x {
+                        *kind = Kind::Interleaved(vec![], Some(from_handles.to_vec()))
+                    }
+                })?;
+                Ok(None)
+            }
             _ => Ok(None),
         },
         Token::DefColumns(_)
@@ -1234,8 +1253,8 @@ fn reduce_toplevel(
             }))
         }
         Token::DefColumns(columns) => {
-            for _ in columns {
-                reduce(e, root_ctx.clone(), ctx, settings)?;
+            for c in columns {
+                reduce(c, root_ctx.clone(), ctx, settings)?;
             }
             Ok(None)
         }

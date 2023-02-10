@@ -20,7 +20,7 @@ use super::{Builtin, EvalSettings, Handle, Kind, Magma, Type};
 pub enum Expression {
     Funcall { func: Builtin, args: Vec<Node> },
     Const(BigInt, Option<Fr>),
-    Column(Handle, Kind<Box<Node>>),
+    Column(Handle, Kind<Node>),
     ArrayColumn(Handle, Vec<usize>),
     List(Vec<Node>),
     Void,
