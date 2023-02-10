@@ -426,7 +426,7 @@ fn reduce(
                                 .iter()
                                 .map(|from| ctx.borrow_mut().resolve_symbol(&from.name))
                                 .collect::<Result<Vec<_>>>()
-                                .with_context(|| anyhow!("while defingin {}", col.red()))?;
+                                .with_context(|| anyhow!("while defining {}", col.red()))?;
                             Kind::Interleaved(froms)
                         }
                     },
