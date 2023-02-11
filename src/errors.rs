@@ -9,6 +9,8 @@ use crate::compiler::{Handle, Type};
 pub enum CompileError<'a> {
     #[error("{}", make_type_error_msg(.0, .1, .2))]
     TypeError(String, &'a [&'a [Type]], Vec<Type>),
+    #[error("{} is never used", .0.pretty())]
+    NotUsed(Handle),
 }
 
 #[derive(Error, Debug)]
