@@ -17,7 +17,6 @@ mod codetyper;
 mod common;
 mod compiletime;
 mod definitions;
-mod errors;
 mod generator;
 mod node;
 mod parser;

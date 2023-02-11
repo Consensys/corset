@@ -8,7 +8,10 @@ use pairing_ce::{
 use rayon::prelude::*;
 use serde_json::Value;
 
-use crate::compiler::{ConstraintSet, Handle, Type};
+use crate::{
+    compiler::{ConstraintSet, Handle, Type},
+    errors::RuntimeError,
+};
 
 type F = Fr;
 
@@ -95,7 +98,7 @@ pub fn compute(v: &Value, cs: &mut ConstraintSet) -> Result<()> {
         .with_context(|| "while computing columns")?;
     for h in cs.modules.handles() {
         if !cs.modules.get(&h).unwrap().is_computed() {
-            warn!("{} empty", h.to_string().bold().blue());
+            warn!("{}", RuntimeError::NotComputed(h.clone()));
         }
     }
 

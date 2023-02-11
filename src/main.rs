@@ -18,6 +18,7 @@ mod check;
 mod column;
 mod compiler;
 mod compute;
+mod errors;
 mod exporters;
 mod pretty;
 #[cfg(test)]

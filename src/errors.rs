@@ -1,12 +1,20 @@
 use colored::Colorize;
 use thiserror::Error;
 
-use super::Type;
+use crate::compiler::{Handle, Type};
 
 #[derive(Error, Debug)]
 pub enum CompileError<'a> {
     #[error("{}", make_type_error_msg(.0, .1, .2))]
     TypeError(String, &'a [&'a [Type]], Vec<Type>),
+}
+
+#[derive(Error, Debug)]
+pub enum RuntimeError {
+    #[error("{}::{} is empty", .0.module.blue(), .0.name.white().bold())]
+    EmptyColumn(Handle),
+    #[error("{}::{} could not be computed", .0.module.blue(), .0.name.white().bold())]
+    NotComputed(Handle),
 }
 
 pub fn make_type_error_msg(fname: &str, expected: &[&[Type]], found: &[Type]) -> String {

@@ -18,11 +18,11 @@ use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 
 use super::definitions::ComputationTable;
-use super::errors::CompileError;
 use super::{common::*, CompileSettings, Expression, Handle, Magma, Node, Type};
 use crate::column::{Column, ColumnSet, Computation};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
+use crate::errors::{CompileError, RuntimeError};
 use crate::pretty::Pretty;
 
 static COUNTER: OnceCell<AtomicUsize> = OnceCell::new();
@@ -652,7 +652,7 @@ impl ConstraintSet {
         if target_col.is_computed() {
             Ok(())
         } else if matches!(target_col.kind, Kind::Atomic) {
-            bail!("column {} is empty", target.to_string().bold().white())
+            bail!(anyhow!(RuntimeError::EmptyColumn(target.clone())))
         } else {
             self.compute(
                 self.computations
