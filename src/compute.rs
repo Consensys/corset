@@ -15,15 +15,36 @@ use crate::{
 
 type F = Fr;
 
+lazy_static::lazy_static! {
+    static ref F_15: F = Fr::from_str("15").unwrap();
+    static ref F_255: F = Fr::from_str("255").unwrap();
+}
+
 fn validate(t: Type, x: F) -> Result<F> {
-    if t.is_bool() {
-        if x.is_zero() || x == F::one() {
-            Ok(x)
-        } else {
-            bail!("expected bool, found {}", x)
+    match t.magma() {
+        crate::compiler::Magma::Boolean => {
+            if x.is_zero() || x == F::one() {
+                Ok(x)
+            } else {
+                bail!(RuntimeError::InvalidValue("bool", x))
+            }
         }
-    } else {
-        Ok(x)
+        crate::compiler::Magma::Nibble => {
+            if x.le(&F_15) {
+                Ok(x)
+            } else {
+                bail!(RuntimeError::InvalidValue("nibble", x))
+            }
+        }
+        crate::compiler::Magma::Byte => {
+            if x.le(&F_255) {
+                Ok(x)
+            } else {
+                bail!(RuntimeError::InvalidValue("byte", x))
+            }
+        }
+        crate::compiler::Magma::Integer => Ok(x),
+        crate::compiler::Magma::Any => unreachable!(),
     }
 }
 

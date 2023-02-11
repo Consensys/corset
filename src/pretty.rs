@@ -1,7 +1,7 @@
 use colored::{Color, ColoredString, Colorize};
 use pairing_ce::{bn256::Fr, ff::PrimeField};
 
-use crate::compiler::{Expression, Node};
+use crate::compiler::{Expression, Handle, Node};
 
 pub const COLORS: [Color; 7] = [
     Color::Green,
@@ -55,5 +55,11 @@ impl Pretty for Node {
         }
 
         format!("{}", rec_pretty(self, 0))
+    }
+}
+
+impl Pretty for Handle {
+    fn pretty(&self) -> String {
+        format!("{}::{}", self.module.blue(), self.name.white().bold())
     }
 }

@@ -1,4 +1,6 @@
+use super::pretty::Pretty;
 use colored::Colorize;
+use pairing_ce::bn256::Fr;
 use thiserror::Error;
 
 use crate::compiler::{Handle, Type};
@@ -10,11 +12,13 @@ pub enum CompileError<'a> {
 }
 
 #[derive(Error, Debug)]
-pub enum RuntimeError {
-    #[error("{}::{} is empty", .0.module.blue(), .0.name.white().bold())]
+pub enum RuntimeError<'a> {
+    #[error("{} is empty", .0.pretty())]
     EmptyColumn(Handle),
-    #[error("{}::{} could not be computed", .0.module.blue(), .0.name.white().bold())]
+    #[error("{} could not be computed", .0.pretty())]
     NotComputed(Handle),
+    #[error("expected a {} value, found {}", .0.white().bold(), .1.pretty().red())]
+    InvalidValue(&'a str, Fr),
 }
 
 pub fn make_type_error_msg(fname: &str, expected: &[&[Type]], found: &[Type]) -> String {
