@@ -99,6 +99,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
             ]),
         ])),
     });
+    cs.update_ids();
 
     Ok(())
 }

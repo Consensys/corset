@@ -261,6 +261,7 @@ fn create_sort_constraint(
             sorted: sorted.to_vec(),
         },
     )?;
+    cs.update_ids();
 
     Ok(())
 }
