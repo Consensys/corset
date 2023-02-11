@@ -863,6 +863,7 @@ fn apply_form(
                 let mut l = vec![];
                 let mut t = Type::INFIMUM;
                 for i in is {
+                    let for_ctx_pretty_name = &ctx.borrow().pretty_name.clone();
                     let mut for_ctx = SymbolTable::derived(
                         ctx.clone(),
                         &format!(
@@ -872,7 +873,7 @@ fn apply_form(
                                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                             i
                         ),
-                        &ctx.borrow().pretty_name.clone(),
+                        &for_ctx_pretty_name,
                         false,
                         false,
                     );
