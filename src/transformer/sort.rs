@@ -134,61 +134,59 @@ fn create_sort_constraint(
 
     // Create the @ constraints
     for (i, at) in ats.iter().enumerate() {
+        // ∑_k=0^i-1 @_k = 0...
+        let sum_ats = if i > 0 {
+            Builtin::Sub.call(&[
+                Node::from_const(1),
+                if i == 1 {
+                    Node::from_handle(&ats[0])
+                } else {
+                    Builtin::Add.call(
+                        &(0..i)
+                            .map(|j| Node::from_handle(&ats[j]))
+                            .collect::<Vec<_>>(),
+                    )
+                },
+            ])
+        } else {
+            // meaningless required for @_0
+            Node::from_const(1)
+        };
+
         cs.constraints.push(Constraint::Vanishes {
             handle: Handle::new(module, format!("{at}-0")),
             domain: None,
-            expr: Box::new(
-                Builtin::Mul.call(&[
-                    // ∑_k=0^i-1 @_k = 0...
-                    Builtin::Sub.call(&[
-                        Node::from_const(1),
-                        Builtin::Add.call(
-                            // FIXME TODO what if i == 0?
-                            &(0..i)
-                                .map(|j| Node::from_handle(&ats[j]))
-                                .collect::<Vec<_>>(),
-                        ),
-                    ]),
-                    // && @ = 0 ...
-                    Builtin::Sub.call(&[Node::from_const(1), Node::from_handle(at)]),
-                    // => sorted_i = sorted_i[-1]
-                    Builtin::Sub.call(&[
-                        Node::from_handle(&sorted[i]),
-                        Builtin::Shift.call(&[Node::from_handle(&sorted[i]), Node::from_const(-1)]),
-                    ]),
+            expr: Box::new(Builtin::Mul.call(&[
+                // ∑_k=0^i-1 @_k = 0...
+                sum_ats.clone(),
+                // && @ = 0 ...
+                Builtin::Sub.call(&[Node::from_const(1), Node::from_handle(at)]),
+                // => sorted_i = sorted_i[-1]
+                Builtin::Sub.call(&[
+                    Node::from_handle(&sorted[i]),
+                    Builtin::Shift.call(&[Node::from_handle(&sorted[i]), Node::from_const(-1)]),
                 ]),
-            ),
+            ])),
         });
         cs.constraints.push(Constraint::Vanishes {
             handle: Handle::new(module, format!("{at}-1")),
             domain: None,
-            expr: Box::new(
-                Builtin::Mul.call(&[
-                    // ∑_k=0^i-1 @_k = 0...
-                    Builtin::Sub.call(&[
-                        Node::from_const(1),
-                        Builtin::Add.call(
-                            &(0..i)
-                                .map(|j| Node::from_handle(&ats[j]))
-                                .collect::<Vec<_>>(),
-                        ),
-                    ]),
-                    // && @ ≠ 0
-                    Node::from_handle(at),
-                    // => sorted_i ≠ sorted_i[-1]
-                    {
-                        let diff = Builtin::Sub.call(&[
-                            Node::from_handle(&sorted[i]),
-                            Builtin::Shift
-                                .call(&[Node::from_handle(&sorted[i]), Node::from_const(-1)]),
-                        ]);
-                        let diff_inv = Builtin::Inv.call(&[diff.clone()]);
+            expr: Box::new(Builtin::Mul.call(&[
+                // ∑_k=0^i-1 @_k = 0...
+                sum_ats.clone(),
+                // && @ ≠ 0
+                Node::from_handle(at),
+                // => sorted_i ≠ sorted_i[-1]
+                {
+                    let diff = Builtin::Sub.call(&[
+                        Node::from_handle(&sorted[i]),
+                        Builtin::Shift.call(&[Node::from_handle(&sorted[i]), Node::from_const(-1)]),
+                    ]);
+                    let diff_inv = Builtin::Inv.call(&[diff.clone()]);
 
-                        Builtin::Sub
-                            .call(&[Node::from_const(1), Builtin::Mul.call(&[diff, diff_inv])])
-                    },
-                ]),
-            ),
+                    Builtin::Sub.call(&[Node::from_const(1), Builtin::Mul.call(&[diff, diff_inv])])
+                },
+            ])),
         });
     }
 
