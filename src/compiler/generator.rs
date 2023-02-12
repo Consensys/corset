@@ -1016,7 +1016,9 @@ fn apply(
                         }
                     }
                     Builtin::Not => Ok(Some(
-                        Builtin::Sub.call(&[Node::one(), traversed_args[0].to_owned()])?,
+                        Builtin::Sub
+                            .call(&[Node::one(), traversed_args[0].to_owned()])?
+                            .with_type(traversed_args[0].t().same_scale(Magma::Boolean)),
                     )),
 
                     Builtin::Eq => {
