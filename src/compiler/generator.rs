@@ -122,6 +122,8 @@ pub enum Builtin {
     Eq,
     Begin,
 
+    IsNotZero,
+
     IfZero,
     IfNotZero,
 }
@@ -156,6 +158,7 @@ impl Builtin {
                 .unwrap_or(Type::INFIMUM)
                 .same_scale(Magma::Boolean),
             Builtin::Mul => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
+            Builtin::IsNotZero => argtype[0].same_scale(Magma::Boolean),
             Builtin::IfZero | Builtin::IfNotZero => {
                 argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
             }
@@ -185,6 +188,7 @@ impl std::fmt::Display for Builtin {
                 Builtin::Not => "not",
                 Builtin::Nth => "nth",
                 Builtin::Begin => "begin",
+                Builtin::IsNotZero => "is-not-zero",
                 Builtin::IfZero => "if-zero",
                 Builtin::IfNotZero => "if-not-zero",
                 Builtin::Len => "len",
@@ -235,6 +239,7 @@ impl FuncVerifier<Node> for Builtin {
             Builtin::Not => Arity::Monadic,
             Builtin::Shift => Arity::Dyadic,
             Builtin::Begin => Arity::AtLeast(1),
+            Builtin::IsNotZero => Arity::Monadic,
             Builtin::IfZero => Arity::Between(2, 3),
             Builtin::IfNotZero => Arity::Between(2, 3),
             Builtin::Nth => Arity::Dyadic,
@@ -252,10 +257,7 @@ impl FuncVerifier<Node> for Builtin {
                 &[Type::Scalar(Magma::Any)],
             ],
             Builtin::Eq => &[&[Type::Column(Magma::Any), Type::Scalar(Magma::Any)]],
-            Builtin::Not => &[
-                &[Type::Scalar(Magma::Boolean)],
-                &[Type::Column(Magma::Boolean)],
-            ],
+            Builtin::Not => &[&[Type::Scalar(Magma::Boolean), Type::Column(Magma::Boolean)]],
             Builtin::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
             Builtin::Inv => &[&[Type::Column(Magma::Any)]],
             Builtin::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
@@ -263,6 +265,7 @@ impl FuncVerifier<Node> for Builtin {
                 &[Type::ArrayColumn(Magma::Any)],
                 &[Type::Scalar(Magma::Any)],
             ],
+            Builtin::IsNotZero => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
             Builtin::IfZero | Builtin::IfNotZero => &[
                 &[
                     Type::Scalar(Magma::Any),
@@ -1012,9 +1015,15 @@ fn apply(
                             unreachable!()
                         }
                     }
+
                     Builtin::Not => Ok(Some(
                         Builtin::Sub.call(&[Node::one(), traversed_args[0].to_owned()]),
                     )),
+
+                    Builtin::IsNotZero => Ok(Some(Builtin::Mul.call(&[
+                        traversed_args[0].to_owned(),
+                        Builtin::Inv.call(&[traversed_args[0].to_owned()]),
+                    ]))),
 
                     Builtin::Eq => {
                         let x = &traversed_args[0];

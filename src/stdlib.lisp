@@ -7,7 +7,7 @@
 (defunalias add +)
 
 ;; Boolean functions
-(defpurefun (is-zero e0) (- 1 (* e0 (inv e0))))
+(defpurefun (is-zero e0) (not (is-not-zero e0)))
 (defpurefun (neq a b) (not (eq a b)))
 (defpurefun (or e0 e1) (not (and (not e0) (not e1))))
 (defpurefun (xor e0 e1) (- (+ e0 e1)

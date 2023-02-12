@@ -367,6 +367,11 @@ fn main() -> Result<()> {
             only,
             skip,
         } => {
+            transformer::validate_nhood(&mut constraints)?;
+            transformer::lower_shifts(&mut constraints);
+            transformer::sorts(&mut constraints)?;
+            transformer::expand_invs(&mut constraints)?;
+
             let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
 
             info!("Initiating waiting loop");
