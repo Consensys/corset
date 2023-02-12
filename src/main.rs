@@ -367,10 +367,16 @@ fn main() -> Result<()> {
             only,
             skip,
         } => {
-            transformer::validate_nhood(&mut constraints)?;
+            transformer::validate_nhood(&mut constraints)
+                .with_context(|| anyhow!("while creating nhood constraints"))?;
             transformer::lower_shifts(&mut constraints)?;
-            transformer::sorts(&mut constraints)?;
-            transformer::expand_invs(&mut constraints)?;
+            transformer::expand_ifs(&mut constraints);
+            transformer::expand_constraints(&mut constraints)
+                .with_context(|| anyhow!("while expanding constraints"))?;
+            transformer::sorts(&mut constraints)
+                .with_context(|| anyhow!("while creating sorting constraints"))?;
+            transformer::expand_invs(&mut constraints)
+                .with_context(|| anyhow!("while expanding inverses"))?;
 
             let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
 
