@@ -301,11 +301,10 @@ fn main() -> Result<()> {
             panic!("Compile Corset with the `interactive` feature to enable the compiler")
         }
     };
+    transformer::precompute(&mut constraints);
 
     match args.command {
         Commands::Go { package, filename } => {
-            transformer::expand_ifs(&mut constraints);
-            transformer::lower_shifts(&mut constraints);
             let mut go_exporter = exporters::GoExporter { package, filename };
             go_exporter.render(&constraints)?;
         }
@@ -317,9 +316,8 @@ fn main() -> Result<()> {
             transformer::expand_ifs(&mut constraints);
             transformer::lower_shifts(&mut constraints);
             transformer::expand_constraints(&mut constraints)?;
-            transformer::expand_invs(&mut constraints)?;
-            transformer::precompute(&mut constraints);
             transformer::sorts(&mut constraints)?;
+            transformer::expand_invs(&mut constraints)?;
 
             let mut wiop_exporter = exporters::WizardIOP {
                 out_filename,
@@ -344,7 +342,9 @@ fn main() -> Result<()> {
             transformer::expand_ifs(&mut constraints);
             transformer::lower_shifts(&mut constraints);
             transformer::expand_constraints(&mut constraints)?;
+            transformer::sorts(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
+
             compute::compute(&read_trace(&tracefile)?, &mut constraints)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
 
@@ -450,9 +450,10 @@ fn main() -> Result<()> {
 
             if expand {
                 transformer::validate_nhood(&mut constraints)?;
-                transformer::lower_shifts(&mut constraints);
                 transformer::expand_ifs(&mut constraints);
+                transformer::lower_shifts(&mut constraints);
                 transformer::expand_constraints(&mut constraints)?;
+                transformer::sorts(&mut constraints)?;
                 transformer::expand_invs(&mut constraints)?;
             }
             compute::compute(&read_trace(&tracefile)?, &mut constraints)
@@ -477,9 +478,6 @@ fn main() -> Result<()> {
             info!("{}: SUCCESS", tracefile)
         }
         Commands::Compile { outfile, pretty } => {
-            transformer::sorts(&mut constraints)?;
-            transformer::precompute(&mut constraints);
-
             std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?
                 .write_all(
