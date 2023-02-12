@@ -1050,7 +1050,7 @@ fn apply(
                         if let Expression::ArrayColumn(_, domain) = traversed_args[0].e() {
                             Ok(Some(Node::from_const(domain.len().try_into().unwrap())))
                         } else {
-                            unreachable!()
+                            bail!(RuntimeError::NotAnArray(traversed_args[0].e().clone()))
                         }
                     }
                 }

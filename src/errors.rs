@@ -3,7 +3,7 @@ use colored::Colorize;
 use pairing_ce::bn256::Fr;
 use thiserror::Error;
 
-use crate::compiler::{Handle, Type};
+use crate::compiler::{Expression, Handle, Type};
 
 #[derive(Error, Debug)]
 pub enum CompileError<'a> {
@@ -21,6 +21,8 @@ pub enum RuntimeError<'a> {
     NotComputed(Handle),
     #[error("expected a {} value, found {}", .0.white().bold(), .1.pretty().red())]
     InvalidValue(&'a str, Fr),
+    #[error("expected an array, found {:?}", .0)]
+    NotAnArray(Expression),
 }
 
 pub fn make_type_error_msg(fname: &str, expected: &[&[Type]], found: &[Type]) -> String {
