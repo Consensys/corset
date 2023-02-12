@@ -533,7 +533,6 @@ impl Node {
                     }
                 }
                 Builtin::Begin => unreachable!(),
-                Builtin::IsNotZero => unreachable!(),
                 Builtin::IfZero => {
                     if args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
                         args[1].eval_fold(i, get, cache, settings, f)
