@@ -10,7 +10,7 @@ use anyhow::Result;
 use super::expression_to_name;
 
 fn invert_expr(e: &Node) -> Node {
-    Builtin::Inv.call(&[e.to_owned()])
+    Builtin::Inv.call(&[e.to_owned()]).unwrap()
 }
 
 /// For all Builtin::Inv encountered, create a new column and the associated constraints
@@ -37,7 +37,7 @@ fn do_expand_inv(
                 let inverted_expr = &mut args[0];
                 let inverted_handle = Handle::new(module, expression_to_name(inverted_expr, "INV"));
                 if cols.get(&inverted_handle).is_err() {
-                    validate_inv(new_cs, inverted_expr, &inverted_handle);
+                    validate_inv(new_cs, inverted_expr, &inverted_handle)?;
                     cols.insert_column(
                         &inverted_handle,
                         Type::Column(Magma::Integer),
@@ -64,7 +64,7 @@ fn do_expand_inv(
     }
 }
 
-fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) {
+fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result<()> {
     cs.push(Builtin::Mul.call(&[
         x_expr.clone(),
         Builtin::Sub.call(&[
@@ -73,19 +73,19 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) {
                 Node {
                     _e: Expression::Column(
                         inv_x_col.clone(),
-                        Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()]))),
+                        Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()])?)),
                     ),
                     _t: Some(Type::Column(Magma::Integer)),
                 },
-            ]),
+            ])?,
             Node::one(),
-        ]),
-    ]));
+        ])?,
+    ])?);
     cs.push(Builtin::Mul.call(&[
         Node {
             _e: Expression::Column(
                 inv_x_col.clone(),
-                Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()]))),
+                Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()])?)),
             ),
             _t: Some(Type::Column(Magma::Integer)),
         },
@@ -95,14 +95,16 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) {
                 Node {
                     _e: Expression::Column(
                         inv_x_col.clone(),
-                        Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()]))),
+                        Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()])?)),
                     ),
                     _t: Some(Type::Column(Magma::Integer)),
                 },
-            ]),
+            ])?,
             Node::one(),
-        ]),
-    ]));
+        ])?,
+    ])?);
+
+    Ok(())
 }
 
 pub fn expand_invs(cs: &mut ConstraintSet) -> Result<()> {

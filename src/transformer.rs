@@ -17,13 +17,20 @@ pub use statics::precompute;
 use crate::compiler::{Builtin, ConstraintSet, Expression, Handle, Kind, Magma, Node, Type};
 
 fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
-    cs.push(Builtin::Sub.call(&[
-        x_expr.clone(),
-        Node {
-            _e: Expression::Column(x_col.to_owned(), Kind::Composite(Box::new(x_expr.clone()))),
-            _t: Some(Type::Column(Magma::Integer)),
-        },
-    ]))
+    cs.push(
+        Builtin::Sub
+            .call(&[
+                x_expr.clone(),
+                Node {
+                    _e: Expression::Column(
+                        x_col.to_owned(),
+                        Kind::Composite(Box::new(x_expr.clone())),
+                    ),
+                    _t: Some(Type::Column(Magma::Integer)),
+                },
+            ])
+            .unwrap(),
+    )
 }
 
 fn create_column(

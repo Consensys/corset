@@ -126,8 +126,9 @@ pub enum Builtin {
     IfNotZero,
 }
 impl Builtin {
-    pub fn call(self, args: &[Node]) -> Node {
-        Node::from_expr(self.raw_call(args))
+    pub fn call(self, args: &[Node]) -> Result<Node> {
+        self.validate_args(args)?;
+        Ok(Node::from_expr(self.raw_call(args)))
     }
 
     pub fn raw_call(self, args: &[Node]) -> Expression {
@@ -225,9 +226,9 @@ impl FuncVerifier<Node> for Defined {
 impl FuncVerifier<Node> for Builtin {
     fn arity(&self) -> Arity {
         match self {
-            Builtin::Add => Arity::AtLeast(2),
-            Builtin::Sub => Arity::AtLeast(2),
-            Builtin::Mul => Arity::AtLeast(2),
+            Builtin::Add => Arity::AtLeast(1),
+            Builtin::Sub => Arity::AtLeast(1),
+            Builtin::Mul => Arity::AtLeast(1),
             Builtin::Exp => Arity::Exactly(2),
             Builtin::Eq => Arity::Exactly(2),
             Builtin::Neg => Arity::Monadic,
@@ -289,6 +290,10 @@ impl FuncVerifier<Node> for Builtin {
                 args_t.clone()
             ))
         }
+    }
+    fn validate_args(&self, args: &[Node]) -> Result<()> {
+        FuncVerifier::validate_arity(self, args)
+            .with_context(|| format!("while validating {}", self))
     }
 }
 
@@ -848,8 +853,7 @@ fn apply_form(
     ctx: &mut Rc<RefCell<SymbolTable>>,
     settings: &CompileSettings,
 ) -> Result<Option<Node>> {
-    let args = f
-        .validate_args(args.to_vec())
+    f.validate_args(args)
         .with_context(|| anyhow!("evaluating call to {:?}", f))?;
 
     match f {
@@ -910,7 +914,7 @@ fn apply_form(
                                 .into_iter()
                                 .map(|e| e.unwrap_or_else(|| Expression::Void.into()))
                                 .collect::<Vec<_>>(),
-                        ),
+                        )?,
                     )),
                 }
             }
@@ -954,7 +958,7 @@ fn apply(
 
         match &f.class {
             FunctionClass::Builtin(b) => {
-                let traversed_args = b.validate_args(traversed_args)?;
+                b.validate_args(&traversed_args)?;
                 match b {
                     // Begin flattens & concatenate any list argument
                     Builtin::Begin => Ok(Some(Node {
@@ -978,7 +982,9 @@ fn apply(
                         ),
                     })),
 
-                    b @ (Builtin::IfZero | Builtin::IfNotZero) => Ok(Some(b.call(&traversed_args))),
+                    b @ (Builtin::IfZero | Builtin::IfNotZero) => {
+                        Ok(Some(b.call(&traversed_args)?))
+                    }
 
                     Builtin::Nth => {
                         if let Expression::ArrayColumn(handle, ..) = &traversed_args[0].e() {
@@ -1010,7 +1016,7 @@ fn apply(
                         }
                     }
                     Builtin::Not => Ok(Some(
-                        Builtin::Sub.call(&[Node::one(), traversed_args[0].to_owned()]),
+                        Builtin::Sub.call(&[Node::one(), traversed_args[0].to_owned()])?,
                     )),
 
                     Builtin::Eq => {
@@ -1019,8 +1025,8 @@ fn apply(
                         if traversed_args_t[0].is_bool() && traversed_args_t[1].is_bool() {
                             Ok(Some(Node {
                                 _e: Builtin::Mul.raw_call(&[
-                                    Builtin::Sub.call(&[x.clone(), y.clone()]),
-                                    Builtin::Sub.call(&[x.clone(), y.clone()]),
+                                    Builtin::Sub.call(&[x.clone(), y.clone()])?,
+                                    Builtin::Sub.call(&[x.clone(), y.clone()])?,
                                 ]),
                                 // NOTE in this very specific case, we are sure that (x - y)² is boolean
                                 _t: Some(x.t().same_scale(Magma::Boolean)),
@@ -1029,7 +1035,7 @@ fn apply(
                             Ok(Some(Builtin::Sub.call(&[
                                 traversed_args[0].to_owned(),
                                 traversed_args[1].to_owned(),
-                            ])))
+                            ])?))
                         }
                     }
 
@@ -1039,7 +1045,7 @@ fn apply(
                     | Builtin::Exp
                     | Builtin::Neg
                     | Builtin::Inv
-                    | Builtin::Shift) => Ok(Some(b.call(&traversed_args))),
+                    | Builtin::Shift) => Ok(Some(b.call(&traversed_args)?)),
                     Builtin::Len => {
                         if let Expression::ArrayColumn(_, domain) = traversed_args[0].e() {
                             Ok(Some(Node::from_const(domain.len().try_into().unwrap())))
@@ -1064,8 +1070,7 @@ fn apply(
                         .get_or_init(|| AtomicUsize::new(0))
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                 );
-                let traversed_args = b
-                    .validate_args(traversed_args)
+                b.validate_args(&traversed_args)
                     .with_context(|| anyhow!("validating call to `{}`", f.handle))?;
                 let mut f_ctx = SymbolTable::derived(
                     ctx.clone(),
@@ -1200,7 +1205,7 @@ fn reduce_toplevel(
                     if let Some(guard) = guard {
                         let guard_expr = reduce(guard, root_ctx.clone(), ctx, settings)?
                             .with_context(|| anyhow!("guard `{:?}` is empty", guard))?;
-                        Builtin::Mul.call(&[guard_expr, expr])
+                        Builtin::IfNotZero.call(&[guard_expr, expr])?
                     } else {
                         expr
                     }

@@ -1,14 +1,15 @@
+use anyhow::Result;
 use num_traits::Zero;
 
 use crate::compiler::{Builtin, Constraint, ConstraintSet, Expression, Node};
 
 use super::{flatten_list, wrap};
 
-fn do_expand_ifs(e: &mut Node) {
+fn do_expand_ifs(e: &mut Node) -> Result<()> {
     match e.e_mut() {
         Expression::List(es) => {
             for e in es.iter_mut() {
-                do_expand_ifs(e);
+                do_expand_ifs(e)?;
             }
         }
         Expression::Funcall { func, args, .. } => {
@@ -41,13 +42,13 @@ fn do_expand_ifs(e: &mut Node) {
                         let cond_not_zero = cond.clone();
                         // If the condition is binary, cond_zero = 1 - x...
                         let cond_zero = if args[0].t().is_bool() {
-                            Builtin::Sub.call(&[Node::one(), cond])
+                            Builtin::Sub.call(&[Node::one(), cond])?
                         } else {
                             // ...otherwise, cond_zero = 1 - x.INV(x)
                             Builtin::Sub.call(&[
                                 Node::one(),
-                                Builtin::Mul.call(&[cond.clone(), Builtin::Inv.call(&[cond])]),
-                            ])
+                                Builtin::Mul.call(&[cond.clone(), Builtin::Inv.call(&[cond])?])?,
+                            ])?
                         };
                         match func {
                             Builtin::IfZero => [cond_zero, cond_not_zero],
@@ -70,7 +71,9 @@ fn do_expand_ifs(e: &mut Node) {
                                 exs.iter()
                                     .map(|ex: &Node| {
                                         ex.flat_map(&|e| {
-                                            Builtin::Mul.call(&[conds[i].clone(), e.clone()])
+                                            Builtin::Mul
+                                                .call(&[conds[i].clone(), e.clone()])
+                                                .unwrap()
                                         })
                                     })
                                     .collect::<Vec<_>>()
@@ -90,12 +93,14 @@ fn do_expand_ifs(e: &mut Node) {
         }
         _ => (),
     }
+
+    Ok(())
 }
 
 pub fn expand_ifs(cs: &mut ConstraintSet) {
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr: e, .. } = c {
-            do_expand_ifs(e); // Ifs create Inv and must be expanded first
+            do_expand_ifs(e).unwrap(); // Ifs create Inv and must be expanded first
         }
     }
 }

@@ -20,10 +20,13 @@ fn shift(e: &Node, i: isize) -> Node {
             Expression::Funcall { func, args } => match func {
                 Builtin::Shift => {
                     let value = args[1].pure_eval().unwrap() + i;
-                    Builtin::Shift.call(&[
-                        args[0].clone(),
-                        Expression::Const(value.clone(), Fr::from_str(&value.to_string())).into(),
-                    ])
+                    Builtin::Shift
+                        .call(&[
+                            args[0].clone(),
+                            Expression::Const(value.clone(), Fr::from_str(&value.to_string()))
+                                .into(),
+                        ])
+                        .unwrap()
                 }
                 _ => Expression::Funcall {
                     func: *func,
@@ -32,10 +35,12 @@ fn shift(e: &Node, i: isize) -> Node {
                 .into(),
             },
             Expression::Const(..) => e.clone(),
-            Expression::Column(..) => Builtin::Shift.call(&[
-                e.clone(),
-                Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
-            ]),
+            Expression::Column(..) => Builtin::Shift
+                .call(&[
+                    e.clone(),
+                    Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
+                ])
+                .unwrap(),
             Expression::List(xs) => {
                 Expression::List(xs.iter().map(|x| shift(x, i)).collect()).into()
             }
@@ -47,21 +52,25 @@ fn shift(e: &Node, i: isize) -> Node {
 
 fn make_chain(xs: &[Node], operand: &str, surround: bool) -> String {
     let head = render_expression(&xs[0]);
-    let tail = &xs[1..];
-    if xs.len() > 2 {
-        let tail = tail
-            .iter()
-            .map(|x| format!("{}({})", operand, render_expression(x)))
-            .collect::<Vec<_>>()
-            .join(".");
-        let chain = format!("{}.{}", head, tail);
-        if surround {
-            format!("({})", chain)
+    if xs.len() > 1 {
+        let tail = &xs[1..];
+        if xs.len() > 2 {
+            let tail = tail
+                .iter()
+                .map(|x| format!("{}({})", operand, render_expression(x)))
+                .collect::<Vec<_>>()
+                .join(".");
+            let chain = format!("{}.{}", head, tail);
+            if surround {
+                format!("({})", chain)
+            } else {
+                chain
+            }
         } else {
-            chain
+            format!("{}.{}({})", head, operand, render_expression(&xs[1]))
         }
     } else {
-        format!("{}.{}({})", head, operand, render_expression(&xs[1]))
+        head
     }
 }
 

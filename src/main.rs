@@ -313,8 +313,8 @@ fn main() -> Result<()> {
             package,
         } => {
             transformer::validate_nhood(&mut constraints)?;
+            transformer::lower_shifts(&mut constraints)?;
             transformer::expand_ifs(&mut constraints);
-            transformer::lower_shifts(&mut constraints);
             transformer::expand_constraints(&mut constraints)?;
             transformer::sorts(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
@@ -339,8 +339,8 @@ fn main() -> Result<()> {
         }
         Commands::Compute { tracefile, outfile } => {
             transformer::validate_nhood(&mut constraints)?;
+            transformer::lower_shifts(&mut constraints)?;
             transformer::expand_ifs(&mut constraints);
-            transformer::lower_shifts(&mut constraints);
             transformer::expand_constraints(&mut constraints)?;
             transformer::sorts(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
@@ -368,7 +368,7 @@ fn main() -> Result<()> {
             skip,
         } => {
             transformer::validate_nhood(&mut constraints)?;
-            transformer::lower_shifts(&mut constraints);
+            transformer::lower_shifts(&mut constraints)?;
             transformer::sorts(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
 
@@ -454,12 +454,16 @@ fn main() -> Result<()> {
             }
 
             if expand {
-                transformer::validate_nhood(&mut constraints)?;
+                transformer::validate_nhood(&mut constraints)
+                    .with_context(|| anyhow!("while creating nhood constraints"))?;
+                transformer::lower_shifts(&mut constraints)?;
                 transformer::expand_ifs(&mut constraints);
-                transformer::lower_shifts(&mut constraints);
-                transformer::expand_constraints(&mut constraints)?;
-                transformer::sorts(&mut constraints)?;
-                transformer::expand_invs(&mut constraints)?;
+                transformer::expand_constraints(&mut constraints)
+                    .with_context(|| anyhow!("while expanding constraints"))?;
+                transformer::sorts(&mut constraints)
+                    .with_context(|| anyhow!("while creating sorting constraints"))?;
+                transformer::expand_invs(&mut constraints)
+                    .with_context(|| anyhow!("while expanding inverses"))?;
             }
             compute::compute(&read_trace(&tracefile)?, &mut constraints)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;

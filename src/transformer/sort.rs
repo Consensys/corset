@@ -83,8 +83,8 @@ fn create_sort_constraint(
             Builtin::Sub.call(&[
                 Node::from_const(1),
                 Node::from_typed_handle(&eq, Type::Column(Magma::Boolean)),
-            ]),
-        ])),
+            ])?,
+        ])?),
     });
     for at in ats.iter() {
         cs.constraints.push(Constraint::Vanishes {
@@ -95,8 +95,8 @@ fn create_sort_constraint(
                 Builtin::Sub.call(&[
                     Node::from_const(1),
                     Node::from_typed_handle(at, Type::Column(Magma::Boolean)),
-                ]),
-            ])),
+                ])?,
+            ])?),
         });
     }
 
@@ -117,9 +117,9 @@ fn create_sort_constraint(
                                 Node::from_handle(byte),
                             ])
                         })
-                        .collect::<Vec<_>>(),
-                ),
-            ]),
+                        .collect::<Result<Vec<_>>>()?,
+                )?,
+            ])?,
         ),
     });
 
@@ -138,18 +138,14 @@ fn create_sort_constraint(
         let sum_ats = if i > 0 {
             Builtin::Sub.call(&[
                 Node::from_const(1),
-                if i == 1 {
-                    Node::from_handle(&ats[0])
-                } else {
-                    Builtin::Add.call(
-                        &(0..i)
-                            .map(|j| Node::from_handle(&ats[j]))
-                            .collect::<Vec<_>>(),
-                    )
-                },
-            ])
+                Builtin::Add.call(
+                    &(0..i)
+                        .map(|j| Node::from_handle(&ats[j]))
+                        .collect::<Vec<_>>(),
+                )?,
+            ])?
         } else {
-            // meaningless required for @_0
+            // meaningless branch required for @_0
             Node::from_const(1)
         };
 
@@ -160,13 +156,13 @@ fn create_sort_constraint(
                 // ∑_k=0^i-1 @_k = 0...
                 sum_ats.clone(),
                 // && @ = 0 ...
-                Builtin::Sub.call(&[Node::from_const(1), Node::from_handle(at)]),
+                Builtin::Sub.call(&[Node::from_const(1), Node::from_handle(at)])?,
                 // => sorted_i = sorted_i[-1]
                 Builtin::Sub.call(&[
                     Node::from_handle(&sorted[i]),
-                    Builtin::Shift.call(&[Node::from_handle(&sorted[i]), Node::from_const(-1)]),
-                ]),
-            ])),
+                    Builtin::Shift.call(&[Node::from_handle(&sorted[i]), Node::from_const(-1)])?,
+                ])?,
+            ])?),
         });
         cs.constraints.push(Constraint::Vanishes {
             handle: Handle::new(module, format!("{at}-1")),
@@ -180,13 +176,15 @@ fn create_sort_constraint(
                 {
                     let diff = Builtin::Sub.call(&[
                         Node::from_handle(&sorted[i]),
-                        Builtin::Shift.call(&[Node::from_handle(&sorted[i]), Node::from_const(-1)]),
-                    ]);
-                    let diff_inv = Builtin::Inv.call(&[diff.clone()]);
+                        Builtin::Shift
+                            .call(&[Node::from_handle(&sorted[i]), Node::from_const(-1)])?,
+                    ])?;
+                    let diff_inv = Builtin::Inv.call(&[diff.clone()])?;
 
-                    Builtin::Sub.call(&[Node::from_const(1), Builtin::Mul.call(&[diff, diff_inv])])
+                    Builtin::Sub
+                        .call(&[Node::from_const(1), Builtin::Mul.call(&[diff, diff_inv])?])?
                 },
-            ])),
+            ])?),
         });
     }
 
@@ -202,8 +200,8 @@ fn create_sort_constraint(
                         .into_iter()
                         .chain(ats.iter().map(Node::from_handle))
                         .collect::<Vec<_>>(),
-                ),
-            ]),
+                )?,
+            ])?,
         ),
     });
 
@@ -214,7 +212,7 @@ fn create_sort_constraint(
         expr: Box::new(
             Builtin::Mul.call(&[
                 // Eq = 0
-                Builtin::Sub.call(&[Node::from_const(1), Node::from_handle(&eq)]),
+                Builtin::Sub.call(&[Node::from_const(1), Node::from_handle(&eq)])?,
                 // Δ = ∑ ε_i × @_i × δSorted_i
                 Builtin::Sub.call(&[
                     Node::from_handle(&delta),
@@ -226,8 +224,8 @@ fn create_sort_constraint(
                                     Builtin::Shift.call(&[
                                         Node::from_handle(&sorted[l]),
                                         Node::from_const(-1),
-                                    ]),
-                                ]);
+                                    ])?,
+                                ])?;
                                 Builtin::Mul.call(&[
                                     if !signs[l] {
                                         Node::from_const(-1)
@@ -238,11 +236,11 @@ fn create_sort_constraint(
                                     tgt_diff,
                                 ])
                             })
-                            .collect::<Vec<_>>()
+                            .collect::<Result<Vec<_>>>()?
                             .as_ref(),
-                    ),
-                ]),
-            ]),
+                    )?,
+                ])?,
+            ])?,
         ),
     });
 

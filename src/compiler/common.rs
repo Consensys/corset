@@ -144,7 +144,7 @@ impl Arity {
 }
 /// The `FuncVerifier` trait defines a function that can check that
 /// it is called with valid arguments
-pub trait FuncVerifier<T> {
+pub trait FuncVerifier<T: Clone> {
     /// The arity of the function
     fn arity(&self) -> Arity;
 
@@ -157,10 +157,9 @@ pub trait FuncVerifier<T> {
     fn validate_types(&self, args: &[T]) -> Result<()>;
 
     /// Checks that the arguments are of correct arity and type
-    fn validate_args(&self, args: Vec<T>) -> Result<Vec<T>> {
-        self.validate_arity(&args)
-            .and_then(|_| self.validate_types(&args))
-            .and(Ok(args))
+    fn validate_args(&self, args: &[T]) -> Result<()> {
+        self.validate_arity(args)
+            .and_then(|_| self.validate_types(args))
     }
 }
 

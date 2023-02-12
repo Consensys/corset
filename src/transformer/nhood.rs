@@ -80,7 +80,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
                 Kind::Phantom,
             )),
             Node::from_const((modulo - 1).try_into().unwrap()),
-        ])),
+        ])?),
     });
 
     cs.constraints.push(Constraint::Vanishes {
@@ -89,15 +89,15 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         expr: Box::new(Builtin::Mul.call(&[
             // SRT_ILD_[i+1] - SRT_ILD_[i]
             Builtin::Sub.call(&[
-                Builtin::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)]),
+                Builtin::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)])?,
                 srt_intrld_aux_xs_node.clone(),
-            ]),
+            ])?,
             // SRT_ILD_[i+1] - (SRT_ILD_[i] + 1)
             Builtin::Sub.call(&[
-                Builtin::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)]),
-                Builtin::Add.call(&[srt_intrld_aux_xs_node, Node::from_const(1)]),
-            ]),
-        ])),
+                Builtin::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)])?,
+                Builtin::Add.call(&[srt_intrld_aux_xs_node, Node::from_const(1)])?,
+            ])?,
+        ])?),
     });
     cs.update_ids();
 
