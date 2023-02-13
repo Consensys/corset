@@ -205,7 +205,21 @@ fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {
 
 fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
     let mut r = String::new();
-    for (handle, column) in cs.modules.iter().sorted_by_cached_key(|(h, _)| h.mangle()) {
+    for (handle, column) in cs
+        .modules
+        .iter()
+        // Interleaved columns should appear after their sources
+        .sorted_by_cached_key(|(h, c)| {
+            (
+                if !matches!(c.kind, Kind::Interleaved(..)) {
+                    0
+                } else {
+                    1
+                },
+                h.mangle(),
+            )
+        })
+    {
         match column.kind {
             Kind::Atomic | Kind::Composite(_) | Kind::Phantom => {
                 if column.used {
@@ -222,22 +236,19 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
                     )
                 }
             }
-            _ => (),
-        }
-    }
-    for (handle, column) in cs.modules.iter() {
-        if let Kind::Interleaved(_, ref froms) = column.kind {
-            r += &format!(
-                "{} := zkevm.Interleave({})\n",
-                handle.mangle(),
-                froms
-                    .as_ref()
-                    .unwrap()
-                    .iter()
-                    .map(Handle::mangle)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
+            Kind::Interleaved(_, ref froms) => {
+                r += &format!(
+                    "{} := zkevm.Interleave({})\n",
+                    handle.mangle(),
+                    froms
+                        .as_ref()
+                        .unwrap()
+                        .iter()
+                        .map(Handle::mangle)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
         }
     }
 
