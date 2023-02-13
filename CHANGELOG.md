@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.0] - 2023-02-13
+
+### Bug Fixes
+
+- Double borrow
+- Missing ID updates
+- Edge cases in @ constraints for sorted columns
+- `Not` typing
+- Guard system
+- Typing of `Not`
+
+### Features
+
+- Add an alternative `[X i]` notation for array indexing
+- Type now implements Ord
+- Add private symbol tables
+- Interleave can now take expression arguments
+- Improve error handling for incorrect numeric values
+- Enable more transformations for `check-loop`
+- CheckLoop test all extensions
+
+### Miscellaneous Tasks
+
+- Typo
+
+### Refactor
+
+- Streeamline types verification
+- Minor factorization
+- Add new errors
+- New error type
+- Re-organize transformations
+
+### Testing
+
+- Fix regression
+
 ## [6.2.0] - 2023-02-05
 
 ### Bug Fixes
@@ -15,6 +52,10 @@ All notable changes to this project will be documented in this file.
 - Add the `LET` form
 - Add the `LEN` builtin function
 - Compute static expressions at compile time
+
+### Miscellaneous Tasks
+
+- Release corset version 6.2.0
 
 ### Refactor
 
