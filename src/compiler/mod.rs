@@ -93,6 +93,7 @@ pub fn make<S: AsRef<str>>(
                             *used,
                             k.to_nil(),
                             settings.allow_dups,
+                            None,
                         )?;
                         match k {
                             Kind::Atomic | Kind::Phantom => (),

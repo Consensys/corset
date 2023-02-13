@@ -15,6 +15,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         true,
         Kind::Phantom,
         false,
+        None,
     );
     cs.computations.insert(
         &aux_handle,
@@ -36,6 +37,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         true,
         Kind::Interleaved(vec![], Some(interleaving.to_owned())),
         false,
+        None,
     );
     cs.computations.insert(
         &intrld_aux_xs_handle,
@@ -52,6 +54,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         true,
         Kind::Phantom,
         false,
+        None,
     );
     cs.computations.insert(
         &srt_intrld_aux_xs_handle,

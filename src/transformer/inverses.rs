@@ -44,6 +44,7 @@ fn do_expand_inv(
                         true,
                         Kind::Composite(Box::new(())),
                         true,
+                        None,
                     )?;
                     comps.insert(
                         &inverted_handle,

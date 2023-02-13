@@ -26,6 +26,7 @@ fn do_expand_expr(
                 true,
                 Kind::Phantom,
                 true,
+                None,
             )?;
 
             let _ = comps.insert(

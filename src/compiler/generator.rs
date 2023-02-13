@@ -765,13 +765,18 @@ impl ConstraintSet {
                 Computation::Interleaved { froms, .. } => {
                     self.length_multiplier(&froms[0]) * froms.len()
                 }
-                Computation::Sorted { froms, .. }
-                | Computation::CyclicFrom { froms, .. }
-                | Computation::SortingConstraints { froms, .. } => {
+                Computation::Sorted { froms, .. } | Computation::CyclicFrom { froms, .. } => {
                     self.length_multiplier(&froms[0])
                 }
+                Computation::SortingConstraints { .. } => 1,
             })
             .unwrap_or(1)
+            * self
+                .modules
+                .get(h)
+                .unwrap()
+                .intrinsic_size_factor
+                .unwrap_or(1)
     }
 
     pub fn write(&mut self, out: &mut impl Write) -> Result<()> {

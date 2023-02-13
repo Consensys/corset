@@ -39,9 +39,12 @@ fn create_column(
     cs: &mut ConstraintSet,
     kind: Kind<()>,
     t: Type,
+    size_factor: Option<usize>,
 ) -> anyhow::Result<(Handle, usize)> {
     let handle = Handle::new(module, name);
-    let id = cs.modules.insert_column(&handle, t, true, kind, false)?;
+    let id = cs
+        .modules
+        .insert_column(&handle, t, true, kind, false, size_factor)?;
     Ok((handle, id))
 }
 

@@ -12,6 +12,7 @@ pub struct Column {
     pub used: bool,
     pub kind: Kind<()>,
     pub t: Type,
+    pub intrinsic_size_factor: Option<usize>,
 }
 impl Column {
     pub fn make_with_spilling(
@@ -184,6 +185,7 @@ impl ColumnSet {
         used: bool,
         kind: Kind<()>,
         allow_dup: bool,
+        size_factor: Option<usize>,
     ) -> Result<usize> {
         if self
             .cols
@@ -201,6 +203,7 @@ impl ColumnSet {
                 used,
                 t,
                 kind,
+                intrinsic_size_factor: size_factor,
             });
             self.cols
                 .entry(handle.module.to_owned())
@@ -218,7 +221,7 @@ impl ColumnSet {
         allow_dup: bool,
     ) -> Result<()> {
         for i in range.iter() {
-            self.insert_column(&handle.ith(*i), t, true, Kind::Atomic, allow_dup)?;
+            self.insert_column(&handle.ith(*i), t, true, Kind::Atomic, allow_dup, None)?;
         }
         Ok(())
     }
