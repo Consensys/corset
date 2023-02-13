@@ -8,7 +8,7 @@ use std::{collections::HashSet, io::Write};
 use anyhow::*;
 use convert_case::{Case, Casing};
 
-use crate::compiler::*;
+use crate::{compiler::*, pretty::Pretty};
 
 const SIZE: usize = 4_194_304;
 
@@ -190,7 +190,7 @@ fn render_constraints(constraints: &[Constraint]) -> String {
                 "build.Range(\"{}\", {}, {})",
                 handle.mangle().to_case(Case::Snake),
                 render_handle(exp),
-                max
+                max.pretty()
             ),
         })
         .collect::<Vec<String>>()
