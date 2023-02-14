@@ -207,7 +207,7 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
     let mut r = String::new();
     for (handle, column) in cs
         .modules
-        .iter()
+        .iter_cols()
         // Interleaved columns should appear after their sources
         .sorted_by_cached_key(|(h, c)| {
             (

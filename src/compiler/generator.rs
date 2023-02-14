@@ -567,7 +567,8 @@ impl ConstraintSet {
         let mut at_values = std::iter::repeat_with(|| vec![Fr::zero(); spilling as usize])
             .take(ats.len())
             .collect::<Vec<_>>();
-        let mut eq_values = vec![Fr::zero(); spilling as usize];
+        // in the spilling, all @ == 0; thus Eq = 1
+        let mut eq_values = vec![Fr::one(); spilling as usize];
         let mut delta_values = vec![Fr::zero(); spilling as usize];
         let mut delta_bytes_values = std::iter::repeat_with(|| vec![Fr::zero(); spilling as usize])
             .take(delta_bytes.len())

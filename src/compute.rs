@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use serde_json::Value;
 
 use crate::{
-    compiler::{ConstraintSet, Handle, Type},
+    compiler::{ConstraintSet, Handle, Kind, Type},
     errors::RuntimeError,
 };
 
@@ -87,9 +87,12 @@ fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Result<(
                 // The first column set the size of its module
                 let module_raw_size = cs.raw_len_for_or_set(&handle.module, xs.len() as isize);
                 let module_spilling = cs.spilling_or_insert(&handle.module);
+                // The min length can be set if the module contains range
+                // proofs, that require a minimal length of a certain power of 2
+                let module_min_len = cs.modules.min_len.get(&handle.module).cloned().unwrap_or(0);
 
                 if let Some(column) = cs.modules.by_handle_mut(&handle) {
-                    trace!("Inserting {} ({})", handle, xs.len());
+                    debug!("Inserting {} ({})", handle, xs.len());
 
                     if xs.len() as isize != module_raw_size {
                         bail!(
@@ -100,11 +103,20 @@ fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Result<(
                         );
                     }
 
-                    column.set_value(
-                        parse_column(xs, column.t)
-                            .with_context(|| anyhow!("while importing {}", handle))?,
-                        module_spilling,
-                    )
+                    let mut xs = parse_column(xs, column.t)
+                        .with_context(|| anyhow!("while importing {}", handle))?;
+
+                    // If the parsed column is not long enought w.r.t. the
+                    // minimal module length, prepend it with as many zeroes as
+                    // required.
+                    // Atomic columns are always padded with zeroes, so there is
+                    // no need to trigger a more complex padding system.
+                    if xs.len() < module_min_len {
+                        xs.reverse();
+                        xs.resize_with(module_min_len, Default::default);
+                        xs.reverse();
+                    }
+                    column.set_value(xs, module_spilling)
                 }
             }
             Ok(())

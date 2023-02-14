@@ -111,7 +111,7 @@ pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
     let mut nibble_columns = HashMap::<String, Vec<Handle>>::new();
     let mut byte_columns = HashMap::<String, Vec<Handle>>::new();
 
-    for (h, c) in cs.modules.iter() {
+    for (h, c) in cs.modules.iter_cols() {
         // only atomic columns (i.e. filled from traces) are of interest here
         if let (Type::Column(magma), Kind::Atomic) = (c.t, &c.kind) {
             match magma {
@@ -130,10 +130,12 @@ pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
 
     for (module, handles) in nibble_columns.iter() {
         process_nhood(module, handles, 4, cs)?;
+        cs.modules.set_min_len(module, 2usize.pow(4));
     }
 
     for (module, handles) in byte_columns.iter() {
         process_nhood(module, handles, 8, cs)?;
+        cs.modules.set_min_len(module, 2usize.pow(8));
     }
 
     cs.update_ids();

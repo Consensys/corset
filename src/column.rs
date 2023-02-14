@@ -108,9 +108,18 @@ pub struct ColumnSet {
     pub cols: HashMap<String, HashMap<String, usize>>, // Module -> (Name, ColumnID)
     pub spilling: HashMap<String, (isize, isize)>,     // Module -> (past_span, future_span)
     pub raw_len: HashMap<String, isize>,
+    /// a module may have a lower bound on its column length if it is involved
+    /// in range proofs
+    pub min_len: HashMap<String, usize>,
 }
 
 impl ColumnSet {
+    pub fn set_min_len(&mut self, module: &str, len: usize) {
+        self.min_len
+            .entry(module.to_string())
+            .and_modify(|l| *l = (*l).max(len))
+            .or_insert(len);
+    }
     pub fn by_handle(&self, handle: &Handle) -> Option<&Column> {
         self.cols
             .get(&handle.module)
@@ -132,6 +141,16 @@ impl ColumnSet {
             .collect()
     }
 
+    pub fn handles_of(&self, m: &str) -> Result<Vec<Handle>> {
+        Ok(self
+            .cols
+            .get(m)
+            .ok_or_else(|| anyhow!("module {} not found", m))?
+            .iter()
+            .map(|c| Handle::new(m.clone(), c.0.to_string()))
+            .collect())
+    }
+
     pub fn id_of(&self, handle: &Handle) -> usize {
         *self
             .cols
@@ -140,7 +159,7 @@ impl ColumnSet {
             .unwrap()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (Handle, &Column)> {
+    pub fn iter_cols(&self) -> impl Iterator<Item = (Handle, &Column)> {
         self.cols.iter().flat_map(|(module, columns)| {
             columns
                 .iter()
@@ -234,7 +253,7 @@ impl ColumnSet {
             "instruction-decoder",
             "fuse",
         ];
-        self.iter()
+        self.iter_cols()
             .filter(|(h, _)| !IGNORED.contains(&h.module.as_str()))
             .all(|(_, c)| c.value().is_none())
     }

@@ -44,7 +44,7 @@ import (
         r += "const (\n";
         r += &cs
             .modules
-            .iter()
+            .iter_cols()
             .filter_map(|(handle, col)| {
                 if let Kind::Atomic = col.kind {
                     Some(format!(
