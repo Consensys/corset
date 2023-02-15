@@ -796,31 +796,30 @@ impl ConstraintSet {
                 let column = &self.modules._cols[i];
                 let handle = Handle::new(&module, &name);
                 let value = column.value().unwrap_or(&empty_vec);
-                let padding = value.get(0).cloned().unwrap_or_else(|| {
-                    self.computations
-                        .computation_for(&handle)
-                        .map(|c| match c {
-                            Computation::Composite { exp, .. } => exp
-                                .eval(
-                                    0,
-                                    &mut |_, _, _| Some(Fr::zero()),
-                                    &mut None,
-                                    &EvalSettings::default(),
-                                )
-                                .unwrap_or_else(Fr::zero),
-                            Computation::Interleaved { .. } => Fr::zero(),
-                            Computation::Sorted { .. } => Fr::zero(),
-                            Computation::CyclicFrom { .. } => Fr::zero(),
-                            Computation::SortingConstraints { eq, .. } => {
-                                if handle == *eq {
-                                    Fr::one()
-                                } else {
-                                    Fr::zero()
-                                }
-                            }
-                        })
-                        .unwrap_or_else(Fr::zero)
-                });
+                let padding = if handle.name.starts_with("__SRT__Eq_") {
+                    // NOTE ugly, find a better way to handle that.
+                    Fr::one()
+                } else {
+                    value.get(0).cloned().unwrap_or_else(|| {
+                        self.computations
+                            .computation_for(&handle)
+                            .map(|c| match c {
+                                Computation::Composite { exp, .. } => exp
+                                    .eval(
+                                        0,
+                                        &mut |_, _, _| Some(Fr::zero()),
+                                        &mut None,
+                                        &EvalSettings::default(),
+                                    )
+                                    .unwrap_or_else(Fr::zero),
+                                Computation::Interleaved { .. } => Fr::zero(),
+                                Computation::Sorted { .. } => Fr::zero(),
+                                Computation::CyclicFrom { .. } => Fr::zero(),
+                                Computation::SortingConstraints { .. } => Fr::zero(),
+                            })
+                            .unwrap_or_else(Fr::zero)
+                    })
+                };
 
                 out.write_all(format!("\"{}\":{{\n", handle).as_bytes())?;
                 out.write_all("\"values\":[".as_bytes())?;
