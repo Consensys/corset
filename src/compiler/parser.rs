@@ -320,10 +320,9 @@ fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
             .as_list()?
             .to_vec();
         let mut status = GuardParser::Begin;
-        let mut guard_tokens = guards.iter();
         let mut domain = None;
         let mut guard = None;
-        while let Some(x) = guard_tokens.next() {
+        for x in guards.iter() {
             match status {
                 GuardParser::Begin => match x.class {
                     Token::Keyword(ref kw) if kw == ":guard" => status = GuardParser::Guard,
@@ -365,8 +364,7 @@ fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
     let body = Box::new(
         tokens
             .next()
-            .with_context(|| anyhow!("missing constraint name"))??
-            .to_owned(),
+            .with_context(|| anyhow!("missing constraint name"))??,
     );
 
     if let Some(last) = tokens.next() {
@@ -380,7 +378,7 @@ fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
             guard,
             body,
         },
-        src: src.into(),
+        src,
         lc,
     })
 }
@@ -409,13 +407,13 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                 // A column is either defined by...
                 match c.class {
                     // ...a name, in which case the column is an atomic fr column...
-                    Token::Symbol(_name) => name = _name.to_owned(),
+                    Token::Symbol(_name) => name = _name,
                     // ...or a list, specifying attributes for this column.
                     Token::List(xs) => {
                         let mut xs = xs.iter();
                         let name_token = xs
                             .next()
-                            .ok_or(anyhow!("expected column name, found empty list"))?;
+                            .ok_or_else(|| anyhow!("expected column name, found empty list"))?;
                         // The first element of the llist *has* to be the name of the column
                         if let Token::Symbol(ref _name) = name_token.class {
                             name = _name.to_owned();
@@ -423,7 +421,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                             bail!("expected column name, found `{:?}`", name_token)
                         }
                         // Then can come all the attributes, in no particular order.
-                        while let Some(x) = xs.next() {
+                        for x in xs {
                             state = match state {
                                 ColumnParser::Begin => match x.class {
                                     Token::Keyword(ref kw) => {
@@ -564,12 +562,12 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                     .collect::<Result<Vec<_>>>()?,
             ),
             lc,
-            src: src.to_string(),
+            src,
         }),
         kw @ ("defun" | "defpurefun") => {
             let mut decl = tokens
                 .next()
-                .ok_or(anyhow!("expected function declaration"))??
+                .ok_or_else(|| anyhow!("expected function declaration"))??
                 .as_list()
                 .with_context(|| anyhow!("invalid function declaration"))?
                 .to_vec()
@@ -606,7 +604,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 } else {
                     Token::Defpurefun { name, args, body }
                 },
-                src: src.into(),
+                src,
                 lc,
             })
         }
@@ -628,7 +626,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
 
             Ok(AstNode {
                 class: Token::DefAliases(defs),
-                src: src.into(),
+                src,
                 lc,
             })
         }
@@ -647,7 +645,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
 
             Ok(AstNode {
                 class: Token::DefunAlias(from, to),
-                src: src.into(),
+                src,
                 lc,
             })
         }
@@ -664,7 +662,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
 
             Ok(AstNode {
                 class: Token::DefInrange(Box::new(exp), range as usize),
-                src: src.into(),
+                src,
                 lc,
             })
         }
@@ -693,7 +691,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                     including,
                     included,
                 },
-                src: src.into(),
+                src,
                 lc,
             })
         }
@@ -716,7 +714,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
 
             Ok(AstNode {
                 class: Token::DefPermutation { from, to },
-                src: src.into(),
+                src,
                 lc,
             })
         }

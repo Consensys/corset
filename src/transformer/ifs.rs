@@ -14,7 +14,7 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
         }
         Expression::Funcall { func, args, .. } => {
             for e in args.iter_mut() {
-                do_expand_ifs(e);
+                do_expand_ifs(e)?;
             }
             if matches!(func, Builtin::IfZero | Builtin::IfNotZero) {
                 let cond = args[0].clone();

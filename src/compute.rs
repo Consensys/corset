@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use serde_json::Value;
 
 use crate::{
-    compiler::{ConstraintSet, Handle, Kind, Type},
+    compiler::{ConstraintSet, Handle, Type},
     errors::RuntimeError,
 };
 

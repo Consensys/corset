@@ -287,7 +287,7 @@ impl FuncVerifier<Node> for Builtin {
             bail!(CompileError::TypeError(
                 self.to_string(),
                 expected_t,
-                args_t.clone()
+                args_t
             ))
         }
     }
@@ -819,7 +819,7 @@ impl ConstraintSet {
                                 }
                             }
                         })
-                        .unwrap_or(Fr::zero())
+                        .unwrap_or_else(Fr::zero)
                 });
 
                 out.write_all(format!("\"{}\":{{\n", handle).as_bytes())?;
@@ -886,7 +886,7 @@ fn apply_form(
                                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                             i
                         ),
-                        &for_ctx_pretty_name,
+                        for_ctx_pretty_name,
                         false,
                         false,
                     );
@@ -941,7 +941,7 @@ fn apply_form(
                 let value = reduce(&pair[1], root_ctx.clone(), &mut sub_ctx, settings)?.unwrap();
                 sub_ctx.borrow_mut().insert_symbol(name, value)?;
             }
-            let body = reduce(&args[1], root_ctx.clone(), &mut sub_ctx, settings)?.unwrap();
+            let body = reduce(&args[1], root_ctx, &mut sub_ctx, settings)?.unwrap();
 
             Ok(Some(body))
         }
@@ -1217,7 +1217,7 @@ fn reduce_toplevel(
                     let expr = reduce(expr, root_ctx.clone(), ctx, settings)?
                         .unwrap_or_else(|| Expression::Void.into());
                     if let Some(guard) = guard {
-                        let guard_expr = reduce(guard, root_ctx.clone(), ctx, settings)?
+                        let guard_expr = reduce(guard, root_ctx, ctx, settings)?
                             .with_context(|| anyhow!("guard `{:?}` is empty", guard))?;
                         Builtin::IfNotZero.call(&[guard_expr, expr])?
                     } else {
@@ -1289,11 +1289,11 @@ fn reduce_toplevel(
             // We look up the columns involved in the permutation just to ensure that they
             // are marked as "used" in the symbol table
             from.iter()
-                .map(|f| ctx.borrow_mut().resolve_symbol(&f))
+                .map(|f| ctx.borrow_mut().resolve_symbol(f))
                 .collect::<Result<Vec<_>>>()
                 .with_context(|| anyhow!("while defining permutation"))?;
             to.iter()
-                .map(|f| ctx.borrow_mut().resolve_symbol(&f))
+                .map(|f| ctx.borrow_mut().resolve_symbol(f))
                 .collect::<Result<Vec<_>>>()
                 .with_context(|| anyhow!("while defining permutation"))?;
 

@@ -141,16 +141,6 @@ impl ColumnSet {
             .collect()
     }
 
-    pub fn handles_of(&self, m: &str) -> Result<Vec<Handle>> {
-        Ok(self
-            .cols
-            .get(m)
-            .ok_or_else(|| anyhow!("module {} not found", m))?
-            .iter()
-            .map(|c| Handle::new(m.clone(), c.0.to_string()))
-            .collect())
-    }
-
     pub fn id_of(&self, handle: &Handle) -> usize {
         *self
             .cols
