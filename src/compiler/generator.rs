@@ -798,7 +798,7 @@ impl ConstraintSet {
                 let value = column.value().unwrap_or(&empty_vec);
                 let padding = value.get(0).cloned().unwrap_or_else(|| {
                     self.computations
-                        .computation_for(&Handle::new(&module, &name))
+                        .computation_for(&handle)
                         .map(|c| match c {
                             Computation::Composite { exp, .. } => exp
                                 .eval(
@@ -811,7 +811,13 @@ impl ConstraintSet {
                             Computation::Interleaved { .. } => Fr::zero(),
                             Computation::Sorted { .. } => Fr::zero(),
                             Computation::CyclicFrom { .. } => Fr::zero(),
-                            Computation::SortingConstraints { .. } => Fr::zero(),
+                            Computation::SortingConstraints { eq, .. } => {
+                                if handle == *eq {
+                                    Fr::one()
+                                } else {
+                                    Fr::zero()
+                                }
+                            }
                         })
                         .unwrap_or(Fr::zero())
                 });
