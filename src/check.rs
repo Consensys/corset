@@ -287,7 +287,7 @@ fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Fr) -> R
                     &Default::default(),
                 )
                 .unwrap();
-            if !r.le(max) {
+            if r.ge(max) {
                 bail!(
                     "{} = {} > {}",
                     expr.to_string().white().bold(),

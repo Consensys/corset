@@ -132,7 +132,7 @@ fn create_sort_constraint(
         cs.constraints.push(Constraint::InRange {
             handle: Handle::new(module, format!("{delta_byte}-byte")),
             exp: Node::from_handle(delta_byte),
-            max: pairing_ce::bn256::Fr::from_str("255").unwrap(),
+            max: pairing_ce::bn256::Fr::from_str("256").unwrap(),
         })
     }
 
