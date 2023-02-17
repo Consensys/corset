@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.1.0] - 2023-02-17
+
+### Bug Fixes
+
+- Range number formatting in WizardIOP
+- Programatically filled columns need a way to set a size factor
+- Disable n-hood constraints in Wizard
+- Pad columns of modules containing range proofs
+- Padding value for Eq columns
+- Padding for Eq columns
+- The WizardIOP range constraints are <, not <=
+
+### Miscellaneous Tasks
+
+- Clippy
+
+### Refactor
+
+- Simplify Wizard export of interleaved columns
+
 ## [7.0.0] - 2023-02-13
 
 ### Bug Fixes
@@ -26,6 +46,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous Tasks
 
 - Typo
+- Release corset version 7.0.0
 
 ### Refactor
 
