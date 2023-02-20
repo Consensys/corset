@@ -136,7 +136,7 @@ fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Result<(
     }
 }
 
-#[time("info", "Expanding columns")]
+#[time("info", "Computing expanded columns")]
 fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
     let mut jobs: ComputationDag = Default::default();
     for c in cs.computations.iter() {
@@ -154,15 +154,16 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
             .collect::<Vec<_>>();
 
         comps
-            // .into_par_iter()
-            .into_iter()
+            .into_par_iter()
             .filter_map(|comp| apply_computation(cs, &comp))
-            .collect::<Result<Vec<_>>>()?
+            .collect::<Vec<_>>()
             .into_iter()
-            .flatten()
-            .for_each(|(h, v, spilling)| {
-                trace!("Filling {}", h.pretty());
-                cs.get_mut(&h).unwrap().set_raw_value(v, spilling);
+            .for_each(|r| match r {
+                Ok(xs) => xs.into_iter().for_each(|(h, v, spilling)| {
+                    trace!("Filling {}", h.pretty());
+                    cs.get_mut(&h).unwrap().set_raw_value(v, spilling);
+                }),
+                Err(e) => warn!("{}", e),
             });
     }
 
@@ -175,7 +176,9 @@ fn compute_interleaved(
     target: &Handle,
 ) -> Result<Vec<ComputedColumn>> {
     for from in froms.iter() {
-        assert!(cs.get(from).unwrap().is_computed())
+        if !cs.get(from).unwrap().is_computed() {
+            bail!("{} is not computed", from.pretty())
+        }
     }
 
     if !froms
@@ -215,9 +218,8 @@ fn compute_sorted(
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling(&froms[0].module).unwrap();
     for from in froms.iter() {
-        trace!("?? {}", from.pretty());
         if !cs.get(from).unwrap().is_computed() {
-            panic!("{} not computed", from);
+            bail!("{} is not computed", from.pretty())
         }
     }
 
@@ -270,7 +272,9 @@ fn compute_cyclic(
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling(&froms[0].module).unwrap();
     for from in froms.iter() {
-        assert!(cs.get(from).unwrap().is_computed())
+        if !cs.get(from).unwrap().is_computed() {
+            bail!("{} is not computed", from.pretty())
+        }
     }
     let len = cs.get(&froms[0]).unwrap().len().unwrap();
     if len < modulo {
@@ -298,8 +302,10 @@ pub fn compute_composite(
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling(&target.module).unwrap();
     let cols_in_expr = exp.dependencies();
-    for c in &cols_in_expr {
-        assert!(cs.get(c).unwrap().is_computed())
+    for from in &cols_in_expr {
+        if !cs.get(from).unwrap().is_computed() {
+            bail!("{} is not computed", from.pretty())
+        }
     }
     let length = *cols_in_expr
         .iter()
@@ -375,8 +381,10 @@ fn compute_sorting_auxs(
     sorted: &[Handle],
 ) -> Result<Vec<ComputedColumn>> {
     assert!(delta_bytes.len() == 16);
-    for c in from.iter().chain(sorted.iter()) {
-        assert!(cs.get(c).unwrap().is_computed());
+    for from in from.iter().chain(sorted.iter()) {
+        if !cs.get(from).unwrap().is_computed() {
+            bail!("{} is not computed", from.pretty())
+        }
     }
 
     let spilling = cs.spilling(&from[0].module).unwrap();
