@@ -139,6 +139,16 @@ fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Result<(
 #[time("info", "Computing expanded columns")]
 fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
     let mut jobs: ComputationDag = Default::default();
+    for m in cs
+        .modules
+        .cols
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>()
+        .into_iter()
+    {
+        cs.spilling_or_insert(&m);
+    }
     for c in cs.computations.iter() {
         jobs.insert_computation(c)
     }
