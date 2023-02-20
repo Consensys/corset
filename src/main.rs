@@ -354,9 +354,11 @@ fn main() -> Result<()> {
             let mut f = std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?;
 
+            let mut out = std::io::BufWriter::with_capacity(10_000_000, &mut f);
             constraints
-                .write(&mut f)
+                .write(&mut out)
                 .with_context(|| format!("while writing to `{}`", &outfile))?;
+            out.flush()?;
         }
         #[cfg(feature = "postgres")]
         Commands::CheckLoop {

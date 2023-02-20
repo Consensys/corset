@@ -460,23 +460,23 @@ impl ConstraintSet {
 
                 out.write_all(format!("\"{}\":{{\n", handle).as_bytes())?;
                 out.write_all("\"values\":[".as_bytes())?;
-                out.write_all(
-                    value
-                        .iter()
-                        .map(|x| {
-                            cache
-                                .cache_get_or_set_with(x.to_owned(), || {
-                                    format!(
-                                        "\"0x0{}\"",
-                                        x.into_repr().to_string()[2..].trim_start_matches('0')
-                                    )
-                                })
-                                .to_owned()
-                        })
-                        .collect::<Vec<_>>()
-                        .join(",")
-                        .as_bytes(),
-                )?;
+
+                let mut value = value.iter().peekable();
+                while let Some(x) = value.next() {
+                    out.write_all(
+                        cache
+                            .cache_get_or_set_with(x.to_owned(), || {
+                                format!(
+                                    "\"0x0{}\"",
+                                    x.into_repr().to_string()[2..].trim_start_matches('0')
+                                )
+                            })
+                            .as_bytes(),
+                    )?;
+                    if value.peek().is_some() {
+                        out.write_all(b",")?;
+                    }
+                }
                 out.write_all(b"],\n")?;
                 out.write_all(
                     format!(

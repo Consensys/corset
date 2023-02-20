@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
+use cached::Cached;
 use colored::Colorize;
 use log::*;
 use logging_timer::time;
@@ -55,14 +56,18 @@ fn validate(t: Type, x: F) -> Result<F> {
 }
 
 fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
+    let mut cache_num = cached::SizedCache::with_size(200000); // ~1.60MB cache
+    let mut cache_str = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut r = vec![F::zero()];
     let xs = xs
-        .par_iter()
+        .iter()
         .map(|x| match x {
-            Value::Number(n) => Fr::from_str(&n.to_string())
+            Value::Number(n) => cache_num
+                .cache_get_or_set_with(n, || Fr::from_str(&n.to_string()))
                 .with_context(|| format!("while parsing `{:?}`", x))
                 .and_then(|x| validate(t, x)),
-            Value::String(s) => Fr::from_str(s)
+            Value::String(s) => cache_str
+                .cache_get_or_set_with(s, || Fr::from_str(s))
                 .with_context(|| format!("while parsing `{:?}`", x))
                 .and_then(|x| validate(t, x)),
             _ => bail!("expected numeric value, found `{}`", x),
@@ -149,7 +154,8 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
             .collect::<Vec<_>>();
 
         comps
-            .into_par_iter()
+            // .into_par_iter()
+            .into_iter()
             .filter_map(|comp| apply_computation(cs, &comp))
             .collect::<Result<Vec<_>>>()?
             .into_iter()
