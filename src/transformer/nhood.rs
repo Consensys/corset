@@ -3,7 +3,8 @@ use std::collections::HashMap;
 
 use crate::{
     column::Computation,
-    compiler::{Builtin, Constraint, ConstraintSet, Expression, Handle, Kind, Magma, Node, Type},
+    compiler::{Builtin, Constraint, ConstraintSet, Expression, Kind, Magma, Node, Type},
+    structs::Handle,
 };
 
 fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSet) -> Result<()> {

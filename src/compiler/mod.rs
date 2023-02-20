@@ -37,7 +37,7 @@ pub fn make<S: AsRef<str>>(
     use colored::Colorize;
     use num_bigint::BigInt;
 
-    use crate::errors::CompileError;
+    use crate::{errors::CompileError, structs::Handle};
 
     let mut asts = vec![];
     let ctx = Rc::new(RefCell::new(SymbolTable::new_root()));

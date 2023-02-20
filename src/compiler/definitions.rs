@@ -12,9 +12,10 @@ use std::rc::{Rc, Weak};
 
 use super::common::BUILTINS;
 use super::generator::{Defined, Function, FunctionClass};
-use super::{Expression, Handle, Magma, Node, Type};
+use super::{Expression, Magma, Node, Type};
 use crate::column::Computation;
 use crate::compiler::parser::*;
+use crate::structs::Handle;
 
 #[derive(Debug, Clone)]
 pub enum Symbol {
@@ -63,6 +64,12 @@ impl ComputationTable {
             .iter()
             .find(|(k, _)| *k == target)
             .map(|x| &self.computations[*x.1])
+    }
+    pub fn computation_idx_for(&self, target: &Handle) -> Option<usize> {
+        self.dependencies
+            .iter()
+            .find(|(k, _)| *k == target)
+            .map(|x| *x.1)
     }
 }
 #[derive(Debug)]

@@ -13,8 +13,9 @@ use std::{
 
 use crate::compiler::codetyper::Tty;
 use crate::pretty::Pretty;
+use crate::structs::Handle;
 
-use super::{Builtin, EvalSettings, Handle, Kind, Magma, Type};
+use super::{Builtin, EvalSettings, Kind, Magma, Type};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum Expression {

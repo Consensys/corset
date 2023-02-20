@@ -1,4 +1,7 @@
-use crate::compiler::{Handle, Kind, Node, Type};
+use crate::{
+    compiler::{Kind, Node, Type},
+    structs::Handle,
+};
 use anyhow::{anyhow, bail, Result};
 use colored::Colorize;
 use pairing_ce::{bn256::Fr, ff::Field};

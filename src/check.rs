@@ -15,8 +15,9 @@ use pairing_ce::{
 
 use crate::{
     column::ColumnSet,
-    compiler::{Constraint, ConstraintSet, Expression, Handle, Node},
+    compiler::{Constraint, ConstraintSet, Expression, Node},
     pretty::*,
+    structs::Handle,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -355,7 +356,7 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
     fn compute_cols(exps: &[Node], cs: &ConstraintSet) -> Result<Vec<Vec<Fr>>> {
         let cols = exps
             .iter()
-            .map(|e| cs.compute_composite_static(e))
+            .map(|e| crate::compute::compute_composite_static(cs, e))
             .collect::<Result<Vec<_>>>()
             .with_context(|| anyhow!("while computing {:?}", exps))?;
         if !cols.iter().all(|p| p.len() == cols[0].len()) {

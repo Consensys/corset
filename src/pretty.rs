@@ -1,7 +1,10 @@
 use colored::{Color, ColoredString, Colorize};
 use pairing_ce::{bn256::Fr, ff::PrimeField};
 
-use crate::compiler::{Expression, Handle, Node};
+use crate::{
+    compiler::{Expression, Node},
+    structs::Handle,
+};
 
 pub const COLORS: [Color; 7] = [
     Color::Green,

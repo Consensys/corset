@@ -18,9 +18,11 @@ mod check;
 mod column;
 mod compiler;
 mod compute;
+mod dag;
 mod errors;
 mod exporters;
 mod pretty;
+mod structs;
 #[cfg(test)]
 mod tests;
 mod transformer;
@@ -345,7 +347,7 @@ fn main() -> Result<()> {
             transformer::sorts(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
 
-            compute::compute(&read_trace(&tracefile)?, &mut constraints)
+            compute::compute_trace(&read_trace(&tracefile)?, &mut constraints)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let outfile = outfile.as_ref().unwrap();
@@ -403,7 +405,7 @@ fn main() -> Result<()> {
                     }
                     .with_context(|| format!("while reading payload from {}", id))?;
 
-                    compute::compute(
+                    compute::compute_trace(
                         &v,
                         &mut local_constraints,
                     )
@@ -471,7 +473,7 @@ fn main() -> Result<()> {
                 transformer::expand_invs(&mut constraints)
                     .with_context(|| anyhow!("while expanding inverses"))?;
             }
-            compute::compute(&read_trace(&tracefile)?, &mut constraints)
+            compute::compute_trace(&read_trace(&tracefile)?, &mut constraints)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
 
             check::check(

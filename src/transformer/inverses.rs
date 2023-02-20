@@ -1,9 +1,9 @@
 use crate::{
     column::{ColumnSet, Computation},
     compiler::{
-        Builtin, ComputationTable, Constraint, ConstraintSet, Expression, Handle, Kind, Magma,
-        Node, Type,
+        Builtin, ComputationTable, Constraint, ConstraintSet, Expression, Kind, Magma, Node, Type,
     },
+    structs::Handle,
 };
 use anyhow::Result;
 

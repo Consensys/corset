@@ -4,7 +4,8 @@ use pairing_ce::ff::PrimeField;
 
 use crate::{
     column::Computation,
-    compiler::{Builtin, Constraint, ConstraintSet, Handle, Kind, Magma, Node, Type},
+    compiler::{Builtin, Constraint, ConstraintSet, Kind, Magma, Node, Type},
+    structs::Handle,
 };
 
 use super::create_column;
@@ -250,7 +251,12 @@ fn create_sort_constraint(
 
     // Add the required computation
     cs.computations.insert_many(
-        &ats,
+        vec![eq.clone(), delta.clone()]
+            .into_iter()
+            .chain(ats.iter().cloned())
+            .chain(delta_bytes.iter().cloned())
+            .collect::<Vec<_>>()
+            .as_slice(),
         Computation::SortingConstraints {
             ats: ats.clone(),
             eq,

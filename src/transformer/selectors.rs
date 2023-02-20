@@ -1,8 +1,7 @@
 use crate::{
     column::{ColumnSet, Computation},
-    compiler::{
-        ComputationTable, Constraint, ConstraintSet, Expression, Handle, Kind, Magma, Node, Type,
-    },
+    compiler::{ComputationTable, Constraint, ConstraintSet, Expression, Kind, Magma, Node, Type},
+    structs::Handle,
 };
 use anyhow::Result;
 

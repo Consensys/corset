@@ -3,7 +3,10 @@ use colored::Colorize;
 use pairing_ce::bn256::Fr;
 use thiserror::Error;
 
-use crate::compiler::{Expression, Handle, Type};
+use crate::{
+    compiler::{Expression, Type},
+    structs::Handle,
+};
 
 #[derive(Error, Debug)]
 pub enum CompileError<'a> {

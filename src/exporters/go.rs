@@ -5,7 +5,7 @@ use convert_case::{Case, Casing};
 use itertools::Itertools;
 use num_bigint::BigInt;
 
-use crate::compiler::*;
+use crate::{compiler::*, structs::Handle};
 
 #[derive(Debug)]
 pub struct GoExporter {

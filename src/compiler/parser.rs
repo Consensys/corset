@@ -1,3 +1,4 @@
+use crate::structs::Handle;
 use anyhow::{anyhow, bail, Context, Result};
 use colored::Colorize;
 use itertools::Itertools;
@@ -95,7 +96,7 @@ pub enum Kind<T> {
     /// a composite column is similar to a phantom column, but the expression
     /// computing it is known
     Composite(Box<T>),
-    Interleaved(Vec<T>, Option<Vec<super::Handle>>),
+    Interleaved(Vec<T>, Option<Vec<Handle>>),
 }
 impl<T> Kind<T> {
     pub fn to_nil(&self) -> Kind<()> {

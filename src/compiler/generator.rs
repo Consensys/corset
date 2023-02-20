@@ -1,6 +1,8 @@
 use anyhow::*;
+use cached::Cached;
 use colored::Colorize;
 use log::*;
+use logging_timer::time;
 use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
 use num_traits::{One, Zero};
@@ -10,7 +12,6 @@ use pairing_ce::ff::{Field, PrimeField};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::io::Write;
@@ -18,12 +19,13 @@ use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 
 use super::definitions::ComputationTable;
-use super::{common::*, CompileSettings, Expression, Handle, Magma, Node, Type};
+use super::{common::*, CompileSettings, Expression, Magma, Node, Type};
 use crate::column::{Column, ColumnSet, Computation};
 use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 use crate::errors::{CompileError, RuntimeError};
 use crate::pretty::Pretty;
+use crate::structs::Handle;
 
 static COUNTER: OnceCell<AtomicUsize> = OnceCell::new();
 
@@ -337,379 +339,12 @@ impl ConstraintSet {
         self.computations.update_ids(&set_id)
     }
 
-    fn get(&self, handle: &Handle) -> Result<&Column> {
+    pub fn get(&self, handle: &Handle) -> Result<&Column> {
         self.modules.get(handle)
     }
 
-    fn get_mut(&mut self, handle: &Handle) -> Result<&mut Column> {
+    pub fn get_mut(&mut self, handle: &Handle) -> Result<&mut Column> {
         self.modules.get_mut(handle)
-    }
-
-    fn compute_interleaved(&mut self, froms: &[Handle], target: &Handle) -> Result<()> {
-        for from in froms.iter() {
-            self.compute_column(from)?;
-        }
-
-        if !froms
-            .iter()
-            .map(|h| self.get(h).unwrap().len().unwrap())
-            .collect::<Vec<_>>()
-            .windows(2)
-            .all(|w| w[0] == w[1])
-        {
-            bail!("interleaving columns of incoherent lengths")
-        }
-
-        let final_len = froms
-            .iter()
-            .map(|h| self.get(h).unwrap().len().unwrap())
-            .sum();
-        let count = froms.len();
-        let values = (0..final_len)
-            .into_par_iter()
-            .map(|k| {
-                let i = k / count;
-                let j = k % count;
-                *self
-                    .get(&froms[j as usize])
-                    .unwrap()
-                    .get(i as isize, false)
-                    .unwrap()
-            })
-            .collect();
-
-        self.get_mut(target)?.set_raw_value(values, 0);
-        assert!(
-            self.get(target).unwrap().len().unwrap()
-                == self.get(target).unwrap().padded_len().unwrap()
-        );
-        assert!(
-            self.get(target).unwrap().len().unwrap()
-                == froms.len() * self.get(&froms[0]).unwrap().len().unwrap()
-        );
-        Ok(())
-    }
-
-    fn compute_sorted(&mut self, froms: &[Handle], tos: &[Handle]) -> Result<()> {
-        let spilling = self.spilling_or_insert(&froms[0].module);
-        for from in froms.iter() {
-            self.compute_column(from)?;
-        }
-
-        let from_cols = froms
-            .iter()
-            .map(|c| self.get(c).unwrap())
-            .collect::<Vec<_>>();
-
-        if !from_cols
-            .windows(2)
-            .all(|w| w[0].padded_len() == w[1].padded_len())
-        {
-            bail!("sorted columns are of incoherent lengths")
-        }
-        let len = from_cols[0].len().unwrap();
-
-        let mut sorted_is = (0..len).collect::<Vec<_>>();
-        sorted_is.sort_by(|i, j| {
-            for from in from_cols.iter() {
-                let x_i = from.get(*i as isize, false).unwrap();
-                let x_j = from.get(*j as isize, false).unwrap();
-                if let x @ (Ordering::Greater | Ordering::Less) = x_i.cmp(x_j) {
-                    return x;
-                }
-            }
-            Ordering::Equal
-        });
-
-        for (k, from) in froms.iter().enumerate() {
-            let value: Vec<Fr> = vec![Fr::zero(); spilling as usize]
-                .into_iter()
-                .chain(sorted_is.iter().map(|i| {
-                    *self
-                        .get(from)
-                        .unwrap()
-                        .get((*i).try_into().unwrap(), false)
-                        .unwrap()
-                }))
-                .collect();
-
-            self.get_mut(&tos[k])
-                .unwrap()
-                .set_raw_value(value, spilling);
-        }
-
-        Ok(())
-    }
-
-    fn compute_cyclic(&mut self, froms: &[Handle], to: &Handle, modulo: usize) -> Result<()> {
-        let spilling = self.spilling_or_insert(&froms[0].module);
-        for from in froms.iter() {
-            self.compute_column(from)?;
-        }
-        let len = self.get(&froms[0]).unwrap().len().unwrap();
-        if len < modulo {
-            bail!(
-                "unable to compute cyclic column {}: {} < {}",
-                to.to_string().bold().white(),
-                len,
-                modulo
-            )
-        }
-
-        let value: Vec<Fr> = vec![Fr::zero(); spilling as usize]
-            .into_iter()
-            .chain((0..len).map(|i| Fr::from_str(&((i % modulo).to_string())).unwrap()))
-            .collect();
-
-        self.get_mut(to).unwrap().set_raw_value(value, spilling);
-
-        Ok(())
-    }
-
-    pub fn compute_composite(&mut self, exp: &Node, target: &Handle) -> Result<()> {
-        let spilling = self.spilling_or_insert(&target.module);
-        let cols_in_expr = exp.dependencies();
-        for c in &cols_in_expr {
-            self.compute_column(c)?
-        }
-        let length = *cols_in_expr
-            .iter()
-            .map(|handle| Ok(self.get(handle).unwrap().len().unwrap().to_owned()))
-            .collect::<Result<Vec<_>>>()?
-            .iter()
-            .max()
-            .unwrap();
-
-        let values = (-spilling..length as isize)
-            .into_par_iter()
-            .map(|i| {
-                exp.eval(
-                    i,
-                    &mut |handle, j, _| {
-                        self.modules._cols[handle.id.unwrap()]
-                            .get(j, false)
-                            .cloned()
-                    },
-                    &mut None,
-                    &EvalSettings { wrap: false },
-                )
-                .unwrap_or_else(Fr::zero)
-            })
-            .collect();
-
-        self.modules
-            .get_mut(target)
-            .unwrap()
-            .set_raw_value(values, spilling);
-        Ok(())
-    }
-
-    pub fn compute_composite_static(&self, exp: &Node) -> Result<Vec<Fr>> {
-        let cols_in_expr = exp.dependencies();
-        for c in &cols_in_expr {
-            if !self.get(c)?.is_computed() {
-                bail!("column {} not yet computed", c.to_string().red())
-            }
-        }
-
-        let length = *cols_in_expr
-            .iter()
-            .map(|handle| {
-                Ok(self
-                    .get(handle)
-                    .with_context(|| anyhow!("while reading {}", handle.to_string().red().bold()))?
-                    .len()
-                    .ok_or_else(|| anyhow!("{} has no len", handle.to_string().red().bold()))?
-                    .to_owned())
-            })
-            .collect::<Result<Vec<_>>>()?
-            .iter()
-            .max()
-            .unwrap();
-
-        let values = (0..length as isize)
-            .into_par_iter()
-            .map(|i| {
-                exp.eval(
-                    i,
-                    &mut |handle, j, _| {
-                        self.modules._cols[handle.id.unwrap()]
-                            .get(j, false)
-                            .cloned()
-                    },
-                    &mut None,
-                    &EvalSettings { wrap: false },
-                )
-                .unwrap_or_else(Fr::zero)
-            })
-            .collect::<Vec<_>>();
-
-        Ok(values)
-    }
-
-    fn compute_sorting_auxs(
-        &mut self,
-        ats: &[Handle],
-        eq: &Handle,
-        delta: &Handle,
-        delta_bytes: &[Handle],
-        signs: &[bool],
-        from: &[Handle],
-        sorted: &[Handle],
-    ) -> Result<()> {
-        assert!(delta_bytes.len() == 16);
-        for c in from.iter().chain(sorted.iter()) {
-            self.compute_column(c)?;
-        }
-        let spilling = self.spilling_or_insert(&from[0].module);
-        let len = self.modules.by_handle(&from[0]).unwrap().len().unwrap();
-
-        let mut at_values = std::iter::repeat_with(|| vec![Fr::zero(); spilling as usize])
-            .take(ats.len())
-            .collect::<Vec<_>>();
-        // in the spilling, all @ == 0; thus Eq = 1
-        let mut eq_values = vec![Fr::one(); spilling as usize];
-        let mut delta_values = vec![Fr::zero(); spilling as usize];
-        let mut delta_bytes_values = std::iter::repeat_with(|| vec![Fr::zero(); spilling as usize])
-            .take(delta_bytes.len())
-            .collect::<Vec<_>>();
-        let sorted_cols = sorted
-            .iter()
-            .map(|f| {
-                self.modules
-                    .by_handle(f)
-                    .ok_or_else(|| anyhow!("column `{}` not found", f))
-            })
-            .collect::<Result<Vec<_>>>()?;
-        for i in 0..len as isize {
-            // Compute @s
-            let mut found = false;
-            for l in 0..ats.len() {
-                let eq = sorted_cols[l]
-                    .get(i, false)
-                    .zip(sorted_cols[l].get(i - 1, false)) // may fail @0 if no padding; in this case, @ = 0
-                    .map(|(v1, v2)| v1.eq(v2))
-                    .unwrap_or(true);
-
-                let v = if !eq {
-                    if found {
-                        Fr::zero()
-                    } else {
-                        found = true;
-                        Fr::one()
-                    }
-                } else {
-                    Fr::zero()
-                };
-
-                at_values[l].push(v);
-            }
-
-            // Compute Eq
-            eq_values.push(if found { Fr::zero() } else { Fr::one() });
-
-            // Compute Delta
-            let mut delta = Fr::zero();
-            if eq_values.last().unwrap().is_zero() {
-                for l in 0..ats.len() {
-                    let mut term = *sorted_cols[l].get(i, false).unwrap();
-                    term.sub_assign(sorted_cols[l].get(i - 1, false).unwrap());
-                    term.mul_assign(at_values[l].last().unwrap());
-                    if !signs[l] {
-                        term.negate();
-                    }
-                    delta.add_assign(&term);
-                }
-            }
-            // delta.sub_assign(&Fr::one());
-            delta_values.push(delta);
-
-            delta
-                .into_repr()
-                .as_ref()
-                .iter()
-                .flat_map(|u| u.to_le_bytes().into_iter())
-                .map(|i| Fr::from_str(&i.to_string()).unwrap())
-                .enumerate()
-                .take(16)
-                .for_each(|(i, b)| delta_bytes_values[i].push(b));
-        }
-
-        for (at, value) in ats.iter().zip(at_values.into_iter()) {
-            self.get_mut(at).unwrap().set_raw_value(value, spilling);
-        }
-        self.get_mut(eq).unwrap().set_raw_value(eq_values, spilling);
-        self.get_mut(delta)
-            .unwrap()
-            .set_raw_value(delta_values, spilling);
-        for (delta_byte, value) in delta_bytes.iter().zip(delta_bytes_values.into_iter()) {
-            self.get_mut(delta_byte)
-                .unwrap()
-                .set_raw_value(value, spilling);
-        }
-        Ok(())
-    }
-
-    fn compute_column(&mut self, target: &Handle) -> Result<()> {
-        let target_col = self.get(target).unwrap();
-        if target_col.is_computed() {
-            Ok(())
-        } else if matches!(target_col.kind, Kind::Atomic) {
-            bail!(anyhow!(RuntimeError::EmptyColumn(target.clone())))
-        } else {
-            self.compute(
-                self.computations
-                    .dependencies(target)
-                    .ok_or_else(|| anyhow!("No computations found for `{}`", target))?,
-            )
-        }
-    }
-
-    fn compute(&mut self, i: usize) -> Result<()> {
-        let comp = self.computations.get(i).unwrap().clone();
-        debug!("Computing `{}`", comp.pretty_target());
-
-        match &comp {
-            Computation::Composite { target, exp } => {
-                if !self.modules.get(target)?.is_computed() {
-                    self.compute_composite(exp, target)
-                } else {
-                    Ok(())
-                }
-            }
-            Computation::Interleaved { target, froms } => {
-                if !self.modules.get(target)?.is_computed() {
-                    self.compute_interleaved(froms, target)
-                } else {
-                    Ok(())
-                }
-            }
-            Computation::Sorted { froms, tos } => self.compute_sorted(froms, tos),
-            Computation::CyclicFrom {
-                target,
-                froms,
-                modulo,
-            } => self.compute_cyclic(froms, target, *modulo),
-            Computation::SortingConstraints {
-                ats,
-                eq,
-                delta,
-                delta_bytes,
-                signs,
-                froms,
-                sorted,
-            } => self.compute_sorting_auxs(ats, eq, delta, delta_bytes, signs, froms, sorted),
-        }
-    }
-
-    pub fn compute_all(&mut self) -> Result<()> {
-        for i in 0..self.computations.iter().count() {
-            if let Err(e) = self.compute(i) {
-                warn!("{:?}", e);
-            }
-        }
-
-        Ok(())
     }
 
     pub fn raw_len_for_or_set(&mut self, m: &str, x: isize) -> isize {
@@ -780,11 +415,14 @@ impl ConstraintSet {
                 .unwrap_or(1)
     }
 
+    #[time("info", "Exporting expanded trace")]
     pub fn write(&mut self, out: &mut impl Write) -> Result<()> {
+        let mut cache = cached::SizedCache::with_size(200000); // ~1.60MB cache
+
         out.write_all("{\"columns\":{\n".as_bytes())?;
 
         for (i, (module, columns)) in self.modules.cols.iter().enumerate() {
-            info!("Exporting {}", &module);
+            debug!("Exporting {}", &module);
             if i > 0 {
                 out.write_all(b",")?;
             }
@@ -825,12 +463,16 @@ impl ConstraintSet {
                 out.write_all("\"values\":[".as_bytes())?;
                 out.write_all(
                     value
-                        .par_iter()
+                        .iter()
                         .map(|x| {
-                            format!(
-                                "\"0x0{}\"",
-                                x.into_repr().to_string()[2..].trim_start_matches('0')
-                            )
+                            cache
+                                .cache_get_or_set_with(x.to_owned(), || {
+                                    format!(
+                                        "\"0x0{}\"",
+                                        x.into_repr().to_string()[2..].trim_start_matches('0')
+                                    )
+                                })
+                                .to_owned()
                         })
                         .collect::<Vec<_>>()
                         .join(",")

@@ -8,7 +8,7 @@ use std::{collections::HashSet, io::Write};
 use anyhow::*;
 use convert_case::{Case, Casing};
 
-use crate::{compiler::*, pretty::Pretty};
+use crate::{compiler::*, pretty::Pretty, structs::Handle};
 
 const SIZE: usize = 4_194_304;
 
