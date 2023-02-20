@@ -536,8 +536,13 @@ pub fn compute_trace(v: &Value, cs: &mut ConstraintSet) -> Result<()> {
     fill_traces(v, vec![], cs).with_context(|| "while reading columns")?;
     compute_all(cs).with_context(|| "while computing columns")?;
     for h in cs.modules.handles() {
-        if !cs.get(&h).unwrap().is_computed() {
-            warn!("{}", RuntimeError::NotComputed(h.clone()));
+        let column = cs.get(&h).unwrap();
+        if !column.is_computed() {
+            if matches!(column.kind, crate::compiler::Kind::Atomic) {
+                warn!("{}", RuntimeError::EmptyColumn(h.clone()))
+            } else {
+                error!("{}", RuntimeError::NotComputed(h.clone()));
+            }
         }
     }
 

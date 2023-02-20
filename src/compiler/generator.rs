@@ -9,7 +9,6 @@ use num_traits::{One, Zero};
 use once_cell::sync::OnceCell;
 use pairing_ce::bn256::Fr;
 use pairing_ce::ff::{Field, PrimeField};
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;

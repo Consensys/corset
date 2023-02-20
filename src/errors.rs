@@ -18,7 +18,7 @@ pub enum CompileError<'a> {
 
 #[derive(Error, Debug)]
 pub enum RuntimeError<'a> {
-    #[error("{} is empty", .0.pretty())]
+    #[error("{} not found in the given trace", .0.pretty())]
     EmptyColumn(Handle),
     #[error("{} could not be computed", .0.pretty())]
     NotComputed(Handle),
