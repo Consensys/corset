@@ -127,6 +127,9 @@ enum Commands {
             required = true
         )]
         outfile: Option<String>,
+
+        #[arg(long, help = "exit on failing columns")]
+        fail_on_missing: bool,
     },
     /// Given a set of constraints and a filled trace, check the validity of the constraints
     Check {
@@ -339,7 +342,11 @@ fn main() -> Result<()> {
             };
             latex_exporter.render(&ast)?
         }
-        Commands::Compute { tracefile, outfile } => {
+        Commands::Compute {
+            tracefile,
+            outfile,
+            fail_on_missing,
+        } => {
             transformer::validate_nhood(&mut constraints)?;
             transformer::lower_shifts(&mut constraints)?;
             transformer::expand_ifs(&mut constraints);
@@ -347,7 +354,7 @@ fn main() -> Result<()> {
             transformer::sorts(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
 
-            compute::compute_trace(&read_trace(&tracefile)?, &mut constraints)
+            compute::compute_trace(&read_trace(&tracefile)?, &mut constraints, fail_on_missing)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let outfile = outfile.as_ref().unwrap();
@@ -475,7 +482,7 @@ fn main() -> Result<()> {
                 transformer::expand_invs(&mut constraints)
                     .with_context(|| anyhow!("while expanding inverses"))?;
             }
-            compute::compute_trace(&read_trace(&tracefile)?, &mut constraints)
+            compute::compute_trace(&read_trace(&tracefile)?, &mut constraints, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
 
             check::check(

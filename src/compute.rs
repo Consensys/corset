@@ -180,15 +180,21 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
     Ok(())
 }
 
+fn ensure_is_computed(h: &Handle, cs: &ConstraintSet) -> Result<()> {
+    let c = cs.get(h)?;
+    if !c.is_computed() {
+        bail!(err_missing_column(c, h))
+    }
+    Ok(())
+}
+
 fn compute_interleaved(
     cs: &ConstraintSet,
     froms: &[Handle],
     target: &Handle,
 ) -> Result<Vec<ComputedColumn>> {
     for from in froms.iter() {
-        if !cs.get(from).unwrap().is_computed() {
-            bail!("{} is not computed", from.pretty())
-        }
+        ensure_is_computed(from, cs)?;
     }
 
     if !froms
@@ -228,9 +234,7 @@ fn compute_sorted(
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling(&froms[0].module).unwrap();
     for from in froms.iter() {
-        if !cs.get(from).unwrap().is_computed() {
-            bail!("{} is not computed", from.pretty())
-        }
+        ensure_is_computed(from, cs)?;
     }
 
     let from_cols = froms.iter().map(|c| cs.get(c).unwrap()).collect::<Vec<_>>();
@@ -282,9 +286,7 @@ fn compute_cyclic(
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling(&froms[0].module).unwrap();
     for from in froms.iter() {
-        if !cs.get(from).unwrap().is_computed() {
-            bail!("{} is not computed", from.pretty())
-        }
+        ensure_is_computed(from, cs)?;
     }
     let len = cs.get(&froms[0]).unwrap().len().unwrap();
     if len < modulo {
@@ -313,9 +315,7 @@ pub fn compute_composite(
     let spilling = cs.spilling(&target.module).unwrap();
     let cols_in_expr = exp.dependencies();
     for from in &cols_in_expr {
-        if !cs.get(from).unwrap().is_computed() {
-            bail!("{} is not computed", from.pretty())
-        }
+        ensure_is_computed(from, cs)?;
     }
     let length = *cols_in_expr
         .iter()
@@ -344,9 +344,7 @@ pub fn compute_composite(
 pub fn compute_composite_static(cs: &ConstraintSet, exp: &Node) -> Result<Vec<Fr>> {
     let cols_in_expr = exp.dependencies();
     for c in &cols_in_expr {
-        if !cs.get(c)?.is_computed() {
-            bail!("column {} not yet computed", c.to_string().red())
-        }
+        ensure_is_computed(c, cs)?;
     }
 
     let length = *cols_in_expr
@@ -392,9 +390,7 @@ fn compute_sorting_auxs(
 ) -> Result<Vec<ComputedColumn>> {
     assert!(delta_bytes.len() == 16);
     for from in from.iter().chain(sorted.iter()) {
-        if !cs.get(from).unwrap().is_computed() {
-            bail!("{} is not computed", from.pretty())
-        }
+        ensure_is_computed(from, cs)?;
     }
 
     let spilling = cs.spilling(&from[0].module).unwrap();
@@ -556,16 +552,25 @@ pub fn apply_computation(
     }
 }
 
-pub fn compute_trace(v: &Value, cs: &mut ConstraintSet) -> Result<()> {
+fn err_missing_column<'a>(c: &crate::column::Column, h: &Handle) -> RuntimeError<'a> {
+    if matches!(c.kind, crate::compiler::Kind::Atomic) {
+        RuntimeError::EmptyColumn(h.clone())
+    } else {
+        RuntimeError::NotComputed(h.clone())
+    }
+}
+
+pub fn compute_trace(v: &Value, cs: &mut ConstraintSet, fail_on_missing: bool) -> Result<()> {
     fill_traces(v, vec![], cs).with_context(|| "while reading columns")?;
     compute_all(cs).with_context(|| "while computing columns")?;
     for h in cs.modules.handles() {
         let column = cs.get(&h).unwrap();
         if !column.is_computed() {
-            if matches!(column.kind, crate::compiler::Kind::Atomic) {
-                warn!("{}", RuntimeError::EmptyColumn(h.clone()))
+            let err = err_missing_column(column, &h);
+            if fail_on_missing {
+                bail!(err)
             } else {
-                error!("{}", RuntimeError::NotComputed(h.clone()));
+                error!("{}", err);
             }
         }
     }
