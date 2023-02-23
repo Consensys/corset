@@ -43,6 +43,7 @@ fn create_sort_constraint(
                 Kind::Phantom,
                 Type::Column(Magma::Boolean),
                 Some(cs.length_multiplier(&from[0])),
+                None,
             )
             .map(|x| x.0)
         })
@@ -54,6 +55,7 @@ fn create_sort_constraint(
         Kind::Phantom,
         Type::Column(Magma::Boolean),
         Some(cs.length_multiplier(&from[0])),
+        Some(1),
     )?
     .0;
     let delta = create_column(
@@ -63,6 +65,7 @@ fn create_sort_constraint(
         Kind::Phantom,
         Type::Column(Magma::Integer),
         Some(cs.length_multiplier(&from[0])),
+        None,
     )?
     .0;
     let delta_bytes = (0..16)
@@ -74,6 +77,7 @@ fn create_sort_constraint(
                 Kind::Phantom,
                 Type::Column(Magma::Byte),
                 Some(cs.length_multiplier(&from[0])),
+                None,
             )
             .map(|x| x.0)
         })

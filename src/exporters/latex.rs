@@ -242,7 +242,7 @@ impl LatexExporter {
                     }
                 ))
             }
-            Token::DefColumn { name, t, kind: _ } => Ok(format!("\\text{{{} \\emph{{{:?}}}}}", name, t)),
+            Token::DefColumn { name, t, .. } => Ok(format!("\\text{{{} \\emph{{{:?}}}}}", name, t)),
             Token::DefArrayColumn { name, domain: range, t } => {
                 Ok(format!("\\text{{{}{:?} \\emph{{{:?}}}}}", name, range, t))
             }

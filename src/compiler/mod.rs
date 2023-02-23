@@ -86,13 +86,14 @@ pub fn make<S: AsRef<str>>(
                 }
 
                 match symbol.e() {
-                    Expression::Column(handle, k) => {
+                    Expression::Column(handle, k, padding_value) => {
                         columns.insert_column(
                             handle,
                             symbol.t(),
                             *used,
                             k.to_nil(),
                             settings.allow_dups,
+                            padding_value.to_owned(),
                             None,
                         )?;
                         match k {
@@ -114,7 +115,14 @@ pub fn make<S: AsRef<str>>(
                         }
                     }
                     Expression::ArrayColumn(handle, range) => {
-                        columns.insert_array(handle, range, symbol.t(), settings.allow_dups)?
+                        // NOTE we may need custom padding value for arrays at some point
+                        columns.insert_array(
+                            handle,
+                            range,
+                            symbol.t(),
+                            settings.allow_dups,
+                            None,
+                        )?
                     }
                     Expression::Const(ref x, _) => {
                         constants.insert(handle, x.clone());

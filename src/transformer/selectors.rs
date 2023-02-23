@@ -26,6 +26,7 @@ fn do_expand_expr(
                 Kind::Phantom,
                 true,
                 None,
+                None,
             )?;
 
             let _ = comps.insert(
@@ -36,7 +37,7 @@ fn do_expand_expr(
                 },
             );
             Ok(Node {
-                _e: Expression::Column(new_handle, Kind::Phantom),
+                _e: Expression::Column(new_handle, Kind::Phantom, None),
                 _t: Some(Type::Column(Magma::Integer)),
             })
         }

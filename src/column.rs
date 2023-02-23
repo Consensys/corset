@@ -11,6 +11,7 @@ use std::collections::HashMap;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Column {
     value: Option<Vec<Fr>>,
+    pub padding_value: Option<i64>,
     pub spilling: isize,
     pub used: bool,
     pub kind: Kind<()>,
@@ -197,6 +198,7 @@ impl ColumnSet {
         used: bool,
         kind: Kind<()>,
         allow_dup: bool,
+        padding_value: Option<i64>,
         size_factor: Option<usize>,
     ) -> Result<usize> {
         if self
@@ -215,6 +217,7 @@ impl ColumnSet {
                 used,
                 t,
                 kind,
+                padding_value,
                 intrinsic_size_factor: size_factor,
             });
             self.cols
@@ -231,9 +234,18 @@ impl ColumnSet {
         range: &[usize],
         t: Type,
         allow_dup: bool,
+        padding_value: Option<i64>,
     ) -> Result<()> {
         for i in range.iter() {
-            self.insert_column(&handle.ith(*i), t, true, Kind::Atomic, allow_dup, None)?;
+            self.insert_column(
+                &handle.ith(*i),
+                t,
+                true,
+                Kind::Atomic,
+                allow_dup,
+                padding_value,
+                None,
+            )?;
         }
         Ok(())
     }

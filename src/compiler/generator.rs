@@ -654,6 +654,7 @@ fn apply(
                                                     format!("{}_{}", handle.name, i),
                                                 ),
                                                 Kind::Atomic,
+                                                None,
                                             ),
                                             _t: Some(Type::Column(array.t().magma())),
                                         }))
@@ -788,11 +789,12 @@ pub fn reduce(
             name,
             t: _,
             kind: k,
+            ..
         } => match k {
             Kind::Composite(e) => {
                 let n = reduce(e, root_ctx, ctx, settings)?.unwrap();
                 ctx.borrow_mut().edit_symbol(name, &|x| {
-                    if let Expression::Column(_, kind) = x {
+                    if let Expression::Column(_, kind, _) = x {
                         *kind = Kind::Composite(Box::new(n.clone()))
                     }
                 })?;
@@ -803,7 +805,7 @@ pub fn reduce(
                     .iter()
                     .map(
                         |f| match reduce(f, root_ctx.clone(), ctx, settings)?.unwrap().e() {
-                            Expression::Column(h, _) => Ok(h.to_owned()),
+                            Expression::Column(h, ..) => Ok(h.to_owned()),
                             x => Err(anyhow!("expected column, found {:?}", x)),
                         },
                     )
@@ -811,7 +813,7 @@ pub fn reduce(
                     .with_context(|| anyhow!("while defining {}", name))?;
 
                 ctx.borrow_mut().edit_symbol(name, &|x| {
-                    if let Expression::Column(_, kind) = x {
+                    if let Expression::Column(_, kind, _) = x {
                         *kind = Kind::Interleaved(vec![], Some(from_handles.to_vec()))
                     }
                 })?;

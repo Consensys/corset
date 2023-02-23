@@ -45,6 +45,7 @@ fn do_expand_inv(
                         Kind::Composite(Box::new(())),
                         true,
                         None,
+                        None,
                     )?;
                     comps.insert(
                         &inverted_handle,
@@ -55,7 +56,7 @@ fn do_expand_inv(
                     )?;
                 }
                 *e = Node {
-                    _e: Expression::Column(inverted_handle.clone(), Kind::Atomic),
+                    _e: Expression::Column(inverted_handle.clone(), Kind::Atomic, None),
                     _t: Some(Type::Column(Magma::Integer)),
                 }
             }
@@ -75,6 +76,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result
                     _e: Expression::Column(
                         inv_x_col.clone(),
                         Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()])?)),
+                        None,
                     ),
                     _t: Some(Type::Column(Magma::Integer)),
                 },
@@ -87,6 +89,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result
             _e: Expression::Column(
                 inv_x_col.clone(),
                 Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()])?)),
+                None,
             ),
             _t: Some(Type::Column(Magma::Integer)),
         },
@@ -97,6 +100,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result
                     _e: Expression::Column(
                         inv_x_col.clone(),
                         Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()])?)),
+                        None,
                     ),
                     _t: Some(Type::Column(Magma::Integer)),
                 },

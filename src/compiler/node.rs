@@ -21,7 +21,7 @@ use super::{Builtin, EvalSettings, Kind, Magma, Type};
 pub enum Expression {
     Funcall { func: Builtin, args: Vec<Node> },
     Const(BigInt, Option<Fr>),
-    Column(Handle, Kind<Node>),
+    Column(Handle, Kind<Node>, Option<i64>),
     ArrayColumn(Handle, Vec<usize>),
     List(Vec<Node>),
     Void,
@@ -62,7 +62,7 @@ impl Node {
     }
     pub fn from_handle(x: &Handle) -> Node {
         Node {
-            _e: Expression::Column(x.clone(), Kind::Phantom),
+            _e: Expression::Column(x.clone(), Kind::Phantom, None),
             _t: None,
         }
     }
@@ -202,7 +202,7 @@ impl Node {
                     };
                     tty.write(x.to_string().color(c).bold().to_string());
                 }
-                Expression::Column(h, _) => {
+                Expression::Column(h, ..) => {
                     let v = f(n).unwrap_or_default();
                     let c = if dim && zero_context {
                         colored::Color::BrightBlack

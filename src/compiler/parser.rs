@@ -52,6 +52,13 @@ impl AstNode {
     pub fn depth(&self) -> usize {
         self.class.depth()
     }
+    pub fn as_i64(&self) -> Result<i64> {
+        if let Token::Value(r) = &self.class {
+            r.try_into().map_err(|e| anyhow!("{:?}", e))
+        } else {
+            bail!("expected i64, found `{:?}`", self)
+        }
+    }
     pub fn as_u64(&self) -> Result<u64> {
         if let Token::Value(r) = &self.class {
             r.try_into().map_err(|e| anyhow!("{:?}", e))
@@ -89,7 +96,7 @@ impl Debug for AstNode {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Kind<T> {
-    /// an atomic column is directly filled from traces
+    /// an atomic column is directly filled from traces and has a padding value
     Atomic,
     /// a phantom column is present, but will be filled later on
     Phantom,
@@ -155,6 +162,8 @@ pub enum Token {
         t: Type,
         /// how the values of the column are filled
         kind: Kind<AstNode>,
+        /// the value to pad the column with; defaults to 0 if None
+        padding_value: Option<i64>,
     },
     /// defines an array
     DefArrayColumn {
@@ -258,7 +267,7 @@ impl Debug for Token {
                 )
             }
             Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
-            Token::DefColumn { name, t, kind } => {
+            Token::DefColumn { name, t, kind, .. } => {
                 write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind)
             }
             Token::DefPermutation { from, to } => {
@@ -394,6 +403,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
         Array,
         Computation,
         Interleaved,
+        PaddingValue,
     }
 
     // A columns definition is a list of column definition
@@ -404,6 +414,8 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                 let mut t = None;
                 let mut kind = Kind::Atomic;
                 let mut range = None;
+                let mut padding_value = None;
+
                 let mut state = ColumnParser::Begin;
                 // A column is either defined by...
                 match c.class {
@@ -446,6 +458,8 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                             ":comp" => ColumnParser::Computation,
                                             // e.g. (A :array {1 3 5}) or (A :array [5])
                                             ":array" => ColumnParser::Array,
+                                            // a specific padding value, e.f. (NOT :padding 255)
+                                            ":padding" => ColumnParser::PaddingValue,
                                             _ => {
                                                 bail!("unexpected keyword found: {}", kw)
                                             }
@@ -476,6 +490,10 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                     );
                                     ColumnParser::Begin
                                 }
+                                ColumnParser::PaddingValue => {
+                                    padding_value = Some(x.as_i64()?);
+                                    ColumnParser::Begin
+                                },
                             };
                         }
                     }
@@ -502,6 +520,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                     name,
                                     t: Type::Column(t.unwrap_or(Magma::Integer)),
                                     kind,
+                                    padding_value,
                                 }
                             },
                             lc: c.lc,
@@ -510,6 +529,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                     ColumnParser::Array => bail!("incomplete :array definition"),
                     ColumnParser::Computation => bail!("incomplate :comp definition"),
                     ColumnParser::Interleaved => bail!("incomplete :interleaved definition"),
+                    ColumnParser::PaddingValue => bail!("incomplete :padding definition"),
                 }
             })
         })

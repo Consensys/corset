@@ -17,6 +17,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         Kind::Phantom,
         false,
         None,
+        None,
     );
     cs.computations.insert(
         &aux_handle,
@@ -39,6 +40,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         Kind::Interleaved(vec![], Some(interleaving.to_owned())),
         false,
         None,
+        None,
     );
     cs.computations.insert(
         &intrld_aux_xs_handle,
@@ -56,6 +58,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         Kind::Phantom,
         false,
         None,
+        None,
     );
     cs.computations.insert(
         &srt_intrld_aux_xs_handle,
@@ -66,7 +69,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
     )?;
 
     let srt_intrld_aux_xs_node = Node {
-        _e: Expression::Column(srt_intrld_aux_xs_handle.to_owned(), Kind::Phantom),
+        _e: Expression::Column(srt_intrld_aux_xs_handle.to_owned(), Kind::Phantom, None),
         _t: Some(Type::Column(Magma::Byte)),
     };
     cs.constraints.push(Constraint::Vanishes {
@@ -82,6 +85,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
             Node::from_expr(Expression::Column(
                 srt_intrld_aux_xs_handle.to_owned(),
                 Kind::Phantom,
+                None,
             )),
             Node::from_const((modulo - 1).try_into().unwrap()),
         ])?),

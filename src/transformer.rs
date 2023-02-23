@@ -28,6 +28,7 @@ fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
                     _e: Expression::Column(
                         x_col.to_owned(),
                         Kind::Composite(Box::new(x_expr.clone())),
+                        None,
                     ),
                     _t: Some(Type::Column(Magma::Integer)),
                 },
@@ -43,11 +44,12 @@ fn create_column(
     kind: Kind<()>,
     t: Type,
     size_factor: Option<usize>,
+    padding_value: Option<i64>,
 ) -> anyhow::Result<(Handle, usize)> {
     let handle = Handle::new(module, name);
     let id = cs
         .modules
-        .insert_column(&handle, t, true, kind, false, size_factor)?;
+        .insert_column(&handle, t, true, kind, false, padding_value, size_factor)?;
     Ok((handle, id))
 }
 

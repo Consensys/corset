@@ -420,7 +420,12 @@ fn reduce(
         Token::DefColumns(cols) => cols
             .iter()
             .fold(Ok(()), |ax, col| ax.and(reduce(col, root_ctx.clone(), ctx))),
-        Token::DefColumn { name: col, t, kind } => {
+        Token::DefColumn {
+            name: col,
+            t,
+            kind,
+            padding_value,
+        } => {
             let module_name = ctx.borrow().name.to_owned();
             let symbol = Node {
                 _e: Expression::Column(
@@ -432,6 +437,7 @@ fn reduce(
                         Kind::Composite(_) => Kind::Phantom, // The actual expression is computed by the generator
                         Kind::Interleaved(_, _) => Kind::Phantom, // The interleaving is later on set by the generator
                     },
+                    padding_value.to_owned(),
                 ),
                 _t: Some(*t),
             };
@@ -476,7 +482,7 @@ fn reduce(
                     .insert_symbol(
                         to,
                         Node {
-                            _e: Expression::Column(to_handle.clone(), Kind::Phantom),
+                            _e: Expression::Column(to_handle.clone(), Kind::Phantom, None),
                             _t: Some(Type::Column(Magma::Integer)),
                         },
                     )
