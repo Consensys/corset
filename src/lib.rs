@@ -4,6 +4,7 @@
 extern crate pest_derive;
 use anyhow::*;
 use compiler::ConstraintSet;
+use errno::{set_errno, Errno};
 use libc::c_char;
 use log::*;
 use pairing_ce::{
@@ -37,13 +38,13 @@ struct ComputedColumn {
     values: Vec<[u64; 4]>,
 }
 #[derive(Default)]
-pub struct ColumnsRegister {
+pub struct Trace {
     columns: Vec<ComputedColumn>,
     ids: Vec<String>,
 }
-impl ColumnsRegister {
+impl Trace {
     fn from_constraints(c: &ConstraintSet) -> Self {
-        let mut r = ColumnsRegister {
+        let mut r = Trace {
             ..Default::default()
         };
 
@@ -90,17 +91,13 @@ impl ColumnsRegister {
         }
         r
     }
-    fn from_ptr<'a>(ptr: *const ColumnsRegister) -> &'a Self {
+    fn from_ptr<'a>(ptr: *const Trace) -> &'a Self {
         assert!(!ptr.is_null());
         unsafe { &*ptr }
     }
 }
 
-fn _compute_trace(
-    zkevmfile: &str,
-    tracefile: &str,
-    fail_on_missing: bool,
-) -> Result<ColumnsRegister> {
+fn _compute_trace(zkevmfile: &str, tracefile: &str, fail_on_missing: bool) -> Result<Trace> {
     info!("Loading `{}`", &zkevmfile);
     let mut constraints = ron::from_str(
         &std::fs::read_to_string(&zkevmfile)
@@ -121,8 +118,14 @@ fn _compute_trace(
         fail_on_missing,
     )
     .with_context(|| format!("while computing from `{}`", tracefile))?;
-    Ok(ColumnsRegister::from_constraints(&constraints))
+    Ok(Trace::from_constraints(&constraints))
 }
+
+pub const ERR_NOT_AN_USIZE: i32 = 1;
+pub const ERR_COMPUTE_TRACE_FAILED: i32 = 2;
+pub const ERR_COLUMN_NAME_NOT_FOUND: i32 = 3;
+pub const ERR_COULD_NOT_INITIALIZE_RAYON: i32 = 4;
+pub const ERR_COLUMN_ID_NOT_FOUND: i32 = 5;
 
 #[no_mangle]
 pub extern "C" fn trace_compute(
@@ -130,11 +133,20 @@ pub extern "C" fn trace_compute(
     tracefile: *const c_char,
     threads: c_uint,
     fail_on_missing: bool,
-) -> *mut ColumnsRegister {
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(threads.try_into().expect("not an usize"))
+) -> *mut Trace {
+    if rayon::ThreadPoolBuilder::new()
+        .num_threads(if let Result::Ok(t) = threads.try_into() {
+            t
+        } else {
+            set_errno(Errno(ERR_NOT_AN_USIZE));
+            return std::ptr::null_mut();
+        })
         .build_global()
-        .expect("failed to initialize rayon");
+        .is_err()
+    {
+        set_errno(Errno(ERR_COULD_NOT_INITIALIZE_RAYON));
+        return std::ptr::null_mut();
+    }
 
     let zkevmfile = cstr_to_string(zkevmfile);
     let tracefile = cstr_to_string(tracefile);
@@ -142,30 +154,31 @@ pub extern "C" fn trace_compute(
     match r {
         Err(e) => {
             eprintln!("{:?}", e);
-            panic!();
+            set_errno(Errno(ERR_COMPUTE_TRACE_FAILED));
+            return std::ptr::null_mut();
         }
-        core::result::Result::Ok(x) => Box::into_raw(Box::new(x)),
+        Result::Ok(x) => Box::into_raw(Box::new(x)),
     }
 }
 
 #[no_mangle]
-pub extern "C" fn trace_free(ptr: *mut ColumnsRegister) {
-    if !ptr.is_null() {
+pub extern "C" fn trace_free(trace: *mut Trace) {
+    if !trace.is_null() {
         unsafe {
-            drop(Box::from_raw(ptr));
+            drop(Box::from_raw(trace));
         }
     }
 }
 
 #[no_mangle]
-pub extern "C" fn trace_column_count(ptr: *const ColumnsRegister) -> c_uint {
-    let r = ColumnsRegister::from_ptr(ptr);
+pub extern "C" fn trace_column_count(trace: *const Trace) -> c_uint {
+    let r = Trace::from_ptr(trace);
     r.ids.len() as c_uint
 }
 
 #[no_mangle]
-pub extern "C" fn trace_column_names(ptr: *const ColumnsRegister) -> *const *mut c_char {
-    let r = ColumnsRegister::from_ptr(ptr);
+pub extern "C" fn trace_column_names(trace: *const Trace) -> *const *mut c_char {
+    let r = Trace::from_ptr(trace);
     let names = r
         .ids
         .iter()
@@ -184,30 +197,43 @@ pub struct ColumnData {
     values: *const [u64; 4],
     values_len: u64,
 }
-
-#[no_mangle]
-pub extern "C" fn trace_column_by_name(
-    ptr: *const ColumnsRegister,
-    name: *const c_char,
-) -> ColumnData {
-    let r = ColumnsRegister::from_ptr(ptr);
-    let name = cstr_to_string(name);
-
-    let i = r
-        .ids
-        .iter()
-        .position(|n| *n == name)
-        .expect("unknown column name");
-
-    trace_column_by_id(ptr, i.try_into().unwrap())
+impl Default for ColumnData {
+    fn default() -> Self {
+        ColumnData {
+            padding_value: Default::default(),
+            values: std::ptr::null(),
+            values_len: 0,
+        }
+    }
 }
 
 #[no_mangle]
-pub extern "C" fn trace_column_by_id(ptr: *const ColumnsRegister, i: u32) -> ColumnData {
-    let r = ColumnsRegister::from_ptr(ptr);
+pub extern "C" fn trace_column_by_name(trace: *const Trace, name: *const c_char) -> ColumnData {
+    let r = Trace::from_ptr(trace);
+    let name = cstr_to_string(name);
+
+    let i = r.ids.iter().position(|n| *n == name);
+    if let Some(i) = i {
+        trace_column_by_id(trace, i.try_into().unwrap())
+    } else {
+        let r = Default::default();
+        set_errno(Errno(ERR_COLUMN_NAME_NOT_FOUND));
+        return r;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn trace_column_by_id(trace: *const Trace, i: u32) -> ColumnData {
+    let r = Trace::from_ptr(trace);
     let i = i as usize;
     assert!(i < r.columns.len());
-    let col = &r.columns[i];
+    let col = if let Some(c) = r.columns.get(i) {
+        c
+    } else {
+        let r = ColumnData::default();
+        set_errno(Errno(ERR_COLUMN_ID_NOT_FOUND));
+        return r;
+    };
 
     ColumnData {
         padding_value: col.padding_value.into(),

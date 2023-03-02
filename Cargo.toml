@@ -43,11 +43,12 @@ serde_json = { version = "1", features = ["arbitrary_precision"] }
 thiserror = "1.0.38"
 logging_timer = "1.1.0"
 libc = "0.2.139"
+errno = "0.3.0"
 
 [features]
-default = [ "interactive" ]
-postgres = [ "dep:postgres" ]
-interactive = [ "dep:indicatif", "dep:pest", "dep:pest_derive" ]
+default = ["interactive"]
+postgres = ["dep:postgres"]
+interactive = ["dep:indicatif", "dep:pest", "dep:pest_derive"]
 
 [package.metadata.release]
 tag-prefix = ""
