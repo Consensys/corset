@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail, Context, Result};
 use cached::Cached;
 use colored::Colorize;
+use flate2::read::GzDecoder;
 use log::*;
 use logging_timer::time;
 use pairing_ce::{
@@ -9,7 +10,12 @@ use pairing_ce::{
 };
 use rayon::prelude::*;
 use serde_json::Value;
-use std::{cmp::Ordering, collections::HashSet};
+use std::{
+    cmp::Ordering,
+    collections::HashSet,
+    fs::File,
+    io::{BufReader, Seek},
+};
 
 use crate::{
     column::Computation,
@@ -53,6 +59,23 @@ fn validate(t: Type, x: F) -> Result<F> {
         crate::compiler::Magma::Integer => Ok(x),
         crate::compiler::Magma::Any => unreachable!(),
     }
+}
+
+pub fn read_trace<S: AsRef<str>>(tracefile: S) -> Result<Value> {
+    let tracefile = tracefile.as_ref();
+    info!("Parsing {}...", tracefile);
+    let mut f = File::open(tracefile).with_context(|| format!("while opening `{}`", tracefile))?;
+
+    let gz = GzDecoder::new(BufReader::new(&f));
+    let v: Value = match gz.header() {
+        Some(_) => serde_json::from_reader(gz),
+        None => {
+            f.rewind()?;
+            serde_json::from_reader(BufReader::new(&f))
+        }
+    }
+    .with_context(|| format!("while reading `{}`", tracefile))?;
+    Ok(v)
 }
 
 fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {

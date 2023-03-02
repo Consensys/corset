@@ -1,15 +1,9 @@
 #[macro_use]
 #[cfg(feature = "interactive")]
 extern crate pest_derive;
-use flate2::read::GzDecoder;
 use is_terminal::IsTerminal;
 use log::*;
-use serde_json::Value;
-use std::{
-    fs::File,
-    io::{BufReader, Seek, Write},
-    path::Path,
-};
+use std::{io::Write, path::Path};
 
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
@@ -229,23 +223,6 @@ enum Commands {
     },
 }
 
-fn read_trace<S: AsRef<str>>(tracefile: S) -> Result<Value> {
-    let tracefile = tracefile.as_ref();
-    info!("Parsing {}...", tracefile);
-    let mut f = File::open(tracefile).with_context(|| format!("while opening `{}`", tracefile))?;
-
-    let gz = GzDecoder::new(BufReader::new(&f));
-    let v: Value = match gz.header() {
-        Some(_) => serde_json::from_reader(gz),
-        None => {
-            f.rewind()?;
-            serde_json::from_reader(BufReader::new(&f))
-        }
-    }
-    .with_context(|| format!("while reading `{}`", tracefile))?;
-    Ok(v)
-}
-
 fn main() -> Result<()> {
     let args = Args::parse();
     buche::new()
@@ -354,8 +331,12 @@ fn main() -> Result<()> {
             transformer::sorts(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
 
-            compute::compute_trace(&read_trace(&tracefile)?, &mut constraints, fail_on_missing)
-                .with_context(|| format!("while computing from `{}`", tracefile))?;
+            compute::compute_trace(
+                &compute::read_trace(&tracefile)?,
+                &mut constraints,
+                fail_on_missing,
+            )
+            .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let outfile = outfile.as_ref().unwrap();
             let mut f = std::fs::File::create(&outfile)
@@ -482,7 +463,7 @@ fn main() -> Result<()> {
                 transformer::expand_invs(&mut constraints)
                     .with_context(|| anyhow!("while expanding inverses"))?;
             }
-            compute::compute_trace(&read_trace(&tracefile)?, &mut constraints, false)
+            compute::compute_trace(&compute::read_trace(&tracefile)?, &mut constraints, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
 
             check::check(
