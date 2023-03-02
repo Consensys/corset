@@ -443,9 +443,8 @@ impl ConstraintSet {
                 let column = &self.modules._cols[i];
                 let handle = Handle::new(&module, &name);
                 let value = column.value().unwrap_or(&empty_vec);
-                let padding = if handle.name.starts_with("__SRT__Eq_") {
-                    // NOTE ugly, find a better way to handle that.
-                    Fr::one()
+                let padding = if let Some(x) = column.padding_value {
+                    Fr::from_str(&x.to_string()).unwrap()
                 } else {
                     value.get(0).cloned().unwrap_or_else(|| {
                         self.computations
