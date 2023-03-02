@@ -250,7 +250,10 @@ The ~for~ forms generate similar constraints, parametrized by the specified iter
               (eq (nth A i) (nth C j)))))
 
 #+end_src
+**** ~force-bool~
+The ~force-bool~ form forces the type of its argument to coalesce to boolean.
 
+The main use for this form is to trigger optimization by forcing type inference that can not be performed atomatically. For instance, given two boolean columns ~B1~ and ~B2~ that happen to be mutually exclusive, the type system can not determine that ~(+ B1 B2)~ is also boolean. However, ~(force-bool (+ B1 B2))~ will ensure that this expression is typed as boolean, and will thus trigger related optimizations, typically as ~if-zero~ conditions.
 *** Branching Forms
 Corset features several branching operations. Although they ought to be simplified in coming revisions of Corset, they are still quite clumsy.
 **** Branching Forms

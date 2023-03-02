@@ -89,6 +89,11 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "if-not-zero"),
             class: FunctionClass::Builtin(Builtin::IfNotZero)
         },
+
+        "force-bool" => Function {
+            handle:Handle::new(super::MAIN_MODULE, "force-bool"),
+            class: FunctionClass::Builtin(Builtin::ForceBool),
+        }
     };
 }
 
