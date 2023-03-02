@@ -125,6 +125,8 @@ pub enum Builtin {
 
     IfZero,
     IfNotZero,
+
+    ForceBool,
 }
 impl Builtin {
     pub fn call(self, args: &[Node]) -> Result<Node> {
@@ -167,6 +169,7 @@ impl Builtin {
             Builtin::Nth => Type::Column(argtype[0].magma()),
             Builtin::Shift => argtype[0],
             Builtin::Len => Type::Scalar(Magma::Integer),
+            Builtin::ForceBool => argtype[0].same_scale(Magma::Boolean),
         }
     }
 }
@@ -190,6 +193,7 @@ impl std::fmt::Display for Builtin {
                 Builtin::IfZero => "if-zero",
                 Builtin::IfNotZero => "if-not-zero",
                 Builtin::Len => "len",
+                Builtin::ForceBool => "force-bool",
             }
         )
     }
@@ -241,6 +245,7 @@ impl FuncVerifier<Node> for Builtin {
             Builtin::IfNotZero => Arity::Between(2, 3),
             Builtin::Nth => Arity::Dyadic,
             Builtin::Len => Arity::Monadic,
+            Builtin::ForceBool => Arity::Monadic,
         }
     }
     fn validate_types(&self, args: &[Node]) -> Result<()> {
@@ -280,6 +285,11 @@ impl FuncVerifier<Node> for Builtin {
                 Type::List(Magma::Any),
             ]],
             Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
+            Builtin::ForceBool => &[&[
+                Type::Scalar(Magma::Any),
+                Type::Column(Magma::Any),
+                Type::List(Magma::Any),
+            ]],
         };
 
         if super::compatible_with(expected_t, &args_t) {
@@ -692,6 +702,12 @@ fn apply(
                                 traversed_args[1].to_owned(),
                             ])?))
                         }
+                    }
+
+                    Builtin::ForceBool => {
+                        Ok(Some(traversed_args[0].clone().with_type(
+                            traversed_args[0].t().same_scale(Magma::Boolean),
+                        )))
                     }
 
                     b @ (Builtin::Add

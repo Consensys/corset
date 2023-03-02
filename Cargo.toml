@@ -48,3 +48,7 @@ tag-prefix = ""
 publish = false
 pre-release-hook = ["git-cliff", "-o", "CHANGELOG.md", "--tag", "{{version}}"]
 allow-branch = ["master"]
+
+# Always optimize dependencies
+[profile.dev.package."*"]
+opt-level = 3

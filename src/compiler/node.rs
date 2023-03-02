@@ -559,6 +559,7 @@ impl Node {
                         unreachable!()
                     }
                 }
+                Builtin::ForceBool => args[0].eval_fold(i, get, cache, settings, f),
             },
             Expression::Const(v, x) => {
                 Some(x.unwrap_or_else(|| panic!("{} is not an Fr element.", v)))
