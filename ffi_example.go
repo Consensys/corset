@@ -1,7 +1,16 @@
 package main
 
+// ===================
+// For dynamic linking
+// ===================
+// cgo LDFLAGS: -L./target/release/ -lcorset
+
+// ==================
+// For static linking
+// ==================
+
+//#cgo LDFLAGS: ./target/release/libcorset.a -lm
 //#cgo CFLAGS: -I./target/
-//#cgo LDFLAGS: -lcorset -L./target/release
 //#include <corset.h>
 import "C"
 import "fmt"
