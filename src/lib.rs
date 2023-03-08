@@ -24,6 +24,15 @@ mod pretty;
 mod structs;
 mod transformer;
 
+type Corset = ConstraintSet;
+
+pub const ERR_NOT_AN_USIZE: i32 = 1;
+pub const ERR_COMPUTE_TRACE_FAILED: i32 = 2;
+pub const ERR_COLUMN_NAME_NOT_FOUND: i32 = 3;
+pub const ERR_COULD_NOT_INITIALIZE_RAYON: i32 = 4;
+pub const ERR_COLUMN_ID_NOT_FOUND: i32 = 5;
+pub const ERR_INVALID_ZKEVM_FILE: i32 = 6;
+
 fn cstr_to_string(s: *const c_char) -> String {
     let name = unsafe {
         assert!(!s.is_null());
@@ -43,7 +52,7 @@ pub struct Trace {
     ids: Vec<String>,
 }
 impl Trace {
-    fn from_constraints(c: &ConstraintSet) -> Self {
+    fn from_constraints(c: &Corset) -> Self {
         let mut r = Trace {
             ..Default::default()
         };
@@ -97,7 +106,7 @@ impl Trace {
     }
 }
 
-fn _compute_trace(zkevmfile: &str, tracefile: &str, fail_on_missing: bool) -> Result<Trace> {
+fn _load_corset(zkevmfile: &str) -> Result<Corset> {
     info!("Loading `{}`", &zkevmfile);
     let mut constraints = ron::from_str(
         &std::fs::read_to_string(&zkevmfile)
@@ -112,24 +121,66 @@ fn _compute_trace(zkevmfile: &str, tracefile: &str, fail_on_missing: bool) -> Re
     transformer::sorts(&mut constraints)?;
     transformer::expand_invs(&mut constraints)?;
 
+    Ok(constraints)
+}
+
+fn _compute_trace(
+    constraints: &mut Corset,
+    tracefile: &str,
+    fail_on_missing: bool,
+) -> Result<Trace> {
     compute::compute_trace(
         &compute::read_trace(&tracefile)?,
-        &mut constraints,
+        constraints,
         fail_on_missing,
     )
     .with_context(|| format!("while computing from `{}`", tracefile))?;
     Ok(Trace::from_constraints(&constraints))
 }
 
-pub const ERR_NOT_AN_USIZE: i32 = 1;
-pub const ERR_COMPUTE_TRACE_FAILED: i32 = 2;
-pub const ERR_COLUMN_NAME_NOT_FOUND: i32 = 3;
-pub const ERR_COULD_NOT_INITIALIZE_RAYON: i32 = 4;
-pub const ERR_COLUMN_ID_NOT_FOUND: i32 = 5;
+#[no_mangle]
+pub extern "C" fn load_corset(zkevmfile: *const c_char) -> *mut Corset {
+    let zkevmfile = cstr_to_string(zkevmfile);
+    match _load_corset(&zkevmfile) {
+        Result::Ok(constraints) => Box::into_raw(Box::new(constraints)),
+        Err(e) => {
+            eprintln!("{:?}", e);
+            set_errno(Errno(ERR_INVALID_ZKEVM_FILE));
+            return std::ptr::null_mut();
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn trace_check(
+    corset: *mut Corset,
+    tracefile: *const c_char,
+    threads: c_uint,
+    fail_on_missing: bool,
+) -> bool {
+    if rayon::ThreadPoolBuilder::new()
+        .num_threads(if let Result::Ok(t) = threads.try_into() {
+            t
+        } else {
+            set_errno(Errno(ERR_NOT_AN_USIZE));
+            return false;
+        })
+        .build_global()
+        .is_err()
+    {
+        set_errno(Errno(ERR_COULD_NOT_INITIALIZE_RAYON));
+        return false;
+    }
+
+    let tracefile = cstr_to_string(tracefile);
+    let constraints = Corset::mut_from_ptr(corset);
+
+    todo!()
+}
 
 #[no_mangle]
 pub extern "C" fn trace_compute(
-    zkevmfile: *const c_char,
+    corset: *mut Corset,
     tracefile: *const c_char,
     threads: c_uint,
     fail_on_missing: bool,
@@ -148,9 +199,9 @@ pub extern "C" fn trace_compute(
         return std::ptr::null_mut();
     }
 
-    let zkevmfile = cstr_to_string(zkevmfile);
     let tracefile = cstr_to_string(tracefile);
-    let r = _compute_trace(&zkevmfile, &tracefile, fail_on_missing);
+    let constraints = Corset::mut_from_ptr(corset);
+    let r = _compute_trace(constraints, &tracefile, fail_on_missing);
     match r {
         Err(e) => {
             eprintln!("{:?}", e);

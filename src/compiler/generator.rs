@@ -339,6 +339,16 @@ impl ConstraintSet {
         r
     }
 
+    pub fn from_ptr<'a>(ptr: *const ConstraintSet) -> &'a Self {
+        assert!(!ptr.is_null());
+        unsafe { &*ptr }
+    }
+
+    pub fn mut_from_ptr<'a>(ptr: *mut ConstraintSet) -> &'a mut Self {
+        assert!(!ptr.is_null());
+        unsafe { &mut *ptr }
+    }
+
     // TODO I hate this, see if we can automate it
     pub fn update_ids(&mut self) {
         let set_id = |h: &mut Handle| h.set_id(self.modules.id_of(h));

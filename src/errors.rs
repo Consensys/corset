@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[derive(Error, Debug)]
-pub enum CompileError<'a> {
+pub(crate) enum CompileError<'a> {
     #[error("{}", make_type_error_msg(.0, .1, .2))]
     TypeError(String, &'a [&'a [Type]], Vec<Type>),
     #[error("{} is never used", .0.pretty())]
@@ -28,7 +28,7 @@ pub enum RuntimeError<'a> {
     NotAnArray(Expression),
 }
 
-pub fn make_type_error_msg(fname: &str, expected: &[&[Type]], found: &[Type]) -> String {
+pub(crate) fn make_type_error_msg(fname: &str, expected: &[&[Type]], found: &[Type]) -> String {
     let expected_str = format!(
         "({})",
         expected
