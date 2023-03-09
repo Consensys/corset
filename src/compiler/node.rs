@@ -15,11 +15,11 @@ use crate::compiler::codetyper::Tty;
 use crate::pretty::Pretty;
 use crate::structs::Handle;
 
-use super::{Builtin, EvalSettings, Kind, Magma, Type};
+use super::{EvalSettings, Intrinsic, Kind, Magma, Type};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum Expression {
-    Funcall { func: Builtin, args: Vec<Node> },
+    Funcall { func: Intrinsic, args: Vec<Node> },
     Const(BigInt, Option<Fr>),
     Column(Handle, Kind<Node>, Option<i64>),
     ArrayColumn(Handle, Vec<usize>),
@@ -275,7 +275,7 @@ impl Node {
         fn _past_span(e: &Node, ax: &mut isize) {
             match e.e() {
                 Expression::Funcall { func, args } => {
-                    if let Builtin::Shift = func {
+                    if let Intrinsic::Shift = func {
                         let arg_big = args[1]
                             .pure_eval()
                             .unwrap_or_else(|_| panic!("{}", args[1].to_string().as_str()));
@@ -301,7 +301,7 @@ impl Node {
         fn _future_span(e: &Node, ax: &mut isize) {
             match e.e() {
                 Expression::Funcall { func, args } => {
-                    if let Builtin::Shift = func {
+                    if let Intrinsic::Shift = func {
                         let arg_big = args[1]
                             .pure_eval()
                             .unwrap_or_else(|_| panic!("{}", args[1].to_string().as_str()));
@@ -362,14 +362,14 @@ impl Node {
     pub fn pure_eval(&self) -> Result<BigInt> {
         match self.e() {
             Expression::Funcall { func, args } => match func {
-                Builtin::Add => {
+                Intrinsic::Add => {
                     let args = args
                         .iter()
                         .map(|x| x.pure_eval())
                         .collect::<Result<Vec<_>>>()?;
                     Ok(args.iter().fold(BigInt::zero(), |ax, x| ax + x))
                 }
-                Builtin::Sub => {
+                Intrinsic::Sub => {
                     let args = args
                         .iter()
                         .map(|x| x.pure_eval())
@@ -380,23 +380,15 @@ impl Node {
                     }
                     Ok(ax)
                 }
-                Builtin::Mul => {
+                Intrinsic::Mul => {
                     let args = args
                         .iter()
                         .map(|x| x.pure_eval())
                         .collect::<Result<Vec<_>>>()?;
                     Ok(args.iter().fold(BigInt::one(), |ax, x| ax * x))
                 }
-                Builtin::Neg => Ok(-args[0].pure_eval()?),
-                Builtin::Len => {
-                    if let Expression::ArrayColumn(_, domain) = &args[0].e() {
-                        BigInt::from_usize(domain.len())
-                            .ok_or_else(|| anyhow!("{} is not convertible to BigInt", domain.len()))
-                    } else {
-                        unreachable!()
-                    }
-                }
-                Builtin::Exp => {
+                Intrinsic::Neg => Ok(-args[0].pure_eval()?),
+                Intrinsic::Exp => {
                     let args = args
                         .iter()
                         .map(|x| x.pure_eval())
@@ -448,28 +440,28 @@ impl Node {
     ) -> Option<Fr> {
         let r = match self.e() {
             Expression::Funcall { func, args } => match func {
-                Builtin::Add => {
+                Intrinsic::Add => {
                     let mut ax = Fr::zero();
                     for arg in args.iter() {
                         ax.add_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
                 }
-                Builtin::Sub => {
+                Intrinsic::Sub => {
                     let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
                     for arg in args.iter().skip(1) {
                         ax.sub_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
                 }
-                Builtin::Mul => {
+                Intrinsic::Mul => {
                     let mut ax = Fr::one();
                     for arg in args.iter() {
                         ax.mul_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
                 }
-                Builtin::Exp => {
+                Intrinsic::Exp => {
                     let mut ax = Fr::one();
                     let mantissa = args[0].eval_fold(i, get, cache, settings, f)?;
                     let exp = args[1].pure_eval().unwrap().to_usize().unwrap();
@@ -478,11 +470,11 @@ impl Node {
                     }
                     Some(ax)
                 }
-                Builtin::Shift => {
+                Intrinsic::Shift => {
                     let shift = args[1].pure_eval().unwrap().to_isize().unwrap();
                     args[0].eval_fold(i + shift, get, cache, &EvalSettings { wrap: false }, f)
                 }
-                Builtin::Eq => {
+                Intrinsic::Eq => {
                     let (x, y) = (
                         args[0].eval_fold(i, get, cache, settings, f)?,
                         args[1].eval_fold(i, get, cache, settings, f)?,
@@ -495,11 +487,11 @@ impl Node {
                         Some(ax)
                     }
                 }
-                Builtin::Neg => args[0].eval_fold(i, get, cache, settings, f).map(|mut x| {
+                Intrinsic::Neg => args[0].eval_fold(i, get, cache, settings, f).map(|mut x| {
                     x.negate();
                     x
                 }),
-                Builtin::Inv => {
+                Intrinsic::Inv => {
                     let x = args[0].eval_fold(i, get, cache, settings, f);
                     if let Some(ref mut rcache) = cache {
                         x.map(|x| {
@@ -511,7 +503,7 @@ impl Node {
                         x.and_then(|x| x.inverse()).or_else(|| Some(Fr::zero()))
                     }
                 }
-                Builtin::Not => {
+                Intrinsic::Not => {
                     let mut r = Fr::one();
                     if let Some(x) = args[0].eval_fold(i, get, cache, settings, f) {
                         r.sub_assign(&x);
@@ -520,7 +512,7 @@ impl Node {
                         None
                     }
                 }
-                Builtin::Nth => {
+                Intrinsic::Nth => {
                     if let (Expression::ArrayColumn(h, range), Expression::Const(idx, _)) =
                         (&args[0].e(), &args[1].e())
                     {
@@ -533,8 +525,8 @@ impl Node {
                         unreachable!()
                     }
                 }
-                Builtin::Begin => unreachable!(),
-                Builtin::IfZero => {
+                Intrinsic::Begin => unreachable!(),
+                Intrinsic::IfZero => {
                     if args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
                         args[1].eval_fold(i, get, cache, settings, f)
                     } else {
@@ -543,7 +535,7 @@ impl Node {
                             .unwrap_or_else(|| Some(Fr::zero()))
                     }
                 }
-                Builtin::IfNotZero => {
+                Intrinsic::IfNotZero => {
                     if !args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
                         args[1].eval_fold(i, get, cache, settings, f)
                     } else {
@@ -552,14 +544,6 @@ impl Node {
                             .unwrap_or_else(|| Some(Fr::zero()))
                     }
                 }
-                Builtin::Len => {
-                    if let Expression::ArrayColumn(_, domain) = &args[0].e() {
-                        Fr::from_str(&format!("{}", domain.len()))
-                    } else {
-                        unreachable!()
-                    }
-                }
-                Builtin::ForceBool => args[0].eval_fold(i, get, cache, settings, f),
             },
             Expression::Const(v, x) => {
                 Some(x.unwrap_or_else(|| panic!("{} is not an Fr element.", v)))

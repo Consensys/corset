@@ -135,7 +135,7 @@ fn _compute_trace(
         fail_on_missing,
     )
     .with_context(|| format!("while computing from `{}`", tracefile))?;
-    Ok(Trace::from_constraints(&constraints))
+    Ok(Trace::from_constraints(constraints))
 }
 
 #[no_mangle]
@@ -146,7 +146,7 @@ pub extern "C" fn load_corset(zkevmfile: *const c_char) -> *mut Corset {
         Err(e) => {
             eprintln!("{:?}", e);
             set_errno(Errno(ERR_INVALID_ZKEVM_FILE));
-            return std::ptr::null_mut();
+            std::ptr::null_mut()
         }
     }
 }
@@ -172,8 +172,8 @@ pub extern "C" fn trace_check(
         return false;
     }
 
-    let tracefile = cstr_to_string(tracefile);
-    let constraints = Corset::mut_from_ptr(corset);
+    let _tracefile = cstr_to_string(tracefile);
+    let _constraints = Corset::mut_from_ptr(corset);
 
     todo!()
 }
@@ -206,7 +206,7 @@ pub extern "C" fn trace_compute(
         Err(e) => {
             eprintln!("{:?}", e);
             set_errno(Errno(ERR_COMPUTE_TRACE_FAILED));
-            return std::ptr::null_mut();
+            std::ptr::null_mut()
         }
         Result::Ok(x) => Box::into_raw(Box::new(x)),
     }
@@ -269,7 +269,7 @@ pub extern "C" fn trace_column_by_name(trace: *const Trace, name: *const c_char)
     } else {
         let r = Default::default();
         set_errno(Errno(ERR_COLUMN_NAME_NOT_FOUND));
-        return r;
+        r
     }
 }
 
@@ -287,7 +287,7 @@ pub extern "C" fn trace_column_by_id(trace: *const Trace, i: u32) -> ColumnData 
     };
 
     ColumnData {
-        padding_value: col.padding_value.into(),
+        padding_value: col.padding_value,
         values: col.values.as_ptr(),
         values_len: col.values.len() as u64,
     }

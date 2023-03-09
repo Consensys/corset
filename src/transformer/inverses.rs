@@ -1,7 +1,7 @@
 use crate::{
     column::{ColumnSet, Computation},
     compiler::{
-        Builtin, ComputationTable, Constraint, ConstraintSet, Expression, Kind, Magma, Node, Type,
+        ComputationTable, Constraint, ConstraintSet, Expression, Intrinsic, Kind, Magma, Node, Type,
     },
     structs::Handle,
 };
@@ -10,7 +10,7 @@ use anyhow::Result;
 use super::expression_to_name;
 
 fn invert_expr(e: &Node) -> Node {
-    Builtin::Inv.call(&[e.to_owned()]).unwrap()
+    Intrinsic::Inv.call(&[e.to_owned()]).unwrap()
 }
 
 /// For all Builtin::Inv encountered, create a new column and the associated constraints
@@ -32,7 +32,7 @@ fn do_expand_inv(
             for e in args.iter_mut() {
                 do_expand_inv(e, cols, comps, new_cs)?;
             }
-            if matches!(func, Builtin::Inv) {
+            if matches!(func, Intrinsic::Inv) {
                 let module = &args[0].module().unwrap();
                 let inverted_expr = &mut args[0];
                 let inverted_handle = Handle::new(module, expression_to_name(inverted_expr, "INV"));
@@ -67,15 +67,15 @@ fn do_expand_inv(
 }
 
 fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result<()> {
-    cs.push(Builtin::Mul.call(&[
+    cs.push(Intrinsic::Mul.call(&[
         x_expr.clone(),
-        Builtin::Sub.call(&[
-            Builtin::Mul.call(&[
+        Intrinsic::Sub.call(&[
+            Intrinsic::Mul.call(&[
                 x_expr.clone(),
                 Node {
                     _e: Expression::Column(
                         inv_x_col.clone(),
-                        Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()])?)),
+                        Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
                         None,
                     ),
                     _t: Some(Type::Column(Magma::Integer)),
@@ -84,22 +84,22 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result
             Node::one(),
         ])?,
     ])?);
-    cs.push(Builtin::Mul.call(&[
+    cs.push(Intrinsic::Mul.call(&[
         Node {
             _e: Expression::Column(
                 inv_x_col.clone(),
-                Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()])?)),
+                Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
                 None,
             ),
             _t: Some(Type::Column(Magma::Integer)),
         },
-        Builtin::Sub.call(&[
-            Builtin::Mul.call(&[
+        Intrinsic::Sub.call(&[
+            Intrinsic::Mul.call(&[
                 x_expr.clone(),
                 Node {
                     _e: Expression::Column(
                         inv_x_col.clone(),
-                        Kind::Composite(Box::new(Builtin::Inv.call(&[x_expr.clone()])?)),
+                        Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
                         None,
                     ),
                     _t: Some(Type::Column(Magma::Integer)),

@@ -1,108 +1,222 @@
 #![allow(dead_code)]
 use anyhow::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::errors::CompileError;
 use crate::structs::Handle;
 
-use super::generator::{Builtin, Function, FunctionClass};
+use super::generator::{Function, FunctionClass};
 use super::parser::{AstNode, Token};
+use super::{Expression, Magma, Node, Type};
 
 lazy_static::lazy_static! {
     pub static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
         // forms
         "for" => Function {
             handle: Handle::new(super::MAIN_MODULE, "for"),
-            class: FunctionClass::SpecialForm(Form::For),
+            class: FunctionClass::Form(Form::For),
         },
         "debug" => Function {
             handle: Handle::new(super::MAIN_MODULE, "debug"),
-            class: FunctionClass::SpecialForm(Form::Debug),
+            class: FunctionClass::Form(Form::Debug),
         },
         "let" => Function {
             handle: Handle::new(super::MAIN_MODULE, "let"),
-            class: FunctionClass::SpecialForm(Form::Let),
+            class: FunctionClass::Form(Form::Let),
         },
 
         // special functions
         "nth" => Function {
             handle: Handle::new(super::MAIN_MODULE, "nth"),
-            class: FunctionClass::Builtin(Builtin::Nth),
+            class: FunctionClass::Intrinsic(Intrinsic::Nth),
         },
         "len" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "len"),
+            handle: Handle::new(super::MAIN_MODULE, Builtin::Len.to_string()),
             class: FunctionClass::Builtin(Builtin::Len),
         },
 
         // monadic
         "inv" => Function {
             handle: Handle::new(super::MAIN_MODULE, "inv"),
-            class: FunctionClass::Builtin(Builtin::Inv)
+            class: FunctionClass::Intrinsic(Intrinsic::Inv)
         },
         "neg" => Function {
             handle: Handle::new(super::MAIN_MODULE, "neg"),
-            class: FunctionClass::Builtin(Builtin::Neg)
+            class: FunctionClass::Intrinsic(Intrinsic::Neg)
         },
         "not" => Function {
             handle: Handle::new(super::MAIN_MODULE, "not"),
-            class: FunctionClass::Builtin(Builtin::Not),
+            class: FunctionClass::Intrinsic(Intrinsic::Not),
         },
 
         // Dyadic
         "eq" => Function{
             handle: Handle::new(super::MAIN_MODULE, "eq"),
-            class: FunctionClass::Builtin(Builtin::Eq),
+            class: FunctionClass::Intrinsic(Intrinsic::Eq),
         },
         "shift" => Function{
             handle: Handle::new(super::MAIN_MODULE, "shift"),
-            class: FunctionClass::Builtin(Builtin::Shift),
+            class: FunctionClass::Intrinsic(Intrinsic::Shift),
         },
 
 
         // polyadic
         "+" => Function {
             handle: Handle::new(super::MAIN_MODULE, "+"),
-            class: FunctionClass::Builtin(Builtin::Add)
+            class: FunctionClass::Intrinsic(Intrinsic::Add)
         },
         "*" => Function {
             handle: Handle::new(super::MAIN_MODULE, "*"),
-            class: FunctionClass::Builtin(Builtin::Mul)
+            class: FunctionClass::Intrinsic(Intrinsic::Mul)
         },
         "^" => Function {
             handle: Handle::new(super::MAIN_MODULE, "^"),
-            class: FunctionClass::Builtin(Builtin::Exp)
+            class: FunctionClass::Intrinsic(Intrinsic::Exp)
         },
         "-" => Function {
             handle: Handle::new(super::MAIN_MODULE, "-"),
-            class: FunctionClass::Builtin(Builtin::Sub)
+            class: FunctionClass::Intrinsic(Intrinsic::Sub)
         },
 
         "begin" => Function{
             handle: Handle::new(super::MAIN_MODULE, "begin"),
-            class: FunctionClass::Builtin(Builtin::Begin)
+            class: FunctionClass::Intrinsic(Intrinsic::Begin)
         },
 
         "if-zero" => Function {
             handle: Handle::new(super::MAIN_MODULE, "if-zero"),
-            class: FunctionClass::Builtin(Builtin::IfZero)
+            class: FunctionClass::Intrinsic(Intrinsic::IfZero)
         },
         "if-not-zero" => Function {
             handle: Handle::new(super::MAIN_MODULE, "if-not-zero"),
-            class: FunctionClass::Builtin(Builtin::IfNotZero)
+            class: FunctionClass::Intrinsic(Intrinsic::IfNotZero)
         },
 
         "force-bool" => Function {
             handle:Handle::new(super::MAIN_MODULE, "force-bool"),
             class: FunctionClass::Builtin(Builtin::ForceBool),
-        }
+        },
+        "reduce" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "reduce"),
+            class: FunctionClass::Form(Form::Reduce)
+        },
     };
 }
 
-// Form have a special treatment and do not evaluate all their arguments
+/// A form is an applicable that operates directly on the AST
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Form {
     For,
     Let,
     Debug,
+    Reduce,
+}
+
+/// A builtin is a regular applicable that acts on already reduced arguments
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Builtin {
+    Len,
+    ForceBool,
+}
+impl std::fmt::Display for Builtin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Builtin::ForceBool => "force-bool",
+                Builtin::Len => "len",
+            }
+        )
+    }
+}
+
+/// An intrinsic is a function that can appear in the final compiled form
+/// of an expression
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+pub enum Intrinsic {
+    Add,
+    Sub,
+    Mul,
+    Exp,
+    Shift,
+    Neg,
+    Inv,
+    Not,
+
+    Nth,
+    Eq,
+    Begin,
+
+    IfZero,
+    IfNotZero,
+}
+impl Intrinsic {
+    pub fn call(self, args: &[Node]) -> Result<Node> {
+        self.validate_args(args)?;
+        Ok(Node::from_expr(self.raw_call(args)))
+    }
+
+    pub fn raw_call(self, args: &[Node]) -> Expression {
+        Expression::Funcall {
+            func: self,
+            args: args.to_owned(),
+        }
+    }
+
+    pub fn typing(&self, argtype: &[Type]) -> Type {
+        match self {
+            Intrinsic::Add | Intrinsic::Sub | Intrinsic::Neg | Intrinsic::Inv => {
+                // Boolean is a corner case, as it is not stable under these operations
+                match argtype.iter().fold(Type::INFIMUM, |a, b| a.max(*b)) {
+                    Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::Integer),
+                    Type::Column(Magma::Boolean) => Type::Column(Magma::Integer),
+                    x => x,
+                }
+            }
+            Intrinsic::Exp => argtype[0],
+            Intrinsic::Eq => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
+            Intrinsic::Not => argtype
+                .iter()
+                .max()
+                .cloned()
+                .unwrap_or(Type::INFIMUM)
+                .same_scale(Magma::Boolean),
+            Intrinsic::Mul => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
+            Intrinsic::IfZero | Intrinsic::IfNotZero => {
+                argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
+            }
+            Intrinsic::Begin => {
+                Type::List(argtype.iter().fold(Type::INFIMUM, |a, b| a.max(*b)).magma())
+            }
+            Intrinsic::Nth => Type::Column(argtype[0].magma()),
+            Intrinsic::Shift => argtype[0],
+        }
+    }
+}
+impl std::fmt::Display for Intrinsic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Intrinsic::Eq => "eq",
+                Intrinsic::Add => "+",
+                Intrinsic::Sub => "-",
+                Intrinsic::Mul => "*",
+                Intrinsic::Exp => "^",
+                Intrinsic::Shift => "shift",
+                Intrinsic::Neg => "-",
+                Intrinsic::Inv => "inv",
+                Intrinsic::Not => "not",
+                Intrinsic::Nth => "nth",
+                Intrinsic::Begin => "begin",
+                Intrinsic::IfZero => "if-zero",
+                Intrinsic::IfNotZero => "if-not-zero",
+            }
+        )
+    }
 }
 
 pub enum Arity {
@@ -166,12 +280,44 @@ pub trait FuncVerifier<T: Clone> {
     }
 }
 
+impl FuncVerifier<Node> for Builtin {
+    fn arity(&self) -> Arity {
+        match self {
+            Builtin::ForceBool => Arity::Monadic,
+            Builtin::Len => Arity::Monadic,
+        }
+    }
+
+    fn validate_types(&self, args: &[Node]) -> Result<()> {
+        let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
+        let expected_t: &[&[Type]] = match self {
+            Builtin::ForceBool => &[&[
+                Type::Scalar(Magma::Any),
+                Type::Column(Magma::Any),
+                Type::List(Magma::Any),
+            ]],
+            Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
+        };
+
+        if super::compatible_with(expected_t, &args_t) {
+            Ok(())
+        } else {
+            bail!(CompileError::TypeError(
+                self.to_string(),
+                expected_t,
+                args_t
+            ))
+        }
+    }
+}
+
 impl FuncVerifier<AstNode> for Form {
     fn arity(&self) -> Arity {
         match self {
             Form::For => Arity::Exactly(3),
             Form::Debug => Arity::AtLeast(1),
-            Form::Let => Arity::Exactly(2),
+            Form::Let => Arity::Dyadic,
+            Form::Reduce => Arity::Dyadic,
         }
     }
     fn validate_types(&self, args: &[AstNode]) -> Result<()> {
@@ -179,12 +325,11 @@ impl FuncVerifier<AstNode> for Form {
             Form::For => {
                 if matches!(args[0].class, Token::Symbol(_))
                     && matches!(args[1].class, Token::Range(_))
-                    && matches!(args[2].class, Token::List { .. })
                 {
                     Ok(())
                 } else {
                     bail!(
-                        "`{:?}` expects [SYMBOL VALUE] but received {:?}",
+                        "`{:?}` expects [SYMBOL RANGE EXPR] but received {:?}",
                         self,
                         args
                     )
@@ -206,6 +351,12 @@ impl FuncVerifier<AstNode> for Form {
                 } else {
                     bail!("LET expects a list of bindings, found `{:?}`", args[0])
                 }
+            }
+            Form::Reduce => {
+                if args[0].as_symbol().is_err() {
+                    bail!("REDUCE expects a symbol, found `{:?}`", args[0])
+                }
+                Ok(())
             }
         }
     }

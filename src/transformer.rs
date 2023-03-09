@@ -15,13 +15,13 @@ pub use sort::sorts;
 pub use statics::precompute;
 
 use crate::{
-    compiler::{Builtin, ConstraintSet, Expression, Kind, Magma, Node, Type},
+    compiler::{ConstraintSet, Expression, Intrinsic, Kind, Magma, Node, Type},
     structs::Handle,
 };
 
 fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
     cs.push(
-        Builtin::Sub
+        Intrinsic::Sub
             .call(&[
                 x_expr.clone(),
                 Node {

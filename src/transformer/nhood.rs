@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::{
     column::Computation,
-    compiler::{Builtin, Constraint, ConstraintSet, Expression, Kind, Magma, Node, Type},
+    compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Kind, Magma, Node, Type},
     structs::Handle,
 };
 
@@ -81,7 +81,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
     cs.constraints.push(Constraint::Vanishes {
         handle: Handle::new(module, format!("2^{n}-hood-end")),
         domain: Some(vec![-1]),
-        expr: Box::new(Builtin::Sub.call(&[
+        expr: Box::new(Intrinsic::Sub.call(&[
             Node::from_expr(Expression::Column(
                 srt_intrld_aux_xs_handle.to_owned(),
                 Kind::Phantom,
@@ -94,16 +94,16 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
     cs.constraints.push(Constraint::Vanishes {
         handle: Handle::new(module, format!("2^{n}-hood-middle")),
         domain: None,
-        expr: Box::new(Builtin::Mul.call(&[
+        expr: Box::new(Intrinsic::Mul.call(&[
             // SRT_ILD_[i+1] - SRT_ILD_[i]
-            Builtin::Sub.call(&[
-                Builtin::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)])?,
+            Intrinsic::Sub.call(&[
+                Intrinsic::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)])?,
                 srt_intrld_aux_xs_node.clone(),
             ])?,
             // SRT_ILD_[i+1] - (SRT_ILD_[i] + 1)
-            Builtin::Sub.call(&[
-                Builtin::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)])?,
-                Builtin::Add.call(&[srt_intrld_aux_xs_node, Node::from_const(1)])?,
+            Intrinsic::Sub.call(&[
+                Intrinsic::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)])?,
+                Intrinsic::Add.call(&[srt_intrld_aux_xs_node, Node::from_const(1)])?,
             ])?,
         ])?),
     });

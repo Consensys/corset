@@ -1,7 +1,7 @@
 use anyhow::Result;
 use num_traits::Zero;
 
-use crate::compiler::{Builtin, Constraint, ConstraintSet, Expression, Node};
+use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
 
 use super::{flatten_list, wrap};
 
@@ -16,19 +16,19 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
             for e in args.iter_mut() {
                 do_expand_ifs(e)?;
             }
-            if matches!(func, Builtin::IfZero | Builtin::IfNotZero) {
+            if matches!(func, Intrinsic::IfZero | Intrinsic::IfNotZero) {
                 let cond = args[0].clone();
                 // If the condition reduces to a constant, we can determine the result
                 if let Ok(constant_cond) = cond.pure_eval() {
                     match func {
-                        Builtin::IfZero => {
+                        Intrinsic::IfZero => {
                             if constant_cond.is_zero() {
                                 *e = args[1].clone();
                             } else {
                                 *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
                             }
                         }
-                        Builtin::IfNotZero => {
+                        Intrinsic::IfNotZero => {
                             if !constant_cond.is_zero() {
                                 *e = args[1].clone();
                             } else {
@@ -42,17 +42,18 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                         let cond_not_zero = cond.clone();
                         // If the condition is binary, cond_zero = 1 - x...
                         let cond_zero = if args[0].t().is_bool() {
-                            Builtin::Sub.call(&[Node::one(), cond])?
+                            Intrinsic::Sub.call(&[Node::one(), cond])?
                         } else {
                             // ...otherwise, cond_zero = 1 - x.INV(x)
-                            Builtin::Sub.call(&[
+                            Intrinsic::Sub.call(&[
                                 Node::one(),
-                                Builtin::Mul.call(&[cond.clone(), Builtin::Inv.call(&[cond])?])?,
+                                Intrinsic::Mul
+                                    .call(&[cond.clone(), Intrinsic::Inv.call(&[cond])?])?,
                             ])?
                         };
                         match func {
-                            Builtin::IfZero => [cond_zero, cond_not_zero],
-                            Builtin::IfNotZero => [cond_not_zero, cond_zero],
+                            Intrinsic::IfZero => [cond_zero, cond_not_zero],
+                            Intrinsic::IfNotZero => [cond_not_zero, cond_zero],
                             _ => unreachable!(),
                         }
                     };
@@ -71,7 +72,7 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                                 exs.iter()
                                     .map(|ex: &Node| {
                                         ex.flat_map(&|e| {
-                                            Builtin::Mul
+                                            Intrinsic::Mul
                                                 .call(&[conds[i].clone(), e.clone()])
                                                 .unwrap()
                                         })

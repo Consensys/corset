@@ -20,7 +20,7 @@ fn compile_time_constants(
         }
         Token::DefConsts(cs) => {
             for (name, exp) in cs.iter() {
-                let value = reduce(exp, root_ctx.clone(), ctx, settings)?.unwrap();
+                let value = reduce(exp, ctx, settings)?.unwrap();
                 ctx.borrow_mut().insert_constant(
                     name,
                     value.pure_eval().with_context(|| make_ast_error(exp))?,

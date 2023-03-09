@@ -12,7 +12,7 @@ use pairing_ce::ff::{Field, PrimeField};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::io::Write;
 use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
@@ -107,98 +107,6 @@ impl Default for EvalSettings {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
-pub enum Builtin {
-    Add,
-    Sub,
-    Mul,
-    Exp,
-    Shift,
-    Neg,
-    Inv,
-    Not,
-
-    Nth,
-    Len,
-    Eq,
-    Begin,
-
-    IfZero,
-    IfNotZero,
-
-    ForceBool,
-}
-impl Builtin {
-    pub fn call(self, args: &[Node]) -> Result<Node> {
-        self.validate_args(args)?;
-        Ok(Node::from_expr(self.raw_call(args)))
-    }
-
-    pub fn raw_call(self, args: &[Node]) -> Expression {
-        Expression::Funcall {
-            func: self,
-            args: args.to_owned(),
-        }
-    }
-
-    pub fn typing(&self, argtype: &[Type]) -> Type {
-        match self {
-            Builtin::Add | Builtin::Sub | Builtin::Neg | Builtin::Inv => {
-                // Boolean is a corner case, as it is not stable under these operations
-                match argtype.iter().fold(Type::INFIMUM, |a, b| a.max(*b)) {
-                    Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::Integer),
-                    Type::Column(Magma::Boolean) => Type::Column(Magma::Integer),
-                    x => x,
-                }
-            }
-            Builtin::Exp => argtype[0],
-            Builtin::Eq => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
-            Builtin::Not => argtype
-                .iter()
-                .max()
-                .cloned()
-                .unwrap_or(Type::INFIMUM)
-                .same_scale(Magma::Boolean),
-            Builtin::Mul => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
-            Builtin::IfZero | Builtin::IfNotZero => {
-                argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
-            }
-            Builtin::Begin => {
-                Type::List(argtype.iter().fold(Type::INFIMUM, |a, b| a.max(*b)).magma())
-            }
-            Builtin::Nth => Type::Column(argtype[0].magma()),
-            Builtin::Shift => argtype[0],
-            Builtin::Len => Type::Scalar(Magma::Integer),
-            Builtin::ForceBool => argtype[0].same_scale(Magma::Boolean),
-        }
-    }
-}
-impl std::fmt::Display for Builtin {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Builtin::Eq => "eq",
-                Builtin::Add => "+",
-                Builtin::Sub => "-",
-                Builtin::Mul => "*",
-                Builtin::Exp => "^",
-                Builtin::Shift => "shift",
-                Builtin::Neg => "-",
-                Builtin::Inv => "inv",
-                Builtin::Not => "not",
-                Builtin::Nth => "nth",
-                Builtin::Begin => "begin",
-                Builtin::IfZero => "if-zero",
-                Builtin::IfNotZero => "if-not-zero",
-                Builtin::Len => "len",
-                Builtin::ForceBool => "force-bool",
-            }
-        )
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Function {
     pub handle: Handle,
@@ -206,9 +114,15 @@ pub struct Function {
 }
 #[derive(Debug, Clone)]
 pub enum FunctionClass {
+    /// A source-defined function
     UserDefined(Defined),
-    SpecialForm(Form),
+    /// A function acting on the AST
+    Form(Form),
+    /// A builtin function
     Builtin(Builtin),
+    /// A field element function
+    Intrinsic(Intrinsic),
+    /// A name alias to any other function (including another alias)
     Alias(String),
 }
 
@@ -228,46 +142,44 @@ impl FuncVerifier<Node> for Defined {
     }
 }
 
-impl FuncVerifier<Node> for Builtin {
+impl FuncVerifier<Node> for Intrinsic {
     fn arity(&self) -> Arity {
         match self {
-            Builtin::Add => Arity::AtLeast(1),
-            Builtin::Sub => Arity::AtLeast(1),
-            Builtin::Mul => Arity::AtLeast(1),
-            Builtin::Exp => Arity::Exactly(2),
-            Builtin::Eq => Arity::Exactly(2),
-            Builtin::Neg => Arity::Monadic,
-            Builtin::Inv => Arity::Monadic,
-            Builtin::Not => Arity::Monadic,
-            Builtin::Shift => Arity::Dyadic,
-            Builtin::Begin => Arity::AtLeast(1),
-            Builtin::IfZero => Arity::Between(2, 3),
-            Builtin::IfNotZero => Arity::Between(2, 3),
-            Builtin::Nth => Arity::Dyadic,
-            Builtin::Len => Arity::Monadic,
-            Builtin::ForceBool => Arity::Monadic,
+            Intrinsic::Add => Arity::AtLeast(1),
+            Intrinsic::Sub => Arity::AtLeast(1),
+            Intrinsic::Mul => Arity::AtLeast(1),
+            Intrinsic::Exp => Arity::Dyadic,
+            Intrinsic::Eq => Arity::Dyadic,
+            Intrinsic::Neg => Arity::Monadic,
+            Intrinsic::Inv => Arity::Monadic,
+            Intrinsic::Not => Arity::Monadic,
+            Intrinsic::Shift => Arity::Dyadic,
+            Intrinsic::Begin => Arity::AtLeast(1),
+            Intrinsic::IfZero => Arity::Between(2, 3),
+            Intrinsic::IfNotZero => Arity::Between(2, 3),
+            Intrinsic::Nth => Arity::Dyadic,
         }
     }
     fn validate_types(&self, args: &[Node]) -> Result<()> {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
         let expected_t: &[&[Type]] = match self {
-            Builtin::Add | Builtin::Sub | Builtin::Mul => {
+            Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => {
                 &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]]
             }
-            Builtin::Exp => &[
+            Intrinsic::Exp => &[
                 &[Type::Scalar(Magma::Any), Type::Column(Magma::Any)],
                 &[Type::Scalar(Magma::Any)],
             ],
-            Builtin::Eq => &[&[Type::Column(Magma::Any), Type::Scalar(Magma::Any)]],
-            Builtin::Not => &[&[Type::Scalar(Magma::Boolean), Type::Column(Magma::Boolean)]],
-            Builtin::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
-            Builtin::Inv => &[&[Type::Column(Magma::Any)]],
-            Builtin::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
-            Builtin::Nth => &[
+            Intrinsic::Eq => &[&[Type::Column(Magma::Any), Type::Scalar(Magma::Any)]],
+            Intrinsic::Not => &[&[Type::Scalar(Magma::Boolean), Type::Column(Magma::Boolean)]],
+            Intrinsic::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
+            Intrinsic::Inv => &[&[Type::Column(Magma::Any)]],
+            Intrinsic::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
+            Intrinsic::Nth => &[
                 &[Type::ArrayColumn(Magma::Any)],
                 &[Type::Scalar(Magma::Any)],
             ],
-            Builtin::IfZero | Builtin::IfNotZero => &[
+            Intrinsic::IfZero | Intrinsic::IfNotZero => &[
                 &[
                     Type::Scalar(Magma::Any),
                     Type::Column(Magma::Any),
@@ -279,13 +191,7 @@ impl FuncVerifier<Node> for Builtin {
                     Type::List(Magma::Any),
                 ],
             ],
-            Builtin::Begin => &[&[
-                Type::Scalar(Magma::Any),
-                Type::Column(Magma::Any),
-                Type::List(Magma::Any),
-            ]],
-            Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
-            Builtin::ForceBool => &[&[
+            Intrinsic::Begin => &[&[
                 Type::Scalar(Magma::Any),
                 Type::Column(Magma::Any),
                 Type::List(Magma::Any),
@@ -520,7 +426,6 @@ impl ConstraintSet {
 fn apply_form(
     f: Form,
     args: &[AstNode],
-    root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
     settings: &CompileSettings,
 ) -> Result<Option<Node>> {
@@ -554,8 +459,7 @@ fn apply_form(
                         Expression::Const(BigInt::from(*i), Fr::from_str(&i.to_string())).into(),
                     )?;
 
-                    let r =
-                        reduce(&body.clone(), root_ctx.clone(), &mut for_ctx, settings)?.unwrap();
+                    let r = reduce(&body.clone(), &mut for_ctx, settings)?.unwrap();
                     t = t.max(r.t());
                     l.push(r);
                 }
@@ -574,13 +478,13 @@ fn apply_form(
             } else {
                 let reduced = args
                     .iter()
-                    .map(|e| reduce(e, root_ctx.clone(), ctx, settings))
+                    .map(|e| reduce(e, ctx, settings))
                     .collect::<Result<Vec<_>>>()?;
                 match reduced.len() {
                     0 => Ok(None),
                     1 => Ok(reduced[0].to_owned()),
                     _ => Ok(Some(
-                        Builtin::Begin.call(
+                        Intrinsic::Begin.call(
                             &reduced
                                 .into_iter()
                                 .map(|e| e.unwrap_or_else(|| Expression::Void.into()))
@@ -597,183 +501,229 @@ fn apply_form(
             for pair in args[0].as_list().unwrap().iter() {
                 let pair = pair.as_list().unwrap();
                 let name = pair[0].as_symbol().unwrap();
-                let value = reduce(&pair[1], root_ctx.clone(), &mut sub_ctx, settings)?.unwrap();
+                let value = reduce(&pair[1], &mut sub_ctx, settings)?.unwrap();
                 sub_ctx.borrow_mut().insert_symbol(name, value)?;
             }
-            let body = reduce(&args[1], root_ctx, &mut sub_ctx, settings)?.unwrap();
+            let body = reduce(&args[1], &mut sub_ctx, settings)?.unwrap();
 
             Ok(Some(body))
         }
+        Form::Reduce => {
+            let f_name = args[0].as_symbol().unwrap();
+            let f = ctx.borrow().resolve_function(f_name)?;
+
+            let mut body = reduce(&args[1], ctx, settings)?.unwrap();
+
+            return match body.e_mut() {
+                Expression::Column(_, _, _)
+                | Expression::Void
+                | Expression::ArrayColumn(_, _)
+                | Expression::Funcall { .. }
+                | Expression::Const(_, _) => panic!(),
+                Expression::List(xs) => {
+                    if xs.len() < 2 {
+                        Ok(Some(body))
+                    } else {
+                        let mut r = apply_function(
+                            &f,
+                            vec![xs.pop().unwrap(), xs.pop().unwrap()],
+                            ctx,
+                            settings,
+                        );
+                        while let Some(x) = xs.pop() {
+                            r = apply_function(&f, vec![x, r?.unwrap()], ctx, settings);
+                        }
+                        r
+                    }
+                }
+            };
+        }
+    }
+}
+
+fn apply_defined(
+    b: &Defined,
+    h: &Handle,
+    traversed_args: Vec<Node>,
+    ctx: &mut Rc<RefCell<SymbolTable>>,
+    settings: &CompileSettings,
+) -> Result<Option<Node>> {
+    let f_mangle = format!(
+        "fn-{}-{}",
+        h,
+        COUNTER
+            .get_or_init(|| AtomicUsize::new(0))
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    );
+    b.validate_args(&traversed_args)
+        .with_context(|| anyhow!("validating call to `{}`", h))?;
+    let mut f_ctx = SymbolTable::derived(ctx.clone(), &f_mangle, &h.to_string(), b.pure, false);
+    for (i, f_arg) in b.args.iter().enumerate() {
+        f_ctx
+            .borrow_mut()
+            .insert_symbol(f_arg, traversed_args[i].clone())?;
+    }
+    reduce(&b.body, &mut f_ctx, settings)
+}
+
+fn apply_builtin(
+    b: &Builtin,
+    traversed_args: Vec<Node>,
+    _ctx: &mut Rc<RefCell<SymbolTable>>,
+    _settings: &CompileSettings,
+) -> Result<Option<Node>> {
+    b.validate_args(&traversed_args)?;
+
+    match b {
+        Builtin::ForceBool => {
+            Ok(Some(traversed_args[0].clone().with_type(
+                traversed_args[0].t().same_scale(Magma::Boolean),
+            )))
+        }
+        Builtin::Len => {
+            if let Expression::ArrayColumn(_, domain) = traversed_args[0].e() {
+                Ok(Some(Node::from_const(domain.len().try_into().unwrap())))
+            } else {
+                bail!(RuntimeError::NotAnArray(traversed_args[0].e().clone()))
+            }
+        }
+    }
+}
+
+fn apply_intrinsic(
+    b: &Intrinsic,
+    traversed_args: Vec<Node>,
+    ctx: &mut Rc<RefCell<SymbolTable>>,
+    _settings: &CompileSettings,
+) -> Result<Option<Node>> {
+    b.validate_args(&traversed_args)?;
+    let traversed_args_t = traversed_args.iter().map(|a| a.t()).collect::<Vec<_>>();
+    match b {
+        // Begin flattens & concatenate any list argument
+        Intrinsic::Begin => Ok(Some(Node {
+            _e: Expression::List(traversed_args.into_iter().fold(vec![], |mut ax, mut e| {
+                match e.e_mut() {
+                    Expression::List(ref mut es) => {
+                        ax.append(es);
+                        ax
+                    }
+                    _ => {
+                        ax.push(e.to_owned());
+                        ax
+                    }
+                }
+            })),
+            _t: Some(
+                traversed_args_t
+                    .iter()
+                    .fold(Type::INFIMUM, |a, b| a.max(*b)),
+            ),
+        })),
+
+        b @ (Intrinsic::IfZero | Intrinsic::IfNotZero) => Ok(Some(b.call(&traversed_args)?)),
+
+        Intrinsic::Nth => {
+            if let Expression::ArrayColumn(handle, ..) = &traversed_args[0].e() {
+                let i = traversed_args[1].pure_eval()?.to_usize().ok_or_else(|| {
+                    anyhow!("{:?} is not a valid indice", traversed_args[1].pure_eval())
+                })?;
+                let array = ctx.borrow_mut().resolve_symbol(&handle.name)?;
+                match array.e() {
+                    Expression::ArrayColumn(handle, range) => {
+                        if range.contains(&i) {
+                            Ok(Some(Node {
+                                _e: Expression::Column(
+                                    Handle::new(&handle.module, format!("{}_{}", handle.name, i)),
+                                    Kind::Atomic,
+                                    None,
+                                ),
+                                _t: Some(Type::Column(array.t().magma())),
+                            }))
+                        } else {
+                            bail!("tried to access `{:?}` at index {}", array, i)
+                        }
+                    }
+                    _ => unimplemented!(),
+                }
+            } else {
+                unreachable!()
+            }
+        }
+        Intrinsic::Not => Ok(Some(
+            Intrinsic::Sub
+                .call(&[Node::one(), traversed_args[0].to_owned()])?
+                .with_type(traversed_args[0].t().same_scale(Magma::Boolean)),
+        )),
+
+        Intrinsic::Eq => {
+            let x = &traversed_args[0];
+            let y = &traversed_args[1];
+            if traversed_args_t[0].is_bool() && traversed_args_t[1].is_bool() {
+                Ok(Some(Node {
+                    _e: Intrinsic::Mul.raw_call(&[
+                        Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
+                        Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
+                    ]),
+                    // NOTE in this very specific case, we are sure that (x - y)² is boolean
+                    _t: Some(x.t().same_scale(Magma::Boolean)),
+                }))
+            } else {
+                Ok(Some(Intrinsic::Sub.call(&[
+                    traversed_args[0].to_owned(),
+                    traversed_args[1].to_owned(),
+                ])?))
+            }
+        }
+
+        b @ (Intrinsic::Add
+        | Intrinsic::Sub
+        | Intrinsic::Mul
+        | Intrinsic::Exp
+        | Intrinsic::Neg
+        | Intrinsic::Inv
+        | Intrinsic::Shift) => Ok(Some(b.call(&traversed_args)?)),
+    }
+}
+
+fn apply_function(
+    f: &Function,
+    args: Vec<Node>,
+    ctx: &mut Rc<RefCell<SymbolTable>>,
+    settings: &CompileSettings,
+) -> Result<Option<Node>> {
+    match &f.class {
+        FunctionClass::UserDefined(d) => apply_defined(d, &f.handle, args, ctx, settings),
+        FunctionClass::Intrinsic(i) => apply_intrinsic(i, args, ctx, settings),
+        FunctionClass::Builtin(b) => apply_builtin(b, args, ctx, settings),
+        _ => unreachable!(),
     }
 }
 
 fn apply(
     f: &Function,
     args: &[AstNode],
-    root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
     settings: &CompileSettings,
 ) -> Result<Option<Node>> {
-    if let FunctionClass::SpecialForm(sf) = f.class {
-        apply_form(sf, args, root_ctx, ctx, settings)
-    } else {
-        let mut traversed_args = vec![];
-        let mut traversed_args_t = vec![];
-        for arg in args.iter() {
-            let traversed = reduce(arg, root_ctx.clone(), ctx, settings)?;
-            if let Some(traversed) = traversed {
-                traversed_args_t.push(traversed.t());
-                traversed_args.push(traversed);
-            }
-        }
-
-        match &f.class {
-            FunctionClass::Builtin(b) => {
-                b.validate_args(&traversed_args)?;
-                match b {
-                    // Begin flattens & concatenate any list argument
-                    Builtin::Begin => Ok(Some(Node {
-                        _e: Expression::List(traversed_args.into_iter().fold(
-                            vec![],
-                            |mut ax, mut e| match e.e_mut() {
-                                Expression::List(ref mut es) => {
-                                    ax.append(es);
-                                    ax
-                                }
-                                _ => {
-                                    ax.push(e);
-                                    ax
-                                }
-                            },
-                        )),
-                        _t: Some(
-                            traversed_args_t
-                                .iter()
-                                .fold(Type::INFIMUM, |a, b| a.max(*b)),
-                        ),
-                    })),
-
-                    b @ (Builtin::IfZero | Builtin::IfNotZero) => {
-                        Ok(Some(b.call(&traversed_args)?))
-                    }
-
-                    Builtin::Nth => {
-                        if let Expression::ArrayColumn(handle, ..) = &traversed_args[0].e() {
-                            let i = traversed_args[1].pure_eval()?.to_usize().ok_or_else(|| {
-                                anyhow!("{:?} is not a valid indice", traversed_args[1].pure_eval())
-                            })?;
-                            let array = ctx.borrow_mut().resolve_symbol(&handle.name)?;
-                            match array.e() {
-                                Expression::ArrayColumn(handle, range) => {
-                                    if range.contains(&i) {
-                                        Ok(Some(Node {
-                                            _e: Expression::Column(
-                                                Handle::new(
-                                                    &handle.module,
-                                                    format!("{}_{}", handle.name, i),
-                                                ),
-                                                Kind::Atomic,
-                                                None,
-                                            ),
-                                            _t: Some(Type::Column(array.t().magma())),
-                                        }))
-                                    } else {
-                                        bail!("tried to access `{:?}` at index {}", array, i)
-                                    }
-                                }
-                                _ => unimplemented!(),
-                            }
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    Builtin::Not => Ok(Some(
-                        Builtin::Sub
-                            .call(&[Node::one(), traversed_args[0].to_owned()])?
-                            .with_type(traversed_args[0].t().same_scale(Magma::Boolean)),
-                    )),
-
-                    Builtin::Eq => {
-                        let x = &traversed_args[0];
-                        let y = &traversed_args[1];
-                        if traversed_args_t[0].is_bool() && traversed_args_t[1].is_bool() {
-                            Ok(Some(Node {
-                                _e: Builtin::Mul.raw_call(&[
-                                    Builtin::Sub.call(&[x.clone(), y.clone()])?,
-                                    Builtin::Sub.call(&[x.clone(), y.clone()])?,
-                                ]),
-                                // NOTE in this very specific case, we are sure that (x - y)² is boolean
-                                _t: Some(x.t().same_scale(Magma::Boolean)),
-                            }))
-                        } else {
-                            Ok(Some(Builtin::Sub.call(&[
-                                traversed_args[0].to_owned(),
-                                traversed_args[1].to_owned(),
-                            ])?))
-                        }
-                    }
-
-                    Builtin::ForceBool => {
-                        Ok(Some(traversed_args[0].clone().with_type(
-                            traversed_args[0].t().same_scale(Magma::Boolean),
-                        )))
-                    }
-
-                    b @ (Builtin::Add
-                    | Builtin::Sub
-                    | Builtin::Mul
-                    | Builtin::Exp
-                    | Builtin::Neg
-                    | Builtin::Inv
-                    | Builtin::Shift) => Ok(Some(b.call(&traversed_args)?)),
-                    Builtin::Len => {
-                        if let Expression::ArrayColumn(_, domain) = traversed_args[0].e() {
-                            Ok(Some(Node::from_const(domain.len().try_into().unwrap())))
-                        } else {
-                            bail!(RuntimeError::NotAnArray(traversed_args[0].e().clone()))
-                        }
-                    }
+    match f.class {
+        FunctionClass::Form(sf) => apply_form(sf, args, ctx, settings),
+        FunctionClass::Intrinsic(_) | FunctionClass::UserDefined(_) | FunctionClass::Builtin(_) => {
+            let mut traversed_args = vec![];
+            for arg in args.iter() {
+                let traversed = reduce(arg, ctx, settings)?;
+                if let Some(traversed) = traversed {
+                    traversed_args.push(traversed);
                 }
             }
 
-            FunctionClass::UserDefined(
-                b @ Defined {
-                    args: f_args,
-                    body,
-                    pure,
-                },
-            ) => {
-                let f_mangle = format!(
-                    "fn-{}-{}",
-                    f.handle,
-                    COUNTER
-                        .get_or_init(|| AtomicUsize::new(0))
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                );
-                b.validate_args(&traversed_args)
-                    .with_context(|| anyhow!("validating call to `{}`", f.handle))?;
-                let mut f_ctx = SymbolTable::derived(
-                    ctx.clone(),
-                    &f_mangle,
-                    &f.handle.to_string(),
-                    *pure,
-                    false,
-                );
-                for (i, f_arg) in f_args.iter().enumerate() {
-                    f_ctx
-                        .borrow_mut()
-                        .insert_symbol(f_arg, traversed_args[i].clone())?;
-                }
-                reduce(body, root_ctx, &mut f_ctx, settings)
-            }
-            _ => unimplemented!("{:?}", f),
+            apply_function(f, traversed_args, ctx, settings)
         }
+        _ => unreachable!(),
     }
 }
 
 pub fn reduce(
     e: &AstNode,
-    root_ctx: Rc<RefCell<SymbolTable>>,
     ctx: &mut Rc<RefCell<SymbolTable>>,
     settings: &CompileSettings,
 ) -> Result<Option<Node>> {
@@ -804,7 +754,7 @@ pub fn reduce(
                     .resolve_function(verb)
                     .with_context(|| make_ast_error(e))?;
 
-                apply(&func, &args[1..], root_ctx, ctx, settings)
+                apply(&func, &args[1..], ctx, settings)
             } else {
                 Err(anyhow!("not a function: `{:?}`", args[0])).with_context(|| make_ast_error(e))
             }
@@ -817,7 +767,7 @@ pub fn reduce(
             ..
         } => match k {
             Kind::Composite(e) => {
-                let n = reduce(e, root_ctx, ctx, settings)?.unwrap();
+                let n = reduce(e, ctx, settings)?.unwrap();
                 ctx.borrow_mut().edit_symbol(name, &|x| {
                     if let Expression::Column(_, kind, _) = x {
                         *kind = Kind::Composite(Box::new(n.clone()))
@@ -828,12 +778,10 @@ pub fn reduce(
             Kind::Interleaved(froms, _) => {
                 let from_handles = froms
                     .iter()
-                    .map(
-                        |f| match reduce(f, root_ctx.clone(), ctx, settings)?.unwrap().e() {
-                            Expression::Column(h, ..) => Ok(h.to_owned()),
-                            x => Err(anyhow!("expected column, found {:?}", x)),
-                        },
-                    )
+                    .map(|f| match reduce(f, ctx, settings)?.unwrap().e() {
+                        Expression::Column(h, ..) => Ok(h.to_owned()),
+                        x => Err(anyhow!("expected column, found {:?}", x)),
+                    })
                     .collect::<Result<Vec<_>>>()
                     .with_context(|| anyhow!("while defining {}", name))?;
 
@@ -881,12 +829,12 @@ fn reduce_toplevel(
                 handle,
                 domain: domain.to_owned(),
                 expr: Box::new({
-                    let expr = reduce(expr, root_ctx.clone(), ctx, settings)?
-                        .unwrap_or_else(|| Expression::Void.into());
+                    let expr =
+                        reduce(expr, ctx, settings)?.unwrap_or_else(|| Expression::Void.into());
                     if let Some(guard) = guard {
-                        let guard_expr = reduce(guard, root_ctx, ctx, settings)?
+                        let guard_expr = reduce(guard, ctx, settings)?
                             .with_context(|| anyhow!("guard `{:?}` is empty", guard))?;
-                        Builtin::IfNotZero.call(&[guard_expr, expr])?
+                        Intrinsic::IfNotZero.call(&[guard_expr, expr])?
                     } else {
                         expr
                     }
@@ -901,11 +849,11 @@ fn reduce_toplevel(
             let handle = Handle::new(&ctx.borrow().name, name);
             let parents = parent
                 .iter()
-                .map(|e| reduce(e, root_ctx.clone(), ctx, settings).map(Option::unwrap))
+                .map(|e| reduce(e, ctx, settings).map(Option::unwrap))
                 .collect::<Result<Vec<_>>>()?;
             let children = child
                 .iter()
-                .map(|e| reduce(e, root_ctx.clone(), ctx, settings).map(Option::unwrap))
+                .map(|e| reduce(e, ctx, settings).map(Option::unwrap))
                 .collect::<Result<Vec<_>>>()?;
             if parents.len() != children.len() {
                 bail!(
@@ -929,14 +877,14 @@ fn reduce_toplevel(
             );
             Ok(Some(Constraint::InRange {
                 handle,
-                exp: reduce(e, root_ctx, ctx, settings)?.unwrap(),
+                exp: reduce(e, ctx, settings)?.unwrap(),
                 max: Fr::from_str(&range.to_string())
                     .ok_or_else(|| anyhow!("`{range}` is not representable in Fr"))?,
             }))
         }
         Token::DefColumns(columns) => {
             for c in columns {
-                reduce(c, root_ctx.clone(), ctx, settings)?;
+                reduce(c, ctx, settings)?;
             }
             Ok(None)
         }

@@ -8,7 +8,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use common::*;
 pub use definitions::ComputationTable;
-pub use generator::{Builtin, Constraint, ConstraintSet, EvalSettings};
+pub use generator::{Constraint, ConstraintSet, EvalSettings};
 pub use node::{Expression, Node};
 pub use parser::{Ast, AstNode, Kind, Token};
 pub use types::*;
@@ -55,7 +55,10 @@ pub fn make<S: AsRef<str>>(
     let mut computations = ctx.borrow().computation_table.clone().take();
 
     for (name, ast) in asts.iter_mut() {
-        info!("Compiling {}", name.bright_white().bold());
+        info!(
+            "Evaluating compile-time values in {}",
+            name.bright_white().bold()
+        );
         compiletime::pass(ast, ctx.clone(), settings).with_context(|| {
             anyhow!(
                 "evaluating compile-time values in {}",
@@ -63,6 +66,13 @@ pub fn make<S: AsRef<str>>(
             )
         })?
     }
+
+    // let macros_ctx = Rc::new(RefCell::new(SymbolTable::<AstNode>::new_root()));
+    // for (name, ast) in asts.iter_mut() {
+    //     info!("Evaluating macros in {}", name.bright_white().bold());
+    //     forms::pass(ast, macros_ctx.clone(), settings)
+    //         .with_context(|| anyhow!("evaluating macros in {}", name.bright_white().bold()))?
+    // }
 
     let constraints = asts
         .iter()
@@ -73,7 +83,7 @@ pub fn make<S: AsRef<str>>(
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .flatten()
-        // Sort by decreasing size for more efficient multi-threaded computation
+        // Sort by decreasing complexity for more efficient multi-threaded computation
         .sorted_by_cached_key(|x| -(x.size() as isize))
         .collect::<Vec<_>>();
 

@@ -18,9 +18,9 @@ fn shift(e: &Node, i: isize) -> Node {
     } else {
         match e.e() {
             Expression::Funcall { func, args } => match func {
-                Builtin::Shift => {
+                Intrinsic::Shift => {
                     let value = args[1].pure_eval().unwrap() + i;
-                    Builtin::Shift
+                    Intrinsic::Shift
                         .call(&[
                             args[0].clone(),
                             Expression::Const(value.clone(), Fr::from_str(&value.to_string()))
@@ -35,7 +35,7 @@ fn shift(e: &Node, i: isize) -> Node {
                 .into(),
             },
             Expression::Const(..) => e.clone(),
-            Expression::Column(..) => Builtin::Shift
+            Expression::Column(..) => Intrinsic::Shift
                 .call(&[
                     e.clone(),
                     Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
@@ -106,12 +106,12 @@ fn render_expression(e: &Node) -> String {
     }
 }
 
-fn render_funcall(func: &Builtin, args: &[Node]) -> String {
+fn render_funcall(func: &Intrinsic, args: &[Node]) -> String {
     match func {
-        Builtin::Add => make_chain(args, "Add", true),
-        Builtin::Mul => make_chain(args, "Mul", false),
-        Builtin::Sub => make_chain(args, "Sub", true),
-        Builtin::Exp => {
+        Intrinsic::Add => make_chain(args, "Add", true),
+        Intrinsic::Mul => make_chain(args, "Mul", false),
+        Intrinsic::Sub => make_chain(args, "Sub", true),
+        Intrinsic::Exp => {
             let exp = args[1]
                 .pure_eval()
                 .unwrap_or_else(|_| panic!("Exponent `{}` is not evaluable", &args[1]))
@@ -131,8 +131,8 @@ fn render_funcall(func: &Builtin, args: &[Node]) -> String {
                 ),
             }
         }
-        Builtin::Neg => format!("({}).Neg()", render_expression(&args[0])),
-        Builtin::Shift => {
+        Intrinsic::Neg => format!("({}).Neg()", render_expression(&args[0])),
+        Intrinsic::Shift => {
             let leaf = match &args[0].e() {
                 Expression::Column(handle, ..) => handle.mangle(),
                 _ => unreachable!(),

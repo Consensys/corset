@@ -93,6 +93,11 @@ impl Debug for AstNode {
         Debug::fmt(&self.class, f)
     }
 }
+impl std::fmt::Display for AstNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Debug::fmt(&self.class, f)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Kind<T> {

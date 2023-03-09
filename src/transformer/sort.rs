@@ -4,7 +4,7 @@ use pairing_ce::ff::PrimeField;
 
 use crate::{
     column::Computation,
-    compiler::{Builtin, Constraint, ConstraintSet, Kind, Magma, Node, Type},
+    compiler::{Constraint, ConstraintSet, Intrinsic, Kind, Magma, Node, Type},
     structs::Handle,
 };
 
@@ -87,9 +87,9 @@ fn create_sort_constraint(
     cs.constraints.push(Constraint::Vanishes {
         handle: Handle::new(&module, "{eq}-binary"),
         domain: None,
-        expr: Box::new(Builtin::Mul.call(&[
+        expr: Box::new(Intrinsic::Mul.call(&[
             Node::from_typed_handle(&eq, Type::Column(Magma::Boolean)),
-            Builtin::Sub.call(&[
+            Intrinsic::Sub.call(&[
                 Node::from_const(1),
                 Node::from_typed_handle(&eq, Type::Column(Magma::Boolean)),
             ])?,
@@ -99,9 +99,9 @@ fn create_sort_constraint(
         cs.constraints.push(Constraint::Vanishes {
             handle: Handle::new(&module, format!("{at}-binary")),
             domain: None,
-            expr: Box::new(Builtin::Mul.call(&[
+            expr: Box::new(Intrinsic::Mul.call(&[
                 Node::from_typed_handle(at, Type::Column(Magma::Boolean)),
-                Builtin::Sub.call(&[
+                Intrinsic::Sub.call(&[
                     Node::from_const(1),
                     Node::from_typed_handle(at, Type::Column(Magma::Boolean)),
                 ])?,
@@ -114,14 +114,14 @@ fn create_sort_constraint(
         handle: Handle::new(&module, format!("{delta}-binary")),
         domain: None,
         expr: Box::new(
-            Builtin::Sub.call(&[
+            Intrinsic::Sub.call(&[
                 Node::from_handle(&delta),
-                Builtin::Add.call(
+                Intrinsic::Add.call(
                     &delta_bytes
                         .iter()
                         .enumerate()
                         .map(|(i, byte)| {
-                            Builtin::Mul.call(&[
+                            Intrinsic::Mul.call(&[
                                 Node::from_bigint(BigInt::from(256).pow(i as u32)),
                                 Node::from_handle(byte),
                             ])
@@ -145,9 +145,9 @@ fn create_sort_constraint(
     for (i, at) in ats.iter().enumerate() {
         // ∑_k=0^i-1 @_k = 0...
         let sum_ats = if i > 0 {
-            Builtin::Sub.call(&[
+            Intrinsic::Sub.call(&[
                 Node::from_const(1),
-                Builtin::Add.call(
+                Intrinsic::Add.call(
                     &(0..i)
                         .map(|j| Node::from_handle(&ats[j]))
                         .collect::<Vec<_>>(),
@@ -161,37 +161,40 @@ fn create_sort_constraint(
         cs.constraints.push(Constraint::Vanishes {
             handle: Handle::new(module, format!("{at}-0")),
             domain: None,
-            expr: Box::new(Builtin::Mul.call(&[
-                // ∑_k=0^i-1 @_k = 0...
-                sum_ats.clone(),
-                // && @ = 0 ...
-                Builtin::Sub.call(&[Node::from_const(1), Node::from_handle(at)])?,
-                // => sorted_i = sorted_i[-1]
-                Builtin::Sub.call(&[
-                    Node::from_handle(&sorted[i]),
-                    Builtin::Shift.call(&[Node::from_handle(&sorted[i]), Node::from_const(-1)])?,
+            expr: Box::new(
+                Intrinsic::Mul.call(&[
+                    // ∑_k=0^i-1 @_k = 0...
+                    sum_ats.clone(),
+                    // && @ = 0 ...
+                    Intrinsic::Sub.call(&[Node::from_const(1), Node::from_handle(at)])?,
+                    // => sorted_i = sorted_i[-1]
+                    Intrinsic::Sub.call(&[
+                        Node::from_handle(&sorted[i]),
+                        Intrinsic::Shift
+                            .call(&[Node::from_handle(&sorted[i]), Node::from_const(-1)])?,
+                    ])?,
                 ])?,
-            ])?),
+            ),
         });
         cs.constraints.push(Constraint::Vanishes {
             handle: Handle::new(module, format!("{at}-1")),
             domain: None,
-            expr: Box::new(Builtin::Mul.call(&[
+            expr: Box::new(Intrinsic::Mul.call(&[
                 // ∑_k=0^i-1 @_k = 0...
                 sum_ats.clone(),
                 // && @ ≠ 0
                 Node::from_handle(at),
                 // => sorted_i ≠ sorted_i[-1]
                 {
-                    let diff = Builtin::Sub.call(&[
+                    let diff = Intrinsic::Sub.call(&[
                         Node::from_handle(&sorted[i]),
-                        Builtin::Shift
+                        Intrinsic::Shift
                             .call(&[Node::from_handle(&sorted[i]), Node::from_const(-1)])?,
                     ])?;
-                    let diff_inv = Builtin::Inv.call(&[diff.clone()])?;
+                    let diff_inv = Intrinsic::Inv.call(&[diff.clone()])?;
 
-                    Builtin::Sub
-                        .call(&[Node::from_const(1), Builtin::Mul.call(&[diff, diff_inv])?])?
+                    Intrinsic::Sub
+                        .call(&[Node::from_const(1), Intrinsic::Mul.call(&[diff, diff_inv])?])?
                 },
             ])?),
         });
@@ -202,9 +205,9 @@ fn create_sort_constraint(
         handle: Handle::new(module, format!("Eq_@_{suffix}")),
         domain: None,
         expr: Box::new(
-            Builtin::Sub.call(&[
+            Intrinsic::Sub.call(&[
                 Node::from_const(1),
-                Builtin::Add.call(
+                Intrinsic::Add.call(
                     &vec![Node::from_handle(&eq)]
                         .into_iter()
                         .chain(ats.iter().map(Node::from_handle))
@@ -219,23 +222,23 @@ fn create_sort_constraint(
         handle: Handle::new(module, format!("__SRT__Eq_i_{suffix}")),
         domain: None,
         expr: Box::new(
-            Builtin::Mul.call(&[
+            Intrinsic::Mul.call(&[
                 // Eq = 0
-                Builtin::Sub.call(&[Node::from_const(1), Node::from_handle(&eq)])?,
+                Intrinsic::Sub.call(&[Node::from_const(1), Node::from_handle(&eq)])?,
                 // Δ = ∑ ε_i × @_i × δSorted_i
-                Builtin::Sub.call(&[
+                Intrinsic::Sub.call(&[
                     Node::from_handle(&delta),
-                    Builtin::Add.call(
+                    Intrinsic::Add.call(
                         (0..from.len())
                             .map(|l| {
-                                let tgt_diff = Builtin::Sub.call(&[
+                                let tgt_diff = Intrinsic::Sub.call(&[
                                     Node::from_handle(&sorted[l]),
-                                    Builtin::Shift.call(&[
+                                    Intrinsic::Shift.call(&[
                                         Node::from_handle(&sorted[l]),
                                         Node::from_const(-1),
                                     ])?,
                                 ])?;
-                                Builtin::Mul.call(&[
+                                Intrinsic::Mul.call(&[
                                     if !signs[l] {
                                         Node::from_const(-1)
                                     } else {
