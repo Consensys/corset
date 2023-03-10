@@ -28,6 +28,10 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "debug"),
             class: FunctionClass::Form(Form::Debug),
         },
+        "todo" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "todo"),
+            class: FunctionClass::Form(Form::Todo),
+        },
         "let" => Function {
             handle: Handle::new(super::MAIN_MODULE, "let"),
             class: FunctionClass::Form(Form::Let),

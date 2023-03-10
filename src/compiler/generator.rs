@@ -493,6 +493,10 @@ fn apply_form(
                 }
             }
         }
+        Form::Todo => {
+            error!("TODO not yet implemented");
+            Ok(None)
+        }
         Form::Let => {
             let sub_ctx_name = format!("let-{}", ctx.borrow().name);
             let mut sub_ctx =

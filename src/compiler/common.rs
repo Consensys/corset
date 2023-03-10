@@ -13,6 +13,7 @@ pub enum Form {
     For,
     Let,
     Debug,
+    Todo,
     Reduce,
 }
 
@@ -219,6 +220,7 @@ impl FuncVerifier<AstNode> for Form {
         match self {
             Form::For => Arity::Exactly(3),
             Form::Debug => Arity::AtLeast(1),
+            Form::Todo => Arity::Exactly(0),
             Form::Let => Arity::Dyadic,
             Form::Reduce => Arity::Dyadic,
         }
@@ -239,6 +241,7 @@ impl FuncVerifier<AstNode> for Form {
                 }
             }
             Form::Debug => Ok(()),
+            Form::Todo => Ok(()),
             Form::Let => {
                 if let Result::Ok(pairs) = args[0].as_list() {
                     for pair in pairs {
