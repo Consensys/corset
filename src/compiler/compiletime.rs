@@ -2,8 +2,8 @@ use anyhow::*;
 use std::{cell::RefCell, rc::Rc};
 
 use super::{
-    definitions::SymbolTable,
     generator::{make_ast_error, reduce},
+    tables::SymbolTable,
     Ast, AstNode, CompileSettings, Token,
 };
 

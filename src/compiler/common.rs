@@ -1,108 +1,11 @@
 #![allow(dead_code)]
 use anyhow::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::errors::CompileError;
-use crate::structs::Handle;
 
-use super::generator::{Function, FunctionClass};
 use super::parser::{AstNode, Token};
 use super::{Expression, Magma, Node, Type};
-
-lazy_static::lazy_static! {
-    pub static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
-        // forms
-        "for" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "for"),
-            class: FunctionClass::Form(Form::For),
-        },
-        "debug" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "debug"),
-            class: FunctionClass::Form(Form::Debug),
-        },
-        "let" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "let"),
-            class: FunctionClass::Form(Form::Let),
-        },
-
-        // special functions
-        "nth" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "nth"),
-            class: FunctionClass::Intrinsic(Intrinsic::Nth),
-        },
-        "len" => Function {
-            handle: Handle::new(super::MAIN_MODULE, Builtin::Len.to_string()),
-            class: FunctionClass::Builtin(Builtin::Len),
-        },
-
-        // monadic
-        "inv" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "inv"),
-            class: FunctionClass::Intrinsic(Intrinsic::Inv)
-        },
-        "neg" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "neg"),
-            class: FunctionClass::Intrinsic(Intrinsic::Neg)
-        },
-        "not" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "not"),
-            class: FunctionClass::Intrinsic(Intrinsic::Not),
-        },
-
-        // Dyadic
-        "eq" => Function{
-            handle: Handle::new(super::MAIN_MODULE, "eq"),
-            class: FunctionClass::Intrinsic(Intrinsic::Eq),
-        },
-        "shift" => Function{
-            handle: Handle::new(super::MAIN_MODULE, "shift"),
-            class: FunctionClass::Intrinsic(Intrinsic::Shift),
-        },
-
-
-        // polyadic
-        "+" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "+"),
-            class: FunctionClass::Intrinsic(Intrinsic::Add)
-        },
-        "*" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "*"),
-            class: FunctionClass::Intrinsic(Intrinsic::Mul)
-        },
-        "^" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "^"),
-            class: FunctionClass::Intrinsic(Intrinsic::Exp)
-        },
-        "-" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "-"),
-            class: FunctionClass::Intrinsic(Intrinsic::Sub)
-        },
-
-        "begin" => Function{
-            handle: Handle::new(super::MAIN_MODULE, "begin"),
-            class: FunctionClass::Intrinsic(Intrinsic::Begin)
-        },
-
-        "if-zero" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "if-zero"),
-            class: FunctionClass::Intrinsic(Intrinsic::IfZero)
-        },
-        "if-not-zero" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "if-not-zero"),
-            class: FunctionClass::Intrinsic(Intrinsic::IfNotZero)
-        },
-
-        "force-bool" => Function {
-            handle:Handle::new(super::MAIN_MODULE, "force-bool"),
-            class: FunctionClass::Builtin(Builtin::ForceBool),
-        },
-        "reduce" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "reduce"),
-            class: FunctionClass::Form(Form::Reduce)
-        },
-    };
-}
 
 /// A form is an applicable that operates directly on the AST
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

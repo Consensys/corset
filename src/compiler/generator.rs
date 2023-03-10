@@ -17,10 +17,9 @@ use std::io::Write;
 use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 
-use super::definitions::ComputationTable;
+use super::tables::{ComputationTable, SymbolTable};
 use super::{common::*, CompileSettings, Expression, Magma, Node, Type};
 use crate::column::{Column, ColumnSet, Computation};
-use crate::compiler::definitions::SymbolTable;
 use crate::compiler::parser::*;
 use crate::errors::{CompileError, RuntimeError};
 use crate::pretty::Pretty;

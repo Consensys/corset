@@ -1,16 +1,14 @@
-use self::definitions::Symbol;
 use crate::column::{ColumnSet, Computation};
 use anyhow::*;
-use definitions::SymbolTable;
 use itertools::Itertools;
 use log::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use common::*;
-pub use definitions::ComputationTable;
 pub use generator::{Constraint, ConstraintSet, EvalSettings};
 pub use node::{Expression, Node};
 pub use parser::{Ast, AstNode, Kind, Token};
+pub use tables::ComputationTable;
 pub use types::*;
 
 mod codetyper;
@@ -20,6 +18,7 @@ mod definitions;
 mod generator;
 mod node;
 mod parser;
+mod tables;
 mod types;
 
 const MAIN_MODULE: &str = "<prelude>";
@@ -37,7 +36,11 @@ pub fn make<S: AsRef<str>>(
     use colored::Colorize;
     use num_bigint::BigInt;
 
-    use crate::{errors::CompileError, structs::Handle};
+    use crate::{
+        compiler::tables::{Symbol, SymbolTable},
+        errors::CompileError,
+        structs::Handle,
+    };
 
     let mut asts = vec![];
     let ctx = Rc::new(RefCell::new(SymbolTable::new_root()));
