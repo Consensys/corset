@@ -1,9 +1,11 @@
 use log::*;
 
+mod debugger;
 mod go;
 mod latex;
 mod wizardiop;
 
+pub use debugger::debug;
 pub use go::GoExporter;
 pub use latex::*;
 pub use wizardiop::WizardIOP;

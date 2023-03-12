@@ -11,7 +11,7 @@ pub use parser::{Ast, AstNode, Kind, Token};
 pub use tables::ComputationTable;
 pub use types::*;
 
-mod codetyper;
+pub mod codetyper;
 mod common;
 mod compiletime;
 mod definitions;

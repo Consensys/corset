@@ -166,19 +166,6 @@ impl Node {
                     tty.write(format!("({fname} ").color(c).to_string());
                     tty.shift(fname.len() + 2);
                     if let Some(a) = args.get(0) {
-                        tty.latch_indent();
-                        _debug(
-                            a,
-                            tty,
-                            f,
-                            faulty,
-                            unclutter,
-                            dim,
-                            v.is_zero() || zero_context,
-                        );
-                    }
-                    tty.cr();
-                    for a in args.iter().skip(1) {
                         _debug(
                             a,
                             tty,
@@ -190,9 +177,26 @@ impl Node {
                         );
                         tty.cr();
                     }
+                    // tty.shift(8);
+                    let mut args = args.iter().skip(1).peekable();
+                    while let Some(a) = args.next() {
+                        _debug(
+                            a,
+                            tty,
+                            f,
+                            faulty,
+                            unclutter,
+                            dim,
+                            v.is_zero() || zero_context,
+                        );
+                        if args.peek().is_some() {
+                            tty.cr();
+                        }
+                    }
                     tty.unshift();
+                    tty.cr();
                     tty.write(")".color(c).to_string());
-                    tty.append(format!("[{}]", v.pretty()).color(c_v).to_string())
+                    tty.write(format!("[{}]", v.pretty()).color(c_v).to_string());
                 }
                 Expression::Const(x, _) => {
                     let c = if dim && zero_context {

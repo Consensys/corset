@@ -180,6 +180,15 @@ enum Commands {
         #[arg(short = 'S', long = "trace-span", help = "", default_value_t = 2)]
         trace_span: isize,
     },
+    /// Display the compiled the constraint system
+    Debug {
+        #[arg(
+            short = 'E',
+            long = "expand",
+            help = "perform all expansion operations before checking"
+        )]
+        expand: bool,
+    },
     /// Given a set of constraints, indefinitely check the traces from an SQL table
     #[cfg(feature = "postgres")]
     CheckLoop {
@@ -483,6 +492,21 @@ fn main() -> Result<()> {
             )
             .with_context(|| format!("while checking `{}`", tracefile))?;
             info!("{}: SUCCESS", tracefile)
+        }
+        Commands::Debug { expand } => {
+            if expand {
+                transformer::validate_nhood(&mut constraints)
+                    .with_context(|| anyhow!("while creating nhood constraints"))?;
+                transformer::lower_shifts(&mut constraints)?;
+                transformer::expand_ifs(&mut constraints);
+                transformer::expand_constraints(&mut constraints)
+                    .with_context(|| anyhow!("while expanding constraints"))?;
+                transformer::sorts(&mut constraints)
+                    .with_context(|| anyhow!("while creating sorting constraints"))?;
+                transformer::expand_invs(&mut constraints)
+                    .with_context(|| anyhow!("while expanding inverses"))?;
+            }
+            exporters::debug(&constraints)?;
         }
         Commands::Compile { outfile, pretty } => {
             std::fs::File::create(&outfile)
