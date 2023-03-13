@@ -750,6 +750,8 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
 
 #[cfg(feature = "interactive")]
 fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
+    use num_traits::{FromPrimitive, Num};
+
     let lc = pair.as_span().start_pos().line_col();
     let src = pair.as_str().to_owned();
 
@@ -774,11 +776,30 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             lc,
             src,
         }),
-        Rule::integer => Ok(AstNode {
-            class: Token::Value(pair.as_str().parse().unwrap()),
-            lc,
-            src,
-        }),
+        Rule::integer => {
+            let s = pair.as_str();
+            let sign = if s.starts_with("-") {
+                BigInt::from_i64(-1)
+            } else {
+                BigInt::from_i64(1)
+            }
+            .unwrap();
+            let s = s.trim_start_matches('-');
+
+            let value = if let Some(s) = s.strip_prefix("0x") {
+                BigInt::from_str_radix(s, 16)
+            } else if let Some(s) = s.strip_prefix("0b") {
+                BigInt::from_str_radix(s, 2)
+            } else {
+                BigInt::from_str_radix(s, 10)
+            };
+
+            Ok(AstNode {
+                class: Token::Value(value.unwrap() * sign),
+                lc,
+                src,
+            })
+        }
         Rule::forloop => {
             let mut pairs = pair.into_inner();
             let for_token = AstNode {

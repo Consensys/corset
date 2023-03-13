@@ -21,6 +21,6 @@ interval = { "[" ~ natural ~ (":" ~ natural ~ (":" ~ natural)?)? ~ "]" }
 typing = @{ "NATURAL" | "BOOLEAN" | "BYTE" | "NIBBLE" }
 
 integer = @{ "-"? ~ natural }
-natural = @{ ASCII_DIGIT+ }
+natural = @{ ("0x" | "0b") ~ ASCII_DIGIT+ | ASCII_DIGIT+ }
 symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" | "," | "." | "'" )+ }
 keyword = @{ ":" ~ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" )+  }
