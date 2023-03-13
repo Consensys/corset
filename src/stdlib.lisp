@@ -3,6 +3,7 @@
 
 (defunalias and +)
 (defunalias mul *)
+(defunalias either *)
 
 (defunalias add +)
 
