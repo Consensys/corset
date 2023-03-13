@@ -5,6 +5,7 @@ use pairing_ce::ff::PrimeField;
 use crate::{
     column::Computation,
     compiler::{Constraint, ConstraintSet, Intrinsic, Kind, Magma, Node, Type},
+    pretty::Base,
     structs::Handle,
 };
 
@@ -44,6 +45,7 @@ fn create_sort_constraint(
                 Type::Column(Magma::Boolean),
                 Some(cs.length_multiplier(&from[0])),
                 None,
+                Base::Dec,
             )
             .map(|x| x.0)
         })
@@ -56,6 +58,7 @@ fn create_sort_constraint(
         Type::Column(Magma::Boolean),
         Some(cs.length_multiplier(&from[0])),
         Some(1),
+        Base::Dec,
     )?
     .0;
     let delta = create_column(
@@ -66,6 +69,7 @@ fn create_sort_constraint(
         Type::Column(Magma::Integer),
         Some(cs.length_multiplier(&from[0])),
         None,
+        Base::Hex,
     )?
     .0;
     let delta_bytes = (0..16)
@@ -78,6 +82,7 @@ fn create_sort_constraint(
                 Type::Column(Magma::Byte),
                 Some(cs.length_multiplier(&from[0])),
                 None,
+                Base::Hex,
             )
             .map(|x| x.0)
         })

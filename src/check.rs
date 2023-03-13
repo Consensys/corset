@@ -198,11 +198,9 @@ fn fail(
             vec![j.to_string()]
                 .into_iter()
                 .chain(handles.iter().map(|handle| {
-                    columns
-                        .get(handle)
-                        .unwrap()
-                        .get(j, true)
-                        .map(|x| x.pretty())
+                    let col = columns.get(handle).unwrap();
+                    col.get(j, true)
+                        .map(|x| x.pretty_with_base(col.base))
                         .unwrap_or_else(|| "nil".into())
                 }))
                 .collect(),

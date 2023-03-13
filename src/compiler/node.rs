@@ -12,7 +12,7 @@ use std::{
 };
 
 use crate::compiler::codetyper::Tty;
-use crate::pretty::Pretty;
+use crate::pretty::{Base, Pretty};
 use crate::structs::Handle;
 
 use super::{EvalSettings, Intrinsic, Kind, Magma, Type};
@@ -21,8 +21,8 @@ use super::{EvalSettings, Intrinsic, Kind, Magma, Type};
 pub enum Expression {
     Funcall { func: Intrinsic, args: Vec<Node> },
     Const(BigInt, Option<Fr>),
-    Column(Handle, Kind<Node>, Option<i64>),
-    ArrayColumn(Handle, Vec<usize>),
+    Column(Handle, Kind<Node>, Option<i64>, Base),
+    ArrayColumn(Handle, Vec<usize>, Base),
     List(Vec<Node>),
     Void,
 }
@@ -62,7 +62,7 @@ impl Node {
     }
     pub fn from_handle(x: &Handle) -> Node {
         Node {
-            _e: Expression::Column(x.clone(), Kind::Phantom, None),
+            _e: Expression::Column(x.clone(), Kind::Phantom, None, Base::Hex),
             _t: None,
         }
     }
@@ -223,7 +223,7 @@ impl Node {
                             .to_string(),
                     );
                 }
-                Expression::ArrayColumn(h, _) => tty.write(h.to_string()),
+                Expression::ArrayColumn(h, ..) => tty.write(h.to_string()),
                 Expression::List(ns) => {
                     let v = f(n).unwrap();
                     let c = if v.is_zero() && dim {
@@ -517,7 +517,7 @@ impl Node {
                     }
                 }
                 Intrinsic::Nth => {
-                    if let (Expression::ArrayColumn(h, range), Expression::Const(idx, _)) =
+                    if let (Expression::ArrayColumn(h, range, _), Expression::Const(idx, _)) =
                         (&args[0].e(), &args[1].e())
                     {
                         let idx = idx.to_usize().unwrap();

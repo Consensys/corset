@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::{
     column::Computation,
     compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Kind, Magma, Node, Type},
+    pretty::Base,
     structs::Handle,
 };
 
@@ -18,6 +19,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         false,
         None,
         None,
+        Base::Bin,
     );
     cs.computations.insert(
         &aux_handle,
@@ -41,6 +43,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         false,
         None,
         None,
+        Base::Bin,
     );
     cs.computations.insert(
         &intrld_aux_xs_handle,
@@ -59,6 +62,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         false,
         None,
         None,
+        Base::Bin,
     );
     cs.computations.insert(
         &srt_intrld_aux_xs_handle,
@@ -69,7 +73,12 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
     )?;
 
     let srt_intrld_aux_xs_node = Node {
-        _e: Expression::Column(srt_intrld_aux_xs_handle.to_owned(), Kind::Phantom, None),
+        _e: Expression::Column(
+            srt_intrld_aux_xs_handle.to_owned(),
+            Kind::Phantom,
+            None,
+            Base::Dec,
+        ),
         _t: Some(Type::Column(Magma::Byte)),
     };
     cs.constraints.push(Constraint::Vanishes {
@@ -86,6 +95,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
                 srt_intrld_aux_xs_handle.to_owned(),
                 Kind::Phantom,
                 None,
+                Base::Dec,
             )),
             Node::from_const((modulo - 1).try_into().unwrap()),
         ])?),

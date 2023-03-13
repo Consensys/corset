@@ -1,5 +1,9 @@
 use colored::{Color, ColoredString, Colorize};
-use pairing_ce::{bn256::Fr, ff::PrimeField};
+use pairing_ce::{
+    bn256::Fr,
+    ff::{Field, PrimeField},
+};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     compiler::{Expression, Node},
@@ -16,8 +20,16 @@ pub const COLORS: [Color; 7] = [
     Color::BrightWhite,
 ];
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum Base {
+    Dec,
+    Hex,
+    Bin,
+}
+
 pub trait Pretty {
     fn pretty(&self) -> String;
+    fn pretty_with_base(&self, base: Base) -> String;
 }
 
 impl Pretty for Fr {
@@ -26,6 +38,21 @@ impl Pretty for Fr {
         i64::from_str_radix(&hex[2..], 16)
             .map(|x| x.to_string())
             .unwrap_or(format!("0x0{}", hex[2..].trim_start_matches('0')))
+    }
+
+    fn pretty_with_base(&self, base: Base) -> String {
+        if self.is_zero() {
+            String::from("0")
+        } else {
+            match base {
+                Base::Dec => self.pretty(),
+                Base::Hex => format!(
+                    "0x0{}",
+                    self.into_repr().to_string()[2..].trim_start_matches('0')
+                ),
+                Base::Bin => todo!(),
+            }
+        }
     }
 }
 
@@ -59,10 +86,16 @@ impl Pretty for Node {
 
         format!("{}", rec_pretty(self, 0))
     }
+    fn pretty_with_base(&self, _base: Base) -> String {
+        self.pretty()
+    }
 }
 
 impl Pretty for Handle {
     fn pretty(&self) -> String {
         format!("{}::{}", self.module.blue(), self.name.white().bold())
+    }
+    fn pretty_with_base(&self, _base: Base) -> String {
+        self.pretty()
     }
 }

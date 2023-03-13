@@ -1,6 +1,7 @@
 use crate::{
     column::{ColumnSet, Computation},
     compiler::{ComputationTable, Constraint, ConstraintSet, Expression, Kind, Magma, Node, Type},
+    pretty::Base,
     structs::Handle,
 };
 use anyhow::Result;
@@ -27,6 +28,7 @@ fn do_expand_expr(
                 true,
                 None,
                 None,
+                Base::Dec,
             )?;
 
             let _ = comps.insert(
@@ -37,7 +39,7 @@ fn do_expand_expr(
                 },
             );
             Ok(Node {
-                _e: Expression::Column(new_handle, Kind::Phantom, None),
+                _e: Expression::Column(new_handle, Kind::Phantom, None, Base::Dec),
                 _t: Some(Type::Column(Magma::Integer)),
             })
         }

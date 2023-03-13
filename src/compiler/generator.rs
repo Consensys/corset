@@ -518,9 +518,9 @@ fn apply_form(
             let mut body = reduce(&args[1], ctx, settings)?.unwrap();
 
             return match body.e_mut() {
-                Expression::Column(_, _, _)
+                Expression::Column(..)
                 | Expression::Void
-                | Expression::ArrayColumn(_, _)
+                | Expression::ArrayColumn(..)
                 | Expression::Funcall { .. }
                 | Expression::Const(_, _) => panic!(),
                 Expression::List(xs) => {
@@ -584,7 +584,7 @@ fn apply_builtin(
             )))
         }
         Builtin::Len => {
-            if let Expression::ArrayColumn(_, domain) = traversed_args[0].e() {
+            if let Expression::ArrayColumn(_, domain, _) = traversed_args[0].e() {
                 Ok(Some(Node::from_const(domain.len().try_into().unwrap())))
             } else {
                 bail!(RuntimeError::NotAnArray(traversed_args[0].e().clone()))
@@ -632,13 +632,14 @@ fn apply_intrinsic(
                 })?;
                 let array = ctx.borrow_mut().resolve_symbol(&handle.name)?;
                 match array.e() {
-                    Expression::ArrayColumn(handle, range) => {
+                    Expression::ArrayColumn(handle, range, base) => {
                         if range.contains(&i) {
                             Ok(Some(Node {
                                 _e: Expression::Column(
                                     Handle::new(&handle.module, format!("{}_{}", handle.name, i)),
                                     Kind::Atomic,
                                     None,
+                                    *base,
                                 ),
                                 _t: Some(Type::Column(array.t().magma())),
                             }))
@@ -772,7 +773,7 @@ pub fn reduce(
             Kind::Composite(e) => {
                 let n = reduce(e, ctx, settings)?.unwrap();
                 ctx.borrow_mut().edit_symbol(name, &|x| {
-                    if let Expression::Column(_, kind, _) = x {
+                    if let Expression::Column(_, kind, _, _) = x {
                         *kind = Kind::Composite(Box::new(n.clone()))
                     }
                 })?;
@@ -789,7 +790,7 @@ pub fn reduce(
                     .with_context(|| anyhow!("while defining {}", name))?;
 
                 ctx.borrow_mut().edit_symbol(name, &|x| {
-                    if let Expression::Column(_, kind, _) = x {
+                    if let Expression::Column(_, kind, _, _) = x {
                         *kind = Kind::Interleaved(vec![], Some(from_handles.to_vec()))
                     }
                 })?;

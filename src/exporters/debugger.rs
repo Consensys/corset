@@ -102,7 +102,7 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty) {
             }
         },
         Expression::Const(x, _) => tty.write(x.to_string()),
-        Expression::Column(h, _, _) => tty.write(&h.name),
+        Expression::Column(h, ..) => tty.write(&h.name),
         Expression::List(xs) => {
             tty.write("{");
             tty.shift(INDENT);
@@ -118,7 +118,7 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty) {
             tty.cr();
             tty.write("}");
         }
-        Expression::ArrayColumn(_, _) => unreachable!(),
+        Expression::ArrayColumn(..) => unreachable!(),
         Expression::Void => unreachable!(),
     }
 }

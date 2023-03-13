@@ -16,6 +16,7 @@ pub use statics::precompute;
 
 use crate::{
     compiler::{ConstraintSet, Expression, Intrinsic, Kind, Magma, Node, Type},
+    pretty::Base,
     structs::Handle,
 };
 
@@ -29,6 +30,7 @@ fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
                         x_col.to_owned(),
                         Kind::Composite(Box::new(x_expr.clone())),
                         None,
+                        Base::Dec,
                     ),
                     _t: Some(Type::Column(Magma::Integer)),
                 },
@@ -45,11 +47,19 @@ fn create_column(
     t: Type,
     size_factor: Option<usize>,
     padding_value: Option<i64>,
+    base: Base,
 ) -> anyhow::Result<(Handle, usize)> {
     let handle = Handle::new(module, name);
-    let id = cs
-        .modules
-        .insert_column(&handle, t, true, kind, false, padding_value, size_factor)?;
+    let id = cs.modules.insert_column(
+        &handle,
+        t,
+        true,
+        kind,
+        false,
+        padding_value,
+        size_factor,
+        base,
+    )?;
     Ok((handle, id))
 }
 

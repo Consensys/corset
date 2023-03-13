@@ -8,6 +8,7 @@ use super::tables::SymbolTable;
 use super::{Expression, Magma, Node, Type};
 use crate::column::Computation;
 use crate::compiler::parser::*;
+use crate::pretty::Base;
 use crate::structs::Handle;
 
 fn reduce(
@@ -39,6 +40,7 @@ fn reduce(
             t,
             kind,
             padding_value,
+            base,
         } => {
             let module_name = ctx.borrow().name.to_owned();
             let symbol = Node {
@@ -52,6 +54,7 @@ fn reduce(
                         Kind::Interleaved(_, _) => Kind::Phantom, // The interleaving is later on set by the generator
                     },
                     padding_value.to_owned(),
+                    *base,
                 ),
                 _t: Some(*t),
             };
@@ -61,12 +64,13 @@ fn reduce(
             name: col,
             domain: range,
             t,
+            base,
         } => {
             let handle = Handle::new(&ctx.borrow().name, col);
             ctx.borrow_mut().insert_symbol(
                 col,
                 Node {
-                    _e: Expression::ArrayColumn(handle, range.to_owned()),
+                    _e: Expression::ArrayColumn(handle, range.to_owned(), *base),
                     _t: Some(*t),
                 },
             )?;
@@ -96,7 +100,12 @@ fn reduce(
                     .insert_symbol(
                         to,
                         Node {
-                            _e: Expression::Column(to_handle.clone(), Kind::Phantom, None),
+                            _e: Expression::Column(
+                                to_handle.clone(),
+                                Kind::Phantom,
+                                None,
+                                Base::Hex,
+                            ),
                             _t: Some(Type::Column(Magma::Integer)),
                         },
                     )

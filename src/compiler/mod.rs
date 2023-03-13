@@ -99,7 +99,7 @@ pub fn make<S: AsRef<str>>(
                 }
 
                 match symbol.e() {
-                    Expression::Column(handle, k, padding_value) => {
+                    Expression::Column(handle, k, padding_value, base) => {
                         columns.insert_column(
                             handle,
                             symbol.t(),
@@ -108,6 +108,7 @@ pub fn make<S: AsRef<str>>(
                             settings.allow_dups,
                             padding_value.to_owned(),
                             None,
+                            *base,
                         )?;
                         match k {
                             Kind::Atomic | Kind::Phantom => (),
@@ -127,7 +128,7 @@ pub fn make<S: AsRef<str>>(
                             )?,
                         }
                     }
-                    Expression::ArrayColumn(handle, range) => {
+                    Expression::ArrayColumn(handle, range, base) => {
                         // NOTE we may need custom padding value for arrays at some point
                         columns.insert_array(
                             handle,
@@ -135,6 +136,7 @@ pub fn make<S: AsRef<str>>(
                             symbol.t(),
                             settings.allow_dups,
                             None,
+                            *base,
                         )?
                     }
                     Expression::Const(ref x, _) => {

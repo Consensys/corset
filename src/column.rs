@@ -1,5 +1,6 @@
 use crate::{
     compiler::{Kind, Node, Type},
+    pretty::Base,
     structs::Handle,
 };
 use anyhow::{anyhow, bail, Result};
@@ -17,6 +18,7 @@ pub struct Column {
     pub kind: Kind<()>,
     pub t: Type,
     pub intrinsic_size_factor: Option<usize>,
+    pub base: Base,
 }
 impl Column {
     pub fn make_with_spilling(
@@ -200,6 +202,7 @@ impl ColumnSet {
         allow_dup: bool,
         padding_value: Option<i64>,
         size_factor: Option<usize>,
+        base: Base,
     ) -> Result<usize> {
         if self
             .cols
@@ -219,6 +222,7 @@ impl ColumnSet {
                 kind,
                 padding_value,
                 intrinsic_size_factor: size_factor,
+                base,
             });
             self.cols
                 .entry(handle.module.to_owned())
@@ -235,6 +239,7 @@ impl ColumnSet {
         t: Type,
         allow_dup: bool,
         padding_value: Option<i64>,
+        base: Base,
     ) -> Result<()> {
         for i in range.iter() {
             self.insert_column(
@@ -245,6 +250,7 @@ impl ColumnSet {
                 allow_dup,
                 padding_value,
                 None,
+                base,
             )?;
         }
         Ok(())

@@ -1,4 +1,4 @@
-use crate::structs::Handle;
+use crate::{pretty::Base, structs::Handle};
 use anyhow::{anyhow, bail, Context, Result};
 use colored::Colorize;
 use itertools::Itertools;
@@ -39,7 +39,7 @@ pub struct Ast {
 }
 
 type LinCol = (usize, usize);
-#[derive(PartialEq, Clone)]
+#[derive(Clone)]
 pub struct AstNode {
     /// the token in which this node devolves
     pub class: Token,
@@ -139,7 +139,7 @@ impl std::fmt::Display for Symbol {
     }
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(Clone)]
 pub enum Token {
     /// an immediate value; can be “arbitrarily” large
     Value(BigInt),
@@ -169,12 +169,16 @@ pub enum Token {
         kind: Kind<AstNode>,
         /// the value to pad the column with; defaults to 0 if None
         padding_value: Option<i64>,
+        /// which numeric base should be used to display column values; this is a purely aesthetic setting
+        base: Base,
     },
     /// defines an array
     DefArrayColumn {
         name: String,
         domain: Vec<usize>,
         t: Type,
+        /// which numeric base should be used to display column values; this is a purely aesthetic setting
+        base: Base,
     },
     /// definition of a function
     Defun {
@@ -283,6 +287,7 @@ impl Debug for Token {
                 name,
                 domain: range,
                 t,
+                ..
             } => {
                 write!(f, "DECLARATION {}{:?}{{{:?}}}", name, range, t)
             }
@@ -409,6 +414,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
         Computation,
         Interleaved,
         PaddingValue,
+        Base,
     }
 
     // A columns definition is a list of column definition
@@ -420,6 +426,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                 let mut kind = Kind::Atomic;
                 let mut range = None;
                 let mut padding_value = None;
+                let mut base = Base::Dec;
 
                 let mut state = ColumnParser::Begin;
                 // A column is either defined by...
@@ -463,8 +470,10 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                             ":comp" => ColumnParser::Computation,
                                             // e.g. (A :array {1 3 5}) or (A :array [5])
                                             ":array" => ColumnParser::Array,
-                                            // a specific padding value, e.f. (NOT :padding 255)
+                                            // a specific padding value, e.g. (NOT :padding 255)
                                             ":padding" => ColumnParser::PaddingValue,
+                                            // how to display the column values in debug
+                                            ":display" => ColumnParser::Base,
                                             _ => {
                                                 bail!("unexpected keyword found: {}", kw)
                                             }
@@ -486,7 +495,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                 // :interleaved expects a list of column to interleave into the one
                                 // being defined
                                 ColumnParser::Interleaved => {
-                                    if kind != Kind::Atomic {
+                                    if !matches!(kind, Kind::Atomic) {
                                         bail!("column {} can not be interleaved; is already {:?}", name, kind)
                                     }
                                     kind = Kind::Interleaved(
@@ -499,6 +508,19 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                     padding_value = Some(x.as_i64()?);
                                     ColumnParser::Begin
                                 },
+                                ColumnParser::Base => {
+                                    base = if let Token::Keyword(ref kw) = x.class {
+                                        match kw.to_lowercase().as_str() {
+                                            ":bin" => Base::Bin,
+                                            ":dec" => Base::Dec,
+                                            ":hex" => Base::Hex,
+                                            _ => bail!(":display expects one of :hex, :dec, :bin; found {}", kw)
+                                        }
+                                    } else {
+                                        bail!(":display expects one of :hex, :dec, :bin; found {}", x)
+                                    };
+                                    ColumnParser::Begin
+                                },
                             };
                         }
                     }
@@ -509,7 +531,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                     ColumnParser::Begin =>
                         Ok(AstNode {
                             class: if let Some(range) = range {
-                                if kind != Kind::Atomic {
+                                if !matches!(kind, Kind::Atomic){
                                     bail!("array columns must be atomic")
                                 }
                                 Token::DefArrayColumn {
@@ -519,6 +541,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                         .iter()
                                         .map(|&x| x.try_into().map_err(|e| anyhow!("{:?}", e)))
                                         .collect::<Result<Vec<_>>>()?,
+                                    base,
                                 }
                             } else {
                                 Token::DefColumn {
@@ -526,6 +549,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                     t: Type::Column(t.unwrap_or(Magma::Integer)),
                                     kind,
                                     padding_value,
+                                    base
                                 }
                             },
                             lc: c.lc,
@@ -535,6 +559,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                     ColumnParser::Computation => bail!("incomplate :comp definition"),
                     ColumnParser::Interleaved => bail!("incomplete :interleaved definition"),
                     ColumnParser::PaddingValue => bail!("incomplete :padding definition"),
+                    ColumnParser::Base => bail!("incomplete :display definition"),
                 }
             })
         })

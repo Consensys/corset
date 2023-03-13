@@ -1,8 +1,18 @@
 use crate::{
     column::{ColumnSet, Computation},
     compiler::{
-        ComputationTable, Constraint, ConstraintSet, Expression, Intrinsic, Kind, Magma, Node, Type,
+        //
+        ComputationTable,
+        Constraint,
+        ConstraintSet,
+        Expression,
+        Intrinsic,
+        Kind,
+        Magma,
+        Node,
+        Type,
     },
+    pretty::Base,
     structs::Handle,
 };
 use anyhow::Result;
@@ -46,6 +56,7 @@ fn do_expand_inv(
                         true,
                         None,
                         None,
+                        Base::Hex,
                     )?;
                     comps.insert(
                         &inverted_handle,
@@ -56,7 +67,7 @@ fn do_expand_inv(
                     )?;
                 }
                 *e = Node {
-                    _e: Expression::Column(inverted_handle.clone(), Kind::Atomic, None),
+                    _e: Expression::Column(inverted_handle.clone(), Kind::Atomic, None, Base::Dec),
                     _t: Some(Type::Column(Magma::Integer)),
                 }
             }
@@ -77,6 +88,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result
                         inv_x_col.clone(),
                         Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
                         None,
+                        Base::Hex,
                     ),
                     _t: Some(Type::Column(Magma::Integer)),
                 },
@@ -90,6 +102,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result
                 inv_x_col.clone(),
                 Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
                 None,
+                Base::Hex,
             ),
             _t: Some(Type::Column(Magma::Integer)),
         },
@@ -101,6 +114,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result
                         inv_x_col.clone(),
                         Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
                         None,
+                        Base::Hex,
                     ),
                     _t: Some(Type::Column(Magma::Integer)),
                 },
