@@ -22,6 +22,10 @@
                            (+ e0 offset)))
 (defpurefun (dec e0 offset) (eq (next e0)
                            (- e0 offset)))
+(defpurefun (did-inc e0 offset) (eq e0
+                                    (+ (prev e0) offset)))
+(defpurefun (did-dec e0 offset) (eq  e0
+                                    (- (prev e0) offset)))
 (defpurefun (remains-constant e0) (will-eq e0 e0))
 (defpurefun (didnt-change e0) (eq e0 (prev e0)))
 (defpurefun (did-change e0) (neq e0 (prev e0)))
