@@ -220,7 +220,7 @@ impl FuncVerifier<AstNode> for Form {
         match self {
             Form::For => Arity::Exactly(3),
             Form::Debug => Arity::AtLeast(1),
-            Form::Todo => Arity::Exactly(0),
+            Form::Todo => Arity::AtLeast(0),
             Form::Let => Arity::Dyadic,
             Form::Reduce => Arity::Dyadic,
         }
