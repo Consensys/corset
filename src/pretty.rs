@@ -35,7 +35,7 @@ pub trait Pretty {
 impl Pretty for Fr {
     fn pretty(&self) -> String {
         let hex = self.into_repr().to_string();
-        i64::from_str_radix(&hex[2..], 16)
+        u64::from_str_radix(&hex[2..], 16)
             .map(|x| x.to_string())
             .unwrap_or(format!("0x0{}", hex[2..].trim_start_matches('0')))
     }
@@ -46,10 +46,16 @@ impl Pretty for Fr {
         } else {
             match base {
                 Base::Dec => self.pretty(),
-                Base::Hex => format!(
-                    "0x0{}",
-                    self.into_repr().to_string()[2..].trim_start_matches('0')
-                ),
+                Base::Hex => {
+                    if self.is_zero() {
+                        String::from("0")
+                    } else {
+                        format!(
+                            "0x{}",
+                            self.into_repr().to_string()[2..].trim_start_matches('0')
+                        )
+                    }
+                }
                 Base::Bin => todo!(),
             }
         }
