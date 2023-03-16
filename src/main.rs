@@ -395,8 +395,8 @@ fn main() -> Result<()> {
                     let payload: &[u8] = row.get(2);
                     info!("Processing {}", id);
 
-                    let gz = GzDecoder::new(std::io::Cursor::new(&payload));
-                    let v: Value = match gz.header() {
+                    let gz = flate2::bufread::GzDecoder::new(std::io::Cursor::new(&payload));
+                    let v: serde_json::Value = match gz.header() {
                         Some(_) => serde_json::from_reader(gz),
                         None => {
                             serde_json::from_reader(std::io::Cursor::new(&payload))
@@ -407,6 +407,7 @@ fn main() -> Result<()> {
                     compute::compute_trace(
                         &v,
                         &mut local_constraints,
+                        false,
                     )
                         .with_context(|| format!("while expanding from {}", id))?;
 
