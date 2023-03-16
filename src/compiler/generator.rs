@@ -244,11 +244,14 @@ impl ConstraintSet {
         r
     }
 
+    // do not pollute compilation output of the binary
+    #[allow(dead_code)]
     pub fn from_ptr<'a>(ptr: *const ConstraintSet) -> &'a Self {
         assert!(!ptr.is_null());
         unsafe { &*ptr }
     }
 
+    #[allow(dead_code)]
     pub fn mut_from_ptr<'a>(ptr: *mut ConstraintSet) -> &'a mut Self {
         assert!(!ptr.is_null());
         unsafe { &mut *ptr }
@@ -286,7 +289,7 @@ impl ConstraintSet {
                 .filter_map(|c| match c {
                     Computation::Composite { target, exp } => {
                         if target.module == m {
-                            Some(exp.past_spill() as isize)
+                            Some(exp.past_spill())
                         } else {
                             None
                         }
@@ -356,7 +359,7 @@ impl ConstraintSet {
             while let Some((name, &i)) = current_col.next() {
                 trace!("Writing {}/{}", module, name);
                 let column = &self.modules._cols[i];
-                let handle = Handle::new(&module, &name);
+                let handle = Handle::new(module, name);
                 let value = column.value().unwrap_or(&empty_vec);
                 let padding = if let Some(x) = column.padding_value {
                     Fr::from_str(&x.to_string()).unwrap()

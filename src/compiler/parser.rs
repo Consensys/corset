@@ -803,7 +803,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
         }),
         Rule::integer => {
             let s = pair.as_str();
-            let sign = if s.starts_with("-") {
+            let sign = if s.starts_with('-') {
                 BigInt::from_i64(-1)
             } else {
                 BigInt::from_i64(1)

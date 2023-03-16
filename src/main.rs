@@ -348,7 +348,7 @@ fn main() -> Result<()> {
             .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let outfile = outfile.as_ref().unwrap();
-            let mut f = std::fs::File::create(&outfile)
+            let mut f = std::fs::File::create(outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?;
 
             let mut out = std::io::BufWriter::with_capacity(10_000_000, &mut f);

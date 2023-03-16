@@ -36,14 +36,6 @@ impl Handle {
         }
     }
 
-    pub fn with_id<S1: AsRef<str>, S2: AsRef<str>>(module: S1, name: S2, id: usize) -> Self {
-        Handle {
-            module: module.as_ref().to_owned(),
-            name: name.as_ref().to_owned(),
-            id: Some(id),
-        }
-    }
-
     pub fn set_id(&mut self, i: usize) {
         self.id = Some(i)
     }
@@ -59,17 +51,7 @@ impl Handle {
 
     /// Remove all symbols in a symbol which are invalid in Go identifiers
     fn purify(s: &str) -> String {
-        s.replace('(', "_")
-            .replace(')', "_")
-            .replace('{', "_")
-            .replace('}', "_")
-            .replace('[', "_")
-            .replace(']', "_")
-            .replace('<', "")
-            .replace('>', "")
-            .replace(':', "_")
-            .replace('%', "_")
-            .replace('.', "_")
+        s.replace(['(', ')', '{', '}', '[', ']', '<', '>', ':', '%', '.'], "_")
             .replace('-', "sub")
             .replace('*', "mul")
             .replace('+', "add")

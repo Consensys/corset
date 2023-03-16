@@ -3,14 +3,13 @@ use colored::{Color, Colorize};
 pub struct Tty {
     depths: Vec<usize>,
     o: Vec<String>,
-    latch: usize,
 }
+
 impl Tty {
     pub fn new() -> Self {
         Self {
             depths: vec![0],
             o: vec![String::new()],
-            latch: 0,
         }
     }
 

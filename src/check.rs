@@ -165,7 +165,7 @@ fn fail(
             .get(&module)
             .unwrap()
             .keys()
-            .map(|name| Handle::new(&module, &name))
+            .map(|name| Handle::new(&module, name))
             .sorted_by_key(|h| h.name.clone())
             .collect::<Vec<_>>()
     } else {

@@ -63,7 +63,7 @@ impl Trace {
             let empty_vec = Vec::new();
             for (name, &i) in columns.iter() {
                 let column = &c.modules._cols[i];
-                let handle = Handle::new(&module, &name);
+                let handle = Handle::new(module, name);
                 let value = column.value().unwrap_or(&empty_vec);
                 let padding = if let Some(x) = column.padding_value {
                     Fr::from_str(&x.to_string()).unwrap()
@@ -111,7 +111,7 @@ impl Trace {
 fn _load_corset(zkevmfile: &str) -> Result<Corset> {
     info!("Loading `{}`", &zkevmfile);
     let mut constraints = ron::from_str(
-        &std::fs::read_to_string(&zkevmfile)
+        &std::fs::read_to_string(zkevmfile)
             .with_context(|| anyhow!("while reading `{}`", zkevmfile))?,
     )
     .with_context(|| anyhow!("while parsing `{}`", zkevmfile))?;
@@ -132,7 +132,7 @@ fn _compute_trace(
     fail_on_missing: bool,
 ) -> Result<Trace> {
     compute::compute_trace(
-        &compute::read_trace(&tracefile)?,
+        &compute::read_trace(tracefile)?,
         constraints,
         fail_on_missing,
     )
@@ -163,7 +163,7 @@ fn _trace_check(corset: &mut ConstraintSet, tracefile: &str, fail_on_missing: bo
     transformer::sorts(corset).with_context(|| anyhow!("while creating sorting constraints"))?;
     transformer::expand_invs(corset).with_context(|| anyhow!("while expanding inverses"))?;
 
-    compute::compute_trace(&compute::read_trace(&tracefile)?, corset, fail_on_missing)
+    compute::compute_trace(&compute::read_trace(tracefile)?, corset, fail_on_missing)
         .with_context(|| format!("while expanding `{}`", tracefile))?;
 
     check::check(

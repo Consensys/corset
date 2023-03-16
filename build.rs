@@ -4,7 +4,7 @@ use cbindgen::Config;
 fn main() {
     // Export the current git hash
     let git_hash = Command::new("git")
-        .args(&["rev-parse", "HEAD"])
+        .args(["rev-parse", "HEAD"])
         .output()
         .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
@@ -25,9 +25,9 @@ fn main() {
         ..Default::default()
     };
 
-    cbindgen::generate_with_config(&crate_dir, config)
+    cbindgen::generate_with_config(crate_dir, config)
         .unwrap()
-        .write_to_file(&dbg!(output_file));
+        .write_to_file(output_file);
 }
 
 /// Find the location of the `target/` directory. Note that this may be

@@ -39,17 +39,17 @@ impl LatexExporter {
         }
     }
 
-    fn _flatten(&mut self, ax: &mut Vec<AstNode>, n: &AstNode) {
+    fn _flatten(ax: &mut Vec<AstNode>, n: &AstNode) {
         ax.push(n.clone());
         match &n.class {
-            Token::List(xs) => xs.iter().for_each(|x| self._flatten(ax, x)),
-            Token::DefColumns(xs) => xs.iter().for_each(|x| self._flatten(ax, x)),
+            Token::List(xs) => xs.iter().for_each(|x| Self::_flatten(ax, x)),
+            Token::DefColumns(xs) => xs.iter().for_each(|x| Self::_flatten(ax, x)),
             Token::DefConstraint {
                 name: _,
                 domain: _,
                 guard: _,
                 body: x,
-            } => self._flatten(ax, x),
+            } => Self::_flatten(ax, x),
             _ => (),
         }
     }

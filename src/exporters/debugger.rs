@@ -30,7 +30,7 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty) {
                 while let Some(a) = args.next() {
                     pretty_expr(a, Some(*f), tty);
                     if args.peek().is_some() {
-                        tty.write(format!(" {} ", f.to_string()));
+                        tty.write(format!(" {} ", f));
                     }
                 }
                 if prev.map(|p| priority(*f, p)).unwrap_or(Ordering::Equal) == Ordering::Less {

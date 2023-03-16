@@ -300,7 +300,7 @@ impl Node {
 
         let mut span = 0;
         _past_span(self, &mut span);
-        span.min(0) as isize
+        span.min(0)
     }
 
     /// Compute the maximum future-shifting in the node
@@ -411,6 +411,7 @@ impl Node {
         }
     }
 
+    #[allow(dead_code)]
     pub fn eval_trace(
         &self,
         i: isize,

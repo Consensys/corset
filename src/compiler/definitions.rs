@@ -45,7 +45,7 @@ fn reduce(
             let module_name = ctx.borrow().name.to_owned();
             let symbol = Node {
                 _e: Expression::Column(
-                    Handle::new(&module_name, col),
+                    Handle::new(module_name, col),
                     // Convert Kind<AstNode> to Kind<Expression>
                     match kind {
                         Kind::Atomic => Kind::Atomic,
@@ -91,8 +91,8 @@ fn reduce(
             let mut _froms = Vec::new();
             let mut _tos = Vec::new();
             for (to, from) in tos.iter().zip(froms.iter()) {
-                let from_handle = Handle::new(&ctx.borrow().name, &from);
-                let to_handle = Handle::new(&ctx.borrow().name, &to);
+                let from_handle = Handle::new(&ctx.borrow().name, from);
+                let to_handle = Handle::new(&ctx.borrow().name, to);
                 ctx.borrow_mut()
                     .resolve_symbol(from)
                     .with_context(|| "while defining permutation")?;
@@ -134,7 +134,7 @@ fn reduce(
             ctx.borrow_mut().insert_function(
                 name,
                 Function {
-                    handle: Handle::new(&module_name, name),
+                    handle: Handle::new(module_name, name),
                     class: FunctionClass::UserDefined(Defined {
                         pure: false,
                         args: args.to_owned(),
@@ -148,7 +148,7 @@ fn reduce(
             ctx.borrow_mut().insert_function(
                 name,
                 Function {
-                    handle: Handle::new(&module_name, name),
+                    handle: Handle::new(module_name, name),
                     class: FunctionClass::UserDefined(Defined {
                         pure: true,
                         args: args.to_owned(),

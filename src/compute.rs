@@ -240,7 +240,7 @@ fn compute_interleaved(
             let i = k / count;
             let j = k % count;
             *cs.modules
-                .get(&froms[j as usize])
+                .get(&froms[j])
                 .unwrap()
                 .get(i as isize, false)
                 .unwrap()

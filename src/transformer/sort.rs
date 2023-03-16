@@ -90,7 +90,7 @@ fn create_sort_constraint(
 
     // Create the binarity constraints
     cs.constraints.push(Constraint::Vanishes {
-        handle: Handle::new(&module, "{eq}-binary"),
+        handle: Handle::new(module, "{eq}-binary"),
         domain: None,
         expr: Box::new(Intrinsic::Mul.call(&[
             Node::from_typed_handle(&eq, Type::Column(Magma::Boolean)),
@@ -102,7 +102,7 @@ fn create_sort_constraint(
     });
     for at in ats.iter() {
         cs.constraints.push(Constraint::Vanishes {
-            handle: Handle::new(&module, format!("{at}-binary")),
+            handle: Handle::new(module, format!("{at}-binary")),
             domain: None,
             expr: Box::new(Intrinsic::Mul.call(&[
                 Node::from_typed_handle(at, Type::Column(Magma::Boolean)),
@@ -116,7 +116,7 @@ fn create_sort_constraint(
 
     // Create the byte decomposition constraint
     cs.constraints.push(Constraint::Vanishes {
-        handle: Handle::new(&module, format!("{delta}-binary")),
+        handle: Handle::new(module, format!("{delta}-binary")),
         domain: None,
         expr: Box::new(
             Intrinsic::Sub.call(&[
