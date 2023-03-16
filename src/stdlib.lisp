@@ -29,7 +29,7 @@
 (defpurefun (did-dec e0 offset) (eq  e0
                                     (- (prev e0) offset)))
 (defpurefun (remains-constant e0) (will-eq e0 e0))
-(defpurefun (didnt-change e0) (eq e0 (prev e0)))
+(defpurefun (didnt-change e0) (- e0 (prev e0)))
 (defpurefun (did-change e0) (neq e0 (prev e0)))
 (defpurefun (will-eq e0 e1) (eq (next e0) e1))
 (defpurefun (was-eq e0 e1) (eq (prev e0) e1))
