@@ -15,6 +15,7 @@ use std::ffi::{c_uint, CStr, CString};
 
 use crate::{column::Computation, compiler::EvalSettings, structs::Handle};
 
+mod check;
 mod column;
 mod compiler;
 mod compute;
@@ -32,6 +33,7 @@ pub const ERR_COLUMN_NAME_NOT_FOUND: i32 = 3;
 pub const ERR_COULD_NOT_INITIALIZE_RAYON: i32 = 4;
 pub const ERR_COLUMN_ID_NOT_FOUND: i32 = 5;
 pub const ERR_INVALID_ZKEVM_FILE: i32 = 6;
+pub const ERR_CHECK_FAILED: i32 = 7;
 
 fn cstr_to_string(s: *const c_char) -> String {
     let name = unsafe {
@@ -151,6 +153,38 @@ pub extern "C" fn load_corset(zkevmfile: *const c_char) -> *mut Corset {
     }
 }
 
+fn _trace_check(corset: &mut ConstraintSet, tracefile: &str, fail_on_missing: bool) -> Result<()> {
+    transformer::validate_nhood(corset)
+        .with_context(|| anyhow!("while creating nhood constraints"))?;
+    transformer::lower_shifts(corset)?;
+    transformer::expand_ifs(corset);
+    transformer::expand_constraints(corset)
+        .with_context(|| anyhow!("while expanding constraints"))?;
+    transformer::sorts(corset).with_context(|| anyhow!("while creating sorting constraints"))?;
+    transformer::expand_invs(corset).with_context(|| anyhow!("while expanding inverses"))?;
+
+    compute::compute_trace(&compute::read_trace(&tracefile)?, corset, fail_on_missing)
+        .with_context(|| format!("while expanding `{}`", tracefile))?;
+
+    check::check(
+        corset,
+        &None,
+        &[],
+        false,
+        true,
+        check::DebugSettings::new()
+            .unclutter(false)
+            .dim(true)
+            .continue_on_error(false)
+            .report(false)
+            .full_trace(false),
+    )
+    .with_context(|| format!("while checking `{}`", tracefile))?;
+    info!("{}: SUCCESS", tracefile);
+
+    Ok(())
+}
+
 #[no_mangle]
 pub extern "C" fn trace_check(
     corset: *mut Corset,
@@ -172,10 +206,17 @@ pub extern "C" fn trace_check(
         return false;
     }
 
-    let _tracefile = cstr_to_string(tracefile);
-    let _constraints = Corset::mut_from_ptr(corset);
+    let corset = Corset::mut_from_ptr(corset);
+    let tracefile = cstr_to_string(tracefile);
 
-    todo!()
+    match _trace_check(corset, &tracefile, fail_on_missing) {
+        Result::Ok(_) => true,
+        Err(e) => {
+            eprintln!("{e:?}");
+            set_errno(Errno(ERR_CHECK_FAILED));
+            false
+        }
+    }
 }
 
 #[no_mangle]
