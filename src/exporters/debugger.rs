@@ -14,7 +14,7 @@ fn priority(a: Intrinsic, b: Intrinsic) -> Ordering {
         (Intrinsic::Mul, Intrinsic::Add) => Ordering::Greater,
         (Intrinsic::Mul, Intrinsic::Sub) => Ordering::Greater,
         (Intrinsic::Mul, Intrinsic::Mul) => Ordering::Equal,
-        (x, y) => unimplemented!("{x:?} <=> {y:?}"),
+        _ => unimplemented!("{a}/{b}"),
     }
 }
 

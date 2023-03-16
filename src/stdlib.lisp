@@ -4,6 +4,7 @@
 (defunalias and +)
 (defunalias mul *)
 (defunalias either *)
+(defunalias all +)
 
 (defunalias add +)
 

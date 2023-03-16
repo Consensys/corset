@@ -177,7 +177,6 @@ impl Node {
                         );
                         tty.cr();
                     }
-                    // tty.shift(8);
                     let mut args = args.iter().skip(1).peekable();
                     while let Some(a) = args.next() {
                         _debug(
@@ -196,7 +195,11 @@ impl Node {
                     tty.unshift();
                     tty.cr();
                     tty.write(")".color(c).to_string());
-                    tty.write(format!("[{}]", v.pretty()).color(c_v).to_string());
+                    tty.write(
+                        format!("[{}]", v.pretty_with_base(Base::Hex))
+                            .color(c_v)
+                            .to_string(),
+                    );
                 }
                 Expression::Const(x, _) => {
                     let c = if dim && zero_context {
@@ -217,7 +220,7 @@ impl Node {
                     };
 
                     tty.write(
-                        format!("{}[{}]", h.name, v.pretty())
+                        format!("{}[{}]", h.name, v.pretty_with_base(Base::Hex))
                             .color(c)
                             .bold()
                             .to_string(),
