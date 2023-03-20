@@ -108,13 +108,26 @@ impl Trace {
     }
 }
 
-fn _load_corset(zkevmfile: &str) -> Result<Corset> {
+fn _corset_from_file(zkevmfile: &str) -> Result<Corset> {
     info!("Loading `{}`", &zkevmfile);
     let mut constraints = ron::from_str(
         &std::fs::read_to_string(zkevmfile)
             .with_context(|| anyhow!("while reading `{}`", zkevmfile))?,
     )
     .with_context(|| anyhow!("while parsing `{}`", zkevmfile))?;
+
+    transformer::validate_nhood(&mut constraints)?;
+    transformer::lower_shifts(&mut constraints)?;
+    transformer::expand_ifs(&mut constraints);
+    transformer::expand_constraints(&mut constraints)?;
+    transformer::sorts(&mut constraints)?;
+    transformer::expand_invs(&mut constraints)?;
+
+    Ok(constraints)
+}
+fn _corset_from_str(zkevmstr: &str) -> Result<Corset> {
+    let mut constraints =
+        ron::from_str(zkevmstr).with_context(|| anyhow!("while parsing the provided zkEVM"))?;
 
     transformer::validate_nhood(&mut constraints)?;
     transformer::lower_shifts(&mut constraints)?;
@@ -141,9 +154,22 @@ fn _compute_trace(
 }
 
 #[no_mangle]
-pub extern "C" fn load_corset(zkevmfile: *const c_char) -> *mut Corset {
+pub extern "C" fn corset_from_file(zkevmfile: *const c_char) -> *mut Corset {
     let zkevmfile = cstr_to_string(zkevmfile);
-    match _load_corset(&zkevmfile) {
+    match _corset_from_file(&zkevmfile) {
+        Result::Ok(constraints) => Box::into_raw(Box::new(constraints)),
+        Err(e) => {
+            eprintln!("{:?}", e);
+            set_errno(Errno(ERR_INVALID_ZKEVM_FILE));
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn corset_from_string(zkevmstr: *const c_char) -> *mut Corset {
+    let zkevmstr = cstr_to_string(zkevmstr);
+    match _corset_from_str(&zkevmstr) {
         Result::Ok(constraints) => Box::into_raw(Box::new(constraints)),
         Err(e) => {
             eprintln!("{:?}", e);

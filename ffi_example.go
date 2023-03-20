@@ -15,6 +15,7 @@ package main
 import "C"
 import "fmt"
 import "unsafe"
+import _ "embed"
 
 // +----------------------------------------------------------------------------------------+
 // |                                                                                        |
@@ -68,16 +69,21 @@ func getColumnNames(trace *C.Trace) (r []string) {
 	return
 }
 
+// go:embed zkevm.bin
+var zkevm string
+
 func main() {
 	// Load a .json(.gz), a constraint set, and return the computed & expanded trace
+	corset, err := C.corset_from_file(C.CString("/home/franklin/consensys/zkevm/zk-geth/zk-evm/zkevm.bin"))
+	// corset, err := C.corset_from_string(C.CString(zkevm))
 	trace, err := C.trace_compute(
-		C.CString("/home/franklin/consensys/zkevm/zk-geth/zk-evm/zkevm.bin"), // constraints file
-		C.CString("/home/franklin/traces/2013044654.json"),                   // trace file
-		1,     // # threads
+		corset,
+		C.CString("/home/franklin/traces/1846717126.json"), // trace file
+		4,     // # threads
 		false, // crash on missing columns in the trace
 	)
 	if err != nil {
-		fmt.Println("while computing trace")
+		fmt.Println("Error while computing trace")
 		return
 	}
 
@@ -88,7 +94,7 @@ func main() {
 	// Take a look at a column in particular
 	col, err := C.trace_column_by_name(trace, C.CString("rom__INV_rom_CODE_FRAGMENT_INDEX"))
 	if err != nil {
-		fmt.Println("while retrieveng column")
+		fmt.Println("while retrieving column")
 		return
 	}
 	// Show padding value, values, and values length
