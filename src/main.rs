@@ -304,7 +304,7 @@ fn main() -> Result<()> {
             package,
         } => {
             // transformer::validate_nhood(&mut constraints)?;
-            transformer::lower_shifts(&mut constraints)?;
+            transformer::lower_shifts(&mut constraints);
             transformer::expand_ifs(&mut constraints);
             transformer::expand_constraints(&mut constraints)?;
             transformer::sorts(&mut constraints)?;
@@ -334,7 +334,7 @@ fn main() -> Result<()> {
             fail_on_missing,
         } => {
             transformer::validate_nhood(&mut constraints)?;
-            transformer::lower_shifts(&mut constraints)?;
+            transformer::lower_shifts(&mut constraints);
             transformer::expand_ifs(&mut constraints);
             transformer::expand_constraints(&mut constraints)?;
             transformer::sorts(&mut constraints)?;
@@ -370,7 +370,7 @@ fn main() -> Result<()> {
         } => {
             transformer::validate_nhood(&mut constraints)
                 .with_context(|| anyhow!("while creating nhood constraints"))?;
-            transformer::lower_shifts(&mut constraints)?;
+            transformer::lower_shifts(&mut constraints);
             transformer::expand_ifs(&mut constraints);
             transformer::expand_constraints(&mut constraints)
                 .with_context(|| anyhow!("while expanding constraints"))?;
@@ -464,7 +464,7 @@ fn main() -> Result<()> {
             if expand {
                 transformer::validate_nhood(&mut constraints)
                     .with_context(|| anyhow!("while creating nhood constraints"))?;
-                transformer::lower_shifts(&mut constraints)?;
+                transformer::lower_shifts(&mut constraints);
                 transformer::expand_ifs(&mut constraints);
                 transformer::expand_constraints(&mut constraints)
                     .with_context(|| anyhow!("while expanding constraints"))?;
@@ -498,7 +498,7 @@ fn main() -> Result<()> {
             if expand {
                 transformer::validate_nhood(&mut constraints)
                     .with_context(|| anyhow!("while creating nhood constraints"))?;
-                transformer::lower_shifts(&mut constraints)?;
+                transformer::lower_shifts(&mut constraints);
                 transformer::expand_ifs(&mut constraints);
                 transformer::expand_constraints(&mut constraints)
                     .with_context(|| anyhow!("while expanding constraints"))?;

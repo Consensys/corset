@@ -117,7 +117,7 @@ fn _corset_from_file(zkevmfile: &str) -> Result<Corset> {
     .with_context(|| anyhow!("while parsing `{}`", zkevmfile))?;
 
     transformer::validate_nhood(&mut constraints)?;
-    transformer::lower_shifts(&mut constraints)?;
+    transformer::lower_shifts(&mut constraints);
     transformer::expand_ifs(&mut constraints);
     transformer::expand_constraints(&mut constraints)?;
     transformer::sorts(&mut constraints)?;
@@ -130,7 +130,7 @@ fn _corset_from_str(zkevmstr: &str) -> Result<Corset> {
         ron::from_str(zkevmstr).with_context(|| anyhow!("while parsing the provided zkEVM"))?;
 
     transformer::validate_nhood(&mut constraints)?;
-    transformer::lower_shifts(&mut constraints)?;
+    transformer::lower_shifts(&mut constraints);
     transformer::expand_ifs(&mut constraints);
     transformer::expand_constraints(&mut constraints)?;
     transformer::sorts(&mut constraints)?;
