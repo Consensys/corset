@@ -306,9 +306,10 @@ import (
     "github.com/consensys/accelerated-crypto-monorepo/zkevm"
 )
 
-const (
-SIZE = {}
-{})
+// const (
+// SIZE = []
+// []
+// )
 
 func ZkEVMDefine(build *zkevm.Builder) {{
 //
@@ -324,11 +325,11 @@ func ZkEVMDefine(build *zkevm.Builder) {{
 }}
 "#,
             &self.package,
-            SIZE,
-            self.sizes
-                .iter()
-                .sorted()
-                .fold(String::new(), |ax, s| ax + &format!("{} = SIZE\n", s)),
+            // SIZE,
+            // self.sizes
+            //     .iter()
+            //     .sorted()
+            //     .fold(String::new(), |ax, s| ax + &format!("{} = SIZE\n", s)),
             columns,
             constraints,
         );
