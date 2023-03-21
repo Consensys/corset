@@ -35,13 +35,13 @@ pub const ERR_COLUMN_ID_NOT_FOUND: i32 = 5;
 pub const ERR_INVALID_ZKEVM_FILE: i32 = 6;
 pub const ERR_CHECK_FAILED: i32 = 7;
 
-fn cstr_to_string(s: *const c_char) -> String {
+fn cstr_to_string<'a>(s: *const c_char) -> &'a str {
     let name = unsafe {
         assert!(!s.is_null());
         CStr::from_ptr(s)
     };
 
-    name.to_str().unwrap().to_owned()
+    name.to_str().unwrap()
 }
 
 struct ComputedColumn {
@@ -97,7 +97,7 @@ impl Trace {
                         .collect(),
                     padding_value: padding.into_repr().0,
                 });
-                r.ids.push(handle.mangle());
+                r.ids.push(handle.to_string());
             }
         }
         r
@@ -139,7 +139,7 @@ fn _corset_from_str(zkevmstr: &str) -> Result<Corset> {
     Ok(constraints)
 }
 
-fn _compute_trace(
+fn _compute_trace_from_file(
     constraints: &mut Corset,
     tracefile: &str,
     fail_on_missing: bool,
@@ -153,11 +153,28 @@ fn _compute_trace(
     Ok(Trace::from_constraints(constraints))
 }
 
+fn _compute_trace_from_str(
+    constraints: &mut Corset,
+    tracestr: &str,
+    fail_on_missing: bool,
+) -> Result<Trace> {
+    compute::compute_trace(
+        &compute::read_trace_str(tracestr)?,
+        constraints,
+        fail_on_missing,
+    )
+    .with_context(|| format!("while computing from `{}`", tracestr))?;
+    Ok(Trace::from_constraints(constraints))
+}
+
 #[no_mangle]
 pub extern "C" fn corset_from_file(zkevmfile: *const c_char) -> *mut Corset {
     let zkevmfile = cstr_to_string(zkevmfile);
-    match _corset_from_file(&zkevmfile) {
-        Result::Ok(constraints) => Box::into_raw(Box::new(constraints)),
+    match _corset_from_file(zkevmfile) {
+        Result::Ok(constraints) => {
+            set_errno(Errno(0));
+            Box::into_raw(Box::new(constraints))
+        }
         Err(e) => {
             eprintln!("{:?}", e);
             set_errno(Errno(ERR_INVALID_ZKEVM_FILE));
@@ -169,8 +186,11 @@ pub extern "C" fn corset_from_file(zkevmfile: *const c_char) -> *mut Corset {
 #[no_mangle]
 pub extern "C" fn corset_from_string(zkevmstr: *const c_char) -> *mut Corset {
     let zkevmstr = cstr_to_string(zkevmstr);
-    match _corset_from_str(&zkevmstr) {
-        Result::Ok(constraints) => Box::into_raw(Box::new(constraints)),
+    match _corset_from_str(zkevmstr) {
+        Result::Ok(constraints) => {
+            set_errno(Errno(0));
+            Box::into_raw(Box::new(constraints))
+        }
         Err(e) => {
             eprintln!("{:?}", e);
             set_errno(Errno(ERR_INVALID_ZKEVM_FILE));
@@ -246,7 +266,7 @@ pub extern "C" fn trace_check(
 }
 
 #[no_mangle]
-pub extern "C" fn trace_compute(
+pub extern "C" fn trace_compute_from_file(
     corset: *mut Corset,
     tracefile: *const c_char,
     threads: c_uint,
@@ -268,14 +288,54 @@ pub extern "C" fn trace_compute(
 
     let tracefile = cstr_to_string(tracefile);
     let constraints = Corset::mut_from_ptr(corset);
-    let r = _compute_trace(constraints, &tracefile, fail_on_missing);
+    let r = _compute_trace_from_file(constraints, tracefile, fail_on_missing);
     match r {
         Err(e) => {
             eprintln!("{:?}", e);
             set_errno(Errno(ERR_COMPUTE_TRACE_FAILED));
             std::ptr::null_mut()
         }
-        Result::Ok(x) => Box::into_raw(Box::new(x)),
+        Result::Ok(x) => {
+            set_errno(Errno(0));
+            Box::into_raw(Box::new(x))
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn trace_compute_from_string(
+    corset: *mut Corset,
+    tracestr: *const c_char,
+    threads: c_uint,
+    fail_on_missing: bool,
+) -> *mut Trace {
+    if rayon::ThreadPoolBuilder::new()
+        .num_threads(if let Result::Ok(t) = threads.try_into() {
+            t
+        } else {
+            set_errno(Errno(ERR_NOT_AN_USIZE));
+            return std::ptr::null_mut();
+        })
+        .build_global()
+        .is_err()
+    {
+        set_errno(Errno(ERR_COULD_NOT_INITIALIZE_RAYON));
+        return std::ptr::null_mut();
+    }
+
+    let tracestr = cstr_to_string(tracestr);
+    let constraints = Corset::mut_from_ptr(corset);
+    let r = _compute_trace_from_str(constraints, tracestr, fail_on_missing);
+    match r {
+        Err(e) => {
+            eprintln!("{:?}", e);
+            set_errno(Errno(ERR_COMPUTE_TRACE_FAILED));
+            std::ptr::null_mut()
+        }
+        Result::Ok(x) => {
+            set_errno(Errno(0));
+            Box::into_raw(Box::new(x))
+        }
     }
 }
 

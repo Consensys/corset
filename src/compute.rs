@@ -78,6 +78,17 @@ pub fn read_trace<S: AsRef<str>>(tracefile: S) -> Result<Value> {
     Ok(v)
 }
 
+pub fn read_trace_str<S: AsRef<str>>(tracestr: S) -> Result<Value> {
+    let tracestr = tracestr.as_ref();
+
+    let gz = GzDecoder::new(BufReader::new(tracestr.as_bytes()));
+    let v: Value = match gz.header() {
+        Some(_) => serde_json::from_reader(gz),
+        None => serde_json::from_reader(BufReader::new(tracestr.as_bytes())),
+    }?;
+    Ok(v)
+}
+
 fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
     let mut cache_num = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut cache_str = cached::SizedCache::with_size(200000); // ~1.60MB cache
