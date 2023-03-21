@@ -200,15 +200,6 @@ pub extern "C" fn corset_from_string(zkevmstr: *const c_char) -> *mut Corset {
 }
 
 fn _trace_check(corset: &mut ConstraintSet, tracefile: &str, fail_on_missing: bool) -> Result<()> {
-    transformer::validate_nhood(corset)
-        .with_context(|| anyhow!("while creating nhood constraints"))?;
-    transformer::lower_shifts(corset)?;
-    transformer::expand_ifs(corset);
-    transformer::expand_constraints(corset)
-        .with_context(|| anyhow!("while expanding constraints"))?;
-    transformer::sorts(corset).with_context(|| anyhow!("while creating sorting constraints"))?;
-    transformer::expand_invs(corset).with_context(|| anyhow!("while expanding inverses"))?;
-
     compute::compute_trace(&compute::read_trace(tracefile)?, corset, fail_on_missing)
         .with_context(|| format!("while expanding `{}`", tracefile))?;
 
