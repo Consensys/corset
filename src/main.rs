@@ -62,7 +62,7 @@ pub struct Args {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Produce a Go-based constraint system
+    /// Export columns in a format usable by zkGeth
     Go {
         #[arg(
             short = 'P',
@@ -91,6 +91,19 @@ enum Commands {
             help = "In which package the function will be generated"
         )]
         package: String,
+    },
+    /// Export columns in a format usable by zkBesu
+    Besu {
+        #[arg(
+            short = 'P',
+            long = "package",
+            required = true,
+            help = "In which package the function will be generated"
+        )]
+        package: String,
+
+        #[arg(short = 'o', long = "out", help = "where to render the columns")]
+        filename: Option<String>,
     },
     /// Produce a LaTeX file describing the constraints
     Latex {
@@ -298,6 +311,9 @@ fn main() -> Result<()> {
         Commands::Go { package, filename } => {
             let mut go_exporter = exporters::GoExporter { package, filename };
             go_exporter.render(&constraints)?;
+        }
+        Commands::Besu { package, filename } => {
+            exporters::besu::render(&constraints, &package, filename.as_ref())?;
         }
         Commands::WizardIOP {
             out_filename,
