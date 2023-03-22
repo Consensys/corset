@@ -38,6 +38,17 @@ impl Type {
         }
     }
 
+    pub fn same_magma(&self, new: Type) -> Self {
+        let magma = self.magma();
+        match new {
+            Type::Void => Type::Void,
+            Type::Scalar(_) => Type::Scalar(magma),
+            Type::Column(_) => Type::Column(magma),
+            Type::ArrayColumn(_) => Type::ArrayColumn(magma),
+            Type::List(_) => Type::List(magma),
+        }
+    }
+
     pub fn as_scalar(&self) -> Self {
         match self {
             Type::Column(x) => Type::Scalar(*x),

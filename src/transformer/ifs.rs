@@ -98,10 +98,83 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
     Ok(())
 }
 
+fn raise_ifs(mut e: Node) -> Node {
+    match e.e_mut() {
+        Expression::Funcall { func, ref mut args } => {
+            *args = args.into_iter().map(|a| raise_ifs(a.clone())).collect();
+
+            match func {
+                Intrinsic::IfZero | Intrinsic::IfNotZero => e.clone(),
+                Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul | Intrinsic::Eq => {
+                    for (i, a) in args.iter().enumerate() {
+                        if let Expression::Funcall {
+                            func: func_if @ (Intrinsic::IfZero | Intrinsic::IfNotZero),
+                            args: args_if,
+                        } = a.e()
+                        {
+                            let cond = args_if[0].clone();
+                            let new_then = func
+                                .call(
+                                    &args
+                                        .iter()
+                                        .take(i)
+                                        .chain(vec![&args_if[1]].into_iter())
+                                        .cloned()
+                                        .collect::<Vec<_>>(),
+                                )
+                                .unwrap();
+                            let new_else = func
+                                .call(
+                                    &args
+                                        .iter()
+                                        .take(i)
+                                        .cloned()
+                                        .chain(
+                                            vec![args_if.get(2).map(|a| a.clone()).unwrap_or_else(
+                                                || Node::from_expr(Expression::Void),
+                                            )]
+                                            .into_iter(),
+                                        )
+                                        .filter(|e| !matches!(e.e(), Expression::Void))
+                                        .collect::<Vec<_>>(),
+                                )
+                                .unwrap();
+
+                            let new_e = raise_ifs(
+                                func_if
+                                    .call(&[cond, new_then, new_else])
+                                    .unwrap()
+                                    .with_type(a.t()),
+                            );
+                            return new_e;
+                        }
+                    }
+                    e
+                }
+                Intrinsic::Shift | Intrinsic::Neg | Intrinsic::Inv | Intrinsic::Not => e,
+
+                Intrinsic::Nth | Intrinsic::Exp | Intrinsic::Begin => e.clone(),
+            }
+        }
+        Expression::List(xs) => {
+            for x in xs.iter_mut() {
+                *x = raise_ifs(x.clone());
+            }
+            e
+        }
+        _ => e,
+    }
+}
+
 pub fn expand_ifs(cs: &mut ConstraintSet) {
     for c in cs.constraints.iter_mut() {
+        if let Constraint::Vanishes { expr, .. } = c {
+            *expr = Box::new(raise_ifs(*expr.clone()));
+        }
+    }
+    for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr: e, .. } = c {
-            do_expand_ifs(e).unwrap(); // Ifs create Inv and must be expanded first
+            do_expand_ifs(e).unwrap();
         }
     }
 }
