@@ -1,8 +1,13 @@
-use crate::compiler::{Ast, AstNode, Token};
-use anyhow::{Context, Result};
+use crate::compiler::{Ast, AstNode, Token, Type};
+use crate::structs::Handle;
+use anyhow::*;
 use convert_case::{Case, Casing};
+use handlebars::Handlebars;
+use itertools::Itertools;
+use log::error;
+use serde::Serialize;
 
-use std::{cell::RefCell, io::Write, rc::Rc};
+use std::{fs::File, io::Write};
 
 #[derive(Default)]
 pub struct LatexExporter {
@@ -14,306 +19,443 @@ pub struct LatexExporter {
 fn sanitize(s: &str) -> String {
     s.replace('_', "\\_")
 }
+fn romanize(s: &str) -> String {
+    s.replace('1', "I")
+        .replace('2', "II")
+        .replace('3', "III")
+        .replace('4', "IV")
+}
 
 fn wrap_env(body: String, env: &str) -> String {
     format!("\\begin{{{}}}\n{}\n\\end{{{}}}\n", env, body, env)
 }
 
-fn dollarize(s: String, in_math: bool) -> String {
-    if !in_math {
+fn as_col(s: &str) -> String {
+    format!("\\rlp{}", romanize(&s.to_case(Case::Pascal)))
+}
+
+fn render_parenthesized(e: &AstNode, state: State) -> Result<String> {
+    if matches!(e.class, Token::Symbol(_) | Token::Value(_)) {
+        render_node(e, state)
+    } else {
+        Ok(format!("({})", render_node(e, state)?))
+    }
+}
+
+fn make_op(op: &str, args: &[AstNode], state: State) -> String {
+    if args.len() > 2 {
+        format!("\\\\\\hspace{{{}cm}}{}", state.indent, op)
+    } else {
+        op.to_owned()
+    }
+}
+
+fn render_op(op: &str, args: &[AstNode], state: State) -> Result<String> {
+    Ok(args
+        .iter()
+        .map(|a| render_node(a, state.clone()))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .join(op))
+}
+
+fn render_if(args: &[AstNode], value: &str, reverse: bool, state: State) -> Result<String> {
+    let op = if args.len() > 2 { "eIf" } else { "If" };
+    let eq = if reverse { "$\\neq$" } else { "=" };
+    let cond = render_node(&args[0], state)?.replace('\n', " ");
+    let tthen = render_node(&args[1], state)?;
+    let eelse = if let Some(x) = args.get(2) {
+        format!("{{{}}}\n", render_node(x, state.in_maths(false))?)
+    } else {
+        "".into()
+    };
+
+    Ok(format!(
+        "\\{}{{{} {} {}}}\n{{{}}}\n{}",
+        op, cond, eq, value, tthen, eelse
+    ))
+}
+
+#[derive(Copy, Clone)]
+struct State<'a> {
+    in_maths: bool,
+    indent: f32,
+    columns: &'a [String],
+}
+impl State<'_> {
+    fn in_maths(self, in_maths: bool) -> Self {
+        State { in_maths, ..self }
+    }
+    fn indent(self) -> Self {
+        State {
+            indent: self.indent + 0.5,
+            ..self
+        }
+    }
+}
+
+fn render_form(args: &[AstNode], state: State) -> Result<String> {
+    if args.is_empty() {
+        Ok("()".into())
+    } else {
+        let fname = if let Token::Symbol(name) = &args[0].class {
+            name
+        } else {
+            error!("{:?} unimplemented in LaTeX", args);
+            return Ok(Default::default());
+        };
+        match fname.as_str() {
+            "nth" => Ok(format!(
+                "{}[{}]",
+                render_node(&args[1], state)?,
+                render_node(&args[2], state)?,
+            )),
+            "=" | "eq" => Ok(format!(
+                "{} = {}",
+                render_node(&args[1], state)?,
+                render_node(&args[2], state)?,
+            )),
+            "*" => Ok(format!(
+                "{} $\\times$ {}",
+                render_parenthesized(&args[1], state)?,
+                render_parenthesized(&args[2], state)?,
+            )),
+            "+" => render_op(&make_op("+", &args[1..], state.indent()), &args[1..], state),
+            "-" => render_op(&make_op("-", &args[1..], state.indent()), &args[1..], state),
+            "^" => Ok(format!(
+                "{}\\textsuperscript{{{}}}",
+                render_parenthesized(&args[1], state)?,
+                render_parenthesized(&args[2], state)?,
+            )),
+            "prev" => Ok(format!(
+                "${}_{{i-1}}$",
+                render_node(
+                    &args[1],
+                    State {
+                        in_maths: true,
+                        ..state
+                    },
+                )?
+            )),
+            "next" => Ok(format!(
+                "${}_{{i+1}}$",
+                render_node(&args[1], state.in_maths(true))?,
+            )),
+            "inc" => Ok(format!(
+                "${}_{{i+1}} = {}_i + {}$",
+                render_node(&args[1], state.in_maths(true))?,
+                render_node(&args[1], state.in_maths(true))?,
+                render_node(&args[2], state.in_maths(true))?,
+            )),
+            "remains-constant" => Ok(format!(
+                "${}_{{i+1}} - {}_{{i}}$",
+                render_node(&args[1], state.in_maths(true))?,
+                render_node(&args[1], state.in_maths(true))?
+            )),
+            "did-change" => Ok(format!(
+                "${}_{{i}} \neq {}_{{i-1}}$",
+                render_node(&args[1], state.in_maths(true))?,
+                render_node(&args[1], state.in_maths(true))?
+            )),
+            "didnt-change" => Ok(format!(
+                "${}_{{i}} - {}_{{i-1}}$",
+                render_node(&args[1], state.in_maths(true))?,
+                render_node(&args[1], state.in_maths(true))?
+            )),
+            "if-eq-else" | "if-eq" => render_if(
+                std::iter::once(&args[1])
+                    .chain(args.iter().skip(3))
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+                &render_node(&args[2], state)?,
+                false,
+                state,
+            ),
+            "if-zero" => render_if(&args[1..], "0".into(), false, state),
+            "if-not-zero" => render_if(&args[1..], "0".into(), true, state),
+            "will-eq" => Ok(format!(
+                "{}[i+1] = {}",
+                render_node(&args[1], state)?,
+                render_node(&args[2], state)?
+            )),
+            "byte-shift" => Ok(format!(
+                "{} $\\gg$ {}",
+                render_node(&args[1], state)?,
+                render_node(&args[2], state)?
+            )),
+            "vanishes" => Ok(format!("{} = 0", render_node(&args[1], state)?,)),
+            "let" => {
+                let mut r = String::new();
+                for xs in args[1]
+                    .as_list()
+                    .unwrap()
+                    .iter()
+                    .map(|x| x.as_list().unwrap())
+                {
+                    let k = &xs[0];
+                    let v = &xs[1];
+                    r += &format!(
+                        "\\texttt{{{}}} $\\leftarrow$ {}\\;\n",
+                        render_node(k, state)?,
+                        render_node(v, state)?
+                    );
+                }
+                r += &render_node(&args[2], state)?;
+                Ok(r)
+            }
+            "begin" => Ok(args[1..]
+                .iter()
+                .map(|n| render_node(n, state.in_maths(true)))
+                .collect::<Result<Vec<_>>>()?
+                .join("\\;\n")),
+            _ => Ok(format!(
+                "\\FuncSty{{{}(}}\n{}\n\\FuncSty{{)}}",
+                render_node(&args[0], state.in_maths(true))?,
+                &args[1..]
+                    .iter()
+                    .map(|a| render_node(a, state.in_maths(false)))
+                    .collect::<Result<Vec<_>>>()?
+                    .join(", ")
+            )),
+        }
+    }
+}
+fn with_env(env: &str, x: &str) -> String {
+    format!("\\{}{{{}}}", env, x)
+}
+
+fn dollarize(s: String, state: State) -> String {
+    if !state.in_maths {
         format!("\\[{}\\]", s)
     } else {
         s
     }
 }
-fn textize(s: String, _: bool) -> String {
-    format!("\\text{{{}}}", s)
+fn render_node(n: &AstNode, state: State) -> Result<String> {
+    match &n.class {
+        Token::Value(x) => Ok(x.to_string()),
+        Token::Symbol(name) => Ok(if state.columns.contains(name) {
+            as_col(name.as_str())
+        } else {
+            with_env("texttt",&sanitize(name))
+        }),
+        Token::DefConsts(cs) => {
+            let body = cs
+                .iter()
+                .map(|c| format!("\\text{{{}}} \\triangleq {:?}", sanitize(&c.0), c.1))
+                .collect::<Vec<_>>()
+                .join("\\\\\n");
+
+            Ok(format!(
+                "\\begin{{defconsts}}\\[{}\\]\\end{{defconsts}}",
+                if cs.len() > 1 {
+                    wrap_env(body, "cases")
+                } else {
+                    body
+                }
+            ))
+        }
+        Token::DefConstraint { name, domain, guard: _, body } => Ok(format!(
+            "\n\\begin{{constraint}}[{} {}]\n\\begin{{gather*}}\n{}\n\\end{{gather*}}\n\\end{{constraint}}\n",
+            name.to_case(Case::Title),
+            if domain.is_none() {
+                "".to_owned()
+            } else {
+                format!("({})",
+                        domain
+                        .as_ref()
+                        .map(|d| d
+                             .iter()
+                             .map(|x| x.to_string())
+                             .collect::<Vec<_>>()
+                             .join(", "))
+                        .unwrap_or_else(|| "".into())
+                )
+            },
+            render_node(body, state.in_maths(false))?,
+        )),
+        Token::List(args) => render_form(args, state),
+        _ => Ok(String::new()),
+    }
 }
 
-impl LatexExporter {
-    fn render_parenthesized(&mut self, e: &AstNode, in_maths: bool) -> Result<String> {
-        if matches!(e.class, Token::Symbol(_) | Token::Value(_)) {
-            self.render_node(e, in_maths)
-        } else {
-            Ok(format!("({})", self.render_node(e, in_maths)?))
-        }
+const CONSTRAINT_TEMPLATE: &'static str = include_str!("constraint.tex");
+#[derive(Serialize)]
+struct LatexTemplate {
+    caption: String,
+    content: String,
+}
+fn render_constraints(asts: &[Ast], columns: &[String]) -> Result<String> {
+    let mut r = String::new();
+    for constraint in asts.iter().flat_map(|ast| constraints(ast).into_iter()) {
+        r += "\n";
+        let state = State {
+            in_maths: false,
+            indent: 0.,
+            columns,
+        };
+        r += &Handlebars::new().render_template(
+            CONSTRAINT_TEMPLATE,
+            &LatexTemplate {
+                caption: constraint.h.name.to_owned(),
+                content: render_node(&constraint.e, state)?,
+            },
+        )?;
+        r += "\n";
     }
+    Ok(r)
+}
 
-    fn _flatten(ax: &mut Vec<AstNode>, n: &AstNode) {
-        ax.push(n.clone());
-        match &n.class {
-            Token::List(xs) => xs.iter().for_each(|x| Self::_flatten(ax, x)),
-            Token::DefColumns(xs) => xs.iter().for_each(|x| Self::_flatten(ax, x)),
+type LatexConst = (String, AstNode);
+struct LatexConstraint {
+    h: Handle,
+    e: AstNode,
+}
+struct LatexColumn {
+    name: String,
+    t: Type,
+    is_array: bool,
+}
+
+fn constraints(ast: &Ast) -> Vec<LatexConstraint> {
+    let mut module = "<prelude>".to_string();
+
+    ast.exprs
+        .iter()
+        .filter_map(|n| match &n.class {
+            Token::DefModule(m) => {
+                module = m.to_owned();
+                None
+            }
             Token::DefConstraint {
-                name: _,
-                domain: _,
-                guard: _,
-                body: x,
-            } => Self::_flatten(ax, x),
+                name,
+                domain,
+                guard,
+                body,
+            } => {
+                let h = Handle::new(&module, name);
+                Some(LatexConstraint {
+                    h,
+                    e: *body.to_owned(),
+                })
+            }
+            // Token::DefPermutation { from, to } => todo!(),
+            // Token::DefPlookup {
+            //     name,
+            //     including,
+            //     included,
+            // } => todo!(),
+            // Token::DefInrange(_, _) => todo!(),
+            _ => None,
+        })
+        .collect()
+}
+
+fn consts(ast: &Ast) -> Vec<LatexConst> {
+    fn _consts(n: &AstNode, consts: &mut Vec<LatexConst>) {
+        match &n.class {
+            Token::DefConsts(cs) => {
+                for (name, exp) in cs.iter() {
+                    consts.push((name.to_owned(), *exp.to_owned()))
+                }
+            }
             _ => (),
         }
     }
-    fn render_form(&mut self, args: &[AstNode], in_maths: bool) -> Result<String> {
-        if args.is_empty() {
-            Ok("()".into())
-        } else {
-            let fname = if let Token::Symbol(name) = &args[0].class {
-                name
-            } else {
-                unreachable!()
-            };
-            match fname.as_str() {
-                "nth" => Ok(dollarize(
-                    format!(
-                        "{}^{{{}}}",
-                        self.render_node(&args[1], true)?,
-                        self.render_node(&args[2], true)?,
-                    ),
-                    in_maths,
-                )),
-                "=" | "eq" => Ok(dollarize(
-                    format!(
-                        "{} = {}",
-                        self.render_node(&args[1], true)?,
-                        self.render_node(&args[2], true)?,
-                    ),
-                    in_maths,
-                )),
-                "*" => Ok(dollarize(
-                    format!(
-                        "{} \\times {}",
-                        self.render_parenthesized(&args[1], true)?,
-                        self.render_parenthesized(&args[2], true)?,
-                    ),
-                    in_maths,
-                )),
-                "-" => Ok(dollarize(
-                    format!(
-                        "{} - {}",
-                        self.render_parenthesized(&args[1], true)?,
-                        self.render_parenthesized(&args[2], true)?,
-                    ),
-                    in_maths,
-                )),
-                "+" => Ok(dollarize(
-                    format!(
-                        "{} + {}",
-                        self.render_parenthesized(&args[1], true)?,
-                        self.render_parenthesized(&args[2], true)?,
-                    ),
-                    in_maths,
-                )),
-                "bin-if-one" => Ok(dollarize(
-                    format!(
-                        "{} = 1 \\Rightarrow {}",
-                        self.render_node(&args[1], true)?,
-                        self.render_node(&args[2], true)?
-                    ),
-                    in_maths,
-                )),
-                // "if-not-zero" => Ok(
-                // format!(
-                //     "\\left[{} \\neq 0\\right] \\Rightarrow \\left[{}\\right]",
-                //     self.render_node(&args[1], in_maths)?,
-                //     self.render_node(&args[2], in_maths)?
-                //     )
-                // ),
-                "if-eq" => Ok(format!(
-                    "\\IF{} = {}\\THEN\n{}",
-                    self.render_node(&args[1], in_maths)?,
-                    self.render_node(&args[2], in_maths)?,
-                    if args[3].depth() > 1 {
-                        format!("\\left[{}\\right]", self.render_node(&args[3], in_maths)?)
-                    } else {
-                        self.render_node(&args[3], in_maths)?
-                    }
-                )),
-                "if-not-zero" => Ok(if args[2].depth() > 1 {
-                    format!(
-                        "\\IF{} \\neq 0\\THEN\n{}",
-                        self.render_node(&args[1], in_maths)?,
-                        if args[2].depth() > 1 {
-                            format!("\\left[{}\\right]", self.render_node(&args[2], in_maths)?)
-                        } else {
-                            self.render_node(&args[2], in_maths)?
-                        }
-                    )
-                } else {
-                    format!(
-                        "\\left[{} \\neq 0\\right] \\Rightarrow \\left[{}\\right]",
-                        self.render_node(&args[1], in_maths)?,
-                        self.render_node(&args[2], in_maths)?
-                    )
-                }),
-                "if-zero" => Ok(format!(
-                    "\\IF{} = 0\\THEN\n{}",
-                    self.render_node(&args[1], in_maths)?,
-                    if args[2].depth() > 1 {
-                        format!("\\left[{}\\right]", self.render_node(&args[2], in_maths)?)
-                    } else {
-                        self.render_node(&args[2], in_maths)?
-                    }
-                )),
-                "will-eq" => Ok(format!(
-                    "{}[t+1] = {}",
-                    self.render_node(&args[1], in_maths)?,
-                    self.render_node(&args[2], in_maths)?
-                )),
-                "vanishes" => Ok(format!("{} = 0", self.render_node(&args[1], in_maths)?,)),
-                "begin" => Ok(format!(
-                    "\\begin{{cases}}{}\\end{{cases}}",
-                    &args[1..]
-                        .iter()
-                        .map(|n| self.render_node(n, true))
-                        .collect::<Result<Vec<_>>>()?
-                        .join("\\\\")
-                )),
-                _ => Ok(format!(
-                    "{}({})",
-                    self.render_node(&args[0], true)?,
-                    &args[1..]
-                        .iter()
-                        .map(|a| self.render_node(a, true))
-                        .collect::<Result<Vec<_>>>()?
-                        .join(", ")
-                )),
-            }
-        }
-    }
-    fn render_node(&mut self, n: &AstNode, in_maths: bool) -> Result<String> {
+
+    ast.exprs.iter().fold(Vec::new(), |mut consts, n| {
+        _consts(n, &mut consts);
+        consts
+    })
+}
+
+fn columns(ast: &Ast) -> Vec<LatexColumn> {
+    fn _columns(n: &AstNode, cols: &mut Vec<LatexColumn>) {
         match &n.class {
-            Token::Value(x) => Ok(x.to_string()),
-            Token::Symbol(name) => Ok(textize(sanitize(name), in_maths)),
-            Token::DefConsts(cs) => {
-                let body = cs
-                    .iter()
-                    .map(|c| format!("\\text{{{}}} \\triangleq {:?}", sanitize(&c.0), c.1))
-                    .collect::<Vec<_>>()
-                    .join("\\\\\n");
-
-                Ok(format!(
-                    "\\begin{{defconsts}}\\[{}\\]\\end{{defconsts}}",
-                    if cs.len() > 1 {
-                        wrap_env(body, "cases")
-                    } else {
-                        body
-                    }
-                ))
+            Token::List(ns) | Token::DefAliases(ns) | Token::DefColumns(ns) => {
+                for n in ns {
+                    _columns(n, cols);
+                }
             }
-            Token::DefAliases(cols) => {
-                let body = cols
-                    .iter()
-                    .map(|col| self.render_node(col, true))
-                    .collect::<Result<Vec<_>>>()?
-                    .join("\\\\");
-
-                Ok(format!(
-                    "\\begin{{aliases}}\\[{}\\]\\end{{aliases}}",
-                    if cols.len() > 1 {
-                        wrap_env(body, "cases")
-                    } else {
-                        body
-                    }
-                ))
-            }
-            Token::DefAlias(from, to) => Ok(dollarize(
-                format!(
-                    "\\text{{{}}} \\triangleq \\text{{{}}}",
-                    sanitize(from),
-                    sanitize(to)
-                ),
-                in_maths,
-            )),
-            // Token::DefunAlias(from, to) => {
-            //     Ok(format!("$\\text{{{}}} \\triangleq \\text{{{}}}$", from, to))
-            // }
-            Token::DefColumns(cols) => {
-                let body = cols
-                    .iter()
-                    .map(|col| self.render_node(col, true))
-                    .collect::<Result<Vec<_>>>()?
-                    .join("\\\\\n");
-                Ok(format!(
-                    "\\begin{{defcols}}\\[{}\\]\\end{{defcols}}",
-                    if cols.len() > 1 {
-                        wrap_env(body, "cases")
-                    } else {
-                        body
-                    }
-                ))
-            }
-            Token::DefColumn { name, t, .. } => Ok(format!("\\text{{{} \\emph{{{:?}}}}}", name, t)),
-            Token::DefArrayColumn { name, domain: range, t, ..} => {
-                Ok(format!("\\text{{{}{:?} \\emph{{{:?}}}}}", name, range, t))
-            }
-            Token::DefConstraint { name, domain, guard: _, body } => Ok(format!(
-                "\n\\begin{{constraint}}[{} {}]\n\\begin{{gather*}}\n{}\n\\end{{gather*}}\n\\end{{constraint}}\n",
-                name.to_case(Case::Title),
-                if domain.is_none() {
-                    "".to_owned()
-                } else {
-                    format!("({})",
-                             domain
-                             .as_ref()
-                             .map(|d| d
-                                  .iter()
-                                  .map(|x| x.to_string())
-                                  .collect::<Vec<_>>()
-                                  .join(", "))
-                             .unwrap_or_else(|| "".into())
-                    )
-                },
-                self.render_node(body, false)?,
-            )),
-            Token::List(args) => self.render_form(args, in_maths),
-            _ => Ok(String::new()),
+            Token::DefColumn { name, t, .. } => cols.push(LatexColumn {
+                name: name.to_owned(),
+                t: *t,
+                is_array: false,
+            }),
+            Token::DefArrayColumn { name, t, .. } => cols.push(LatexColumn {
+                name: name.to_owned(),
+                t: *t,
+                is_array: true,
+            }),
+            Token::DefAlias(from, _to) => cols.push(LatexColumn {
+                name: from.to_owned(),
+                t: Type::Void,
+                is_array: false,
+            }),
+            _ => (),
         }
     }
 
-    pub fn render(&mut self, asts: &[Ast]) -> Result<()> {
-        let s = Rc::new(RefCell::new(self));
-        let r = asts
-            .iter()
-            .flat_map(|a| a.exprs.iter().map(|n| s.borrow_mut().render_node(n, false)))
-            .collect::<Result<Vec<_>>>()?
-            .join("\n");
-        let body = format!(
-            r#"
-\documentclass{{article}}
+    ast.exprs.iter().fold(Vec::new(), |mut cols, n| {
+        _columns(n, &mut cols);
+        cols
+    })
+}
 
-\usepackage{{amssymb}}
-\usepackage{{amsmath}}
-\usepackage{{theorem}}
-\usepackage{{algorithmic}}
-\usepackage{{breqn}}
-\usepackage[dvipsnames]{{xcolor}}
-
-\theorembodyfont{{\rm}}
-\newtheorem{{constraint}}{{Constraint}}
-\newtheorem{{aliases}}{{Aliases}}
-\newtheorem{{defcols}}{{Column Definitions}}
-\newtheorem{{defconsts}}{{Constant Definitions}}
-
-\newcommand{{\IF}}{{\text{{\textcolor{{WildStrawberry}}{{IF~}}}}}}
-\newcommand{{\THEN}}{{\text{{\textcolor{{Cerulean}}{{~THEN~}}}}}}
-
-\begin{{document}}
-{}
-
-\end{{document}}
-"#,
-            r
-        );
-
-        let filename = s.borrow().constraints_filename.clone();
-        if let Some(filename) = filename.as_ref() {
-            std::fs::File::create(filename)
-                .with_context(|| format!("while creating `{}`", filename))?
-                .write_all(body.as_bytes())
-                .with_context(|| format!("while writing to `{}`", filename))
+fn render_columns(asts: &[Ast], file: &str) -> Result<(String, Vec<String>)> {
+    let mut column_symbols = Vec::new();
+    let mut r = String::new();
+    for col in asts.iter().flat_map(|ast| columns(ast).into_iter()) {
+        column_symbols.push(col.name.clone());
+        let suffix = if col.name.to_lowercase().ends_with("stamppp") {
+            "\\blacksquare"
         } else {
-            println!("{}", body);
-            Ok(())
-        }
+            ""
+        };
+        r += &format!(
+            "\\newcommand{{{}}}{}{{\\col{{{}{}}}{}}}\n",
+            as_col(&col.name),
+            if col.is_array { "[1]" } else { "" },
+            sanitize(&col.name),
+            if col.is_array { "\\_#" } else { "" },
+            suffix,
+        );
     }
+    Ok((r, column_symbols))
+}
+
+pub fn render(
+    asts: &[Ast],
+    constraints_file: Option<String>,
+    columns_file: Option<String>,
+) -> Result<()> {
+    if let Some(constraints_file) = constraints_file.as_ref() {
+        let mut out = File::create(constraints_file)
+            .with_context(|| anyhow!("while opening {}", constraints_file))?;
+        out.write_all(
+            r#"
+\documentclass{article}
+\usepackage{algorithm2e}
+\usepackage{amsmath}
+
+\newcommand{\col}[1]{
+  \ifmmode
+    \mathsf{#1}
+  \else
+    \textsf{#1}
+  \fi
+}
+
+
+"#
+            .as_bytes(),
+        )?;
+        let columns = render_columns(asts, constraints_file)?;
+        out.write_all(columns.0.as_bytes())?;
+        out.write_all("\n\n\\begin{document}\n".as_bytes())?;
+        out.write_all(render_constraints(asts, &columns.1)?.as_bytes())?;
+        out.write_all("\\end{document}".as_bytes())?;
+    }
+    Ok(())
 }

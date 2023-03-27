@@ -15,10 +15,10 @@ pub mod codetyper;
 mod common;
 mod compiletime;
 mod definitions;
-mod generator;
+pub mod generator;
 mod node;
 mod parser;
-mod tables;
+pub mod tables;
 mod types;
 
 const MAIN_MODULE: &str = "<prelude>";
@@ -69,13 +69,6 @@ pub fn make<S: AsRef<str>>(
             )
         })?
     }
-
-    // let macros_ctx = Rc::new(RefCell::new(SymbolTable::<AstNode>::new_root()));
-    // for (name, ast) in asts.iter_mut() {
-    //     info!("Evaluating macros in {}", name.bright_white().bold());
-    //     forms::pass(ast, macros_ctx.clone(), settings)
-    //         .with_context(|| anyhow!("evaluating macros in {}", name.bright_white().bold()))?
-    // }
 
     let constraints = asts
         .iter()

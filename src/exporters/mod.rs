@@ -3,12 +3,11 @@ use log::*;
 pub mod besu;
 mod debugger;
 mod go;
-mod latex;
+pub mod latex;
 mod wizardiop;
 
 pub use debugger::debug;
 pub use go::GoExporter;
-pub use latex::*;
 pub use wizardiop::WizardIOP;
 
 fn gofmt(filename: &str) {

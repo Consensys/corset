@@ -337,12 +337,7 @@ fn main() -> Result<()> {
             constraints_filename,
             columns_filename,
         } => {
-            let mut latex_exporter = exporters::LatexExporter {
-                constraints_filename,
-                columns_filename,
-                render_columns: true,
-            };
-            latex_exporter.render(&ast)?
+            exporters::latex::render(ast.as_slice(), constraints_filename, columns_filename)?;
         }
         Commands::Compute {
             tracefile,
