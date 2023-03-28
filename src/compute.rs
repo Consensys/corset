@@ -61,9 +61,9 @@ fn validate(t: Type, x: F) -> Result<F> {
     }
 }
 
+#[time("info", "Parsing trace from JSON file")]
 pub fn read_trace<S: AsRef<str>>(tracefile: S) -> Result<Value> {
     let tracefile = tracefile.as_ref();
-    info!("Parsing {}...", tracefile);
     let mut f = File::open(tracefile).with_context(|| format!("while opening `{}`", tracefile))?;
 
     let gz = GzDecoder::new(BufReader::new(&f));
@@ -116,7 +116,7 @@ fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Result<(
         Value::Object(map) => {
             for (k, v) in map.iter() {
                 if k == "Trace" {
-                    info!("Importing {}", path[path.len() - 1]);
+                    debug!("Importing {}", path[path.len() - 1]);
                     fill_traces(v, path.clone(), cs)?;
                 } else {
                     let mut path = path.clone();
@@ -137,7 +137,7 @@ fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Result<(
                 let module_min_len = cs.modules.min_len.get(&handle.module).cloned().unwrap_or(0);
 
                 if let Some(column) = cs.modules.by_handle_mut(&handle) {
-                    debug!("Inserting {} ({})", handle, xs.len());
+                    trace!("Inserting {} ({})", handle, xs.len());
 
                     if xs.len() as isize != module_raw_size {
                         bail!(
