@@ -163,10 +163,16 @@ fn reduce(
                 },
             )
         }
-        Token::DefAlias(from, to) => ctx
-            .borrow_mut()
-            .insert_alias(from, to)
-            .with_context(|| anyhow!("defining {} -> {}", from, to)),
+        Token::DefAlias(from, to) => {
+            let _ = ctx
+                .borrow_mut()
+                .resolve_symbol(to)
+                .with_context(|| anyhow!("while defining alias `{}`", from))?;
+
+            ctx.borrow_mut()
+                .insert_alias(from, to)
+                .with_context(|| anyhow!("defining {} -> {}", from, to))
+        }
         Token::DefunAlias(from, to) => ctx
             .borrow_mut()
             .insert_funalias(from, to)
