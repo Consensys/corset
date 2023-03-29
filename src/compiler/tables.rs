@@ -444,13 +444,13 @@ impl SymbolTable {
         self._resolve_function(name, &mut HashSet::new())
     }
 
-    pub fn insert_constant(&mut self, name: &str, value: BigInt) -> Result<()> {
+    pub fn insert_constant(&mut self, name: &str, value: BigInt, replace: bool) -> Result<()> {
         let t = if Zero::is_zero(&value) || One::is_one(&value) {
             Type::Scalar(Magma::Boolean)
         } else {
             Type::Scalar(Magma::Integer)
         };
-        if self.symbols.contains_key(name) {
+        if self.symbols.contains_key(name) && !replace {
             bail!("`{}` already exists in `{}`", name.red(), self.name.blue())
         } else if let Some(fr) = pairing_ce::bn256::Fr::from_str(&value.to_string()) {
             self.symbols.insert(

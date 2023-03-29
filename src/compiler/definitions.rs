@@ -1,5 +1,7 @@
 use anyhow::*;
 use log::*;
+use num_bigint::BigInt;
+use num_traits::FromPrimitive;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -24,7 +26,6 @@ fn reduce(
         | Token::Range(_)
         | Token::Type(_)
         | Token::DefPlookup { .. }
-        | Token::DefConsts(..)
         | Token::DefInrange(..) => Ok(()),
 
         Token::DefConstraint { name, .. } => ctx.borrow_mut().insert_constraint(name),
@@ -76,6 +77,14 @@ fn reduce(
             )?;
             Ok(())
         }
+        Token::DefConsts(cs) => {
+            // The actual value will be filled later on by the compile-time pass
+            for c in cs.iter() {
+                ctx.borrow_mut()
+                    .insert_constant(&c.0, BigInt::from_i8(0).unwrap(), false)?;
+            }
+            Ok(())
+        }
         Token::DefPermutation {
             from: froms,
             to: tos,
@@ -116,7 +125,7 @@ fn reduce(
                         },
                     )
                     .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
-                _froms.push(dbg!(from_actual_handle));
+                _froms.push(from_actual_handle);
                 _tos.push(to_handle);
             }
 

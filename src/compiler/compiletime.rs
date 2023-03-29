@@ -24,6 +24,7 @@ fn compile_time_constants(
                 ctx.borrow_mut().insert_constant(
                     name,
                     value.pure_eval().with_context(|| make_ast_error(exp))?,
+                    true,
                 )?;
             }
             Ok(())
