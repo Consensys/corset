@@ -910,10 +910,21 @@ fn reduce_toplevel(
         Token::DefPermutation { from, to } => {
             // We look up the columns involved in the permutation just to ensure that they
             // are marked as "used" in the symbol table
-            from.iter()
-                .map(|f| ctx.borrow_mut().resolve_symbol(f))
-                .collect::<Result<Vec<_>>>()
-                .with_context(|| anyhow!("while defining permutation"))?;
+            let froms = from
+                .iter()
+                .map(|from| {
+                    if let Expression::Column(handle, ..) = ctx
+                        .borrow_mut()
+                        .resolve_symbol(from)
+                        .with_context(|| "while defining permutation")?
+                        .e()
+                    {
+                        Ok(handle.to_owned())
+                    } else {
+                        unreachable!()
+                    }
+                })
+                .collect::<Result<Vec<_>>>()?;
             to.iter()
                 .map(|f| ctx.borrow_mut().resolve_symbol(f))
                 .collect::<Result<Vec<_>>>()
@@ -924,10 +935,7 @@ fn reduce_toplevel(
                     &ctx.borrow().name,
                     names::Generator::default().next().unwrap(),
                 ),
-                from: from
-                    .iter()
-                    .map(|f| Handle::new(&ctx.borrow().name, f))
-                    .collect::<Vec<_>>(),
+                from: froms,
                 to: to
                     .iter()
                     .map(|f| Handle::new(&ctx.borrow().name, f))

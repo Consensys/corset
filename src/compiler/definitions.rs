@@ -91,11 +91,17 @@ fn reduce(
             let mut _froms = Vec::new();
             let mut _tos = Vec::new();
             for (to, from) in tos.iter().zip(froms.iter()) {
-                let from_handle = Handle::new(&ctx.borrow().name, from);
                 let to_handle = Handle::new(&ctx.borrow().name, to);
-                ctx.borrow_mut()
+                let from_actual_handle = if let Expression::Column(handle, ..) = ctx
+                    .borrow_mut()
                     .resolve_symbol(from)
-                    .with_context(|| "while defining permutation")?;
+                    .with_context(|| "while defining permutation")?
+                    .e()
+                {
+                    handle.to_owned()
+                } else {
+                    unreachable!()
+                };
                 ctx.borrow_mut()
                     .insert_symbol(
                         to,
@@ -110,7 +116,7 @@ fn reduce(
                         },
                     )
                     .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
-                _froms.push(from_handle);
+                _froms.push(dbg!(from_actual_handle));
                 _tos.push(to_handle);
             }
 
