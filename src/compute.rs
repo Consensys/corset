@@ -101,7 +101,7 @@ fn parse_column(xs: &[Value], t: Type) -> Result<Vec<F>> {
                 .with_context(|| format!("while parsing Fr from Number `{:?}`", x))
                 .and_then(|x| validate(t, x)),
             Value::String(s) => cache_str
-                .cache_get_or_set_with(s, || Fr::from_str(dbg!(s)))
+                .cache_get_or_set_with(s, || Fr::from_str(s))
                 .with_context(|| format!("while parsing Fr from String `{:?}`", x))
                 .and_then(|x| validate(t, x)),
             _ => bail!("expected numeric value, found `{}`", x),
