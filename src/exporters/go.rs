@@ -2,97 +2,74 @@ use std::{collections::HashMap, io::Write};
 
 use anyhow::*;
 use convert_case::{Case, Casing};
+use handlebars::Handlebars;
 use itertools::Itertools;
-use num_bigint::BigInt;
+use serde::Serialize;
 
-use crate::{compiler::*, structs::Handle};
+use crate::compiler::*;
 
-#[derive(Debug)]
-pub struct GoExporter {
-    pub package: String,
-    pub filename: Option<String>,
+#[derive(Serialize)]
+struct GoConstant {
+    name: String,
+    value: String,
 }
-impl GoExporter {
-    fn render_consts(&self, consts: &HashMap<Handle, BigInt>) -> String {
-        consts
-            .iter()
-            .sorted_by_key(|(handle, _)| handle.to_string())
-            .fold(String::new(), |mut ax, (handle, value)| {
-                ax.push_str(&format!(
-                    "const {} = {}\n",
-                    handle.mangled_name().to_case(Case::ScreamingSnake),
-                    value
-                ));
-                ax
-            })
-    }
+#[derive(Serialize)]
+struct GoColumn {
+    corset_name: String,
+    go_name: String,
+}
+#[derive(Serialize)]
+struct TemplateData {
+    module: String,
+    columns: Vec<GoColumn>,
+    constants: Vec<GoConstant>,
+}
 
-    fn render_columns(&self, cs: &ConstraintSet) -> String {
-        let mut r = format!(
-            r#"
-package {}
+pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Result<()> {
+    const TEMPLATE: &'static str = include_str!("zkgeth.go");
+    let columns = cs
+        .modules
+        .iter_cols()
+        .filter_map(|(handle, c)| {
+            if matches!(c.kind, Kind::Atomic) {
+                Some(GoColumn {
+                    corset_name: handle.name.to_string(),
+                    go_name: handle.mangled_name(),
+                })
+            } else {
+                None
+            }
+        })
+        .sorted_by(|a, b| a.corset_name.cmp(&b.corset_name))
+        .collect::<Vec<_>>();
+    let constants = cs
+        .constants
+        .iter()
+        .map(|c| GoConstant {
+            name: c.0.mangled_name().to_case(Case::ScreamingSnake),
+            value: c.1.to_string(),
+        })
+        .sorted_by(|a, b| a.name.cmp(&b.name))
+        .collect::<Vec<_>>();
 
-import (
-    "github.com/ethereum/go-ethereum/zk-evm/zeroknowledge/witnessdata/column"
-)
-"#,
-            self.package,
-        );
+    let r = Handlebars::new().render_template(
+        TEMPLATE,
+        &TemplateData {
+            module: package.to_owned(),
+            columns,
+            constants,
+        },
+    )?;
 
-        r += &self.render_consts(&cs.constants);
-
-        r += "const (\n";
-        r += &cs
-            .modules
-            .iter_cols()
-            .filter_map(|(handle, col)| {
-                if let Kind::Atomic = col.kind {
-                    Some(format!(
-                        "{} column.Column = \"{}\"",
-                        handle.mangled_name(),
-                        handle.mangled_name()
-                    ))
-                } else {
-                    None
-                }
-            })
-            .sorted()
-            .collect::<Vec<_>>()
-            .join("\n");
-        r += ")\n\n";
-
-        // r += "var AllColumns = []column.Description{";
-        // r.push_str(&format!(
-        //     "\n{}\n",
-        //     cs.modules
-        //         .iter()
-        //         .filter_map(|(handle, col)| if let Kind::Atomic = col.kind {
-        //             Some(format!("{},", handle.mangled_name()))
-        //         } else {
-        //             None
-        //         })
-        //         .sorted()
-        //         .collect::<Vec<_>>()
-        //         .join("\n")
-        // ));
-        // r += "}\n\n";
-
-        r
-    }
-
-    pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
-        let columns = self.render_columns(cs);
-
-        if let Some(ref filename) = self.filename {
-            std::fs::File::create(filename)
-                .with_context(|| format!("while creating `{}`", filename))?
-                .write_all(columns.as_bytes())
-                .with_context(|| format!("while writing to `{}`", filename))?;
-            super::gofmt(filename);
-        } else {
-            println!("{}", columns);
-        };
-
+    if let Some(filename) = outfile.as_ref() {
+        std::fs::File::create(filename)
+            .with_context(|| format!("while creating `{}`", filename))?
+            .write_all(r.as_bytes())
+            .with_context(|| format!("while writing to `{}`", filename))?;
+        super::gofmt(filename);
+        Ok(())
+    } else {
+        println!("{}", r);
         Ok(())
     }
 }

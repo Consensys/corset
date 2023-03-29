@@ -2,12 +2,11 @@ use log::*;
 
 pub mod besu;
 mod debugger;
-mod go;
+pub mod go;
 pub mod latex;
 mod wizardiop;
 
 pub use debugger::debug;
-pub use go::GoExporter;
 pub use wizardiop::WizardIOP;
 
 fn gofmt(filename: &str) {

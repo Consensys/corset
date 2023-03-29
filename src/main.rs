@@ -309,8 +309,7 @@ fn main() -> Result<()> {
 
     match args.command {
         Commands::Go { package, filename } => {
-            let mut go_exporter = exporters::GoExporter { package, filename };
-            go_exporter.render(&constraints)?;
+            exporters::go::render(&constraints, &package, filename.as_ref())?;
         }
         Commands::Besu { package, filename } => {
             exporters::besu::render(&constraints, &package, filename.as_ref())?;
