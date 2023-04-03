@@ -246,7 +246,7 @@ pub extern "C" fn trace_check(
     let corset = Corset::mut_from_ptr(corset);
     let tracefile = cstr_to_string(tracefile);
 
-    match _trace_check(corset, &tracefile, fail_on_missing) {
+    match _trace_check(corset, tracefile, fail_on_missing) {
         Result::Ok(_) => true,
         Err(e) => {
             eprintln!("{e:?}");
@@ -331,11 +331,9 @@ pub extern "C" fn trace_compute_from_string(
 }
 
 #[no_mangle]
-pub extern "C" fn trace_free(trace: *mut Trace) {
+pub unsafe extern "C" fn trace_free(trace: *mut Trace) {
     if !trace.is_null() {
-        unsafe {
-            drop(Box::from_raw(trace));
-        }
+        drop(Box::from_raw(trace));
     }
 }
 

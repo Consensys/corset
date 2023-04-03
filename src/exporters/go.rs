@@ -1,10 +1,9 @@
-use std::{collections::HashMap, io::Write};
-
 use anyhow::*;
 use convert_case::{Case, Casing};
 use handlebars::Handlebars;
 use itertools::Itertools;
 use serde::Serialize;
+use std::io::Write;
 
 use crate::compiler::*;
 
@@ -26,7 +25,7 @@ struct TemplateData {
 }
 
 pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Result<()> {
-    const TEMPLATE: &'static str = include_str!("zkgeth.go");
+    const TEMPLATE: &str = include_str!("zkgeth.go");
     let columns = cs
         .modules
         .iter_cols()

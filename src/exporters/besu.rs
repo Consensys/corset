@@ -7,7 +7,7 @@ use handlebars::Handlebars;
 use itertools::Itertools;
 use serde::Serialize;
 
-const TEMPLATE: &'static str = include_str!("besu.java");
+const TEMPLATE: &str = include_str!("besu.java");
 
 #[derive(Serialize)]
 struct BesuColumn {

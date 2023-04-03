@@ -53,7 +53,7 @@ fn make_op(op: &str, args: &[AstNode], state: State) -> String {
 fn render_op(op: &str, args: &[AstNode], state: State) -> Result<String> {
     Ok(args
         .iter()
-        .map(|a| render_node(a, state.clone()))
+        .map(|a| render_node(a, state))
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .join(op))
@@ -172,8 +172,8 @@ fn render_form(args: &[AstNode], state: State) -> Result<String> {
                 false,
                 state,
             ),
-            "if-zero" => render_if(&args[1..], "0".into(), false, state),
-            "if-not-zero" => render_if(&args[1..], "0".into(), true, state),
+            "if-zero" => render_if(&args[1..], "0", false, state),
+            "if-not-zero" => render_if(&args[1..], "0", true, state),
             "will-eq" => Ok(format!(
                 "{}[i+1] = {}",
                 render_node(&args[1], state)?,
@@ -225,13 +225,6 @@ fn with_env(env: &str, x: &str) -> String {
     format!("\\{}{{{}}}", env, x)
 }
 
-fn dollarize(s: String, state: State) -> String {
-    if !state.in_maths {
-        format!("\\[{}\\]", s)
-    } else {
-        s
-    }
-}
 fn render_node(n: &AstNode, state: State) -> Result<String> {
     match &n.class {
         Token::Value(x) => Ok(x.to_string()),
@@ -280,7 +273,7 @@ fn render_node(n: &AstNode, state: State) -> Result<String> {
     }
 }
 
-const CONSTRAINT_TEMPLATE: &'static str = include_str!("constraint.tex");
+const CONSTRAINT_TEMPLATE: &str = include_str!("constraint.tex");
 #[derive(Serialize)]
 struct LatexTemplate {
     caption: String,
@@ -330,8 +323,8 @@ fn constraints(ast: &Ast) -> Vec<LatexConstraint> {
             }
             Token::DefConstraint {
                 name,
-                domain,
-                guard,
+                domain: _domain,
+                guard: _guard,
                 body,
             } => {
                 let h = Handle::new(&module, name);
@@ -354,13 +347,12 @@ fn constraints(ast: &Ast) -> Vec<LatexConstraint> {
 
 fn consts(ast: &Ast) -> Vec<LatexConst> {
     fn _consts(n: &AstNode, consts: &mut Vec<LatexConst>) {
-        match &n.class {
-            Token::DefConsts(cs) => {
-                for (name, exp) in cs.iter() {
-                    consts.push((name.to_owned(), *exp.to_owned()))
-                }
+        if let Token::DefConsts(cs) = &n.class {
+            for (name, exp) in cs.iter() {
+                consts.push((name.to_owned(), *exp.to_owned()))
             }
-            _ => (),
+        } else {
+            unreachable!()
         }
     }
 
@@ -403,7 +395,7 @@ fn columns(ast: &Ast) -> Vec<LatexColumn> {
     })
 }
 
-fn render_columns(asts: &[Ast], file: &str) -> Result<(String, Vec<String>)> {
+fn render_columns(asts: &[Ast]) -> Result<(String, Vec<String>)> {
     let mut column_symbols = Vec::new();
     let mut r = String::new();
     for col in asts.iter().flat_map(|ast| columns(ast).into_iter()) {
@@ -425,11 +417,7 @@ fn render_columns(asts: &[Ast], file: &str) -> Result<(String, Vec<String>)> {
     Ok((r, column_symbols))
 }
 
-pub fn render(
-    asts: &[Ast],
-    constraints_file: Option<String>,
-    columns_file: Option<String>,
-) -> Result<()> {
+pub fn render(asts: &[Ast], constraints_file: Option<String>) -> Result<()> {
     if let Some(constraints_file) = constraints_file.as_ref() {
         let mut out = File::create(constraints_file)
             .with_context(|| anyhow!("while opening {}", constraints_file))?;
@@ -451,7 +439,7 @@ pub fn render(
 "#
             .as_bytes(),
         )?;
-        let columns = render_columns(asts, constraints_file)?;
+        let columns = render_columns(asts)?;
         out.write_all(columns.0.as_bytes())?;
         out.write_all("\n\n\\begin{document}\n".as_bytes())?;
         out.write_all(render_constraints(asts, &columns.1)?.as_bytes())?;

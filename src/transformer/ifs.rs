@@ -101,7 +101,7 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
 fn raise_ifs(mut e: Node) -> Node {
     match e.e_mut() {
         Expression::Funcall { func, ref mut args } => {
-            *args = args.into_iter().map(|a| raise_ifs(a.clone())).collect();
+            *args = args.iter_mut().map(|a| raise_ifs(a.clone())).collect();
 
             match func {
                 Intrinsic::IfZero | Intrinsic::IfNotZero => e.clone(),
@@ -118,7 +118,7 @@ fn raise_ifs(mut e: Node) -> Node {
                                     &args
                                         .iter()
                                         .take(i)
-                                        .chain(vec![&args_if[1]].into_iter())
+                                        .chain(std::iter::once(&args_if[1]))
                                         .cloned()
                                         .collect::<Vec<_>>(),
                                 )
@@ -129,12 +129,11 @@ fn raise_ifs(mut e: Node) -> Node {
                                         .iter()
                                         .take(i)
                                         .cloned()
-                                        .chain(
-                                            vec![args_if.get(2).map(|a| a.clone()).unwrap_or_else(
+                                        .chain(std::iter::once(
+                                            args_if.get(2).map(|a| a.clone()).unwrap_or_else(
                                                 || Node::from_expr(Expression::Void),
-                                            )]
-                                            .into_iter(),
-                                        )
+                                            ),
+                                        ))
                                         .filter(|e| !matches!(e.e(), Expression::Void))
                                         .collect::<Vec<_>>(),
                                 )

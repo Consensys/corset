@@ -113,9 +113,6 @@ enum Commands {
             help = "where to render the constraints"
         )]
         constraints_filename: Option<String>,
-
-        #[arg(long = "columns-file", help = "where to render the columns")]
-        columns_filename: Option<String>,
     },
     /// Given a set of constraints and a trace file, fill the computed columns
     Compute {
@@ -334,9 +331,8 @@ fn main() -> Result<()> {
         }
         Commands::Latex {
             constraints_filename,
-            columns_filename,
         } => {
-            exporters::latex::render(ast.as_slice(), constraints_filename, columns_filename)?;
+            exporters::latex::render(ast.as_slice(), constraints_filename)?;
         }
         Commands::Compute {
             tracefile,
