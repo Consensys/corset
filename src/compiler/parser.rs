@@ -1,6 +1,5 @@
-use crate::{pretty::Base, structs::Handle};
+use crate::{errors, pretty::Base, structs::Handle};
 use anyhow::{anyhow, bail, Context, Result};
-use colored::Colorize;
 use itertools::Itertools;
 use num_bigint::BigInt;
 #[cfg(feature = "interactive")]
@@ -15,23 +14,6 @@ use super::{Magma, Type};
 #[derive(Parser)]
 #[grammar = "corset.pest"]
 struct CorsetParser;
-
-pub fn make_src_error(src: &str, lc: (usize, usize)) -> String {
-    let src_str = src
-        .chars()
-        .take_while(|x| *x != '\n')
-        .collect::<String>()
-        .bold()
-        .bright_white()
-        .to_string();
-
-    format!(
-        "at line {}: {}{}",
-        lc.0.to_string().blue(),
-        src_str,
-        if src_str.len() < src.len() { "..." } else { "" }.bright_white()
-    )
-}
 
 #[derive(Debug)]
 pub struct Ast {
@@ -564,7 +546,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
             })
         })
         .collect::<Result<Vec<_>>>()
-        .with_context(|| make_src_error(&src, lc))?;
+        .with_context(|| errors::parser::make_src_error(&src, lc))?;
 
     Ok(AstNode {
         class: Token::DefColumns(columns),
@@ -782,7 +764,9 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
 
     match pair.as_rule() {
         Rule::expr => rec_parse(pair.into_inner().next().unwrap()),
-        Rule::definition => parse_definition(pair).with_context(|| make_src_error(&src, lc)),
+        Rule::definition => {
+            parse_definition(pair).with_context(|| errors::parser::make_src_error(&src, lc))
+        }
         Rule::sexpr => {
             let args = pair
                 .into_inner()

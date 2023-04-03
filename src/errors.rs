@@ -10,7 +10,7 @@ use crate::{
 
 #[derive(Error, Debug)]
 pub(crate) enum CompileError<'a> {
-    #[error("{}", make_type_error_msg(.0, .1, .2))]
+    #[error("{}", compiler::make_type_error_msg(.0, .1, .2))]
     TypeError(String, &'a [&'a [Type]], Vec<Type>),
     #[error("{} is never used", .0.pretty())]
     NotUsed(Handle),
@@ -28,51 +28,77 @@ pub enum RuntimeError<'a> {
     NotAnArray(Expression),
 }
 
-pub(crate) fn make_type_error_msg(fname: &str, expected: &[&[Type]], found: &[Type]) -> String {
-    let expected_str = format!(
-        "({})",
-        expected
-            .iter()
-            .cycle()
-            .zip(found.iter())
-            .map(|(es, f)| {
-                if es.iter().any(|e| e >= f) {
-                    "..".into()
-                } else {
-                    es.iter()
-                        .map(|e| format!("{:?}", e))
-                        .collect::<Vec<_>>()
-                        .join("|")
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
-            .blue()
-            .bold()
-    );
-    let found_str = format!(
-        "({})",
-        expected
-            .iter()
-            .cycle()
-            .zip(found.iter())
-            .map(|(e, f)| {
-                if e.iter().any(|e| f <= e) {
-                    "..".into()
-                } else {
-                    format!("{:?}", f)
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
-            .red()
-            .bold()
-    );
+pub mod parser {
+    use colored::Colorize;
 
-    format!(
-        "{} expects {}, found {}",
-        fname.yellow().bold(),
-        expected_str,
-        found_str
-    )
+    pub fn make_src_error(src: &str, lc: (usize, usize)) -> String {
+        let src_str = src
+            .chars()
+            .take_while(|x| *x != '\n')
+            .collect::<String>()
+            .bold()
+            .bright_white()
+            .to_string();
+
+        format!(
+            "at line {}: {}{}",
+            lc.0.to_string().blue(),
+            src_str,
+            if src_str.len() < src.len() { "..." } else { "" }.bright_white()
+        )
+    }
+}
+
+pub(crate) mod compiler {
+    use crate::compiler::Type;
+    use colored::Colorize;
+
+    pub(crate) fn make_type_error_msg(fname: &str, expected: &[&[Type]], found: &[Type]) -> String {
+        let expected_str = format!(
+            "({})",
+            expected
+                .iter()
+                .cycle()
+                .zip(found.iter())
+                .map(|(es, f)| {
+                    if es.iter().any(|e| e >= f) {
+                        "..".into()
+                    } else {
+                        es.iter()
+                            .map(|e| format!("{:?}", e))
+                            .collect::<Vec<_>>()
+                            .join("|")
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+                .blue()
+                .bold()
+        );
+        let found_str = format!(
+            "({})",
+            expected
+                .iter()
+                .cycle()
+                .zip(found.iter())
+                .map(|(e, f)| {
+                    if e.iter().any(|e| f <= e) {
+                        "..".into()
+                    } else {
+                        format!("{:?}", f)
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+                .red()
+                .bold()
+        );
+
+        format!(
+            "{} expects {}, found {}",
+            fname.yellow().bold(),
+            expected_str,
+            found_str
+        )
+    }
 }

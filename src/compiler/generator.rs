@@ -21,7 +21,7 @@ use super::tables::{ComputationTable, SymbolTable};
 use super::{common::*, CompileSettings, Expression, Magma, Node, Type};
 use crate::column::{Column, ColumnSet, Computation};
 use crate::compiler::parser::*;
-use crate::errors::{CompileError, RuntimeError};
+use crate::errors::{self, CompileError, RuntimeError};
 use crate::pretty::Pretty;
 use crate::structs::Handle;
 
@@ -947,7 +947,7 @@ fn reduce_toplevel(
 }
 
 pub fn make_ast_error(exp: &AstNode) -> String {
-    make_src_error(&exp.src, exp.lc)
+    errors::parser::make_src_error(&exp.src, exp.lc)
 }
 
 pub fn pass(
