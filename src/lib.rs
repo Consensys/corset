@@ -11,6 +11,7 @@ use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},
 };
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use std::ffi::{c_uint, CStr, CString};
 
 use crate::{column::Computation, compiler::EvalSettings, structs::Handle};
@@ -59,58 +60,74 @@ impl Trace {
             ..Default::default()
         };
 
-        for (module, columns) in c.modules.cols.iter() {
-            let empty_vec = Vec::new();
-            for (name, &i) in columns.iter() {
-                let column = &c.modules._cols[i];
-                let handle = Handle::new(module, name);
-                let value = column.value().unwrap_or(&empty_vec);
-                let padding = if let Some(x) = column.padding_value {
-                    Fr::from_str(&x.to_string()).unwrap()
-                } else {
-                    value.get(0).cloned().unwrap_or_else(|| {
-                        c.computations
-                            .computation_for(&handle)
-                            .map(|c| match c {
-                                Computation::Composite { exp, .. } => exp
-                                    .eval(
-                                        0,
-                                        &mut |_, _, _| Some(Fr::zero()),
-                                        &mut None,
-                                        &EvalSettings::default(),
-                                    )
-                                    .unwrap_or_else(Fr::zero),
-                                Computation::Interleaved { .. } => Fr::zero(),
-                                Computation::Sorted { .. } => Fr::zero(),
-                                Computation::CyclicFrom { .. } => Fr::zero(),
-                                Computation::SortingConstraints { .. } => Fr::zero(),
-                            })
-                            .unwrap_or_else(Fr::zero)
-                    })
-                };
-                r.columns.push(ComputedColumn {
-                    values: column
-                        .value()
-                        .unwrap_or(&empty_vec)
-                        .iter()
-                        .map(|x| {
-                            let mut v = x.into_repr().0;
-                            if big_endian {
-                                #[cfg(target_arch = "aarch64")]
-                                reverse_fr_aarch64(&mut v);
-                                #[cfg(target_arch = "x86_64")]
-                                reverse_fr_x86_64(&mut v);
-                                #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-                                reverse_fr(&mut v);
-                            }
-                            v
+        let rs = c
+            .modules
+            .cols
+            .par_iter()
+            .flat_map(|(module, columns)| {
+                let empty_vec = Vec::new();
+                columns.par_iter().map(move |(name, i)| {
+                    let column = &c.modules._cols[*i];
+                    let handle = Handle::new(module, name);
+                    let value = column.value().unwrap_or(&empty_vec);
+                    let padding = if let Some(x) = column.padding_value {
+                        Fr::from_str(&x.to_string()).unwrap()
+                    } else {
+                        value.get(0).cloned().unwrap_or_else(|| {
+                            c.computations
+                                .computation_for(&handle)
+                                .map(|c| match c {
+                                    Computation::Composite { exp, .. } => exp
+                                        .eval(
+                                            0,
+                                            &mut |_, _, _| Some(Fr::zero()),
+                                            &mut None,
+                                            &EvalSettings::default(),
+                                        )
+                                        .unwrap_or_else(Fr::zero),
+                                    Computation::Interleaved { .. } => Fr::zero(),
+                                    Computation::Sorted { .. } => Fr::zero(),
+                                    Computation::CyclicFrom { .. } => Fr::zero(),
+                                    Computation::SortingConstraints { .. } => Fr::zero(),
+                                })
+                                .unwrap_or_else(Fr::zero)
                         })
-                        .collect(),
-                    padding_value: padding.into_repr().0,
-                });
-                r.ids.push(handle.to_string());
-            }
+                    };
+                    (
+                        ComputedColumn {
+                            values: column
+                                .value()
+                                .unwrap_or(&empty_vec)
+                                .iter()
+                                .map(|x| {
+                                    let mut v = x.into_repr().0;
+                                    if big_endian {
+                                        #[cfg(target_arch = "aarch64")]
+                                        reverse_fr_aarch64(&mut v);
+                                        #[cfg(target_arch = "x86_64")]
+                                        reverse_fr_x86_64(&mut v);
+                                        #[cfg(not(any(
+                                            target_arch = "x86_64",
+                                            target_arch = "aarch64"
+                                        )))]
+                                        reverse_fr(&mut v);
+                                    }
+                                    v
+                                })
+                                .collect(),
+                            padding_value: padding.into_repr().0,
+                        },
+                        handle.to_string(),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for (col, id) in rs.into_iter() {
+            r.columns.push(col);
+            r.ids.push(id);
         }
+
         r
     }
     fn from_ptr<'a>(ptr: *const Trace) -> &'a Self {
