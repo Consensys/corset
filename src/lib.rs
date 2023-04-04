@@ -54,7 +54,7 @@ pub struct Trace {
     ids: Vec<String>,
 }
 impl Trace {
-    fn from_constraints(c: &Corset) -> Self {
+    fn from_constraints(c: &Corset, big_endian: bool) -> Self {
         let mut r = Trace {
             ..Default::default()
         };
@@ -93,7 +93,18 @@ impl Trace {
                         .value()
                         .unwrap_or(&empty_vec)
                         .iter()
-                        .map(|x| x.into_repr().0)
+                        .map(|x| {
+                            let mut v = x.into_repr().0;
+                            if big_endian {
+                                #[cfg(target_arch = "aarch64")]
+                                reverse_fr_aarch64(&mut v);
+                                #[cfg(target_arch = "x86_64")]
+                                reverse_fr_x86_64(&mut v);
+                                #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+                                reverse_fr(&mut v);
+                            }
+                            v
+                        })
                         .collect(),
                     padding_value: padding.into_repr().0,
                 });
@@ -105,6 +116,46 @@ impl Trace {
     fn from_ptr<'a>(ptr: *const Trace) -> &'a Self {
         assert!(!ptr.is_null());
         unsafe { &*ptr }
+    }
+}
+
+fn reverse_fr(v: &mut [u64; 4]) {
+    for vi in v.iter_mut() {
+        *vi = vi.swap_bytes();
+    }
+    v.swap(0, 3);
+    v.swap(1, 2);
+}
+
+#[cfg(target_arch = "aarch64")]
+fn reverse_fr_aarch64(v: &mut [u64; 4]) {
+    for vi in v.iter_mut() {
+        *vi = vi.swap_bytes();
+    }
+    v.swap(0, 3);
+    v.swap(1, 2);
+}
+
+#[cfg(target_arch = "x86_64")]
+fn reverse_fr_x86_64(v: &mut [u64; 4]) {
+    if is_x86_feature_detected!("avx2") {
+        unsafe {
+            use std::arch::x86_64::*;
+            let inverter = _mm256_set_epi64x(
+                0x0001020304050607,
+                0x08090a0b0c0d0e0f,
+                0x0001020304050607,
+                0x08090a0b0c0d0e0f,
+            );
+            let value = _mm256_loadu_si256(v.as_ptr() as *const __m256i);
+            *v = std::mem::transmute(_mm256_shuffle_epi8(value, inverter));
+        }
+    } else {
+        for vi in v.iter_mut() {
+            *vi = vi.swap_bytes();
+        }
+        v.swap(0, 3);
+        v.swap(1, 2);
     }
 }
 
@@ -142,6 +193,7 @@ fn _corset_from_str(zkevmstr: &str) -> Result<Corset> {
 fn _compute_trace_from_file(
     constraints: &mut Corset,
     tracefile: &str,
+    big_endian: bool,
     fail_on_missing: bool,
 ) -> Result<Trace> {
     compute::compute_trace(
@@ -150,12 +202,13 @@ fn _compute_trace_from_file(
         fail_on_missing,
     )
     .with_context(|| format!("while computing from `{}`", tracefile))?;
-    Ok(Trace::from_constraints(constraints))
+    Ok(Trace::from_constraints(constraints, big_endian))
 }
 
 fn _compute_trace_from_str(
     constraints: &mut Corset,
     tracestr: &str,
+    big_endian: bool,
     fail_on_missing: bool,
 ) -> Result<Trace> {
     compute::compute_trace(
@@ -164,7 +217,7 @@ fn _compute_trace_from_str(
         fail_on_missing,
     )
     .with_context(|| format!("while computing from `{}`", tracestr))?;
-    Ok(Trace::from_constraints(constraints))
+    Ok(Trace::from_constraints(constraints, big_endian))
 }
 
 #[no_mangle]
@@ -261,6 +314,7 @@ pub extern "C" fn trace_compute_from_file(
     corset: *mut Corset,
     tracefile: *const c_char,
     threads: c_uint,
+    big_endian: bool,
     fail_on_missing: bool,
 ) -> *mut Trace {
     if rayon::ThreadPoolBuilder::new()
@@ -279,7 +333,7 @@ pub extern "C" fn trace_compute_from_file(
 
     let tracefile = cstr_to_string(tracefile);
     let constraints = Corset::mut_from_ptr(corset);
-    let r = _compute_trace_from_file(constraints, tracefile, fail_on_missing);
+    let r = _compute_trace_from_file(constraints, tracefile, big_endian, fail_on_missing);
     match r {
         Err(e) => {
             eprintln!("{:?}", e);
@@ -298,6 +352,7 @@ pub extern "C" fn trace_compute_from_string(
     corset: *mut Corset,
     tracestr: *const c_char,
     threads: c_uint,
+    big_endian: bool,
     fail_on_missing: bool,
 ) -> *mut Trace {
     if rayon::ThreadPoolBuilder::new()
@@ -316,7 +371,7 @@ pub extern "C" fn trace_compute_from_string(
 
     let tracestr = cstr_to_string(tracestr);
     let constraints = Corset::mut_from_ptr(corset);
-    let r = _compute_trace_from_str(constraints, tracestr, fail_on_missing);
+    let r = _compute_trace_from_str(constraints, tracestr, big_endian, fail_on_missing);
     match r {
         Err(e) => {
             eprintln!("{:?}", e);
