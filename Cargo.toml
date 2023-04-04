@@ -46,6 +46,9 @@ serde = { version = "1", features = ["derive"] }
 thiserror = "1.0.38"
 handlebars = { version = "4.3.6", default-features = false }
 
+[target.'cfg(all(target_arch = "x86_64", target_feature = "avx"))'.dependencies]
+simd-json = "0.7.0"
+
 [features]
 default = ["interactive"]
 interactive = ["dep:indicatif", "dep:pest", "dep:pest_derive"]

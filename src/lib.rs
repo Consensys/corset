@@ -22,9 +22,16 @@ mod compiler;
 mod compute;
 mod dag;
 mod errors;
+#[cfg_attr(
+    all(target_arch = "x86_64", target_feature = "avx"),
+    path = "import_simd.rs"
+)]
+#[cfg_attr(not(all(target_arch = "x86_64")), path = "import.rs")]
+mod import;
 mod pretty;
 mod structs;
 mod transformer;
+mod utils;
 
 type Corset = ConstraintSet;
 
@@ -213,12 +220,8 @@ fn _compute_trace_from_file(
     big_endian: bool,
     fail_on_missing: bool,
 ) -> Result<Trace> {
-    compute::compute_trace(
-        &compute::read_trace(tracefile)?,
-        constraints,
-        fail_on_missing,
-    )
-    .with_context(|| format!("while computing from `{}`", tracefile))?;
+    compute::compute_trace(tracefile, constraints, fail_on_missing)
+        .with_context(|| format!("while computing from `{}`", tracefile))?;
     Ok(Trace::from_constraints(constraints, big_endian))
 }
 
@@ -228,12 +231,8 @@ fn _compute_trace_from_str(
     big_endian: bool,
     fail_on_missing: bool,
 ) -> Result<Trace> {
-    compute::compute_trace(
-        &compute::read_trace_str(tracestr)?,
-        constraints,
-        fail_on_missing,
-    )
-    .with_context(|| format!("while computing from `{}`", tracestr))?;
+    compute::compute_trace_str(tracestr, constraints, fail_on_missing)
+        .with_context(|| format!("while computing from `{}`", tracestr))?;
     Ok(Trace::from_constraints(constraints, big_endian))
 }
 
@@ -270,7 +269,7 @@ pub extern "C" fn corset_from_string(zkevmstr: *const c_char) -> *mut Corset {
 }
 
 fn _trace_check(corset: &mut ConstraintSet, tracefile: &str, fail_on_missing: bool) -> Result<()> {
-    compute::compute_trace(&compute::read_trace(tracefile)?, corset, fail_on_missing)
+    compute::compute_trace(tracefile, corset, fail_on_missing)
         .with_context(|| format!("while expanding `{}`", tracefile))?;
 
     check::check(

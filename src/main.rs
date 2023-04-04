@@ -15,6 +15,12 @@ mod compute;
 mod dag;
 mod errors;
 mod exporters;
+#[cfg_attr(
+    all(target_arch = "x86_64", target_feature = "avx"),
+    path = "import.rs"
+)]
+#[cfg_attr(not(all(target_arch = "x86_64")), path = "import.rs")]
+mod import;
 mod pretty;
 mod structs;
 #[cfg(test)]
@@ -346,12 +352,8 @@ fn main() -> Result<()> {
             transformer::sorts(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
 
-            compute::compute_trace(
-                &compute::read_trace(&tracefile)?,
-                &mut constraints,
-                fail_on_missing,
-            )
-            .with_context(|| format!("while computing from `{}`", tracefile))?;
+            compute::compute_trace(&tracefile, &mut constraints, fail_on_missing)
+                .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let outfile = outfile.as_ref().unwrap();
             let mut f = std::fs::File::create(outfile)
@@ -398,20 +400,11 @@ fn main() -> Result<()> {
                     &[],
                 )? {
                     let id: &str = row.get(0);
-                    let payload: &[u8] = row.get(2);
+                    let payload: &str = row.get(2);
                     info!("Processing {}", id);
 
-                    let gz = flate2::bufread::GzDecoder::new(std::io::Cursor::new(&payload));
-                    let v: serde_json::Value = match gz.header() {
-                        Some(_) => serde_json::from_reader(gz),
-                        None => {
-                            serde_json::from_reader(std::io::Cursor::new(&payload))
-                        }
-                    }
-                    .with_context(|| format!("while reading payload from {}", id))?;
-
                     compute::compute_trace(
-                        &v,
+                        &payload,
                         &mut local_constraints,
                         false,
                     )
@@ -479,7 +472,7 @@ fn main() -> Result<()> {
                 transformer::expand_invs(&mut constraints)
                     .with_context(|| anyhow!("while expanding inverses"))?;
             }
-            compute::compute_trace(&compute::read_trace(&tracefile)?, &mut constraints, false)
+            compute::compute_trace(&tracefile, &mut constraints, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
 
             check::check(
