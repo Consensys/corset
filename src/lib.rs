@@ -172,7 +172,8 @@ fn reverse_fr_x86_64(v: &mut [u64; 4]) {
                 0x08090a0b0c0d0e0f,
             );
             let value = _mm256_loadu_si256(v.as_ptr() as *const __m256i);
-            *v = std::mem::transmute(_mm256_shuffle_epi8(value, inverter));
+            let x = _mm256_shuffle_epi8(value, inverter);
+            *v = std::mem::transmute(_mm256_permute2f128_si256(x, x, 0x01));
         }
     } else {
         for vi in v.iter_mut() {
