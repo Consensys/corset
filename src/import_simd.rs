@@ -39,6 +39,7 @@ pub fn read_trace<'a>(tracefile: &'a str, cs: &mut ConstraintSet) -> Result<()> 
     fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
 }
 
+#[time("info", "Parsing trace from JSON")]
 pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
     let mut gz = GzDecoder::new(BufReader::new(tracestr));
     let mut content = Vec::new();

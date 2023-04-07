@@ -19,7 +19,7 @@ use crate::{
     structs::Handle,
 };
 
-#[time("info", "Parsing trace from JSON file")]
+#[time("info", "Parsing trace from JSON file with SIMD")]
 pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
     let mut f = File::open(tracefile).with_context(|| format!("while opening `{}`", tracefile))?;
 
@@ -35,6 +35,7 @@ pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
     fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
 }
 
+#[time("info", "Parsing trace from JSON with SIMD")]
 pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
     let gz = GzDecoder::new(BufReader::new(tracestr));
     let v: Value = match gz.header() {
