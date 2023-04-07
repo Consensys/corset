@@ -141,7 +141,21 @@ fn render_constraints(cs: &[Constraint]) {
                 including,
                 included,
                 ..
-            } => println!("{:?} <=> {:?}", including, included),
+            } => {
+                println!(
+                    "{{{}}} ⊂ {{{}}}",
+                    included
+                        .iter()
+                        .map(|n| n.pretty())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    including
+                        .iter()
+                        .map(|n| n.pretty())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                )
+            }
             Constraint::Permutation { .. } => (),
             Constraint::InRange { handle, exp, max } => {
                 let mut tty = Tty::new();
