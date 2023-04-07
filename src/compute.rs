@@ -465,7 +465,11 @@ pub fn compute_trace(tracefile: &str, cs: &mut ConstraintSet, fail_on_missing: b
     prepare(cs, fail_on_missing)
 }
 
-pub fn compute_trace_str(trace: &str, cs: &mut ConstraintSet, fail_on_missing: bool) -> Result<()> {
+pub fn compute_trace_str(
+    trace: &[u8],
+    cs: &mut ConstraintSet,
+    fail_on_missing: bool,
+) -> Result<()> {
     import::read_trace_str(trace, cs)?;
     prepare(cs, fail_on_missing)
 }

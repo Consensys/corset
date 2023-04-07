@@ -400,11 +400,11 @@ fn main() -> Result<()> {
                     &[],
                 )? {
                     let id: &str = row.get(0);
-                    let payload: &str = row.get(2);
+                    let payload: &[u8] = row.get(2);
                     info!("Processing {}", id);
 
-                    compute::compute_trace(
-                        &payload,
+                    compute::compute_trace_str(
+                        payload,
                         &mut local_constraints,
                         false,
                     )

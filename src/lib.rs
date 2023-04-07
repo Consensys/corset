@@ -239,7 +239,7 @@ fn _compute_trace_from_str(
     convert_to_be: bool,
     fail_on_missing: bool,
 ) -> Result<Trace> {
-    compute::compute_trace_str(tracestr, constraints, fail_on_missing)
+    compute::compute_trace_str(tracestr.as_bytes(), constraints, fail_on_missing)
         .with_context(|| format!("while computing from `{}`", tracestr))?;
     Ok(Trace::from_constraints(constraints, convert_to_be))
 }

@@ -39,15 +39,15 @@ pub fn read_trace<'a>(tracefile: &'a str, cs: &mut ConstraintSet) -> Result<()> 
     fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
 }
 
-pub fn read_trace_str(tracestr: &str, cs: &mut ConstraintSet) -> Result<()> {
-    let mut gz = GzDecoder::new(BufReader::new(tracestr.as_bytes()));
+pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
+    let mut gz = GzDecoder::new(BufReader::new(tracestr));
     let mut content = Vec::new();
     match gz.header() {
         Some(_) => {
             gz.read_to_end(&mut content)?;
         }
         None => {
-            content = tracestr.as_bytes().to_vec();
+            content = tracestr.to_vec();
         }
     };
     let v = simd_json::to_borrowed_value(&mut content)

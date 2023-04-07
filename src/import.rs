@@ -35,11 +35,11 @@ pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
     fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
 }
 
-pub fn read_trace_str(tracestr: &str, cs: &mut ConstraintSet) -> Result<()> {
-    let gz = GzDecoder::new(BufReader::new(tracestr.as_bytes()));
+pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
+    let gz = GzDecoder::new(BufReader::new(tracestr));
     let v: Value = match gz.header() {
         Some(_) => serde_json::from_reader(gz),
-        None => serde_json::from_reader(BufReader::new(tracestr.as_bytes())),
+        None => serde_json::from_reader(BufReader::new(tracestr)),
     }?;
     fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
 }
