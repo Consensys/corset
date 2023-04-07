@@ -102,3 +102,24 @@ pub(crate) mod compiler {
         )
     }
 }
+
+pub mod symbols {
+    use colored::Colorize;
+    use thiserror::Error;
+
+    #[derive(Error, Debug)]
+    pub enum Error {
+        #[error("module {} not found in {}", .0.red(), .1.blue())]
+        ModuleNotFound(String, String),
+        #[error("symbol {} not found in module {}", .0.red(), .1.blue())]
+        SymbolNotFound(String, String),
+        #[error("{} already exists in {}", .0.yellow(), .1.blue())]
+        SymbolAlreadyExists(String, String),
+        #[error("function {} already defined in {}", .0.yellow(), .1.blue())]
+        FunctionAlreadyExists(String, String),
+        #[error("{} already exists: {} → {}", .0.yellow(), .0.red(), .1.magenta())]
+        AliasAlreadyExists(String, String),
+        #[error("ciruclar definition found for {}", .0.red())]
+        CircularDefinition(String),
+    }
+}

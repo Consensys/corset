@@ -501,7 +501,7 @@ fn apply_form(
             Ok(None)
         }
         Form::Let => {
-            let sub_ctx_name = format!("let-{}", ctx.borrow().name);
+            let sub_ctx_name = format!("let-{}", ctx.borrow().module);
             let mut sub_ctx =
                 SymbolTable::derived(ctx.clone(), &sub_ctx_name, &sub_ctx_name, false, false);
             for pair in args[0].as_list().unwrap().iter() {
@@ -831,7 +831,7 @@ fn reduce_toplevel(
             guard,
             body: expr,
         } => {
-            let handle = Handle::new(&ctx.borrow().name, name);
+            let handle = Handle::new(&ctx.borrow().module, name);
             Ok(Some(Constraint::Vanishes {
                 handle,
                 domain: domain.to_owned(),
@@ -853,7 +853,7 @@ fn reduce_toplevel(
             including: parent,
             included: child,
         } => {
-            let handle = Handle::new(&ctx.borrow().name, name);
+            let handle = Handle::new(&ctx.borrow().module, name);
             let parents = parent
                 .iter()
                 .map(|e| reduce(e, ctx, settings).map(Option::unwrap))
@@ -879,7 +879,7 @@ fn reduce_toplevel(
         }
         Token::DefInrange(e, range) => {
             let handle = Handle::new(
-                &ctx.borrow().name,
+                &ctx.borrow().module,
                 names::Generator::default().next().unwrap(),
             );
             Ok(Some(Constraint::InRange {
@@ -932,13 +932,13 @@ fn reduce_toplevel(
 
             Ok(Some(Constraint::Permutation {
                 handle: Handle::new(
-                    &ctx.borrow().name,
+                    &ctx.borrow().module,
                     names::Generator::default().next().unwrap(),
                 ),
                 from: froms,
                 to: to
                     .iter()
-                    .map(|f| Handle::new(&ctx.borrow().name, f))
+                    .map(|f| Handle::new(&ctx.borrow().module, f))
                     .collect::<Vec<_>>(),
             }))
         }

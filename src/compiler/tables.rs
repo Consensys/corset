@@ -2,6 +2,7 @@ use super::{generator::Function, Expression, Magma, Node, Type};
 use crate::{
     column::Computation,
     compiler::{generator::FunctionClass, Builtin, Form, Intrinsic},
+    errors::symbols,
     structs::Handle,
 };
 use anyhow::*;
@@ -172,10 +173,10 @@ pub struct SymbolTable {
     // The parent relationship is only used for contextual
     // semantics (i.e. for & functions), not modules
     closed: bool,
-    // If true, then those are module definition.
+    // If true, then those are module definitions.
     // Otherwise, this table is a private table, e.g. function arguments
     public: bool,
-    pub name: String,
+    pub module: String,
     pub pretty_name: String,
     parent: Weak<RefCell<Self>>,
     children: HashMap<String, Rc<RefCell<SymbolTable>>>,
@@ -189,7 +190,7 @@ impl SymbolTable {
         SymbolTable {
             closed: true,
             public: true,
-            name: super::MAIN_MODULE.to_owned(),
+            module: super::MAIN_MODULE.to_owned(),
             pretty_name: "".into(),
             parent: Weak::new(),
             children: Default::default(),
@@ -219,7 +220,7 @@ impl SymbolTable {
                 Rc::new(RefCell::new(SymbolTable {
                     closed,
                     public,
-                    name: name.to_owned(),
+                    module: name.to_owned(),
                     pretty_name: pretty_name.to_owned(),
                     parent: Rc::downgrade(&parent),
                     children: Default::default(),
@@ -239,7 +240,7 @@ impl SymbolTable {
         for (module, handle, symbol) in self
             .symbols
             .iter_mut()
-            .map(|(k, v)| (&self.pretty_name, Handle::new(&self.name, k), v))
+            .map(|(k, v)| (&self.pretty_name, Handle::new(&self.module, k), v))
         {
             f(module, handle, symbol)?;
         }
@@ -281,18 +282,16 @@ impl SymbolTable {
                     }
                     None => {
                         if absolute_path {
-                            bail!(
-                                "symbol {} unknown in module {}",
-                                name.red(),
-                                self.name.blue()
-                            )
+                            Err(anyhow!(symbols::Error::SymbolNotFound(
+                                name.to_owned(),
+                                self.module.to_owned()
+                            )))
                         } else {
                             self.parent.upgrade().map_or(
-                                Err(anyhow!(
-                                    "symbol {} unknown in module {}",
-                                    name.red(),
-                                    self.name.blue()
-                                )),
+                                Err(anyhow!(symbols::Error::SymbolNotFound(
+                                    name.to_owned(),
+                                    self.module.to_owned(),
+                                ))),
                                 |parent| {
                                     parent.borrow_mut()._resolve_symbol(
                                         name,
@@ -317,7 +316,7 @@ impl SymbolTable {
         ax: &mut HashSet<String>,
     ) -> Result<()> {
         if ax.contains(name) {
-            bail!("Circular definitions found for {}", name.to_string().red())
+            Err(anyhow!(symbols::Error::CircularDefinition(name.to_owned())))
         } else {
             ax.insert(name.to_owned());
             // Ugly, but required for borrowing reasons
@@ -330,11 +329,10 @@ impl SymbolTable {
                         Ok(())
                     }
                     None => self.parent.upgrade().map_or(
-                        Err(anyhow!(
-                            "column `{}` unknown in module `{}`",
-                            name.red(),
-                            self.name.blue()
-                        )),
+                        Err(anyhow!(symbols::Error::SymbolNotFound(
+                            name.to_owned(),
+                            self.module.to_owned(),
+                        ))),
                         |parent| parent.borrow_mut().edit_symbol(name, f),
                     ),
                     _ => unimplemented!(),
@@ -345,7 +343,7 @@ impl SymbolTable {
 
     fn _resolve_function(&self, name: &str, ax: &mut HashSet<String>) -> Result<Function> {
         if ax.contains(name) {
-            bail!("Circular definitions found for {}", name.to_string().red())
+            bail!(symbols::Error::CircularDefinition(name.to_owned()))
         } else {
             ax.insert(name.to_owned());
             match self.funcs.get(name) {
@@ -377,11 +375,10 @@ impl SymbolTable {
 
     pub fn insert_symbol(&mut self, name: &str, e: Node) -> Result<()> {
         if self.symbols.contains_key(name) {
-            bail!(
-                "column `{}` already exists in module `{}`",
-                name.red(),
-                self.name.blue()
-            )
+            bail!(symbols::Error::SymbolAlreadyExists(
+                name.to_owned(),
+                self.module.to_owned()
+            ))
         } else {
             self.symbols
                 .insert(name.to_owned(), Symbol::Final(e, false));
@@ -391,7 +388,10 @@ impl SymbolTable {
 
     pub fn insert_function(&mut self, name: &str, f: Function) -> Result<()> {
         if self.funcs.contains_key(name) {
-            bail!("function {} already defined", name.to_string().red())
+            bail!(symbols::Error::FunctionAlreadyExists(
+                name.to_owned(),
+                self.module.to_owned()
+            ))
         } else {
             self.funcs.insert(name.to_owned(), f);
             Ok(())
@@ -400,7 +400,10 @@ impl SymbolTable {
 
     pub fn insert_alias(&mut self, from: &str, to: &str) -> Result<()> {
         if self.symbols.contains_key(from) {
-            bail!("`{}` already exists", from)
+            bail!(symbols::Error::SymbolAlreadyExists(
+                from.to_owned(),
+                self.module.to_owned()
+            ))
         } else {
             self.symbols
                 .insert(from.to_owned(), Symbol::Alias(to.to_owned()));
@@ -410,17 +413,15 @@ impl SymbolTable {
 
     pub fn insert_funalias(&mut self, from: &str, to: &str) -> Result<()> {
         if self.funcs.contains_key(from) {
-            bail!(
-                "{} already exists: {} -> {}",
-                from.to_string().red(),
-                from.to_string().red(),
-                to.to_string().magenta(),
-            )
+            bail!(symbols::Error::AliasAlreadyExists(
+                from.to_owned(),
+                to.to_owned()
+            ))
         } else {
             self.funcs.insert(
                 from.to_owned(),
                 Function {
-                    handle: Handle::new(&self.name, to),
+                    handle: Handle::new(&self.module, to),
                     class: FunctionClass::Alias(to.to_string()),
                 },
             );
@@ -451,7 +452,10 @@ impl SymbolTable {
             Type::Scalar(Magma::Integer)
         };
         if self.symbols.contains_key(name) && !replace {
-            bail!("`{}` already exists in `{}`", name.red(), self.name.blue())
+            bail!(symbols::Error::SymbolAlreadyExists(
+                name.to_owned(),
+                self.module.to_owned()
+            ))
         } else if let Some(fr) = pairing_ce::bn256::Fr::from_str(&value.to_string()) {
             self.symbols.insert(
                 name.to_owned(),
@@ -470,26 +474,33 @@ impl SymbolTable {
     }
 
     fn resolve_symbol_with_path(&mut self, name: &str) -> Result<Node> {
-        self.parent.upgrade().map_or_else(
-            || self._resolve_symbol_with_path(name.split('.').peekable()),
-            |parent| parent.borrow_mut().resolve_symbol_with_path(name),
-        )
+        let mut components = name.split('.');
+        let module = components.next().unwrap();
+        let name = components
+            .next()
+            .with_context(|| anyhow!("missing name in {}", name))?;
+        self._resolve_symbol_with_path(&module, &name)
     }
 
-    fn _resolve_symbol_with_path<'a>(
-        &mut self,
-        mut path: std::iter::Peekable<impl Iterator<Item = &'a str>>,
-    ) -> Result<Node> {
-        let name = path.next().unwrap();
-        match path.peek() {
-            Some(_) => {
-                if let Some(submodule) = self.children.get_mut(name) {
-                    submodule.borrow_mut()._resolve_symbol_with_path(path)
-                } else {
-                    bail!("module {} not found in {}", name.red(), self.name.blue())
-                }
-            }
-            None => self._resolve_symbol(name, &mut HashSet::new(), true, false),
+    fn _resolve_symbol_with_path(&mut self, module: &str, name: &str) -> Result<Node> {
+        if self.module == module {
+            self.resolve_symbol(name)
+        } else {
+            self.parent.upgrade().map_or_else(
+                || self._resolve_down_symbol_with_path(module, name),
+                |parent| parent.borrow_mut()._resolve_symbol_with_path(module, name),
+            )
+        }
+    }
+
+    fn _resolve_down_symbol_with_path<'a>(&mut self, module: &str, name: &str) -> Result<Node> {
+        if let Some(submodule) = self.children.get_mut(module) {
+            submodule.borrow_mut().resolve_symbol(name)
+        } else {
+            bail!(symbols::Error::ModuleNotFound(
+                name.to_owned(),
+                self.module.to_owned(),
+            ))
         }
     }
 }

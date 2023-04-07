@@ -43,7 +43,7 @@ fn reduce(
             padding_value,
             base,
         } => {
-            let module_name = ctx.borrow().name.to_owned();
+            let module_name = ctx.borrow().module.to_owned();
             let symbol = Node {
                 _e: Expression::Column(
                     Handle::new(module_name, col),
@@ -67,7 +67,7 @@ fn reduce(
             t,
             base,
         } => {
-            let handle = Handle::new(&ctx.borrow().name, col);
+            let handle = Handle::new(&ctx.borrow().module, col);
             ctx.borrow_mut().insert_symbol(
                 col,
                 Node {
@@ -100,7 +100,7 @@ fn reduce(
             let mut _froms = Vec::new();
             let mut _tos = Vec::new();
             for (to, from) in tos.iter().zip(froms.iter()) {
-                let to_handle = Handle::new(&ctx.borrow().name, to);
+                let to_handle = Handle::new(&ctx.borrow().module, to);
                 let from_actual_handle = if let Expression::Column(handle, ..) = ctx
                     .borrow_mut()
                     .resolve_symbol(from)
@@ -145,7 +145,7 @@ fn reduce(
             ax.and(reduce(alias, root_ctx.clone(), ctx))
         }),
         Token::Defun { name, args, body } => {
-            let module_name = ctx.borrow().name.to_owned();
+            let module_name = ctx.borrow().module.to_owned();
             ctx.borrow_mut().insert_function(
                 name,
                 Function {
@@ -159,7 +159,7 @@ fn reduce(
             )
         }
         Token::Defpurefun { name, args, body } => {
-            let module_name = ctx.borrow().name.to_owned();
+            let module_name = ctx.borrow().module.to_owned();
             ctx.borrow_mut().insert_function(
                 name,
                 Function {

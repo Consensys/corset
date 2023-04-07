@@ -137,7 +137,11 @@ fn render_constraints(cs: &[Constraint]) {
                 println!("\n{}", handle.pretty());
                 println!("{}", tty.page_feed());
             }
-            Constraint::Plookup { .. } => (),
+            Constraint::Plookup {
+                including,
+                included,
+                ..
+            } => println!("{:?} <=> {:?}", including, included),
             Constraint::Permutation { .. } => (),
             Constraint::InRange { handle, exp, max } => {
                 let mut tty = Tty::new();
