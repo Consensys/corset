@@ -15,13 +15,19 @@ fn create_sort_constraint(
     cs: &mut ConstraintSet,
     from: &[Handle],
     sorted: &[Handle],
+    signs: &[bool],
 ) -> Result<()> {
     if from.len() != sorted.len() {
         bail!("different lengths found while creating sort constraints");
     }
     let module = &from[0].module;
 
-    let signs = std::iter::repeat(true).take(from.len()).collect::<Vec<_>>();
+    if signs.len() == 0 {
+        bail!("no sorting criterion specified")
+    }
+    if signs.len() > from.len() {
+        bail!("found more sorting orders thant columns to sort")
+    }
     // the suffix is required, in case a single module contains multiple sorts
     let suffix = format!(
         "{:x}",
@@ -35,7 +41,7 @@ fn create_sort_constraint(
     );
 
     // Create the columns
-    let ats = (0..from.len())
+    let ats = (0..signs.len())
         .map(|i| {
             create_column(
                 module,
@@ -234,7 +240,7 @@ fn create_sort_constraint(
                 Intrinsic::Sub.call(&[
                     Node::from_handle(&delta),
                     Intrinsic::Add.call(
-                        (0..from.len())
+                        (0..signs.len())
                             .map(|l| {
                                 let tgt_diff = Intrinsic::Sub.call(&[
                                     Node::from_handle(&sorted[l]),
@@ -292,8 +298,8 @@ pub fn sorts(cs: &mut ConstraintSet) -> Result<()> {
         .collect::<Vec<_>>()
         .into_iter()
     {
-        if let Computation::Sorted { froms, tos } = c {
-            create_sort_constraint(cs, &froms, &tos)?;
+        if let Computation::Sorted { froms, tos, signs } = c {
+            create_sort_constraint(cs, &froms, &tos, &signs)?;
         }
     }
     Ok(())

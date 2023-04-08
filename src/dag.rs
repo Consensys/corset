@@ -51,7 +51,7 @@ impl ComputationDag {
                     self.depends(from, target);
                 }
             }
-            Computation::Sorted { froms, tos } => {
+            Computation::Sorted { froms, tos, .. } => {
                 for from in froms.iter() {
                     for to in tos.iter() {
                         self.depends(from, to);

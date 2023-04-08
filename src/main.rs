@@ -93,7 +93,7 @@ enum Commands {
         #[arg(
             short = 'P',
             long = "package",
-            required = true,
+            default_value = "define",
             help = "In which package the function will be generated"
         )]
         package: String,

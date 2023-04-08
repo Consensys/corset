@@ -88,6 +88,7 @@ fn reduce(
         Token::DefPermutation {
             from: froms,
             to: tos,
+            signs,
         } => {
             if tos.len() != froms.len() {
                 bail!(
@@ -137,6 +138,7 @@ fn reduce(
                     Computation::Sorted {
                         froms: _froms,
                         tos: _tos.clone(),
+                        signs: signs.clone(),
                     },
                 )?;
             Ok(())

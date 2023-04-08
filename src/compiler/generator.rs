@@ -39,10 +39,12 @@ pub enum Constraint {
         including: Vec<Node>,
         included: Vec<Node>,
     },
+    // TODO check with Alex that order (e.g. signs) does not matter
     Permutation {
         handle: Handle,
         from: Vec<Handle>,
         to: Vec<Handle>,
+        signs: Vec<bool>,
     },
     InRange {
         handle: Handle,
@@ -75,6 +77,7 @@ impl Constraint {
                 handle: _,
                 from: hs1,
                 to: hs2,
+                signs: _,
             } => hs1.iter_mut().chain(hs2.iter_mut()).for_each(|h| set_id(h)),
             Constraint::InRange {
                 handle: _,
@@ -907,7 +910,7 @@ fn reduce_toplevel(
         | Token::DefAliases(_)
         | Token::DefunAlias(..)
         | Token::DefConsts(..) => Ok(None),
-        Token::DefPermutation { from, to } => {
+        Token::DefPermutation { from, to, signs } => {
             // We look up the columns involved in the permutation just to ensure that they
             // are marked as "used" in the symbol table
             let froms = from
@@ -940,6 +943,7 @@ fn reduce_toplevel(
                     .iter()
                     .map(|f| Handle::new(&ctx.borrow().module, f))
                     .collect::<Vec<_>>(),
+                signs: signs.clone(),
             }))
         }
         _ => unreachable!("{:?}", e.src),

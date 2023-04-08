@@ -177,7 +177,12 @@ fn render_constraints(constraints: &[Constraint]) -> String {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            Constraint::Permutation { handle, from, to } => format!(
+            Constraint::Permutation {
+                handle,
+                from,
+                to,
+                signs: _,
+            } => format!(
                 "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
                 handle.mangle().to_case(Case::Snake),
                 from.iter()

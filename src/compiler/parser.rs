@@ -1,5 +1,6 @@
 use crate::{errors, pretty::Base, structs::Handle};
 use anyhow::{anyhow, bail, Context, Result};
+use colored::Colorize;
 use itertools::Itertools;
 use num_bigint::BigInt;
 #[cfg(feature = "interactive")]
@@ -197,6 +198,7 @@ pub enum Token {
     DefPermutation {
         from: Vec<String>,
         to: Vec<String>,
+        signs: Vec<bool>,
     },
     /// declaration of a plookup constraint between two sets of columns
     DefPlookup {
@@ -261,7 +263,7 @@ impl Debug for Token {
             Token::DefColumn { name, t, kind, .. } => {
                 write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind)
             }
-            Token::DefPermutation { from, to } => {
+            Token::DefPermutation { from, to, .. } => {
                 write!(f, "({:?}):PERMUTATION({:?})", to, from)
             }
             Token::DefInrange(exp, max) => write!(f, "{:?}E{}", exp, max),
@@ -729,24 +731,84 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         "defpermutation" => {
-            let to = tokens
-                .next()
-                .with_context(|| anyhow!("missing target columns"))??
-                .as_list()?
-                .iter()
-                .map(|t| t.as_symbol().map(|x| x.to_owned()))
-                .collect::<Result<Vec<_>>>()?;
+            enum SignParser {
+                Running,
+                Done,
+            }
 
-            let from = tokens
+            let to = tokens
                 .next()
                 .with_context(|| anyhow!("missing source columns"))??
                 .as_list()?
                 .iter()
                 .map(|t| t.as_symbol().map(|x| x.to_owned()))
                 .collect::<Result<Vec<_>>>()?;
+            let mut sign_state = SignParser::Running;
+            let mut signs = Vec::new();
+            let mut from = Vec::new();
+            for c in tokens
+                .next()
+                .with_context(|| anyhow!("missing target columns"))??
+                .as_list()?
+                .iter()
+            {
+                match c.class {
+                    Token::Symbol(ref x) => {
+                        sign_state = SignParser::Done;
+                        from.push(x.to_owned());
+                    }
+                    Token::List(ref xs) => {
+                        let mut xs = xs.iter();
+                        let sign = xs
+                            .next()
+                            .with_context(|| anyhow!("missing sorting criterion"))?;
+                        let sign = sign
+                            .as_symbol()
+                            .with_context(|| {
+                                anyhow!("expected + or -, found {}", sign.src.bold().white())
+                            })
+                            .and_then(|x| {
+                                if x == "+" || x == "↓" {
+                                    Ok(true)
+                                } else if x == "-" || x == "↑" {
+                                    Ok(false)
+                                } else {
+                                    Err(anyhow!(
+                                        "expected + or -, found {}",
+                                        sign.src.bold().white()
+                                    ))
+                                }
+                            })?;
+
+                        let col = xs
+                            .next()
+                            .with_context(|| anyhow!("missing column to sort"))?;
+                        let col = col
+                            .as_symbol()
+                            .with_context(|| anyhow!("expected column to sort, found {}", col.src))?
+                            .to_string();
+                        if matches!(sign_state, SignParser::Done) {
+                            bail!(
+                                "found sorting column {} after non-sorting column",
+                                col.white().bold()
+                            )
+                        }
+
+                        signs.push(sign);
+                        from.push(col);
+                    }
+                    _ => {
+                        bail!("expected COLUMN or (SIGN COLUMN), found {}", c)
+                    }
+                }
+            }
+
+            if signs.is_empty() {
+                bail!("no sorting criterion found")
+            }
 
             Ok(AstNode {
-                class: Token::DefPermutation { from, to },
+                class: Token::DefPermutation { from, to, signs },
                 src,
                 lc,
             })

@@ -69,6 +69,7 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         Computation::Sorted {
             froms: vec![intrld_aux_xs_handle.to_owned()],
             tos: vec![srt_intrld_aux_xs_handle.to_owned()],
+            signs: vec![true],
         },
     )?;
 

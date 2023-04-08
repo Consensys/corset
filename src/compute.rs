@@ -114,6 +114,7 @@ fn compute_sorted(
     cs: &ConstraintSet,
     froms: &[Handle],
     tos: &[Handle],
+    signs: &[bool],
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling(&froms[0].module).unwrap();
     for from in froms.iter() {
@@ -132,11 +133,11 @@ fn compute_sorted(
 
     let mut sorted_is = (0..len).collect::<Vec<_>>();
     sorted_is.sort_by(|i, j| {
-        for from in from_cols.iter() {
+        for (sign, from) in signs.iter().zip(from_cols.iter()) {
             let x_i = from.get(*i as isize, false).unwrap();
             let x_j = from.get(*j as isize, false).unwrap();
             if let x @ (Ordering::Greater | Ordering::Less) = x_i.cmp(x_j) {
-                return x;
+                return if *sign { x } else { x.reverse() };
             }
         }
         Ordering::Equal
@@ -389,9 +390,9 @@ pub fn apply_computation(
                 None
             }
         }
-        Computation::Sorted { froms, tos } => {
+        Computation::Sorted { froms, tos, signs } => {
             if !cs.get(&tos[0]).unwrap().is_computed() {
-                Some(compute_sorted(cs, froms, tos))
+                Some(compute_sorted(cs, froms, tos, signs))
             } else {
                 None
             }

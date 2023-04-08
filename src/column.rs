@@ -283,6 +283,7 @@ pub enum Computation {
     Sorted {
         froms: Vec<Handle>,
         tos: Vec<Handle>,
+        signs: Vec<bool>,
     },
     CyclicFrom {
         target: Handle,
