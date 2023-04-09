@@ -19,10 +19,22 @@ use super::{EvalSettings, Intrinsic, Kind, Magma, Type};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum Expression {
-    Funcall { func: Intrinsic, args: Vec<Node> },
+    Funcall {
+        func: Intrinsic,
+        args: Vec<Node>,
+    },
     Const(BigInt, Option<Fr>),
-    Column(Handle, Kind<Node>, Option<i64>, Base),
-    ArrayColumn(Handle, Vec<usize>, Base),
+    Column {
+        handle: Handle,
+        kind: Kind<Node>,
+        padding_value: Option<i64>,
+        base: Base,
+    },
+    ArrayColumn {
+        handle: Handle,
+        domain: Vec<usize>,
+        base: Base,
+    },
     List(Vec<Node>),
     Void,
 }
@@ -62,7 +74,12 @@ impl Node {
     }
     pub fn from_handle(x: &Handle) -> Node {
         Node {
-            _e: Expression::Column(x.clone(), Kind::Phantom, None, Base::Hex),
+            _e: Expression::Column {
+                handle: x.clone(),
+                kind: Kind::Phantom,
+                padding_value: None,
+                base: Base::Hex,
+            },
             _t: None,
         }
     }
@@ -99,8 +116,8 @@ impl Node {
                     Type::Scalar(Magma::Integer)
                 }
             }
-            Expression::Column(..) => Type::Void,
-            Expression::ArrayColumn(..) => Type::Void,
+            Expression::Column { .. } => Type::Void,
+            Expression::ArrayColumn { .. } => Type::Void,
             Expression::List(xs) => Type::List(
                 xs.iter()
                     .map(Node::t)
@@ -209,7 +226,7 @@ impl Node {
                     };
                     tty.write(x.to_string().color(c).bold().to_string());
                 }
-                Expression::Column(h, ..) => {
+                Expression::Column { handle: h, .. } => {
                     let v = f(n).unwrap_or_default();
                     let c = if dim && zero_context {
                         colored::Color::BrightBlack
@@ -226,7 +243,7 @@ impl Node {
                             .to_string(),
                     );
                 }
-                Expression::ArrayColumn(h, ..) => tty.write(h.to_string()),
+                Expression::ArrayColumn { handle, .. } => tty.write(handle.to_string()),
                 Expression::List(ns) => {
                     let v = f(n).unwrap();
                     let c = if v.is_zero() && dim {
@@ -270,8 +287,8 @@ impl Node {
         match self.e() {
             Expression::Funcall { args, .. } => 1 + args.iter().map(Node::size).sum::<usize>(),
             Expression::Const(..) => 0,
-            Expression::Column(..) => 1,
-            Expression::ArrayColumn(..) => 0,
+            Expression::Column { .. } => 1,
+            Expression::ArrayColumn { .. } => 0,
             Expression::List(xs) => xs.iter().map(Node::size).sum::<usize>(),
             Expression::Void => 0,
         }
@@ -335,10 +352,10 @@ impl Node {
                 args.iter_mut().for_each(|e| e.add_id_to_handles(set_id))
             }
 
-            Expression::Column(handle, ..) => set_id(handle),
+            Expression::Column { handle, .. } => set_id(handle),
             Expression::List(xs) => xs.iter_mut().for_each(|x| x.add_id_to_handles(set_id)),
 
-            Expression::ArrayColumn(..) | Expression::Const(_, _) | Expression::Void => {}
+            Expression::ArrayColumn { .. } | Expression::Const(_, _) | Expression::Void => {}
         }
     }
 
@@ -346,7 +363,7 @@ impl Node {
         self.leaves()
             .into_iter()
             .filter_map(|e| match e.e() {
-                Expression::Column(handle, ..) => Some(handle.clone()),
+                Expression::Column { handle, .. } => Some(handle.clone()),
                 _ => None,
             })
             .collect()
@@ -521,8 +538,14 @@ impl Node {
                     }
                 }
                 Intrinsic::Nth => {
-                    if let (Expression::ArrayColumn(h, range, _), Expression::Const(idx, _)) =
-                        (&args[0].e(), &args[1].e())
+                    if let (
+                        Expression::ArrayColumn {
+                            handle: h,
+                            domain: range,
+                            base: _,
+                        },
+                        Expression::Const(idx, _),
+                    ) = (&args[0].e(), &args[1].e())
                     {
                         let idx = idx.to_usize().unwrap();
                         if !range.contains(&idx) {
@@ -556,7 +579,7 @@ impl Node {
             Expression::Const(v, x) => {
                 Some(x.unwrap_or_else(|| panic!("{} is not an Fr element.", v)))
             }
-            Expression::Column(handle, ..) => get(handle, i, settings.wrap),
+            Expression::Column { handle, .. } => get(handle, i, settings.wrap),
             Expression::List(xs) => xs
                 .iter()
                 .filter_map(|x| x.eval_fold(i, get, cache, settings, f))
@@ -577,8 +600,8 @@ impl Node {
                     }
                 }
                 Expression::Const(..) => ax.push(e.clone()),
-                Expression::Column(..) => ax.push(e.clone()),
-                Expression::ArrayColumn(..) => {}
+                Expression::Column { .. } => ax.push(e.clone()),
+                Expression::ArrayColumn { .. } => {}
                 Expression::List(args) => {
                     for a in args {
                         _flatten(a, ax);
@@ -617,16 +640,16 @@ impl Display for Node {
 
         match self.e() {
             Expression::Const(x, _) => write!(f, "{}", x),
-            Expression::Column(handle, ..) => {
+            Expression::Column { handle, .. } => {
                 write!(f, "{}", handle)
             }
-            Expression::ArrayColumn(handle, range, ..) => {
+            Expression::ArrayColumn { handle, domain, .. } => {
                 write!(
                     f,
                     "{}[{}:{}]",
                     handle,
-                    range.first().unwrap(),
-                    range.last().unwrap(),
+                    domain.first().unwrap(),
+                    domain.last().unwrap(),
                 )
             }
             Expression::List(cs) => write!(f, "{{{}}}", format_list(cs)),
@@ -649,10 +672,14 @@ impl Debug for Node {
 
         match self.e() {
             Expression::Const(x, _) => write!(f, "{}", x),
-            Expression::Column(handle, ..) => {
+            Expression::Column { handle, .. } => {
                 write!(f, "{:?}:{:?}", handle, self._t)
             }
-            Expression::ArrayColumn(handle, range, ..) => {
+            Expression::ArrayColumn {
+                handle,
+                domain: range,
+                ..
+            } => {
                 write!(
                     f,
                     "{}:{:?}[{}:{}]",

@@ -26,12 +26,12 @@ fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
             .call(&[
                 x_expr.clone(),
                 Node {
-                    _e: Expression::Column(
-                        x_col.to_owned(),
-                        Kind::Composite(Box::new(x_expr.clone())),
-                        None,
-                        Base::Dec,
-                    ),
+                    _e: Expression::Column {
+                        handle: x_col.to_owned(),
+                        kind: Kind::Composite(Box::new(x_expr.clone())),
+                        padding_value: None,
+                        base: Base::Dec,
+                    },
                     _t: Some(Type::Column(Magma::Integer)),
                 },
             ])

@@ -524,9 +524,9 @@ fn apply_form(
             let mut body = reduce(&args[1], ctx, settings)?.unwrap();
 
             return match body.e_mut() {
-                Expression::Column(..)
+                Expression::Column { .. }
                 | Expression::Void
-                | Expression::ArrayColumn(..)
+                | Expression::ArrayColumn { .. }
                 | Expression::Funcall { .. }
                 | Expression::Const(_, _) => panic!(),
                 Expression::List(xs) => {
@@ -590,7 +590,12 @@ fn apply_builtin(
             )))
         }
         Builtin::Len => {
-            if let Expression::ArrayColumn(_, domain, _) = traversed_args[0].e() {
+            if let Expression::ArrayColumn {
+                handle: _,
+                domain,
+                base: _,
+            } = traversed_args[0].e()
+            {
                 Ok(Some(Node::from_const(domain.len().try_into().unwrap())))
             } else {
                 bail!(RuntimeError::NotAnArray(traversed_args[0].e().clone()))
@@ -632,21 +637,28 @@ fn apply_intrinsic(
         b @ (Intrinsic::IfZero | Intrinsic::IfNotZero) => Ok(Some(b.call(&traversed_args)?)),
 
         Intrinsic::Nth => {
-            if let Expression::ArrayColumn(handle, ..) = &traversed_args[0].e() {
+            if let Expression::ArrayColumn { handle, .. } = &traversed_args[0].e() {
                 let i = traversed_args[1].pure_eval()?.to_usize().ok_or_else(|| {
                     anyhow!("{:?} is not a valid indice", traversed_args[1].pure_eval())
                 })?;
                 let array = ctx.borrow_mut().resolve_symbol(&handle.name)?;
                 match array.e() {
-                    Expression::ArrayColumn(handle, range, base) => {
+                    Expression::ArrayColumn {
+                        handle,
+                        domain: range,
+                        base,
+                    } => {
                         if range.contains(&i) {
                             Ok(Some(Node {
-                                _e: Expression::Column(
-                                    Handle::new(&handle.module, format!("{}_{}", handle.name, i)),
-                                    Kind::Atomic,
-                                    None,
-                                    *base,
-                                ),
+                                _e: Expression::Column {
+                                    handle: Handle::new(
+                                        &handle.module,
+                                        format!("{}_{}", handle.name, i),
+                                    ),
+                                    kind: Kind::Atomic,
+                                    padding_value: None,
+                                    base: *base,
+                                },
                                 _t: Some(Type::Column(array.t().magma())),
                             }))
                         } else {
@@ -779,7 +791,13 @@ pub fn reduce(
             Kind::Composite(e) => {
                 let n = reduce(e, ctx, settings)?.unwrap();
                 ctx.borrow_mut().edit_symbol(name, &|x| {
-                    if let Expression::Column(_, kind, _, _) = x {
+                    if let Expression::Column {
+                        handle: _,
+                        kind,
+                        padding_value: _,
+                        base: _,
+                    } = x
+                    {
                         *kind = Kind::Composite(Box::new(n.clone()))
                     }
                 })?;
@@ -789,14 +807,20 @@ pub fn reduce(
                 let from_handles = froms
                     .iter()
                     .map(|f| match reduce(f, ctx, settings)?.unwrap().e() {
-                        Expression::Column(h, ..) => Ok(h.to_owned()),
+                        Expression::Column { handle: h, .. } => Ok(h.to_owned()),
                         x => Err(anyhow!("expected column, found {:?}", x)),
                     })
                     .collect::<Result<Vec<_>>>()
                     .with_context(|| anyhow!("while defining {}", name))?;
 
                 ctx.borrow_mut().edit_symbol(name, &|x| {
-                    if let Expression::Column(_, kind, _, _) = x {
+                    if let Expression::Column {
+                        handle: _,
+                        kind,
+                        padding_value: _,
+                        base: _,
+                    } = x
+                    {
                         *kind = Kind::Interleaved(vec![], Some(from_handles.to_vec()))
                     }
                 })?;
@@ -916,7 +940,7 @@ fn reduce_toplevel(
             let froms = from
                 .iter()
                 .map(|from| {
-                    if let Expression::Column(handle, ..) = ctx
+                    if let Expression::Column { handle, .. } = ctx
                         .borrow_mut()
                         .resolve_symbol(from)
                         .with_context(|| "while defining permutation")?

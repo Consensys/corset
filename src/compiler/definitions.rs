@@ -45,18 +45,17 @@ fn reduce(
         } => {
             let module_name = ctx.borrow().module.to_owned();
             let symbol = Node {
-                _e: Expression::Column(
-                    Handle::new(module_name, col),
-                    // Convert Kind<AstNode> to Kind<Expression>
-                    match kind {
+                _e: Expression::Column {
+                    handle: Handle::new(module_name, col),
+                    kind: match kind {
                         Kind::Atomic => Kind::Atomic,
                         Kind::Phantom => Kind::Phantom,
                         Kind::Composite(_) => Kind::Phantom, // The actual expression is computed by the generator
                         Kind::Interleaved(_, _) => Kind::Phantom, // The interleaving is later on set by the generator
                     },
-                    padding_value.to_owned(),
-                    *base,
-                ),
+                    padding_value: padding_value.to_owned(),
+                    base: *base,
+                },
                 _t: Some(*t),
             };
             ctx.borrow_mut().insert_symbol(col, symbol)
@@ -71,7 +70,11 @@ fn reduce(
             ctx.borrow_mut().insert_symbol(
                 col,
                 Node {
-                    _e: Expression::ArrayColumn(handle, range.to_owned(), *base),
+                    _e: Expression::ArrayColumn {
+                        handle,
+                        domain: range.to_owned(),
+                        base: *base,
+                    },
                     _t: Some(*t),
                 },
             )?;
@@ -102,7 +105,7 @@ fn reduce(
             let mut _tos = Vec::new();
             for (to, from) in tos.iter().zip(froms.iter()) {
                 let to_handle = Handle::new(&ctx.borrow().module, to);
-                let from_actual_handle = if let Expression::Column(handle, ..) = ctx
+                let from_actual_handle = if let Expression::Column { handle, .. } = ctx
                     .borrow_mut()
                     .resolve_symbol(from)
                     .with_context(|| "while defining permutation")?
@@ -116,12 +119,12 @@ fn reduce(
                     .insert_symbol(
                         to,
                         Node {
-                            _e: Expression::Column(
-                                to_handle.clone(),
-                                Kind::Phantom,
-                                None,
-                                Base::Hex,
-                            ),
+                            _e: Expression::Column {
+                                handle: to_handle.clone(),
+                                kind: Kind::Phantom,
+                                padding_value: None,
+                                base: Base::Hex,
+                            },
                             _t: Some(Type::Column(Magma::Integer)),
                         },
                     )

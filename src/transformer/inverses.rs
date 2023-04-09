@@ -67,7 +67,12 @@ fn do_expand_inv(
                     )?;
                 }
                 *e = Node {
-                    _e: Expression::Column(inverted_handle.clone(), Kind::Atomic, None, Base::Dec),
+                    _e: Expression::Column {
+                        handle: inverted_handle.clone(),
+                        kind: Kind::Atomic,
+                        padding_value: None,
+                        base: Base::Dec,
+                    },
                     _t: Some(Type::Column(Magma::Integer)),
                 }
             }
@@ -84,12 +89,12 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result
             Intrinsic::Mul.call(&[
                 x_expr.clone(),
                 Node {
-                    _e: Expression::Column(
-                        inv_x_col.clone(),
-                        Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
-                        None,
-                        Base::Hex,
-                    ),
+                    _e: Expression::Column {
+                        handle: inv_x_col.clone(),
+                        kind: Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
+                        padding_value: None,
+                        base: Base::Hex,
+                    },
                     _t: Some(Type::Column(Magma::Integer)),
                 },
             ])?,
@@ -98,24 +103,24 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result
     ])?);
     cs.push(Intrinsic::Mul.call(&[
         Node {
-            _e: Expression::Column(
-                inv_x_col.clone(),
-                Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
-                None,
-                Base::Hex,
-            ),
+            _e: Expression::Column {
+                handle: inv_x_col.clone(),
+                kind: Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
+                padding_value: None,
+                base: Base::Hex,
+            },
             _t: Some(Type::Column(Magma::Integer)),
         },
         Intrinsic::Sub.call(&[
             Intrinsic::Mul.call(&[
                 x_expr.clone(),
                 Node {
-                    _e: Expression::Column(
-                        inv_x_col.clone(),
-                        Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
-                        None,
-                        Base::Hex,
-                    ),
+                    _e: Expression::Column {
+                        handle: inv_x_col.clone(),
+                        kind: Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
+                        padding_value: None,
+                        base: Base::Hex,
+                    },
                     _t: Some(Type::Column(Magma::Integer)),
                 },
             ])?,

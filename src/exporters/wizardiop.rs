@@ -35,7 +35,7 @@ fn shift(e: &Node, i: isize) -> Node {
                 .into(),
             },
             Expression::Const(..) => e.clone(),
-            Expression::Column(..) => Intrinsic::Shift
+            Expression::Column { .. } => Intrinsic::Shift
                 .call(&[
                     e.clone(),
                     Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
@@ -44,7 +44,7 @@ fn shift(e: &Node, i: isize) -> Node {
             Expression::List(xs) => {
                 Expression::List(xs.iter().map(|x| shift(x, i)).collect()).into()
             }
-            Expression::ArrayColumn(..) => unreachable!(),
+            Expression::ArrayColumn { .. } => unreachable!(),
             Expression::Void => Expression::Void.into(),
         }
     }
@@ -77,16 +77,16 @@ fn make_chain(xs: &[Node], operand: &str, surround: bool) -> String {
 /// Render an expression, panicking if it is not a handle
 fn render_handle(e: &Node) -> String {
     match e.e() {
-        Expression::Column(handle, ..) => handle.mangle(),
+        Expression::Column { handle, .. } => handle.mangle(),
         _ => unreachable!(),
     }
 }
 
 fn render_expression(e: &Node) -> String {
     match e.e() {
-        Expression::ArrayColumn(..) => unreachable!(),
+        Expression::ArrayColumn { .. } => unreachable!(),
         Expression::Const(x, _) => format!("symbolic.NewConstant(\"{}\")", x),
-        Expression::Column(handle, ..) => format!("{}.AsVariable()", handle.mangle()),
+        Expression::Column { handle, .. } => format!("{}.AsVariable()", handle.mangle()),
         Expression::Funcall { func, args } => render_funcall(func, args),
         Expression::List(constraints) => constraints
             .iter()
@@ -134,7 +134,7 @@ fn render_funcall(func: &Intrinsic, args: &[Node]) -> String {
         Intrinsic::Neg => format!("({}).Neg()", render_expression(&args[0])),
         Intrinsic::Shift => {
             let leaf = match &args[0].e() {
-                Expression::Column(handle, ..) => handle.mangle(),
+                Expression::Column { handle, .. } => handle.mangle(),
                 _ => unreachable!(),
             };
             format!(

@@ -74,12 +74,12 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
     )?;
 
     let srt_intrld_aux_xs_node = Node {
-        _e: Expression::Column(
-            srt_intrld_aux_xs_handle.to_owned(),
-            Kind::Phantom,
-            None,
-            Base::Dec,
-        ),
+        _e: Expression::Column {
+            handle: srt_intrld_aux_xs_handle.to_owned(),
+            kind: Kind::Phantom,
+            padding_value: None,
+            base: Base::Dec,
+        },
         _t: Some(Type::Column(Magma::Byte)),
     };
     cs.constraints.push(Constraint::Vanishes {
@@ -92,12 +92,12 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
         handle: Handle::new(module, format!("2^{n}-hood-end")),
         domain: Some(vec![-1]),
         expr: Box::new(Intrinsic::Sub.call(&[
-            Node::from_expr(Expression::Column(
-                srt_intrld_aux_xs_handle.to_owned(),
-                Kind::Phantom,
-                None,
-                Base::Dec,
-            )),
+            Node::from_expr(Expression::Column {
+                handle: srt_intrld_aux_xs_handle.to_owned(),
+                kind: Kind::Phantom,
+                padding_value: None,
+                base: Base::Dec,
+            }),
             Node::from_const((modulo - 1).try_into().unwrap()),
         ])?),
     });

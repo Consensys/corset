@@ -68,8 +68,12 @@ impl Pretty for Node {
             let c = &COLORS[depth % COLORS.len()];
             match s.e() {
                 Expression::Const(x, _) => format!("{}", x).color(*c),
-                Expression::Column(handle, ..) => handle.name.to_string().color(*c),
-                Expression::ArrayColumn(handle, range, ..) => format!(
+                Expression::Column { handle, .. } => handle.name.to_string().color(*c),
+                Expression::ArrayColumn {
+                    handle,
+                    domain: range,
+                    ..
+                } => format!(
                     "{}[{}:{}]",
                     handle.name,
                     range.first().unwrap(),

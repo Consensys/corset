@@ -15,7 +15,7 @@ fn do_expand_expr(
     new_cs: &mut Vec<Node>,
 ) -> Result<Node> {
     match e.e() {
-        Expression::Column(..) => Ok(e.clone()),
+        Expression::Column { .. } => Ok(e.clone()),
         _ => {
             let module = e.module().unwrap();
             let new_handle = Handle::new(module, expression_to_name(e, "EXPAND"));
@@ -39,7 +39,12 @@ fn do_expand_expr(
                 },
             );
             Ok(Node {
-                _e: Expression::Column(new_handle, Kind::Phantom, None, Base::Dec),
+                _e: Expression::Column {
+                    handle: new_handle,
+                    kind: Kind::Phantom,
+                    padding_value: None,
+                    base: Base::Dec,
+                },
                 _t: Some(Type::Column(Magma::Integer)),
             })
         }

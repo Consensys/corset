@@ -17,7 +17,7 @@ fn do_lower_shifts(e: &mut Node, depth: isize) {
             }
         }
         Expression::Const(_, _) => (),
-        Expression::Column(..) => {
+        Expression::Column { .. } => {
             if depth != 0 {
                 let column = e.clone();
                 *e = Intrinsic::Shift
@@ -28,7 +28,7 @@ fn do_lower_shifts(e: &mut Node, depth: isize) {
                     .unwrap();
             }
         }
-        Expression::ArrayColumn(..) => (),
+        Expression::ArrayColumn { .. } => (),
         Expression::List(xs) => {
             for x in xs.iter_mut() {
                 do_lower_shifts(x, depth);

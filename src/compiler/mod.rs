@@ -92,7 +92,12 @@ pub fn make<S: AsRef<str>>(
                 }
 
                 match symbol.e() {
-                    Expression::Column(handle, k, padding_value, base) => {
+                    Expression::Column {
+                        handle,
+                        kind: k,
+                        padding_value,
+                        base,
+                    } => {
                         columns.insert_column(
                             handle,
                             symbol.t(),
@@ -121,7 +126,11 @@ pub fn make<S: AsRef<str>>(
                             )?,
                         }
                     }
-                    Expression::ArrayColumn(handle, range, base) => {
+                    Expression::ArrayColumn {
+                        handle,
+                        domain: range,
+                        base,
+                    } => {
                         // NOTE we may need custom padding value for arrays at some point
                         columns.insert_array(
                             handle,
