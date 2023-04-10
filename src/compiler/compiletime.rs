@@ -1,27 +1,21 @@
 use anyhow::*;
-use std::{cell::RefCell, rc::Rc};
 
 use super::{
     generator::{make_ast_error, reduce},
-    tables::SymbolTable,
+    tables::Scope,
     Ast, AstNode, CompileSettings, Token,
 };
 
-fn compile_time_constants(
-    e: &AstNode,
-    root_ctx: Rc<RefCell<SymbolTable>>,
-    ctx: &mut Rc<RefCell<SymbolTable>>,
-    settings: &CompileSettings,
-) -> Result<()> {
+fn compile_time_constants(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()> {
     match &e.class {
         Token::DefModule(name) => {
-            *ctx = SymbolTable::derived(root_ctx, name, name, false, true);
+            *ctx = ctx.derived(name, false, true);
             Ok(())
         }
         Token::DefConsts(cs) => {
             for (name, exp) in cs.iter() {
                 let value = reduce(exp, ctx, settings)?.unwrap();
-                ctx.borrow_mut().insert_constant(
+                ctx.insert_constant(
                     name,
                     value.pure_eval().with_context(|| make_ast_error(exp))?,
                     true,
@@ -33,11 +27,10 @@ fn compile_time_constants(
     }
 }
 
-pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>, settings: &CompileSettings) -> Result<()> {
+pub fn pass(ast: &Ast, ctx: Scope, settings: &CompileSettings) -> Result<()> {
     let mut module = ctx.clone();
     for exp in ast.exprs.iter() {
-        compile_time_constants(exp, ctx.clone(), &mut module, settings)
-            .with_context(|| make_ast_error(exp))?;
+        compile_time_constants(exp, &mut module, settings).with_context(|| make_ast_error(exp))?;
     }
 
     Ok(())

@@ -7,15 +7,17 @@ use crate::{
 };
 use anyhow::*;
 use colored::Colorize;
+use itertools::Itertools;
 use log::*;
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use pairing_ce::ff::PrimeField;
 use serde::{Deserialize, Serialize};
+use sorbus::{NodeID, Tree};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
-    rc::{Rc, Weak},
+    rc::Rc,
 };
 
 lazy_static::lazy_static! {
@@ -168,93 +170,164 @@ pub enum Symbol {
     Alias(String),
     Final(Node, bool),
 }
-#[derive(Debug)]
-pub struct SymbolTable {
-    // The parent relationship is only used for contextual
-    // semantics (i.e. for & functions), not modules
-    closed: bool,
-    // If true, then those are module definitions.
-    // Otherwise, this table is a private table, e.g. function arguments
-    public: bool,
-    pub module: String,
-    pub pretty_name: String,
-    parent: Weak<RefCell<Self>>,
-    children: HashMap<String, Rc<RefCell<SymbolTable>>>,
-    constraints: HashSet<String>,
-    funcs: HashMap<String, Function>,
-    symbols: HashMap<String, Symbol>,
-    pub computation_table: Rc<RefCell<ComputationTable>>,
+
+#[derive(Default)]
+pub struct GlobalData {
+    pub computations: ComputationTable,
 }
-impl SymbolTable {
-    pub fn new_root() -> SymbolTable {
-        SymbolTable {
-            closed: true,
-            public: true,
-            module: super::MAIN_MODULE.to_owned(),
-            pretty_name: "".into(),
-            parent: Weak::new(),
-            children: Default::default(),
-            constraints: Default::default(),
-            funcs: BUILTINS
-                .iter()
-                .map(|(k, f)| (k.to_string(), f.clone()))
-                .collect(),
-            symbols: Default::default(),
-            computation_table: Rc::new(RefCell::new(Default::default())),
+
+type SymbolTableTree = Tree<SymbolTable, GlobalData>;
+pub struct Scope {
+    pub tree: Rc<RefCell<SymbolTableTree>>,
+    id: NodeID,
+}
+
+macro_rules! data {
+    ($i:ident) => {
+        $i.tree.clone().borrow()[$i.id].unwrap_data()
+    };
+}
+
+macro_rules! data_mut {
+    ($i:ident) => {
+        $i.tree.clone().borrow_mut()[$i.id].unwrap_data_mut()
+    };
+}
+
+impl Scope {
+    pub fn new() -> Scope {
+        let mut tree = Tree::new();
+        let root = tree.add_node(
+            None,
+            Some(SymbolTable {
+                name: super::MAIN_MODULE.to_owned(),
+                closed: true,
+                public: true,
+                constraints: Default::default(),
+                funcs: BUILTINS
+                    .iter()
+                    .map(|(k, f)| (k.to_string(), f.clone()))
+                    .collect(),
+                symbols: Default::default(),
+            }),
+        );
+        tree.set_root(root);
+
+        Scope {
+            tree: Rc::new(RefCell::new(tree)),
+            id: root,
         }
     }
 
-    pub fn derived(
-        parent: Rc<RefCell<Self>>,
-        name: &str,
-        pretty_name: &str,
-        closed: bool,
-        public: bool,
-    ) -> Rc<RefCell<Self>> {
-        let ct = parent.borrow().computation_table.clone();
-        parent
+    pub fn derived(&mut self, name: &str, closed: bool, public: bool) -> Scope {
+        let maybe_child = self.tree.borrow().find_child(self.id, |n| n.name == name);
+        match maybe_child {
+            Some(n) => self.at(n),
+            None => {
+                let new_node = self.tree.borrow_mut().add_node(
+                    Some(self.id),
+                    Some(SymbolTable {
+                        name: name.to_owned(),
+                        closed,
+                        public,
+                        constraints: Default::default(),
+                        funcs: Default::default(),
+                        symbols: Default::default(),
+                    }),
+                );
+                Scope {
+                    tree: self.tree.clone(),
+                    id: new_node,
+                }
+            }
+        }
+    }
+
+    pub fn module(&self) -> String {
+        data!(self).name.to_owned()
+    }
+
+    pub fn name(&self) -> String {
+        data!(self).name.to_owned()
+    }
+
+    pub fn computations(&self) -> ComputationTable {
+        self.tree.borrow().metadata().computations.clone()
+    }
+
+    pub fn insert_many_computations(
+        &self,
+        targets: &[Handle],
+        computation: Computation,
+    ) -> Result<()> {
+        self.tree
             .borrow_mut()
-            .children
-            .entry(name.to_string())
-            .or_insert_with(|| {
-                Rc::new(RefCell::new(SymbolTable {
-                    closed,
-                    public,
-                    module: name.to_owned(),
-                    pretty_name: pretty_name.to_owned(),
-                    parent: Rc::downgrade(&parent),
-                    children: Default::default(),
-                    constraints: Default::default(),
-                    funcs: Default::default(),
-                    symbols: Default::default(),
-                    computation_table: ct,
-                }))
-            })
-            .clone()
+            .metadata_mut()
+            .computations
+            .insert_many(targets, computation)
+    }
+
+    fn at(&self, id: usize) -> Scope {
+        Scope {
+            tree: self.tree.clone(),
+            id,
+        }
+    }
+
+    fn parent(&self) -> Option<Scope> {
+        let parent = self.tree.borrow().parent(self.id).clone();
+        parent.map(|p| self.at(p))
+    }
+
+    fn children(&self) -> Vec<Scope> {
+        self.tree
+            .borrow()
+            .children(self.id)
+            .iter()
+            .map(|c| self.at(*c))
+            .collect()
     }
 
     pub fn visit_mut<T>(
         &mut self,
-        f: &mut dyn FnMut(&str, Handle, &mut Symbol) -> Result<()>,
+        f: &mut dyn FnMut(Handle, &mut Symbol) -> Result<()>,
     ) -> Result<()> {
-        for (module, handle, symbol) in self
+        if !data!(self).public {
+            return Ok(());
+        }
+
+        let module = data!(self).name.clone();
+        for (handle, symbol) in data_mut!(self)
             .symbols
             .iter_mut()
-            .map(|(k, v)| (&self.pretty_name, Handle::new(&self.module, k), v))
+            .map(|(k, v)| (Handle::new(&module, k), v))
         {
-            f(module, handle, symbol)?;
+            f(handle, symbol)?;
         }
-        for c in self.children.values_mut() {
-            let public = c.borrow().public;
-            if public {
-                c.borrow_mut().visit_mut::<T>(f)?;
-            }
+        for c in self.children().iter_mut() {
+            c.visit_mut::<T>(f)?;
         }
         Ok(())
     }
 
+    pub fn resolve_symbol(&mut self, name: &str) -> Result<Node> {
+        if name.contains('.') {
+            self.resolve_symbol_with_path(name)
+        } else {
+            Self::_resolve_symbol(
+                self.id,
+                &mut self.tree.borrow_mut(),
+                name,
+                &mut HashSet::new(),
+                false,
+                false,
+            )
+        }
+    }
+
     fn _resolve_symbol(
-        &mut self,
+        n: usize,
+        tree: &mut SymbolTableTree,
         name: &str,
         ax: &mut HashSet<String>,
         absolute_path: bool,
@@ -264,53 +337,56 @@ impl SymbolTable {
             bail!("circular definition found for {}", name)
         } else {
             ax.insert(name.to_owned());
-            // Ugly, but required for borrowing reasons
-            if let Some(Symbol::Alias(target)) = self.symbols.get(name).cloned() {
-                self._resolve_symbol(&target, ax, absolute_path, pure)
-            } else {
-                match self.symbols.get_mut(name) {
-                    Some(Symbol::Final(exp, visited)) => {
-                        if pure && !matches!(exp.e(), Expression::Const(..)) {
-                            bail!(
-                                "symbol {} can not be used in a pure context",
-                                exp.to_string().blue()
-                            )
-                        } else {
-                            *visited = true;
-                            Ok(exp.clone())
-                        }
+            match tree[n].unwrap_data_mut().symbols.get_mut(name) {
+                Some(Symbol::Alias(target)) => {
+                    let target = target.to_owned();
+                    Self::_resolve_symbol(n, tree, &target, ax, absolute_path, pure)
+                }
+                Some(Symbol::Final(exp, ref mut visited)) => {
+                    if pure && !matches!(exp.e(), Expression::Const(..)) {
+                        bail!(
+                            "symbol {} can not be used in a pure context",
+                            exp.to_string().blue()
+                        )
+                    } else {
+                        *visited = true;
+                        Ok(exp.clone())
                     }
-                    None => {
-                        if absolute_path {
-                            Err(anyhow!(symbols::Error::SymbolNotFound(
-                                name.to_owned(),
-                                self.module.to_owned()
-                            )))
-                        } else {
-                            self.parent.upgrade().map_or(
+                }
+                None => {
+                    if absolute_path {
+                        Err(anyhow!(symbols::Error::SymbolNotFound(
+                            name.to_owned(),
+                            tree.unwrap_data(n).name.to_string()
+                        )))
+                    } else {
+                        tree.parent(n).map_or(
+                            {
                                 Err(anyhow!(symbols::Error::SymbolNotFound(
                                     name.to_owned(),
-                                    self.module.to_owned(),
-                                ))),
-                                |parent| {
-                                    parent.borrow_mut()._resolve_symbol(
-                                        name,
-                                        &mut HashSet::new(),
-                                        false,
-                                        self.closed || pure,
-                                    )
-                                },
-                            )
-                        }
+                                    tree[n].unwrap_data().name.to_string(),
+                                )))
+                            },
+                            |parent| {
+                                Self::_resolve_symbol(
+                                    parent,
+                                    tree,
+                                    name,
+                                    &mut HashSet::new(),
+                                    false,
+                                    tree[n].unwrap_data().closed || pure,
+                                )
+                            },
+                        )
                     }
-                    _ => unimplemented!(),
                 }
             }
         }
     }
 
     fn _edit_symbol(
-        &mut self,
+        n: usize,
+        tree: &mut SymbolTableTree,
         name: &str,
         f: &dyn Fn(&mut Expression),
         ax: &mut HashSet<String>,
@@ -319,24 +395,22 @@ impl SymbolTable {
             Err(anyhow!(symbols::Error::CircularDefinition(name.to_owned())))
         } else {
             ax.insert(name.to_owned());
-            // Ugly, but required for borrowing reasons
-            if let Some(Symbol::Alias(_)) = self.symbols.get(name).cloned() {
-                self._edit_symbol(name, f, ax)
-            } else {
-                match self.symbols.get_mut(name) {
-                    Some(Symbol::Final(constraint, _)) => {
-                        f(constraint.e_mut());
-                        Ok(())
-                    }
-                    None => self.parent.upgrade().map_or(
-                        Err(anyhow!(symbols::Error::SymbolNotFound(
-                            name.to_owned(),
-                            self.module.to_owned(),
-                        ))),
-                        |parent| parent.borrow_mut().edit_symbol(name, f),
-                    ),
-                    _ => unimplemented!(),
+            match tree[n].unwrap_data_mut().symbols.get_mut(name) {
+                Some(Symbol::Alias(to)) => {
+                    let to = to.to_owned();
+                    Self::_edit_symbol(n, tree, &to, f, ax)
                 }
+                Some(Symbol::Final(ref mut constraint, _)) => {
+                    f(constraint.e_mut());
+                    Ok(())
+                }
+                None => tree.parent(n).map_or(
+                    Err(anyhow!(symbols::Error::SymbolNotFound(
+                        name.to_owned(),
+                        tree[n].unwrap_data().name.to_owned(),
+                    ))),
+                    |parent| Self::_edit_symbol(parent, tree, name, f, ax),
+                ),
             }
         }
     }
@@ -346,27 +420,26 @@ impl SymbolTable {
             bail!(symbols::Error::CircularDefinition(name.to_owned()))
         } else {
             ax.insert(name.to_owned());
-            match self.funcs.get(name) {
+            match data!(self).funcs.get(name) {
                 Some(Function {
                     class: FunctionClass::Alias(ref to),
                     ..
                 }) => self.resolve_function(to),
                 Some(f) => Ok(f.to_owned()),
                 None => self
-                    .parent
-                    .upgrade()
+                    .parent()
                     .map_or(Err(anyhow!("function {} unknown", name.red())), |parent| {
-                        parent.borrow().resolve_function(name)
+                        parent.resolve_function(name)
                     }),
             }
         }
     }
 
     pub fn insert_constraint(&mut self, name: &str) -> Result<()> {
-        if self.constraints.contains(name) {
+        if data!(self).constraints.contains(name) {
             warn!("redefining constraint `{}`", name.yellow());
         }
-        if self.constraints.insert(name.to_owned()) {
+        if data_mut!(self).constraints.insert(name.to_owned()) {
             Ok(())
         } else {
             bail!("Constraint `{}` already defined", name)
@@ -374,54 +447,57 @@ impl SymbolTable {
     }
 
     pub fn insert_symbol(&mut self, name: &str, e: Node) -> Result<()> {
-        if self.symbols.contains_key(name) {
+        if data!(self).symbols.contains_key(name) {
             bail!(symbols::Error::SymbolAlreadyExists(
                 name.to_owned(),
-                self.module.to_owned()
+                data!(self).name.to_owned()
             ))
         } else {
-            self.symbols
+            data_mut!(self)
+                .symbols
                 .insert(name.to_owned(), Symbol::Final(e, false));
             Ok(())
         }
     }
 
     pub fn insert_function(&mut self, name: &str, f: Function) -> Result<()> {
-        if self.funcs.contains_key(name) {
+        if data!(self).funcs.contains_key(name) {
             bail!(symbols::Error::FunctionAlreadyExists(
                 name.to_owned(),
-                self.module.to_owned()
+                data!(self).name.to_owned()
             ))
         } else {
-            self.funcs.insert(name.to_owned(), f);
+            data_mut!(self).funcs.insert(name.to_owned(), f);
             Ok(())
         }
     }
 
     pub fn insert_alias(&mut self, from: &str, to: &str) -> Result<()> {
-        if self.symbols.contains_key(from) {
+        if data!(self).symbols.contains_key(from) {
             bail!(symbols::Error::SymbolAlreadyExists(
                 from.to_owned(),
-                self.module.to_owned()
+                data!(self).name.to_owned()
             ))
         } else {
-            self.symbols
+            data_mut!(self)
+                .symbols
                 .insert(from.to_owned(), Symbol::Alias(to.to_owned()));
             Ok(())
         }
     }
 
     pub fn insert_funalias(&mut self, from: &str, to: &str) -> Result<()> {
-        if self.funcs.contains_key(from) {
+        if data!(self).funcs.contains_key(from) {
             bail!(symbols::Error::AliasAlreadyExists(
                 from.to_owned(),
                 to.to_owned()
             ))
         } else {
-            self.funcs.insert(
+            let module = data!(self).name.clone();
+            data_mut!(self).funcs.insert(
                 from.to_owned(),
                 Function {
-                    handle: Handle::new(&self.module, to),
+                    handle: Handle::new(module, to),
                     class: FunctionClass::Alias(to.to_string()),
                 },
             );
@@ -429,16 +505,14 @@ impl SymbolTable {
         }
     }
 
-    pub fn resolve_symbol(&mut self, name: &str) -> Result<Node> {
-        if name.contains('.') {
-            self.resolve_symbol_with_path(name)
-        } else {
-            self._resolve_symbol(name, &mut HashSet::new(), false, false)
-        }
-    }
-
     pub fn edit_symbol(&mut self, name: &str, f: &dyn Fn(&mut Expression)) -> Result<()> {
-        self._edit_symbol(name, f, &mut HashSet::new())
+        Self::_edit_symbol(
+            self.id,
+            &mut self.tree.borrow_mut(),
+            name,
+            f,
+            &mut HashSet::new(),
+        )
     }
 
     pub fn resolve_function(&self, name: &str) -> Result<Function> {
@@ -451,13 +525,13 @@ impl SymbolTable {
         } else {
             Type::Scalar(Magma::Integer)
         };
-        if self.symbols.contains_key(name) && !replace {
+        if data!(self).symbols.contains_key(name) && !replace {
             bail!(symbols::Error::SymbolAlreadyExists(
                 name.to_owned(),
-                self.module.to_owned()
+                data!(self).name.to_owned()
             ))
         } else if let Some(fr) = pairing_ce::bn256::Fr::from_str(&value.to_string()) {
-            self.symbols.insert(
+            data_mut!(self).symbols.insert(
                 name.to_owned(),
                 Symbol::Final(
                     Node {
@@ -474,33 +548,60 @@ impl SymbolTable {
     }
 
     fn resolve_symbol_with_path(&mut self, name: &str) -> Result<Node> {
-        let mut components = name.split('.');
-        let module = components.next().unwrap();
-        let name = components
-            .next()
-            .with_context(|| anyhow!("missing name in {}", name))?;
-        self._resolve_symbol_with_path(&module, &name)
+        let components = name.split('.').collect::<Vec<_>>();
+        self._resolve_symbol_with_path(&components)
     }
 
-    fn _resolve_symbol_with_path(&mut self, module: &str, name: &str) -> Result<Node> {
-        if self.module == module {
-            self.resolve_symbol(name)
+    fn _resolve_symbol_with_path<'a>(&mut self, path: &[&str]) -> Result<Node> {
+        if path.len() == 1 {
+            self.resolve_symbol(path[0])
         } else {
-            self.parent.upgrade().map_or_else(
-                || self._resolve_down_symbol_with_path(module, name),
-                |parent| parent.borrow_mut()._resolve_symbol_with_path(module, name),
-            )
-        }
-    }
-
-    fn _resolve_down_symbol_with_path<'a>(&mut self, module: &str, name: &str) -> Result<Node> {
-        if let Some(submodule) = self.children.get_mut(module) {
-            submodule.borrow_mut().resolve_symbol(name)
-        } else {
+            for c in self.children() {
+                if data!(c).name == path[0] {
+                    return self.at(c.id)._resolve_symbol_with_path(&path[1..]);
+                }
+            }
             bail!(symbols::Error::ModuleNotFound(
-                name.to_owned(),
-                self.module.to_owned(),
+                path.join("."),
+                self.tree.borrow()[self.id].unwrap_data().name.to_string(),
             ))
         }
     }
+
+    #[allow(dead_code)]
+    pub fn print(&self) {
+        self.tree.borrow().print(|s| {
+            format!(
+                "{} - S = {{{}}} F = {{{}}}",
+                s.name,
+                s.symbols.keys().join(" "),
+                s.funcs.keys().join(" ")
+            )
+        });
+    }
+}
+
+impl std::clone::Clone for Scope {
+    fn clone(&self) -> Self {
+        Scope {
+            tree: self.tree.clone(),
+            id: self.id,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct SymbolTable {
+    // The name of this table
+    pub name: String,
+    // The parent relationship is only used for contextual
+    // semantics (i.e. for & functions), not modules
+    closed: bool,
+    // If true, then those are module definitions,
+    // otherwise, this table is a private table, e.g. function arguments.
+    // This is used when browsing the tables to avoid inner contexts.
+    public: bool,
+    constraints: HashSet<String>,
+    funcs: HashMap<String, Function>,
+    symbols: HashMap<String, Symbol>,
 }

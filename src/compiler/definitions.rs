@@ -2,22 +2,16 @@ use anyhow::*;
 use log::*;
 use num_bigint::BigInt;
 use num_traits::FromPrimitive;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 use super::generator::{Defined, Function, FunctionClass};
-use super::tables::SymbolTable;
+use super::tables::Scope;
 use super::{Expression, Magma, Node, Type};
 use crate::column::Computation;
 use crate::compiler::parser::*;
 use crate::pretty::Base;
 use crate::structs::Handle;
 
-fn reduce(
-    e: &AstNode,
-    root_ctx: Rc<RefCell<SymbolTable>>,
-    ctx: &mut Rc<RefCell<SymbolTable>>,
-) -> Result<()> {
+fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
     match &e.class {
         Token::Value(_)
         | Token::Symbol(_)
@@ -28,14 +22,12 @@ fn reduce(
         | Token::DefPlookup { .. }
         | Token::DefInrange(..) => Ok(()),
 
-        Token::DefConstraint { name, .. } => ctx.borrow_mut().insert_constraint(name),
+        Token::DefConstraint { name, .. } => ctx.insert_constraint(name),
         Token::DefModule(name) => {
-            *ctx = SymbolTable::derived(root_ctx, name, name, false, true);
+            *ctx = ctx.derived(name, false, true);
             Ok(())
         }
-        Token::DefColumns(cols) => cols
-            .iter()
-            .fold(Ok(()), |ax, col| ax.and(reduce(col, root_ctx.clone(), ctx))),
+        Token::DefColumns(cols) => cols.iter().fold(Ok(()), |ax, col| ax.and(reduce(col, ctx))),
         Token::DefColumn {
             name: col,
             t,
@@ -43,7 +35,7 @@ fn reduce(
             padding_value,
             base,
         } => {
-            let module_name = ctx.borrow().module.to_owned();
+            let module_name = ctx.module();
             let symbol = Node {
                 _e: Expression::Column {
                     handle: Handle::new(module_name, col),
@@ -58,7 +50,7 @@ fn reduce(
                 },
                 _t: Some(*t),
             };
-            ctx.borrow_mut().insert_symbol(col, symbol)
+            ctx.insert_symbol(col, symbol)
         }
         Token::DefArrayColumn {
             name: col,
@@ -66,8 +58,8 @@ fn reduce(
             t,
             base,
         } => {
-            let handle = Handle::new(&ctx.borrow().module, col);
-            ctx.borrow_mut().insert_symbol(
+            let handle = Handle::new(ctx.module(), col);
+            ctx.insert_symbol(
                 col,
                 Node {
                     _e: Expression::ArrayColumn {
@@ -83,8 +75,7 @@ fn reduce(
         Token::DefConsts(cs) => {
             // The actual value will be filled later on by the compile-time pass
             for c in cs.iter() {
-                ctx.borrow_mut()
-                    .insert_constant(&c.0, BigInt::from_i8(0).unwrap(), false)?;
+                ctx.insert_constant(&c.0, BigInt::from_i8(0).unwrap(), false)?;
             }
             Ok(())
         }
@@ -104,9 +95,8 @@ fn reduce(
             let mut _froms = Vec::new();
             let mut _tos = Vec::new();
             for (to, from) in tos.iter().zip(froms.iter()) {
-                let to_handle = Handle::new(&ctx.borrow().module, to);
+                let to_handle = Handle::new(ctx.module(), to);
                 let from_actual_handle = if let Expression::Column { handle, .. } = ctx
-                    .borrow_mut()
                     .resolve_symbol(from)
                     .with_context(|| "while defining permutation")?
                     .e()
@@ -115,43 +105,39 @@ fn reduce(
                 } else {
                     unreachable!()
                 };
-                ctx.borrow_mut()
-                    .insert_symbol(
-                        to,
-                        Node {
-                            _e: Expression::Column {
-                                handle: to_handle.clone(),
-                                kind: Kind::Phantom,
-                                padding_value: None,
-                                base: Base::Hex,
-                            },
-                            _t: Some(Type::Column(Magma::Integer)),
+                ctx.insert_symbol(
+                    to,
+                    Node {
+                        _e: Expression::Column {
+                            handle: to_handle.clone(),
+                            kind: Kind::Phantom,
+                            padding_value: None,
+                            base: Base::Hex,
                         },
-                    )
-                    .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
+                        _t: Some(Type::Column(Magma::Integer)),
+                    },
+                )
+                .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
                 _froms.push(from_actual_handle);
                 _tos.push(to_handle);
             }
 
-            ctx.borrow_mut()
-                .computation_table
-                .borrow_mut()
-                .insert_many(
-                    &_tos,
-                    Computation::Sorted {
-                        froms: _froms,
-                        tos: _tos.clone(),
-                        signs: signs.clone(),
-                    },
-                )?;
+            ctx.insert_many_computations(
+                &_tos,
+                Computation::Sorted {
+                    froms: _froms,
+                    tos: _tos.clone(),
+                    signs: signs.clone(),
+                },
+            )?;
             Ok(())
         }
-        Token::DefAliases(aliases) => aliases.iter().fold(Ok(()), |ax, alias| {
-            ax.and(reduce(alias, root_ctx.clone(), ctx))
-        }),
+        Token::DefAliases(aliases) => aliases
+            .iter()
+            .fold(Ok(()), |ax, alias| ax.and(reduce(alias, ctx))),
         Token::Defun { name, args, body } => {
-            let module_name = ctx.borrow().module.to_owned();
-            ctx.borrow_mut().insert_function(
+            let module_name = ctx.module();
+            ctx.insert_function(
                 name,
                 Function {
                     handle: Handle::new(module_name, name),
@@ -164,8 +150,8 @@ fn reduce(
             )
         }
         Token::Defpurefun { name, args, body } => {
-            let module_name = ctx.borrow().module.to_owned();
-            ctx.borrow_mut().insert_function(
+            let module_name = ctx.module();
+            ctx.insert_function(
                 name,
                 Function {
                     handle: Handle::new(module_name, name),
@@ -179,25 +165,22 @@ fn reduce(
         }
         Token::DefAlias(from, to) => {
             let _ = ctx
-                .borrow_mut()
                 .resolve_symbol(to)
                 .with_context(|| anyhow!("while defining alias `{}`", from))?;
 
-            ctx.borrow_mut()
-                .insert_alias(from, to)
+            ctx.insert_alias(from, to)
                 .with_context(|| anyhow!("defining {} -> {}", from, to))
         }
         Token::DefunAlias(from, to) => ctx
-            .borrow_mut()
             .insert_funalias(from, to)
             .with_context(|| anyhow!("defining {} -> {}", from, to)),
     }
 }
 
-pub fn pass(ast: &Ast, ctx: Rc<RefCell<SymbolTable>>) -> Result<()> {
-    let mut current_ctx = ctx.clone();
+pub fn pass(ast: &Ast, ctx: Scope) -> Result<()> {
+    let mut module = ctx.clone();
     for e in ast.exprs.iter() {
-        reduce(e, ctx.clone(), &mut current_ctx)?;
+        reduce(e, &mut module)?;
     }
 
     Ok(())

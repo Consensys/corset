@@ -10,14 +10,14 @@ use once_cell::sync::OnceCell;
 use pairing_ce::bn256::Fr;
 use pairing_ce::ff::{Field, PrimeField};
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
+
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::Write;
-use std::rc::Rc;
+
 use std::sync::atomic::AtomicUsize;
 
-use super::tables::{ComputationTable, SymbolTable};
+use super::tables::{ComputationTable, Scope};
 use super::{common::*, CompileSettings, Expression, Magma, Node, Type};
 use crate::column::{Column, ColumnSet, Computation};
 use crate::compiler::parser::*;
@@ -431,7 +431,7 @@ impl ConstraintSet {
 fn apply_form(
     f: Form,
     args: &[AstNode],
-    ctx: &mut Rc<RefCell<SymbolTable>>,
+    ctx: &mut Scope,
     settings: &CompileSettings,
 ) -> Result<Option<Node>> {
     f.validate_args(args)
@@ -445,21 +445,19 @@ fn apply_form(
                 let mut l = vec![];
                 let mut t = Type::INFIMUM;
                 for i in is {
-                    let for_ctx_pretty_name = &ctx.borrow().pretty_name.clone();
-                    let mut for_ctx = SymbolTable::derived(
-                        ctx.clone(),
+                    let mut for_ctx = ctx.derived(
                         &format!(
-                            "for-{}-{}",
+                            "{}-for-{}-{}",
+                            ctx.name(),
                             COUNTER
                                 .get_or_init(|| AtomicUsize::new(0))
                                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                             i
                         ),
-                        for_ctx_pretty_name,
                         false,
                         false,
                     );
-                    for_ctx.borrow_mut().insert_symbol(
+                    for_ctx.insert_symbol(
                         i_name,
                         Expression::Const(BigInt::from(*i), Fr::from_str(&i.to_string())).into(),
                     )?;
@@ -504,14 +502,13 @@ fn apply_form(
             Ok(None)
         }
         Form::Let => {
-            let sub_ctx_name = format!("let-{}", ctx.borrow().module);
-            let mut sub_ctx =
-                SymbolTable::derived(ctx.clone(), &sub_ctx_name, &sub_ctx_name, false, false);
+            let sub_ctx_name = format!("let-{}", ctx.module());
+            let mut sub_ctx = ctx.derived(&sub_ctx_name, false, false);
             for pair in args[0].as_list().unwrap().iter() {
                 let pair = pair.as_list().unwrap();
                 let name = pair[0].as_symbol().unwrap();
                 let value = reduce(&pair[1], &mut sub_ctx, settings)?.unwrap();
-                sub_ctx.borrow_mut().insert_symbol(name, value)?;
+                sub_ctx.insert_symbol(name, value)?;
             }
             let body = reduce(&args[1], &mut sub_ctx, settings)?.unwrap();
 
@@ -519,7 +516,7 @@ fn apply_form(
         }
         Form::Reduce => {
             let f_name = args[0].as_symbol().unwrap();
-            let f = ctx.borrow().resolve_function(f_name)?;
+            let f = ctx.resolve_function(f_name)?;
 
             let mut body = reduce(&args[1], ctx, settings)?.unwrap();
 
@@ -554,7 +551,7 @@ fn apply_defined(
     b: &Defined,
     h: &Handle,
     traversed_args: Vec<Node>,
-    ctx: &mut Rc<RefCell<SymbolTable>>,
+    ctx: &mut Scope,
     settings: &CompileSettings,
 ) -> Result<Option<Node>> {
     let f_mangle = format!(
@@ -566,11 +563,9 @@ fn apply_defined(
     );
     b.validate_args(&traversed_args)
         .with_context(|| anyhow!("validating call to `{}`", h))?;
-    let mut f_ctx = SymbolTable::derived(ctx.clone(), &f_mangle, &h.to_string(), b.pure, false);
+    let mut f_ctx = ctx.derived(&f_mangle, b.pure, false);
     for (i, f_arg) in b.args.iter().enumerate() {
-        f_ctx
-            .borrow_mut()
-            .insert_symbol(f_arg, traversed_args[i].clone())?;
+        f_ctx.insert_symbol(f_arg, traversed_args[i].clone())?;
     }
     reduce(&b.body, &mut f_ctx, settings)
 }
@@ -578,7 +573,7 @@ fn apply_defined(
 fn apply_builtin(
     b: &Builtin,
     traversed_args: Vec<Node>,
-    _ctx: &mut Rc<RefCell<SymbolTable>>,
+    _ctx: &mut Scope,
     _settings: &CompileSettings,
 ) -> Result<Option<Node>> {
     b.validate_args(&traversed_args)?;
@@ -607,7 +602,7 @@ fn apply_builtin(
 fn apply_intrinsic(
     b: &Intrinsic,
     traversed_args: Vec<Node>,
-    ctx: &mut Rc<RefCell<SymbolTable>>,
+    ctx: &mut Scope,
     _settings: &CompileSettings,
 ) -> Result<Option<Node>> {
     b.validate_args(&traversed_args)?;
@@ -641,7 +636,7 @@ fn apply_intrinsic(
                 let i = traversed_args[1].pure_eval()?.to_usize().ok_or_else(|| {
                     anyhow!("{:?} is not a valid indice", traversed_args[1].pure_eval())
                 })?;
-                let array = ctx.borrow_mut().resolve_symbol(&handle.name)?;
+                let array = ctx.resolve_symbol(&handle.name)?;
                 match array.e() {
                     Expression::ArrayColumn {
                         handle,
@@ -710,7 +705,7 @@ fn apply_intrinsic(
 fn apply_function(
     f: &Function,
     args: Vec<Node>,
-    ctx: &mut Rc<RefCell<SymbolTable>>,
+    ctx: &mut Scope,
     settings: &CompileSettings,
 ) -> Result<Option<Node>> {
     match &f.class {
@@ -724,7 +719,7 @@ fn apply_function(
 fn apply(
     f: &Function,
     args: &[AstNode],
-    ctx: &mut Rc<RefCell<SymbolTable>>,
+    ctx: &mut Scope,
     settings: &CompileSettings,
 ) -> Result<Option<Node>> {
     match f.class {
@@ -744,11 +739,7 @@ fn apply(
     }
 }
 
-pub fn reduce(
-    e: &AstNode,
-    ctx: &mut Rc<RefCell<SymbolTable>>,
-    settings: &CompileSettings,
-) -> Result<Option<Node>> {
+pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<Option<Node>> {
     match &e.class {
         Token::Keyword(_) | Token::Type(_) | Token::Range(_) => Ok(None),
         Token::Value(x) => Ok(Some(Node {
@@ -761,7 +752,6 @@ pub fn reduce(
         })),
         Token::Symbol(name) => {
             let r = ctx
-                .borrow_mut()
                 .resolve_symbol(name)
                 .with_context(|| make_ast_error(e))?;
             Ok(Some(r))
@@ -772,7 +762,6 @@ pub fn reduce(
                 Ok(Some(Expression::List(vec![]).into()))
             } else if let Token::Symbol(verb) = &args[0].class {
                 let func = ctx
-                    .borrow()
                     .resolve_function(verb)
                     .with_context(|| make_ast_error(e))?;
 
@@ -790,7 +779,7 @@ pub fn reduce(
         } => match k {
             Kind::Composite(e) => {
                 let n = reduce(e, ctx, settings)?.unwrap();
-                ctx.borrow_mut().edit_symbol(name, &|x| {
+                ctx.edit_symbol(name, &|x| {
                     if let Expression::Column {
                         handle: _,
                         kind,
@@ -813,7 +802,7 @@ pub fn reduce(
                     .collect::<Result<Vec<_>>>()
                     .with_context(|| anyhow!("while defining {}", name))?;
 
-                ctx.borrow_mut().edit_symbol(name, &|x| {
+                ctx.edit_symbol(name, &|x| {
                     if let Expression::Column {
                         handle: _,
                         kind,
@@ -847,8 +836,7 @@ pub fn reduce(
 
 fn reduce_toplevel(
     e: &AstNode,
-    root_ctx: Rc<RefCell<SymbolTable>>,
-    ctx: &mut Rc<RefCell<SymbolTable>>,
+    ctx: &mut Scope,
     settings: &CompileSettings,
 ) -> Result<Option<Constraint>> {
     match &e.class {
@@ -858,7 +846,7 @@ fn reduce_toplevel(
             guard,
             body: expr,
         } => {
-            let handle = Handle::new(&ctx.borrow().module, name);
+            let handle = Handle::new(ctx.module(), name);
             Ok(Some(Constraint::Vanishes {
                 handle,
                 domain: domain.to_owned(),
@@ -880,7 +868,7 @@ fn reduce_toplevel(
             including: parent,
             included: child,
         } => {
-            let handle = Handle::new(&ctx.borrow().module, name);
+            let handle = Handle::new(ctx.module(), name);
             let parents = parent
                 .iter()
                 .map(|e| reduce(e, ctx, settings).map(Option::unwrap))
@@ -905,10 +893,7 @@ fn reduce_toplevel(
             }
         }
         Token::DefInrange(e, range) => {
-            let handle = Handle::new(
-                &ctx.borrow().module,
-                names::Generator::default().next().unwrap(),
-            );
+            let handle = Handle::new(ctx.module(), names::Generator::default().next().unwrap());
             Ok(Some(Constraint::InRange {
                 handle,
                 exp: reduce(e, ctx, settings)?.unwrap(),
@@ -923,7 +908,7 @@ fn reduce_toplevel(
             Ok(None)
         }
         Token::DefModule(name) => {
-            *ctx = SymbolTable::derived(root_ctx, name, name, false, true);
+            *ctx = ctx.derived(name, false, true);
             Ok(None)
         }
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
@@ -941,7 +926,6 @@ fn reduce_toplevel(
                 .iter()
                 .map(|from| {
                     if let Expression::Column { handle, .. } = ctx
-                        .borrow_mut()
                         .resolve_symbol(from)
                         .with_context(|| "while defining permutation")?
                         .e()
@@ -953,19 +937,16 @@ fn reduce_toplevel(
                 })
                 .collect::<Result<Vec<_>>>()?;
             to.iter()
-                .map(|f| ctx.borrow_mut().resolve_symbol(f))
+                .map(|f| ctx.resolve_symbol(f))
                 .collect::<Result<Vec<_>>>()
                 .with_context(|| anyhow!("while defining permutation"))?;
 
             Ok(Some(Constraint::Permutation {
-                handle: Handle::new(
-                    &ctx.borrow().module,
-                    names::Generator::default().next().unwrap(),
-                ),
+                handle: Handle::new(ctx.module(), names::Generator::default().next().unwrap()),
                 from: froms,
                 to: to
                     .iter()
-                    .map(|f| Handle::new(&ctx.borrow().module, f))
+                    .map(|f| Handle::new(ctx.module(), f))
                     .collect::<Vec<_>>(),
                 signs: signs.clone(),
             }))
@@ -978,16 +959,12 @@ pub fn make_ast_error(exp: &AstNode) -> String {
     errors::parser::make_src_error(&exp.src, exp.lc)
 }
 
-pub fn pass(
-    ast: &Ast,
-    ctx: Rc<RefCell<SymbolTable>>,
-    settings: &CompileSettings,
-) -> Result<Vec<Constraint>> {
+pub fn pass(ast: &Ast, ctx: Scope, settings: &CompileSettings) -> Result<Vec<Constraint>> {
     let mut r = vec![];
-
     let mut module = ctx.clone();
+
     for exp in ast.exprs.iter() {
-        if let Some(c) = reduce_toplevel(exp, ctx.clone(), &mut module, settings)? {
+        if let Some(c) = reduce_toplevel(exp, &mut module, settings)? {
             r.push(c)
         }
     }

@@ -38,6 +38,7 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
 
     let todos = jobs.job_slices();
     for slice in todos {
+        trace!("Processing computation slice {:?}", slice);
         let comps = slice
             .iter()
             .filter_map(|h| cs.computations.computation_idx_for(h))

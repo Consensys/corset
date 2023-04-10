@@ -12,6 +12,7 @@ use crate::{
 pub(crate) enum CompileError<'a> {
     #[error("{}", compiler::make_type_error_msg(.0, .1, .2))]
     TypeError(String, &'a [&'a [Type]], Vec<Type>),
+
     #[error("{} is never used", .0.pretty())]
     NotUsed(Handle),
 }
@@ -20,10 +21,13 @@ pub(crate) enum CompileError<'a> {
 pub enum RuntimeError<'a> {
     #[error("{} not found in the given trace", .0.pretty())]
     EmptyColumn(Handle),
+
     #[error("{} could not be computed", .0.pretty())]
     NotComputed(Handle),
+
     #[error("expected a {} value, found {}", .0.white().bold(), .1.pretty().red())]
     InvalidValue(&'a str, Fr),
+
     #[error("expected an array, found {:?}", .0)]
     NotAnArray(Expression),
 }
@@ -111,15 +115,20 @@ pub mod symbols {
     pub enum Error {
         #[error("module {} not found in {}", .0.red(), .1.blue())]
         ModuleNotFound(String, String),
+
         #[error("symbol {} not found in module {}", .0.red(), .1.blue())]
         SymbolNotFound(String, String),
-        #[error("{} already exists in {}", .0.yellow(), .1.blue())]
+
+        #[error("symbol {} already exists in {}", .0.yellow(), .1.blue())]
         SymbolAlreadyExists(String, String),
+
         #[error("function {} already defined in {}", .0.yellow(), .1.blue())]
         FunctionAlreadyExists(String, String),
-        #[error("{} already exists: {} → {}", .0.yellow(), .0.red(), .1.magenta())]
+
+        #[error("function {} already exists: {} → {}", .0.yellow(), .0.red(), .1.magenta())]
         AliasAlreadyExists(String, String),
-        #[error("ciruclar definition found for {}", .0.red())]
+
+        #[error("circular definition found for {}", .0.red())]
         CircularDefinition(String),
     }
 }

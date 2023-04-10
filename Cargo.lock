@@ -396,6 +396,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simd-json",
+ "sorbus",
  "thiserror",
 ]
 
@@ -808,6 +809,12 @@ dependencies = [
  "cxx",
  "cxx-build",
 ]
+
+[[package]]
+name = "identity-hash"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfdd7caa900436d8f13b2346fe10257e0c05c1f1f9e351f4f5d57c03bd5f45da"
 
 [[package]]
 name = "indexmap"
@@ -1584,6 +1591,15 @@ checksum = "bc8d618c6641ae355025c449427f9e96b98abf99a772be3cef6708d15c77147a"
 dependencies = [
  "libc",
  "windows-sys 0.45.0",
+]
+
+[[package]]
+name = "sorbus"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e34241003f81ae3bd26a783da7605e65881ddf3e8bdebeaedb2d454793423f8e"
+dependencies = [
+ "identity-hash",
 ]
 
 [[package]]

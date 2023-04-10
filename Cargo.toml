@@ -22,6 +22,7 @@ colored = "2.0"
 convert_case = "0.6"
 errno = "0.3.0"
 flate2 = "1"
+handlebars = { version = "4.3.6", default-features = false }
 indicatif = { version = "0.17", optional = true }
 is-terminal = "0.4"
 itertools = "0.10"
@@ -43,8 +44,9 @@ rayon = "1.5"
 ron = "0.8"
 serde_json = { version = "1", features = ["arbitrary_precision"] }
 serde = { version = "1", features = ["derive"] }
+sorbus = "0.9"
 thiserror = "1.0.38"
-handlebars = { version = "4.3.6", default-features = false }
+
 
 [target.'cfg(all(target_arch = "x86_64", target_feature = "avx"))'.dependencies]
 simd-json = "0.7.0"

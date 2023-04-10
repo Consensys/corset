@@ -2,7 +2,7 @@ use crate::column::{ColumnSet, Computation};
 use anyhow::*;
 use itertools::Itertools;
 use log::*;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 pub use common::*;
 pub use generator::{Constraint, ConstraintSet, EvalSettings};
@@ -37,13 +37,13 @@ pub fn make<S: AsRef<str>>(
     use num_bigint::BigInt;
 
     use crate::{
-        compiler::tables::{Symbol, SymbolTable},
+        compiler::tables::{Scope, Symbol},
         errors::CompileError,
         structs::Handle,
     };
 
     let mut asts = vec![];
-    let ctx = Rc::new(RefCell::new(SymbolTable::new_root()));
+    let mut ctx = Scope::new();
 
     for (name, content) in sources.iter() {
         info!("Parsing {}", name.bright_white().bold());
@@ -55,7 +55,7 @@ pub fn make<S: AsRef<str>>(
 
     let mut columns: ColumnSet = Default::default();
     let mut constants: HashMap<Handle, BigInt> = Default::default();
-    let mut computations = ctx.borrow().computation_table.clone().take();
+    let mut computations = ctx.computations();
 
     for (name, ast) in asts.iter_mut() {
         info!(
@@ -83,7 +83,7 @@ pub fn make<S: AsRef<str>>(
         .sorted_by_cached_key(|x| -(x.size() as isize))
         .collect::<Vec<_>>();
 
-    ctx.borrow_mut().visit_mut::<()>(&mut |_, handle, symbol| {
+    ctx.visit_mut::<()>(&mut |handle, symbol| {
         match symbol {
             Symbol::Alias(_) => {}
             Symbol::Final(symbol, used) => {
@@ -131,7 +131,7 @@ pub fn make<S: AsRef<str>>(
                         domain: range,
                         base,
                     } => {
-                        // NOTE we may need custom padding value for arrays at some point
+                        // // NOTE we may need custom padding value for arrays at some point
                         columns.insert_array(
                             handle,
                             range,
