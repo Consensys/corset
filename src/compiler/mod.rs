@@ -1,4 +1,7 @@
-use crate::column::{ColumnSet, Computation};
+use crate::{
+    column::{ColumnID, ColumnSet, Computation},
+    structs::Handle,
+};
 use anyhow::*;
 use itertools::Itertools;
 use log::*;
@@ -6,7 +9,7 @@ use std::collections::HashMap;
 
 pub use common::*;
 pub use generator::{Constraint, ConstraintSet, EvalSettings};
-pub use node::{Expression, Node};
+pub use node::{ColumnRef, Expression, Node};
 pub use parser::{Ast, AstNode, Kind, Token};
 pub use tables::ComputationTable;
 pub use types::*;
@@ -21,7 +24,7 @@ mod parser;
 pub mod tables;
 mod types;
 
-const MAIN_MODULE: &str = "<prelude>";
+pub(crate) const MAIN_MODULE: &str = "<prelude>";
 
 pub struct CompileSettings {
     pub debug: bool,
@@ -37,9 +40,9 @@ pub fn make<S: AsRef<str>>(
     use num_bigint::BigInt;
 
     use crate::{
+        column::Column,
         compiler::tables::{Scope, Symbol},
         errors::CompileError,
-        structs::Handle,
     };
 
     let mut asts = vec![];
@@ -98,29 +101,28 @@ pub fn make<S: AsRef<str>>(
                         padding_value,
                         base,
                     } => {
-                        columns.insert_column(
-                            handle,
-                            symbol.t(),
-                            *used,
-                            k.to_nil(),
-                            settings.allow_dups,
-                            padding_value.to_owned(),
-                            None,
-                            *base,
-                        )?;
+                        let column = Column::builder()
+                            .and_padding_value(padding_value.to_owned())
+                            .handle(handle.as_handle().clone())
+                            .used(*used)
+                            .kind(k.to_nil())
+                            .t(symbol.t().magma())
+                            .base(*base)
+                            .build();
+                        let id = columns.insert_column(column, settings.allow_dups)?;
                         match k {
                             Kind::Atomic | Kind::Phantom => (),
                             Kind::Composite(e) => computations.insert(
-                                handle,
+                                &id,
                                 Computation::Composite {
-                                    target: handle.clone(),
+                                    target: id.clone(),
                                     exp: *e.clone(),
                                 },
                             )?,
                             Kind::Interleaved(_, froms) => computations.insert(
-                                handle,
+                                &id,
                                 Computation::Interleaved {
-                                    target: handle.clone(),
+                                    target: id.clone(),
                                     froms: froms.as_ref().unwrap().to_owned(),
                                 },
                             )?,
@@ -136,8 +138,25 @@ pub fn make<S: AsRef<str>>(
         Ok(())
     })?;
 
-    Ok((
-        asts.into_iter().map(|x| x.1).collect(),
-        ConstraintSet::new(columns, constraints, constants, computations),
-    ))
+    let perspectives = ctx
+        .tree
+        .borrow()
+        .metadata()
+        .perspectives
+        .iter()
+        .map(|(module, persps)| {
+            (
+                module.to_owned(),
+                persps
+                    .iter()
+                    .map(|(perspective, trigger)| {
+                        (perspective.to_owned(), trigger.clone().unwrap().into())
+                    })
+                    .collect::<HashMap<_, _>>(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+
+    let cs = ConstraintSet::new(columns, constraints, constants, computations, perspectives)?;
+    Ok((asts.into_iter().map(|x| x.1).collect(), cs))
 }

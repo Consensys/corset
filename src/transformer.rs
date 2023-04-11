@@ -15,8 +15,7 @@ pub use sort::sorts;
 pub use statics::precompute;
 
 use crate::{
-    compiler::{ConstraintSet, Expression, Intrinsic, Kind, Magma, Node, Type},
-    pretty::Base,
+    compiler::{Expression, Intrinsic, Kind, Magma, Node},
     structs::Handle,
 };
 
@@ -25,42 +24,14 @@ fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
         Intrinsic::Sub
             .call(&[
                 x_expr.clone(),
-                Node {
-                    _e: Expression::Column {
-                        handle: x_col.to_owned(),
-                        kind: Kind::Composite(Box::new(x_expr.clone())),
-                        padding_value: None,
-                        base: Base::Dec,
-                    },
-                    _t: Some(Type::Column(Magma::Integer)),
-                },
+                Node::column()
+                    .handle(x_col.to_owned())
+                    .kind(Kind::Composite(Box::new(x_expr.clone())))
+                    .t(Magma::Integer)
+                    .build(),
             ])
             .unwrap(),
     )
-}
-
-fn create_column(
-    module: &str,
-    name: &str,
-    cs: &mut ConstraintSet,
-    kind: Kind<()>,
-    t: Type,
-    size_factor: Option<usize>,
-    padding_value: Option<i64>,
-    base: Base,
-) -> anyhow::Result<(Handle, usize)> {
-    let handle = Handle::new(module, name);
-    let id = cs.modules.insert_column(
-        &handle,
-        t,
-        true,
-        kind,
-        false,
-        padding_value,
-        size_factor,
-        base,
-    )?;
-    Ok((handle, id))
 }
 
 fn expression_to_name(e: &Node, prefix: &str) -> String {

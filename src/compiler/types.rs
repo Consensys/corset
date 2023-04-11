@@ -98,8 +98,8 @@ impl std::cmp::PartialOrd for Type {
     }
 }
 
-/// [ill-named] A magma is a set where operations stay within the itself.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// [ill-named] A magma is a set where some operations stay within itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum Magma {
     Boolean,
     /// 4-bits

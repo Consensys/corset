@@ -50,14 +50,14 @@ fn shift(e: &Node, i: isize) -> Node {
     }
 }
 
-fn make_chain(xs: &[Node], operand: &str, surround: bool) -> String {
-    let head = render_expression(&xs[0]);
+fn make_chain(cs: &ConstraintSet, xs: &[Node], operand: &str, surround: bool) -> String {
+    let head = render_expression(cs, &xs[0]);
     if xs.len() > 1 {
         let tail = &xs[1..];
         if xs.len() > 2 {
             let tail = tail
                 .iter()
-                .map(|x| format!("{}({})", operand, render_expression(x)))
+                .map(|x| format!("{}({})", operand, render_expression(cs, x)))
                 .collect::<Vec<_>>()
                 .join(".");
             let chain = format!("{}.{}", head, tail);
@@ -67,7 +67,7 @@ fn make_chain(xs: &[Node], operand: &str, surround: bool) -> String {
                 chain
             }
         } else {
-            format!("{}.{}({})", head, operand, render_expression(&xs[1]))
+            format!("{}.{}({})", head, operand, render_expression(cs, &xs[1]))
         }
     } else {
         head
@@ -75,22 +75,24 @@ fn make_chain(xs: &[Node], operand: &str, surround: bool) -> String {
 }
 
 /// Render an expression, panicking if it is not a handle
-fn render_handle(e: &Node) -> String {
+fn render_handle(cs: &ConstraintSet, e: &Node) -> String {
     match e.e() {
-        Expression::Column { handle, .. } => handle.mangle(),
+        Expression::Column { handle, .. } => reg_mangle(cs, &handle).unwrap(),
         _ => unreachable!(),
     }
 }
 
-fn render_expression(e: &Node) -> String {
+fn render_expression(cs: &ConstraintSet, e: &Node) -> String {
     match e.e() {
         Expression::ArrayColumn { .. } => unreachable!(),
         Expression::Const(x, _) => format!("symbolic.NewConstant(\"{}\")", x),
-        Expression::Column { handle, .. } => format!("{}.AsVariable()", handle.mangle()),
-        Expression::Funcall { func, args } => render_funcall(func, args),
+        Expression::Column { handle, .. } => {
+            format!("{}.AsVariable()", reg_mangle(cs, handle).unwrap())
+        }
+        Expression::Funcall { func, args } => render_funcall(cs, func, args),
         Expression::List(constraints) => constraints
             .iter()
-            .map(render_expression)
+            .map(|e| render_expression(cs, e))
             .map(|mut x| {
                 if let Some(true) = x.chars().last().map(|c| c != ',') {
                     x.push(',');
@@ -106,11 +108,11 @@ fn render_expression(e: &Node) -> String {
     }
 }
 
-fn render_funcall(func: &Intrinsic, args: &[Node]) -> String {
+fn render_funcall(cs: &ConstraintSet, func: &Intrinsic, args: &[Node]) -> String {
     match func {
-        Intrinsic::Add => make_chain(args, "Add", true),
-        Intrinsic::Mul => make_chain(args, "Mul", false),
-        Intrinsic::Sub => make_chain(args, "Sub", true),
+        Intrinsic::Add => make_chain(cs, args, "Add", true),
+        Intrinsic::Mul => make_chain(cs, args, "Mul", false),
+        Intrinsic::Sub => make_chain(cs, args, "Sub", true),
         Intrinsic::Exp => {
             let exp = args[1]
                 .pure_eval()
@@ -121,8 +123,9 @@ fn render_funcall(func: &Intrinsic, args: &[Node]) -> String {
                 });
             match exp {
                 0 => "column.CONST_STRING(\"1\")".to_string(),
-                1 => render_expression(&args[0]),
+                1 => render_expression(cs, &args[0]),
                 _ => make_chain(
+                    cs,
                     &std::iter::repeat(args[0].clone())
                         .take(exp)
                         .collect::<Vec<_>>(),
@@ -131,10 +134,10 @@ fn render_funcall(func: &Intrinsic, args: &[Node]) -> String {
                 ),
             }
         }
-        Intrinsic::Neg => format!("({}).Neg()", render_expression(&args[0])),
+        Intrinsic::Neg => format!("({}).Neg()", render_expression(cs, &args[0])),
         Intrinsic::Shift => {
             let leaf = match &args[0].e() {
-                Expression::Column { handle, .. } => handle.mangle(),
+                Expression::Column { handle, .. } => reg_mangle(cs, handle).unwrap(),
                 _ => unreachable!(),
             };
             format!(
@@ -149,8 +152,8 @@ fn render_funcall(func: &Intrinsic, args: &[Node]) -> String {
     }
 }
 
-fn render_constraints(constraints: &[Constraint]) -> String {
-    constraints
+fn render_constraints(cs: &ConstraintSet) -> String {
+    cs.constraints
         .iter()
         .sorted_by_key(|c| c.name())
         .map(|constraint| match constraint {
@@ -158,7 +161,7 @@ fn render_constraints(constraints: &[Constraint]) -> String {
                 handle,
                 domain,
                 expr,
-            } => render_constraint(&handle.to_string(), domain.clone(), expr),
+            } => render_constraint(cs, &handle.to_string(), domain.clone(), expr),
             Constraint::Plookup {
                 handle,
                 including,
@@ -168,12 +171,12 @@ fn render_constraints(constraints: &[Constraint]) -> String {
                 handle,
                 including
                     .iter()
-                    .map(render_handle)
+                    .map(|h| render_handle(cs, h))
                     .collect::<Vec<_>>()
                     .join(", "),
                 included
                     .iter()
-                    .map(render_handle)
+                    .map(|h| render_handle(cs, h))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
@@ -186,15 +189,18 @@ fn render_constraints(constraints: &[Constraint]) -> String {
                 "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
                 handle.mangle().to_case(Case::Snake),
                 from.iter()
-                    .map(Handle::mangle)
+                    .map(|c| reg_mangle(cs, c).unwrap())
                     .collect::<Vec<_>>()
                     .join(", "),
-                to.iter().map(Handle::mangle).collect::<Vec<_>>().join(", ")
+                to.iter()
+                    .map(|h| reg_mangle(cs, h).unwrap())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
             Constraint::InRange { handle, exp, max } => format!(
                 "build.Range(\"{}\", {}, {})",
                 handle.mangle().to_case(Case::Snake),
-                render_handle(exp),
+                render_handle(cs, exp),
                 max.pretty()
             ),
         })
@@ -208,35 +214,71 @@ fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {
     r
 }
 
+fn reg_mangle(cs: &ConstraintSet, c: &ColumnRef) -> Result<String> {
+    let reg_id = cs
+        .columns
+        .get_col(c)?
+        .register
+        .ok_or_else(|| anyhow!("column {} has no backing register", c.pretty()))?;
+    let reg = &cs
+        .columns
+        .registers
+        .get(reg_id)
+        .ok_or_else(|| anyhow!("register {} for column {} does not exist", reg_id, c))?;
+    Ok(reg
+        .handle
+        .as_ref()
+        .map(|h| h.mangle())
+        .unwrap_or_else(|| Handle::new("", reg_id.to_string()).mangle()))
+}
+
+fn reg(cs: &ConstraintSet, c: &Handle) -> Result<Handle> {
+    let reg_id = cs
+        .columns
+        .by_handle(c)?
+        .register
+        .ok_or_else(|| anyhow!("column {} has no backing register", c.pretty()))?;
+    let reg = &cs
+        .columns
+        .registers
+        .get(reg_id)
+        .ok_or_else(|| anyhow!("register {} for column {} does not exist", reg_id, c))?;
+    Ok(reg
+        .handle
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| Handle::new(&c.module, reg_id.to_string())))
+}
+
 fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
     let mut r = String::new();
-    for (handle, column) in cs
-        .modules
-        .iter_cols()
+    for (h, column) in cs
+        .columns
+        .iter()
         // Interleaved columns should appear after their sources
-        .sorted_by_cached_key(|(h, c)| {
+        .sorted_by_cached_key(|c| {
             (
-                if !matches!(c.kind, Kind::Interleaved(..)) {
+                if !matches!(c.1.kind, Kind::Interleaved(..)) {
                     0
                 } else {
                     1
                 },
-                h.mangle(),
+                c.1.handle.mangle(),
             )
         })
     {
         match column.kind {
             Kind::Atomic | Kind::Composite(_) | Kind::Phantom => {
                 if column.used {
-                    let size_multiplier = cs.length_multiplier(&handle);
+                    let size_multiplier = cs.length_multiplier(&h);
                     r += &format!(
                         "{} := build.RegisterCommit(\"{}\", {})\n",
-                        handle.mangle(),
-                        handle,
+                        reg_mangle(cs, &h).unwrap(),
+                        reg(cs, &column.handle).unwrap(),
                         if size_multiplier == 1 {
-                            make_size(&handle, sizes)
+                            make_size(&column.handle, sizes)
                         } else {
-                            format!("{}*{}", size_multiplier, make_size(&handle, sizes))
+                            format!("{} * {}", size_multiplier, make_size(&column.handle, sizes))
                         }
                     )
                 }
@@ -244,12 +286,12 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
             Kind::Interleaved(_, ref froms) => {
                 r += &format!(
                     "{} := zkevm.Interleave({})\n",
-                    handle.mangle(),
+                    reg_mangle(cs, &h).unwrap(),
                     froms
                         .as_ref()
                         .unwrap()
                         .iter()
-                        .map(Handle::mangle)
+                        .map(|c| reg_mangle(cs, c).unwrap())
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
@@ -260,19 +302,24 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
     r
 }
 
-fn render_constraint(name: &str, domain: Option<Vec<isize>>, expr: &Node) -> String {
+fn render_constraint(
+    cs: &ConstraintSet,
+    name: &str,
+    domain: Option<Vec<isize>>,
+    expr: &Node,
+) -> String {
     match expr.e() {
         Expression::List(xs) => xs
             .iter()
             .enumerate()
-            .map(|(i, x)| render_constraint(&format!("{}_{}", name, i), domain.clone(), x))
+            .map(|(i, x)| render_constraint(cs, &format!("{}_{}", name, i), domain.clone(), x))
             .collect::<Vec<_>>()
             .join("\n"),
         _ => match domain {
             None => format!(
                 "build.GlobalConstraint(\"{}\", {})",
                 name,
-                render_expression(expr)
+                render_expression(cs, expr)
             ),
             Some(domain) => domain
                 .iter()
@@ -280,7 +327,7 @@ fn render_constraint(name: &str, domain: Option<Vec<isize>>, expr: &Node) -> Str
                     format!(
                         "build.LocalConstraint(\"{}\", {})",
                         name,
-                        render_expression(&shift(expr, *x))
+                        render_expression(cs, &shift(expr, *x))
                     )
                 })
                 .collect::<Vec<_>>()
@@ -299,7 +346,7 @@ pub struct WizardIOP {
 impl WizardIOP {
     pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
         let columns = render_columns(cs, &mut self.sizes);
-        let constraints = render_constraints(&cs.constraints);
+        let constraints = render_constraints(cs);
 
         let r = format!(
             r#"

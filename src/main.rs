@@ -204,12 +204,14 @@ enum Commands {
     },
     /// Display the compiled the constraint system
     Debug {
+        #[arg(short = 'e', long = "expand", value_parser=["nhood", "lower-shifts", "ifs", "constraints", "permutations", "inverses"], value_delimiter=',')]
+        expand: Vec<String>,
         #[arg(
             short = 'E',
-            long = "expand",
+            long = "expand-all",
             help = "perform all expansion operations before checking"
         )]
-        expand: bool,
+        expand_all: bool,
         #[arg(
             short = 'C',
             long = "columns",
@@ -222,6 +224,18 @@ enum Commands {
             help = "display constraint expressions"
         )]
         show_constraints: bool,
+        #[arg(
+            short = 'x',
+            long = "computations",
+            help = "display computed columns details"
+        )]
+        show_computations: bool,
+        #[arg(
+            short = 'p',
+            long = "perspectives",
+            help = "display perspective details"
+        )]
+        show_perspectives: bool,
         #[arg(
             long = "only",
             help = "only show these constraints",
@@ -508,6 +522,7 @@ fn main() -> Result<()> {
                 transformer::expand_invs(&mut constraints)
                     .with_context(|| anyhow!("while expanding inverses"))?;
             }
+
             compute::compute_trace(&tracefile, &mut constraints, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
 
@@ -531,30 +546,46 @@ fn main() -> Result<()> {
         }
         Commands::Debug {
             expand,
+            expand_all,
             show_columns,
             show_constraints,
+            show_computations,
+            show_perspectives,
             only,
             skip,
         } => {
-            if expand {
+            if expand.contains(&"nhood".into()) || expand_all {
                 transformer::validate_nhood(&mut constraints)
                     .with_context(|| anyhow!("while creating nhood constraints"))?;
+            }
+            if expand.contains(&"lower-shifts".into()) || expand_all {
                 transformer::lower_shifts(&mut constraints);
+            }
+            if expand.contains(&"ifs".into()) || expand_all {
                 transformer::expand_ifs(&mut constraints);
+            }
+            if expand.contains(&"constraints".into()) || expand_all {
                 transformer::expand_constraints(&mut constraints)
                     .with_context(|| anyhow!("while expanding constraints"))?;
+            }
+            if expand.contains(&"permutations".into()) || expand_all {
                 transformer::sorts(&mut constraints)
                     .with_context(|| anyhow!("while creating sorting constraints"))?;
+            }
+            if expand.contains(&"inverses".into()) || expand_all {
                 transformer::expand_invs(&mut constraints)
                     .with_context(|| anyhow!("while expanding inverses"))?;
             }
             if !show_columns && !show_constraints {
                 error!("no elements specified to debug");
             }
+
             exporters::debug(
                 &constraints,
                 show_constraints,
                 show_columns,
+                show_computations,
+                show_perspectives,
                 only.as_ref(),
                 &skip,
             )?;

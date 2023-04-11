@@ -11,10 +11,10 @@ use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},
 };
-use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::*;
 use std::ffi::{c_uint, CStr, CString};
 
-use crate::{column::Computation, compiler::EvalSettings, structs::Handle};
+use crate::{column::Computation, compiler::EvalSettings};
 
 mod check;
 mod column;
@@ -68,63 +68,61 @@ impl Trace {
         };
 
         let rs = c
-            .modules
-            .cols
+            .columns
+            .all()
             .par_iter()
-            .flat_map(|(module, columns)| {
+            .map(|i| {
                 let empty_vec = Vec::new();
-                columns.par_iter().map(move |(name, i)| {
-                    let column = &c.modules._cols[*i];
-                    let handle = Handle::new(module, name);
-                    let value = column.value().unwrap_or(&empty_vec);
-                    let padding = if let Some(x) = column.padding_value {
-                        Fr::from_str(&x.to_string()).unwrap()
-                    } else {
-                        value.get(0).cloned().unwrap_or_else(|| {
-                            c.computations
-                                .computation_for(&handle)
-                                .map(|c| match c {
-                                    Computation::Composite { exp, .. } => exp
-                                        .eval(
-                                            0,
-                                            &mut |_, _, _| Some(Fr::zero()),
-                                            &mut None,
-                                            &EvalSettings::default(),
-                                        )
-                                        .unwrap_or_else(Fr::zero),
-                                    Computation::Interleaved { .. } => Fr::zero(),
-                                    Computation::Sorted { .. } => Fr::zero(),
-                                    Computation::CyclicFrom { .. } => Fr::zero(),
-                                    Computation::SortingConstraints { .. } => Fr::zero(),
-                                })
-                                .unwrap_or_else(Fr::zero)
-                        })
-                    };
-                    (
-                        ComputedColumn {
-                            values: column
-                                .value()
-                                .unwrap_or(&empty_vec)
-                                .iter()
-                                .map(|x| {
-                                    let mut v = x.into_repr().0;
-                                    if convert_to_be {
-                                        reverse_fr(&mut v);
-                                    }
-                                    v
-                                })
-                                .collect(),
-                            padding_value: {
-                                let mut padding = padding.into_repr().0;
+                let column = &c.columns._cols[i.as_id()];
+                let value = c.columns.value(i.into()).unwrap_or(&empty_vec);
+                let padding = if let Some(x) = column.padding_value {
+                    Fr::from_str(&x.to_string()).unwrap()
+                } else {
+                    value.get(0).cloned().unwrap_or_else(|| {
+                        c.computations
+                            .computation_for(i.into())
+                            .map(|c| match c {
+                                Computation::Composite { exp, .. } => exp
+                                    .eval(
+                                        0,
+                                        &mut |_, _, _| Some(Fr::zero()),
+                                        &mut None,
+                                        &EvalSettings::default(),
+                                    )
+                                    .unwrap_or_else(Fr::zero),
+                                Computation::Interleaved { .. } => Fr::zero(),
+                                Computation::Sorted { .. } => Fr::zero(),
+                                Computation::CyclicFrom { .. } => Fr::zero(),
+                                Computation::SortingConstraints { .. } => Fr::zero(),
+                            })
+                            .unwrap_or_else(Fr::zero)
+                    })
+                };
+                (
+                    ComputedColumn {
+                        values: c
+                            .columns
+                            .value(i)
+                            .unwrap_or(&empty_vec)
+                            .iter()
+                            .map(|x| {
+                                let mut v = x.into_repr().0;
                                 if convert_to_be {
-                                    reverse_fr(&mut padding);
+                                    reverse_fr(&mut v);
                                 }
-                                padding
-                            },
+                                v
+                            })
+                            .collect(),
+                        padding_value: {
+                            let mut padding = padding.into_repr().0;
+                            if convert_to_be {
+                                reverse_fr(&mut padding);
+                            }
+                            padding
                         },
-                        handle.to_string(),
-                    )
-                })
+                    },
+                    column.handle.to_string(),
+                )
             })
             .collect::<Vec<_>>();
 

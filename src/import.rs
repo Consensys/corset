@@ -1,3 +1,4 @@
+use super::compiler::ColumnRef;
 use anyhow::*;
 use cached::Cached;
 use colored::Colorize;
@@ -84,15 +85,16 @@ pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Resu
         }
         Value::Array(xs) => {
             if !xs.is_empty() && path.len() >= 2 {
-                let handle = Handle::new(&path[path.len() - 2], &path[path.len() - 1]);
-                // The first column set the size of its module
-                let module_raw_size = cs.raw_len_for_or_set(&handle.module, xs.len() as isize);
-                let module_spilling = cs.spilling_or_insert(&handle.module);
+                let module = path[path.len() - 2].to_string();
+                let handle: ColumnRef = Handle::new(&module, &path[path.len() - 1]).into();
+                // The first column sets the size of its module
+                let module_raw_size = cs.raw_len_for_or_set(&module, xs.len() as isize);
+                let module_spilling = cs.spilling_for(&handle).unwrap();
                 // The min length can be set if the module contains range
                 // proofs, that require a minimal length of a certain power of 2
-                let module_min_len = cs.modules.min_len.get(&handle.module).cloned().unwrap_or(0);
+                let module_min_len = cs.columns.min_len.get(&module).cloned().unwrap_or(0);
 
-                if let Some(column) = cs.modules.by_handle_mut(&handle) {
+                if let Result::Ok(crate::column::Column { t, .. }) = cs.columns.get_col(&handle) {
                     trace!("Inserting {} ({})", handle, xs.len());
 
                     if xs.len() as isize != module_raw_size {
@@ -104,7 +106,7 @@ pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Resu
                         );
                     }
 
-                    let mut xs = parse_column(xs, column.t)
+                    let mut xs = parse_column(xs, *t)
                         .with_context(|| anyhow!("while importing {}", handle))?;
 
                     // If the parsed column is not long enought w.r.t. the
@@ -117,7 +119,7 @@ pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Resu
                         xs.resize_with(module_min_len, Default::default);
                         xs.reverse();
                     }
-                    column.set_value(xs, module_spilling)
+                    cs.columns.set_value(&handle, xs, module_spilling)?
                 }
             }
             Ok(())

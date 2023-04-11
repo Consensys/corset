@@ -9,7 +9,7 @@ use super::{
 fn compile_time_constants(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()> {
     match &e.class {
         Token::DefModule(name) => {
-            *ctx = ctx.root_derived(name, false, true, false);
+            *ctx = ctx.derived_from_root(name, false, true, false);
             Ok(())
         }
         Token::DefConsts(cs) => {
@@ -28,7 +28,7 @@ fn compile_time_constants(e: &AstNode, ctx: &mut Scope, settings: &CompileSettin
 }
 
 pub fn pass(ast: &Ast, ctx: Scope, settings: &CompileSettings) -> Result<()> {
-    let mut module = ctx.clone();
+    let mut module = ctx;
     for exp in ast.exprs.iter() {
         compile_time_constants(exp, &mut module, settings).with_context(|| make_ast_error(exp))?;
     }

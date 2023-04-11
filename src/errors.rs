@@ -15,6 +15,9 @@ pub(crate) enum CompileError<'a> {
 
     #[error("{} is never used", .0.pretty())]
     NotUsed(Handle),
+
+    #[error("column {} not found", .0.pretty())]
+    NotFound(Handle),
 }
 
 #[derive(Error, Debug)]
@@ -56,6 +59,16 @@ pub mod parser {
 pub(crate) mod compiler {
     use crate::compiler::Type;
     use colored::Colorize;
+    use thiserror::Error;
+
+    #[derive(Error, Debug)]
+    pub enum Error {
+        #[error("constraint {} refers to non-ID columns", .0)]
+        ConstraintWithHandles(String),
+
+        #[error("computation {} refers to non-ID columns", .0)]
+        ComputationWithHandles(String),
+    }
 
     pub(crate) fn make_type_error_msg(fname: &str, expected: &[&[Type]], found: &[Type]) -> String {
         let expected_str = format!(

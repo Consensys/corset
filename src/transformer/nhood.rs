@@ -2,86 +2,80 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 use crate::{
-    column::Computation,
-    compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Kind, Magma, Node, Type},
+    column::{Column, Computation},
+    compiler::{ColumnRef, Constraint, ConstraintSet, Intrinsic, Kind, Magma, Node, Type},
     pretty::Base,
     structs::Handle,
 };
 
-fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSet) -> Result<()> {
+fn process_nhood(
+    module: &str,
+    handles: &[ColumnRef],
+    n: u32,
+    cs: &mut ConstraintSet,
+) -> Result<()> {
     let modulo = 2usize.pow(n);
-    let aux_handle = Handle::new(module, format!("AUX_2_{}_HOOD", n));
-    let _aux_id = cs.modules.insert_column(
-        &aux_handle,
-        Type::Column(Magma::Integer),
-        true,
-        Kind::Phantom,
+    let _aux_id = cs.columns.insert_column_and_register(
+        Column::builder()
+            .handle(Handle::new(module, format!("AUX_2_{}_HOOD", n)))
+            .kind(Kind::Phantom)
+            .base(Base::Bin)
+            .build(),
         false,
-        None,
-        None,
-        Base::Bin,
-    );
+    )?;
     cs.computations.insert(
-        &aux_handle,
+        &_aux_id,
         Computation::CyclicFrom {
-            target: aux_handle.clone(),
+            target: _aux_id.clone(),
             froms: handles.to_vec(),
             modulo,
         },
     )?;
 
-    let intrld_aux_xs_handle = Handle::new(module, format!("INTRLD_AUX_2_{}_HOOD", n));
-    let interleaving = vec![aux_handle]
+    let interleaving = vec![_aux_id]
         .into_iter()
         .chain(handles.iter().cloned())
         .collect::<Vec<_>>();
-    let _intrld_aux_xs_id = cs.modules.insert_column(
-        &intrld_aux_xs_handle,
-        Type::Column(Magma::Integer),
-        true,
-        Kind::Interleaved(vec![], Some(interleaving.to_owned())),
+    let _intrld_aux_xs_id = cs.columns.insert_column_and_register(
+        Column::builder()
+            .handle(Handle::new(module, format!("INTRLD_AUX_2_{}_HOOD", n)))
+            .kind(Kind::Interleaved(vec![], Some(interleaving.to_owned())))
+            .base(Base::Bin)
+            .build(),
         false,
-        None,
-        None,
-        Base::Bin,
-    );
+    )?;
     cs.computations.insert(
-        &intrld_aux_xs_handle,
+        &_intrld_aux_xs_id,
         Computation::Interleaved {
-            target: intrld_aux_xs_handle.clone(),
+            target: _intrld_aux_xs_id.clone(),
             froms: interleaving,
         },
     )?;
 
-    let srt_intrld_aux_xs_handle = Handle::new(module, format!("SRT_INTRLD_AUX_2_{}_HOOD", n));
-    let _aux_intrld_srtd_id = cs.modules.insert_column(
-        &srt_intrld_aux_xs_handle,
-        Type::Column(Magma::Integer),
+    let srt_intrld_aux_xs_id = cs.columns.insert_column_and_register(
+        Column::builder()
+            .handle(Handle::new(module, format!("SRT_INTRLD_AUX_2_{}_HOOD", n)))
+            .kind(Kind::Phantom)
+            .base(Base::Bin)
+            .build(),
         true,
-        Kind::Phantom,
-        false,
-        None,
-        None,
-        Base::Bin,
-    );
+    )?;
     cs.computations.insert(
-        &srt_intrld_aux_xs_handle,
+        &srt_intrld_aux_xs_id,
         Computation::Sorted {
-            froms: vec![intrld_aux_xs_handle.to_owned()],
-            tos: vec![srt_intrld_aux_xs_handle.to_owned()],
+            froms: vec![_intrld_aux_xs_id.clone()],
+            tos: vec![srt_intrld_aux_xs_id.clone()],
             signs: vec![true],
         },
     )?;
 
-    let srt_intrld_aux_xs_node = Node {
-        _e: Expression::Column {
-            handle: srt_intrld_aux_xs_handle.to_owned(),
-            kind: Kind::Phantom,
-            padding_value: None,
-            base: Base::Dec,
-        },
-        _t: Some(Type::Column(Magma::Byte)),
-    };
+    let srt_intrld_aux_xs_node = Node::column()
+        .handle(srt_intrld_aux_xs_id.clone())
+        .kind(Kind::Phantom)
+        .base(Base::Dec)
+        .t(Magma::Byte)
+        .build();
+
     cs.constraints.push(Constraint::Vanishes {
         handle: Handle::new(module, format!("2^{n}-hood-start")),
         domain: Some(vec![0]),
@@ -91,15 +85,16 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
     cs.constraints.push(Constraint::Vanishes {
         handle: Handle::new(module, format!("2^{n}-hood-end")),
         domain: Some(vec![-1]),
-        expr: Box::new(Intrinsic::Sub.call(&[
-            Node::from_expr(Expression::Column {
-                handle: srt_intrld_aux_xs_handle.to_owned(),
-                kind: Kind::Phantom,
-                padding_value: None,
-                base: Base::Dec,
-            }),
-            Node::from_const((modulo - 1).try_into().unwrap()),
-        ])?),
+        expr: Box::new(
+            Intrinsic::Sub.call(&[
+                Node::column()
+                    .handle(srt_intrld_aux_xs_id.clone())
+                    .kind(Kind::Phantom)
+                    .base(Base::Dec)
+                    .build(),
+                Node::from_const((modulo - 1).try_into().unwrap()),
+            ])?,
+        ),
     });
 
     cs.constraints.push(Constraint::Vanishes {
@@ -118,25 +113,24 @@ fn process_nhood(module: &str, handles: &[Handle], n: u32, cs: &mut ConstraintSe
             ])?,
         ])?),
     });
-    cs.update_ids();
 
     Ok(())
 }
 
 pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
-    let mut nibble_columns = HashMap::<String, Vec<Handle>>::new();
-    let mut byte_columns = HashMap::<String, Vec<Handle>>::new();
+    let mut nibble_columns = HashMap::<String, Vec<ColumnRef>>::new();
+    let mut byte_columns = HashMap::<String, Vec<ColumnRef>>::new();
 
-    for (h, c) in cs.modules.iter_cols() {
+    for (h, c) in cs.columns.iter() {
         // only atomic columns (i.e. filled from traces) are of interest here
         if let (Type::Column(magma), Kind::Atomic) = (c.t, &c.kind) {
             match magma {
                 Magma::Nibble => nibble_columns
-                    .entry(h.module.to_owned())
+                    .entry(c.handle.module.to_owned())
                     .or_default()
                     .push(h.clone()),
                 Magma::Byte => byte_columns
-                    .entry(h.module.to_owned())
+                    .entry(c.handle.module.to_owned())
                     .or_default()
                     .push(h.clone()),
                 _ => (),
@@ -146,14 +140,13 @@ pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
 
     for (module, handles) in nibble_columns.iter() {
         process_nhood(module, handles, 4, cs)?;
-        cs.modules.set_min_len(module, 2usize.pow(4));
+        cs.columns.set_min_len(module, 2usize.pow(4));
     }
 
     for (module, handles) in byte_columns.iter() {
         process_nhood(module, handles, 8, cs)?;
-        cs.modules.set_min_len(module, 2usize.pow(8));
+        cs.columns.set_min_len(module, 2usize.pow(8));
     }
 
-    cs.update_ids();
     Ok(())
 }
