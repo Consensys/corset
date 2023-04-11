@@ -636,7 +636,7 @@ fn apply_intrinsic(
                 let i = traversed_args[1].pure_eval()?.to_usize().ok_or_else(|| {
                     anyhow!("{:?} is not a valid indice", traversed_args[1].pure_eval())
                 })?;
-                let array = ctx.resolve_symbol(&handle.name)?;
+                let array = ctx.resolve_handle(&handle)?;
                 match array.e() {
                     Expression::ArrayColumn {
                         handle,

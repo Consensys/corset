@@ -325,6 +325,10 @@ impl Scope {
         }
     }
 
+    pub fn resolve_handle(&mut self, h: &Handle) -> Result<Node> {
+        self.resolve_symbol(&h.to_string())
+    }
+
     fn _resolve_symbol(
         n: usize,
         tree: &mut SymbolTableTree,
