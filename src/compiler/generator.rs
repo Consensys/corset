@@ -456,6 +456,7 @@ fn apply_form(
                         ),
                         false,
                         false,
+                        false,
                     );
                     for_ctx.insert_symbol(
                         i_name,
@@ -503,7 +504,7 @@ fn apply_form(
         }
         Form::Let => {
             let sub_ctx_name = format!("let-{}", ctx.module());
-            let mut sub_ctx = ctx.derived(&sub_ctx_name, false, false);
+            let mut sub_ctx = ctx.derived(&sub_ctx_name, false, false, false);
             for pair in args[0].as_list().unwrap().iter() {
                 let pair = pair.as_list().unwrap();
                 let name = pair[0].as_symbol().unwrap();
@@ -563,7 +564,7 @@ fn apply_defined(
     );
     b.validate_args(&traversed_args)
         .with_context(|| anyhow!("validating call to `{}`", h))?;
-    let mut f_ctx = ctx.derived(&f_mangle, b.pure, false);
+    let mut f_ctx = ctx.derived(&f_mangle, b.pure, false, false);
     for (i, f_arg) in b.args.iter().enumerate() {
         f_ctx.insert_symbol(f_arg, traversed_args[i].clone())?;
     }
@@ -868,6 +869,7 @@ fn reduce_toplevel(
             including: parent,
             included: child,
         } => {
+            *ctx = ctx.derived(&format!("plookup-{}", name), false, false, true);
             let handle = Handle::new(ctx.module(), name);
             let parents = parent
                 .iter()
@@ -908,7 +910,7 @@ fn reduce_toplevel(
             Ok(None)
         }
         Token::DefModule(name) => {
-            *ctx = ctx.derived(name, false, true);
+            *ctx = ctx.derived(name, false, true, false);
             Ok(None)
         }
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {

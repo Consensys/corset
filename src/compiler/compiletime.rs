@@ -9,7 +9,7 @@ use super::{
 fn compile_time_constants(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()> {
     match &e.class {
         Token::DefModule(name) => {
-            *ctx = ctx.derived(name, false, true);
+            *ctx = ctx.root_derived(name, false, true, false);
             Ok(())
         }
         Token::DefConsts(cs) => {

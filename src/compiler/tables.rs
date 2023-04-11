@@ -203,6 +203,7 @@ impl Scope {
                 name: super::MAIN_MODULE.to_owned(),
                 closed: true,
                 public: true,
+                global: false,
                 constraints: Default::default(),
                 funcs: BUILTINS
                     .iter()
@@ -219,17 +220,46 @@ impl Scope {
         }
     }
 
-    pub fn derived(&mut self, name: &str, closed: bool, public: bool) -> Scope {
+    pub fn derived(&mut self, name: &str, closed: bool, public: bool, global: bool) -> Scope {
         let maybe_child = self.tree.borrow().find_child(self.id, |n| n.name == name);
         match maybe_child {
             Some(n) => self.at(n),
             None => {
+                let current_global = data!(self).global;
                 let new_node = self.tree.borrow_mut().add_node(
                     Some(self.id),
                     Some(SymbolTable {
                         name: name.to_owned(),
                         closed,
                         public,
+                        global: global || current_global,
+                        constraints: Default::default(),
+                        funcs: Default::default(),
+                        symbols: Default::default(),
+                    }),
+                );
+                Scope {
+                    tree: self.tree.clone(),
+                    id: new_node,
+                }
+            }
+        }
+    }
+
+    pub fn root_derived(&mut self, name: &str, closed: bool, public: bool, global: bool) -> Scope {
+        let root = self.tree.borrow().root();
+        let maybe_child = self.tree.borrow().find_child(root, |n| n.name == name);
+        match maybe_child {
+            Some(n) => self.at(n),
+            None => {
+                let current_global = data!(self).global;
+                let new_node = self.tree.borrow_mut().add_node(
+                    Some(root),
+                    Some(SymbolTable {
+                        name: name.to_owned(),
+                        closed,
+                        public,
+                        global: global || current_global,
                         constraints: Default::default(),
                         funcs: Default::default(),
                         symbols: Default::default(),
@@ -311,8 +341,13 @@ impl Scope {
     }
 
     pub fn resolve_symbol(&mut self, name: &str) -> Result<Node> {
+        let global = data!(self).global;
         if name.contains('.') {
-            self.resolve_symbol_with_path(name)
+            if global {
+                self.resolve_symbol_with_path(name)
+            } else {
+                bail!(symbols::Error::NotAGlobalScope)
+            }
         } else {
             Self::_resolve_symbol(
                 self.id,
@@ -326,7 +361,12 @@ impl Scope {
     }
 
     pub fn resolve_handle(&mut self, h: &Handle) -> Result<Node> {
-        self.resolve_symbol(&h.to_string())
+        let global = data!(self).global;
+        if global {
+            self.resolve_symbol(&h.to_string())
+        } else {
+            self.resolve_symbol(&h.name)
+        }
     }
 
     fn _resolve_symbol(
@@ -609,6 +649,10 @@ pub struct SymbolTable {
     // otherwise, this table is a private table, e.g. function arguments.
     // This is used when browsing the tables to avoid inner contexts.
     public: bool,
+    // If true, fully qualified handles can be looked up; otherwise
+    // it will result in a failure.
+    // This setting in forcefully inherited by children scopes.
+    global: bool,
     constraints: HashSet<String>,
     funcs: HashMap<String, Function>,
     symbols: HashMap<String, Symbol>,

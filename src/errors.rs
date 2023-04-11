@@ -130,5 +130,8 @@ pub mod symbols {
 
         #[error("circular definition found for {}", .0.red())]
         CircularDefinition(String),
+
+        #[error("other modules can not be reached from here")]
+        NotAGlobalScope,
     }
 }

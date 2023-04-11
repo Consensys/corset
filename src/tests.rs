@@ -158,3 +158,15 @@ fn array_len() {
         "(defcolumns (a[5]) b c) (defconstraint test () (eq (len (nth a 2)) 5))",
     );
 }
+
+#[test]
+fn global_scope() {
+    must_run(
+        "global scope ok",
+        "(module asdf) (defcolumns a b) (module zxcv) (defcolumns x y) (defplookup test (asdf.a asdf.b) (zxcv.x zxcv.y))",
+    );
+    must_fail(
+        "local scope ok",
+        "(module asdf) (defcolumns a b) (module zxcv) (defcolumns x y) (defconstraint test () (= asdf.a zxcv.x))",
+    );
+}

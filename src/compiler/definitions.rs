@@ -24,7 +24,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
 
         Token::DefConstraint { name, .. } => ctx.insert_constraint(name),
         Token::DefModule(name) => {
-            *ctx = ctx.derived(name, false, true);
+            *ctx = ctx.root_derived(name, false, true, false);
             Ok(())
         }
         Token::DefColumns(cols) => cols.iter().fold(Ok(()), |ax, col| ax.and(reduce(col, ctx))),
