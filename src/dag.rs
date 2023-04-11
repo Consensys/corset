@@ -1,21 +1,21 @@
 use std::collections::HashSet;
 
-use crate::{column::Computation, structs::Handle};
+use crate::{column::Computation, compiler::ColumnRef};
 
 #[derive(Default, Debug)]
 pub(crate) struct ComputationDag {
-    nodes: HashSet<Handle>,
-    edges: HashSet<(Handle, Handle)>,
+    nodes: HashSet<ColumnRef>,
+    edges: HashSet<(ColumnRef, ColumnRef)>,
 }
 
 impl ComputationDag {
-    pub fn depends(&mut self, n1: &Handle, n2: &Handle) {
+    pub fn depends(&mut self, n1: &ColumnRef, n2: &ColumnRef) {
         self.nodes.insert(n1.to_owned());
         self.nodes.insert(n2.to_owned());
         self.edges.insert((n1.clone(), n2.clone()));
     }
 
-    fn sinks(&self) -> Vec<Handle> {
+    fn sinks(&self) -> Vec<ColumnRef> {
         self.nodes
             .iter()
             .filter(|n| self.outgoing(n).is_empty())
@@ -23,7 +23,7 @@ impl ComputationDag {
             .collect()
     }
 
-    fn incoming(&self, n: &Handle) -> HashSet<Handle> {
+    fn incoming(&self, n: &ColumnRef) -> HashSet<ColumnRef> {
         self.edges
             .iter()
             .filter(|(_, o)| o == n)
@@ -31,7 +31,7 @@ impl ComputationDag {
             .collect()
     }
 
-    fn outgoing(&self, n: &Handle) -> HashSet<Handle> {
+    fn outgoing(&self, n: &ColumnRef) -> HashSet<ColumnRef> {
         self.edges
             .iter()
             .filter(|(o, _)| o == n)
@@ -84,7 +84,7 @@ impl ComputationDag {
     }
 
     /// Returns a pseudo-topological sorting, a list of sets of independent columns
-    pub fn job_slices(&self) -> Vec<HashSet<Handle>> {
+    pub fn job_slices(&self) -> Vec<HashSet<ColumnRef>> {
         let mut r = Vec::new();
         let mut visited = HashSet::new();
 

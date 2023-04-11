@@ -71,3 +71,13 @@ pub fn validate(t: crate::compiler::Type, x: Fr) -> Result<Fr> {
         crate::compiler::Magma::Any => unreachable!(),
     }
 }
+
+/// Remove all symbols in a symbol which are invalid in Go identifiers
+pub fn purify(s: &str) -> String {
+    s.replace(['(', ')', '{', '}', '[', ']', '<', '>', ':', '%', '.'], "_")
+        .replace('-', "sub")
+        .replace('*', "mul")
+        .replace('+', "add")
+        .replace('/', "div")
+        .replace(|c: char| !c.is_ascii(), "_")
+}

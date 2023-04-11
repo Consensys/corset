@@ -6,7 +6,7 @@ use pairing_ce::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    compiler::{Expression, Node},
+    compiler::{ColumnRef, Expression, Node},
     structs::Handle,
 };
 
@@ -68,7 +68,7 @@ impl Pretty for Node {
             let c = &COLORS[depth % COLORS.len()];
             match s.e() {
                 Expression::Const(x, _) => format!("{}", x).color(*c),
-                Expression::Column { handle, .. } => handle.name.to_string().color(*c),
+                Expression::Column { handle, .. } => handle.to_string().color(*c),
                 Expression::ArrayColumn {
                     handle,
                     domain: range,
@@ -103,7 +103,23 @@ impl Pretty for Node {
 
 impl Pretty for Handle {
     fn pretty(&self) -> String {
-        format!("{}.{}", self.module.blue(), self.name.white().bold())
+        if self.module != crate::compiler::MAIN_MODULE {
+            format!("{}.{}", self.module.blue(), self.name.white().bold())
+        } else {
+            format!("{}", self.name.white().bold())
+        }
+    }
+    fn pretty_with_base(&self, _base: Base) -> String {
+        self.pretty()
+    }
+}
+
+impl Pretty for ColumnRef {
+    fn pretty(&self) -> String {
+        match &self.0 {
+            either::Either::Left(h) => h.pretty(),
+            either::Either::Right(id) => format!("Col.#{}", id),
+        }
     }
     fn pretty_with_base(&self, _base: Base) -> String {
         self.pretty()

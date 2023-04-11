@@ -130,9 +130,9 @@ fn raise_ifs(mut e: Node) -> Node {
                                         .take(i)
                                         .cloned()
                                         .chain(std::iter::once(
-                                            args_if.get(2).map(|a| a.clone()).unwrap_or_else(
-                                                || Node::from_expr(Expression::Void),
-                                            ),
+                                            args_if.get(2).cloned().unwrap_or_else(|| {
+                                                Node::from_expr(Expression::Void)
+                                            }),
                                         ))
                                         .filter(|e| !matches!(e.e(), Expression::Void))
                                         .collect::<Vec<_>>(),

@@ -1,6 +1,8 @@
+use crate::compiler::ColumnID;
 use anyhow::*;
 use cached::Cached;
-use colored::Colorize;
+use colored::{ColoredString, Colorize};
+use either::Either;
 use num_bigint::BigInt;
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use pairing_ce::ff::Field;
@@ -12,10 +14,71 @@ use std::{
 };
 
 use crate::compiler::codetyper::Tty;
-use crate::pretty::{Base, Pretty};
+use crate::pretty::{Base, Pretty, COLORS};
 use crate::structs::Handle;
 
-use super::{EvalSettings, Intrinsic, Kind, Magma, Type};
+use super::{ConstraintSet, EvalSettings, Intrinsic, Kind, Magma, Type};
+
+#[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq)]
+pub struct ColumnRef(pub Either<Handle, ColumnID>);
+impl ColumnRef {
+    pub fn of_handle(h: Handle) -> ColumnRef {
+        ColumnRef(Either::Left(h))
+    }
+    pub fn of_id(i: ColumnID) -> ColumnRef {
+        ColumnRef(Either::Right(i))
+    }
+    pub fn as_handle(&self) -> &Handle {
+        self.0.as_ref().left().unwrap()
+    }
+    pub fn as_id(&self) -> ColumnID {
+        *self.0.as_ref().right().unwrap()
+    }
+    pub fn is_id(&self) -> bool {
+        matches!(self.0, Either::Right(_))
+    }
+    pub fn is_handle(&self) -> bool {
+        matches!(self.0, Either::Left(_))
+    }
+    pub fn set_id(&mut self, i: ColumnID) {
+        if self.is_handle() {
+            self.0 = Either::Right(i)
+        }
+    }
+}
+impl std::cmp::PartialEq for ColumnRef {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (Either::Left(x), Either::Left(y)) => x.eq(y),
+            (Either::Left(_), Either::Right(_)) => false,
+            (Either::Right(_), Either::Left(_)) => false,
+            (Either::Right(x), Either::Right(y)) => x.eq(y),
+        }
+    }
+}
+impl Display for ColumnRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            Either::Left(handle) => write!(f, "{}", handle),
+            Either::Right(id) => write!(f, "{}", id),
+        }
+    }
+}
+impl From<&Handle> for ColumnRef {
+    fn from(h: &Handle) -> ColumnRef {
+        ColumnRef::of_handle(h.to_owned())
+    }
+}
+impl From<Handle> for ColumnRef {
+    fn from(h: Handle) -> ColumnRef {
+        ColumnRef::of_handle(h)
+    }
+}
+impl From<ColumnID> for ColumnRef {
+    fn from(i: ColumnID) -> ColumnRef {
+        ColumnRef::of_id(i)
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum Expression {
@@ -25,7 +88,7 @@ pub enum Expression {
     },
     Const(BigInt, Option<Fr>),
     Column {
-        handle: Handle,
+        handle: ColumnRef,
         kind: Kind<Node>,
         padding_value: Option<i64>,
         base: Base,
@@ -49,6 +112,7 @@ impl From<Expression> for Node {
         Node::from_expr(e)
     }
 }
+#[buildstructor::buildstructor]
 impl Node {
     pub fn from_expr(e: Expression) -> Node {
         Node { _e: e, _t: None }
@@ -72,10 +136,10 @@ impl Node {
             })),
         }
     }
-    pub fn from_handle(x: &Handle) -> Node {
+    pub fn phantom_column(x: &ColumnRef) -> Node {
         Node {
             _e: Expression::Column {
-                handle: x.clone(),
+                handle: x.to_owned(),
                 kind: Kind::Phantom,
                 padding_value: None,
                 base: Base::Hex,
@@ -89,8 +153,26 @@ impl Node {
             ..self
         }
     }
-    pub fn from_typed_handle(x: &Handle, t: Type) -> Node {
-        Self::from_handle(x).with_type(t)
+    #[builder(entry = "column", exit = "build", visibility = "pub")]
+    pub fn new_column(
+        handle: ColumnRef,
+        base: Option<Base>,
+        kind: Kind<Node>,
+        padding_value: Option<i64>,
+        t: Option<Magma>,
+    ) -> Node {
+        Node {
+            _e: Expression::Column {
+                handle,
+                kind,
+                padding_value,
+                base: base.unwrap_or(Base::Hex),
+            },
+            _t: Some(Type::Column(t.unwrap_or(Magma::Integer))),
+        }
+    }
+    pub fn typed_phantom_column(x: &ColumnRef, t: Type) -> Node {
+        Self::phantom_column(x).with_type(t)
     }
     pub fn one() -> Node {
         Self::from_expr(Expression::Const(One::one(), Some(Fr::one())))
@@ -107,7 +189,7 @@ impl Node {
     pub fn t(&self) -> Type {
         self._t.unwrap_or_else(|| match &self.e() {
             Expression::Funcall { func, args } => {
-                func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
+                dbg!(func).typing(&dbg!(&args).iter().map(|a| a.t()).collect::<Vec<_>>())
             }
             Expression::Const(ref x, _) => {
                 if Zero::is_zero(x) || One::is_one(x) {
@@ -127,6 +209,40 @@ impl Node {
             ),
             Expression::Void => Type::Void,
         })
+    }
+
+    pub fn pretty_with_handle(&self, cs: &ConstraintSet) -> String {
+        fn rec_pretty(s: &Node, depth: usize, cs: &ConstraintSet) -> ColoredString {
+            let c = &COLORS[depth % COLORS.len()];
+            match s.e() {
+                Expression::Const(x, _) => format!("{}", x).color(*c),
+                Expression::Column { handle, .. } => cs.handle(handle).to_string().color(*c),
+                Expression::ArrayColumn {
+                    handle,
+                    domain: range,
+                    ..
+                } => format!(
+                    "{}[{}:{}]",
+                    handle.name,
+                    range.first().unwrap(),
+                    range.last().unwrap(),
+                )
+                .color(*c),
+                Expression::List(ns) => format!("{{{}}}", format_list(ns, depth + 1, cs)).color(*c),
+                Expression::Funcall { func, args } => {
+                    format!("({:?} {})", func, format_list(args, depth + 1, cs)).color(*c)
+                }
+                Expression::Void => "nil".color(*c),
+            }
+        }
+        fn format_list(ns: &[Node], depth: usize, cs: &ConstraintSet) -> String {
+            ns.iter()
+                .map(|n| rec_pretty(n, depth, cs).to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+
+        format!("{}", rec_pretty(self, 0, cs))
     }
 
     pub fn debug(&self, f: &dyn Fn(&Node) -> Option<Fr>, unclutter: bool, dim: bool) -> String {
@@ -236,6 +352,7 @@ impl Node {
                         colored::Color::BrightWhite
                     };
 
+                    let h = h.as_handle();
                     tty.write(
                         format!("{}[{}]", h.name, v.pretty_with_base(Base::Hex))
                             .color(c)
@@ -296,9 +413,10 @@ impl Node {
 
     /// Compute the maximum future-shifting in the node
     pub fn past_spill(&self) -> isize {
-        fn _past_span(e: &Node, ax: &mut isize) {
-            match e.e() {
+        fn _past_span(e: &Expression, ax: isize) -> isize {
+            match e {
                 Expression::Funcall { func, args } => {
+                    let mut mine = ax;
                     if let Intrinsic::Shift = func {
                         let arg_big = args[1]
                             .pure_eval()
@@ -306,25 +424,24 @@ impl Node {
                         let arg = arg_big
                             .to_isize()
                             .unwrap_or_else(|| panic!("{}", arg_big.to_string().as_str()));
-                        *ax = (*ax).min(*ax + arg);
+                        mine = mine.min(mine + arg);
                     }
-                    args.iter().for_each(|e| _past_span(e, ax))
+                    args.iter().map(|e| _past_span(e.e(), mine)).min().unwrap()
                 }
-                Expression::List(es) => es.iter().for_each(|e| _past_span(e, ax)),
-                _ => {}
+                Expression::List(es) => es.iter().map(|e| _past_span(e.e(), ax)).min().unwrap(),
+                _ => ax,
             }
         }
 
-        let mut span = 0;
-        _past_span(self, &mut span);
-        span.min(0)
+        _past_span(self.e(), 0).min(0)
     }
 
     /// Compute the maximum future-shifting in the node
-    pub fn future_spill(&self) -> usize {
-        fn _future_span(e: &Node, ax: &mut isize) {
-            match e.e() {
+    pub fn future_spill(&self) -> isize {
+        fn _future_span(e: &Expression, ax: isize) -> isize {
+            match e {
                 Expression::Funcall { func, args } => {
+                    let mut mine = ax;
                     if let Intrinsic::Shift = func {
                         let arg_big = args[1]
                             .pure_eval()
@@ -332,21 +449,22 @@ impl Node {
                         let arg = arg_big
                             .to_isize()
                             .unwrap_or_else(|| panic!("{}", arg_big.to_string().as_str()));
-                        *ax = (*ax).max(*ax + arg);
+                        mine = mine.max(mine + arg);
                     }
-                    args.iter().for_each(|e| _future_span(e, ax))
+                    args.iter()
+                        .map(|e| _future_span(e.e(), mine))
+                        .max()
+                        .unwrap()
                 }
-                Expression::List(es) => es.iter().for_each(|e| _future_span(e, ax)),
-                _ => {}
+                Expression::List(es) => es.iter().map(|e| _future_span(e.e(), ax)).max().unwrap(),
+                _ => ax,
             }
         }
 
-        let mut span = 0;
-        _future_span(self, &mut span);
-        span.max(0) as usize
+        _future_span(self.e(), 0).max(0)
     }
 
-    pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut Handle)) {
+    pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut ColumnRef)) {
         match self.e_mut() {
             Expression::Funcall { args, .. } => {
                 args.iter_mut().for_each(|e| e.add_id_to_handles(set_id))
@@ -359,7 +477,7 @@ impl Node {
         }
     }
 
-    pub fn dependencies(&self) -> HashSet<Handle> {
+    pub fn dependencies(&self) -> HashSet<ColumnRef> {
         self.leaves()
             .into_iter()
             .filter_map(|e| match e.e() {
@@ -367,19 +485,6 @@ impl Node {
                 _ => None,
             })
             .collect()
-    }
-
-    pub fn module(&self) -> Option<String> {
-        let modules = self
-            .dependencies()
-            .into_iter()
-            .map(|h| h.module)
-            .collect::<HashSet<_>>();
-        if modules.len() != 1 {
-            None
-        } else {
-            modules.into_iter().next()
-        }
     }
 
     /// Evaluate a compile-time known value
@@ -432,7 +537,7 @@ impl Node {
     pub fn eval_trace(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&Handle, isize, bool) -> Option<Fr>,
+        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
         cache: &mut Option<cached::SizedCache<Fr, Fr>>,
         settings: &EvalSettings,
     ) -> (Option<Fr>, HashMap<String, Option<Fr>>) {
@@ -448,7 +553,7 @@ impl Node {
     pub fn eval(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&Handle, isize, bool) -> Option<Fr>,
+        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
         cache: &mut Option<cached::SizedCache<Fr, Fr>>,
         settings: &EvalSettings,
     ) -> Option<Fr> {
@@ -458,7 +563,7 @@ impl Node {
     pub fn eval_fold(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&Handle, isize, bool) -> Option<Fr>,
+        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
         cache: &mut Option<cached::SizedCache<Fr, Fr>>,
         settings: &EvalSettings,
         f: &mut dyn FnMut(&Node, &Option<Fr>),
@@ -551,7 +656,7 @@ impl Node {
                         if !range.contains(&idx) {
                             panic!("trying to access `{}` at index `{}`", h, idx);
                         }
-                        get(&h.ith(idx), i, settings.wrap)
+                        get(&h.ith(idx).into(), i, settings.wrap)
                     } else {
                         unreachable!()
                     }

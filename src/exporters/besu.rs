@@ -31,13 +31,13 @@ struct TemplateData {
 
 pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Result<()> {
     let columns = cs
-        .modules
+        .columns
         .iter_cols()
-        .filter_map(|(handle, c)| {
+        .filter_map(|c| {
             if matches!(c.kind, Kind::Atomic) {
                 Some(BesuColumn {
-                    corset_name: handle.name.to_string(),
-                    java_name: handle.name.to_case(Case::Camel),
+                    corset_name: c.handle.name.to_string(),
+                    java_name: c.handle.name.to_case(Case::Camel),
                     tupe: match c.t.magma() {
                         Magma::Boolean => "Boolean",
                         Magma::Nibble => "UnsignedByte",
@@ -46,7 +46,7 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
                         Magma::Any => unreachable!(),
                     }
                     .into(),
-                    appender_name: format!("append{}", handle.name.to_case(Case::Pascal)),
+                    appender_name: format!("append{}", c.handle.name.to_case(Case::Pascal)),
                 })
             } else {
                 None

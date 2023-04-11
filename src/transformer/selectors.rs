@@ -1,10 +1,10 @@
 use crate::{
-    column::{ColumnSet, Computation},
-    compiler::{ComputationTable, Constraint, ConstraintSet, Expression, Kind, Magma, Node, Type},
+    column::{Column, ColumnSet, Computation},
+    compiler::{ComputationTable, Constraint, ConstraintSet, Expression, Kind, Magma, Node},
     pretty::Base,
     structs::Handle,
 };
-use anyhow::Result;
+use anyhow::*;
 
 use super::{expression_to_name, validate_computation};
 
@@ -17,36 +17,30 @@ fn do_expand_expr(
     match e.e() {
         Expression::Column { .. } => Ok(e.clone()),
         _ => {
-            let module = e.module().unwrap();
+            let module = cols.module_of(e.dependencies().iter()).unwrap();
             let new_handle = Handle::new(module, expression_to_name(e, "EXPAND"));
             validate_computation(new_cs, e, &new_handle);
-            cols.insert_column(
-                &new_handle,
-                Type::Column(Magma::Integer),
+            cols.insert_column_and_register(
+                Column::builder()
+                    .handle(new_handle.clone())
+                    .kind(Kind::Phantom)
+                    .build(),
                 true,
-                Kind::Phantom,
-                true,
-                None,
-                None,
-                Base::Dec,
             )?;
 
             let _ = comps.insert(
-                &new_handle,
+                &new_handle.clone().into(),
                 Computation::Composite {
-                    target: new_handle.clone(),
+                    target: new_handle.clone().into(),
                     exp: e.clone(),
                 },
             );
-            Ok(Node {
-                _e: Expression::Column {
-                    handle: new_handle,
-                    kind: Kind::Phantom,
-                    padding_value: None,
-                    base: Base::Dec,
-                },
-                _t: Some(Type::Column(Magma::Integer)),
-            })
+            Ok(Node::column()
+                .handle(new_handle)
+                .kind(Kind::Phantom)
+                .base(Base::Dec)
+                .t(Magma::Integer)
+                .build())
         }
     }
 }
@@ -62,7 +56,7 @@ pub fn expand_constraints(cs: &mut ConstraintSet) -> Result<()> {
             } => {
                 for e in parents.iter_mut().chain(children.iter_mut()) {
                     *e =
-                        do_expand_expr(e, &mut cs.modules, &mut cs.computations, &mut new_cs_exps)?;
+                        do_expand_expr(e, &mut cs.columns, &mut cs.computations, &mut new_cs_exps)?;
                 }
             }
             Constraint::InRange {
@@ -70,7 +64,7 @@ pub fn expand_constraints(cs: &mut ConstraintSet) -> Result<()> {
                 exp: e,
                 max: _,
             } => {
-                *e = do_expand_expr(e, &mut cs.modules, &mut cs.computations, &mut new_cs_exps)?;
+                *e = do_expand_expr(e, &mut cs.columns, &mut cs.computations, &mut new_cs_exps)?;
             }
             _ => (),
         }
@@ -83,6 +77,5 @@ pub fn expand_constraints(cs: &mut ConstraintSet) -> Result<()> {
         });
     }
 
-    cs.update_ids();
     Ok(())
 }

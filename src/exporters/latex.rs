@@ -1,3 +1,4 @@
+#![allow(dead_code)] // TODO
 use crate::compiler::{Ast, AstNode, Token, Type};
 use crate::structs::Handle;
 use anyhow::*;
@@ -231,7 +232,7 @@ fn render_node(n: &AstNode, state: State) -> Result<String> {
         Token::Symbol(name) => Ok(if state.columns.contains(name) {
             as_col(name.as_str())
         } else {
-            with_env("texttt",&sanitize(name))
+            with_env("texttt", &sanitize(name))
         }),
         Token::DefConsts(cs) => {
             let body = cs
@@ -249,9 +250,16 @@ fn render_node(n: &AstNode, state: State) -> Result<String> {
                 }
             ))
         }
-        Token::DefConstraint { name, domain, guard: _, body } => Ok(format!(
-            "\n\\begin{{constraint}}[{} {}]\n\\begin{{gather*}}\n{}\n\\end{{gather*}}\n\\end{{constraint}}\n",
+        Token::DefConstraint {
+            name,
+            domain,
+            guard: _,
+            body,
+        } => Ok(format!(
+            "\n\\begin{{constraint}}[{}{} {}]\n\\begin{{gather*}}\n{}\n\\end{{gather*}}\n\\end{{constraint}}\n",
             name.to_case(Case::Title),
+            "",
+            // perspective.as_ref().map(|p| format!(" (when {})", p)).unwrap_or_default(),
             if domain.is_none() {
                 "".to_owned()
             } else {
@@ -326,6 +334,7 @@ fn constraints(ast: &Ast) -> Vec<LatexConstraint> {
                 domain: _domain,
                 guard: _guard,
                 body,
+                ..
             } => {
                 let h = Handle::new(&module, name);
                 Some(LatexConstraint {

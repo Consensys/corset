@@ -27,13 +27,13 @@ struct TemplateData {
 pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Result<()> {
     const TEMPLATE: &str = include_str!("zkgeth.go");
     let columns = cs
-        .modules
+        .columns
         .iter_cols()
-        .filter_map(|(handle, c)| {
+        .filter_map(|c| {
             if matches!(c.kind, Kind::Atomic) {
                 Some(GoColumn {
-                    corset_name: handle.name.to_string(),
-                    go_name: handle.mangled_name(),
+                    corset_name: c.handle.name.to_string(),
+                    go_name: c.handle.mangled_name(),
                 })
             } else {
                 None

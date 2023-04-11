@@ -1,4 +1,4 @@
-use crate::{errors, pretty::Base, structs::Handle};
+use crate::{errors, pretty::Base};
 use anyhow::{anyhow, bail, Context, Result};
 use colored::Colorize;
 use itertools::Itertools;
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Debug;
 
-use super::{Magma, Type};
+use super::{ColumnRef, Magma, Type};
 
 #[cfg(feature = "interactive")]
 #[derive(Parser)]
@@ -91,7 +91,7 @@ pub enum Kind<T> {
     /// a composite column is similar to a phantom column, but the expression
     /// computing it is known
     Composite(Box<T>),
-    Interleaved(Vec<T>, Option<Vec<Handle>>),
+    Interleaved(Vec<T>, Option<Vec<ColumnRef>>),
 }
 impl<T> Kind<T> {
     pub fn to_nil(&self) -> Kind<()> {
@@ -143,6 +143,13 @@ pub enum Token {
     DefConsts(Vec<(String, Box<AstNode>)>),
     /// a list of columns declaration, normally only DefColumn
     DefColumns(Vec<AstNode>),
+    /// a list of columns declaration, normally only DefColumn, only enabled when trigger is non-zero
+    DefPerspective {
+        name: String,
+        trigger: Box<AstNode>,
+        columns: Vec<AstNode>,
+    },
+    /// defines an atomic column
     DefColumn {
         /// name of the column; unique in its module
         name: String,
@@ -296,6 +303,11 @@ impl Debug for Token {
             } => {
                 write!(f, "{}: {:?} ⊂ {:?}", name, including, included)
             }
+            Token::DefPerspective {
+                name,
+                trigger,
+                columns,
+            } => write!(f, "SET {}/{:?} {:?}", name, trigger, columns),
         }
     }
 }
@@ -387,8 +399,44 @@ fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
     })
 }
 
+fn parse_defperspective<I: Iterator<Item = Result<AstNode>>>(mut tokens: I) -> Result<AstNode> {
+    let name = tokens
+        .next()
+        .with_context(|| anyhow!("missing perspective name"))??
+        .as_symbol()
+        .with_context(|| "expected perspective name")?
+        .to_owned();
+
+    let trigger = Box::new(
+        tokens
+            .next()
+            .with_context(|| anyhow!("expected perspective trigger"))??,
+    );
+
+    let columns_tokens = tokens
+        .next()
+        .with_context(|| anyhow!("missing columns declaration in perspective"))??;
+    let lc = columns_tokens.lc;
+    let src = columns_tokens.src.to_owned();
+    let columns = columns_tokens.as_list()?.iter().cloned().map(Ok);
+    let columns = parse_defcolumns(columns, lc, src.to_owned())?;
+    if let Token::DefColumns(columns) = columns.class {
+        Ok(AstNode {
+            class: Token::DefPerspective {
+                name,
+                trigger,
+                columns,
+            },
+            src,
+            lc,
+        })
+    } else {
+        unreachable!()
+    }
+}
+
 fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
-    pair: I,
+    tokens: I,
     lc: (usize, usize),
     src: String,
 ) -> Result<AstNode> {
@@ -402,7 +450,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
     }
 
     // A columns definition is a list of column definition
-    let columns = pair
+    let columns = tokens
         .map(|c| {
             c.and_then(|c| {
                 let name;
@@ -577,6 +625,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         "defcolumns" => parse_defcolumns(tokens, lc, src),
+        "defperspective" => parse_defperspective(tokens),
         "defconst" => Ok(AstNode {
             class: Token::DefConsts(
                 tokens

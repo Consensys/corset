@@ -1,21 +1,12 @@
+use std::collections::HashSet;
+
 use crate::{
-    column::{ColumnSet, Computation},
-    compiler::{
-        //
-        ComputationTable,
-        Constraint,
-        ConstraintSet,
-        Expression,
-        Intrinsic,
-        Kind,
-        Magma,
-        Node,
-        Type,
-    },
+    column::{Column, Computation},
+    compiler::{ColumnRef, Constraint, ConstraintSet, Expression, Intrinsic, Kind, Magma, Node},
     pretty::Base,
     structs::Handle,
 };
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 
 use super::expression_to_name;
 
@@ -25,127 +16,138 @@ fn invert_expr(e: &Node) -> Node {
 
 /// For all Builtin::Inv encountered, create a new column and the associated constraints
 /// pre-computing and proving the inverted column.
-fn do_expand_inv(
-    e: &mut Node,
-    cols: &mut ColumnSet,
-    comps: &mut ComputationTable,
-    new_cs: &mut Vec<Node>,
-) -> Result<()> {
-    match e.e_mut() {
-        Expression::List(es) => {
-            for e in es.iter_mut() {
-                do_expand_inv(e, cols, comps, new_cs)?;
-            }
-            Ok(())
-        }
-        Expression::Funcall { func, args, .. } => {
-            for e in args.iter_mut() {
-                do_expand_inv(e, cols, comps, new_cs)?;
-            }
-            if matches!(func, Intrinsic::Inv) {
-                let module = &args[0].module().unwrap();
-                let inverted_expr = &mut args[0];
-                let inverted_handle = Handle::new(module, expression_to_name(inverted_expr, "INV"));
-                if cols.get(&inverted_handle).is_err() {
-                    validate_inv(new_cs, inverted_expr, &inverted_handle)?;
-                    cols.insert_column(
-                        &inverted_handle,
-                        Type::Column(Magma::Integer),
-                        true,
-                        Kind::Composite(Box::new(())),
-                        true,
-                        None,
-                        None,
-                        Base::Hex,
-                    )?;
-                    comps.insert(
-                        &inverted_handle,
-                        Computation::Composite {
-                            target: inverted_handle.clone(),
-                            exp: invert_expr(inverted_expr),
-                        },
-                    )?;
+
+impl Node {
+    pub(crate) fn do_expand_inv(
+        &mut self,
+        gm: &dyn Fn(&HashSet<ColumnRef>) -> String,
+        new_cols: &mut Vec<(Handle, Node)>,
+    ) -> Result<()> {
+        match self.e_mut() {
+            Expression::List(es) => {
+                for e in es.iter_mut() {
+                    e.do_expand_inv(gm, new_cols)?;
                 }
-                *e = Node {
-                    _e: Expression::Column {
-                        handle: inverted_handle.clone(),
-                        kind: Kind::Atomic,
-                        padding_value: None,
-                        base: Base::Dec,
+                Ok(())
+            }
+            Expression::Funcall { func, args, .. } => {
+                for e in args.iter_mut() {
+                    e.do_expand_inv(gm, new_cols)?;
+                }
+                if matches!(func, Intrinsic::Inv) {
+                    let module = gm(&args[0].dependencies());
+                    let inverted_expr = invert_expr(&args[0]);
+                    let inverted_handle = Handle::new(module, expression_to_name(&args[0], "INV"));
+                    new_cols.push((inverted_handle.clone(), inverted_expr));
+                    *self = Node::column()
+                        .handle(inverted_handle)
+                        .kind(Kind::Atomic)
+                        // TODO:
+                        // .t(match dbg!(&self).t().magma() {
+                        //     Magma::Boolean => Magma::Boolean,
+                        //     _ => Magma::Integer,
+                        // }) // boolean is stable by inversion
+                        .build();
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+impl ConstraintSet {
+    pub fn expand_invs(&mut self) -> Result<()> {
+        let mut new_cols = vec![];
+        let get_module = |rs: &HashSet<ColumnRef>| self.columns.module_of(rs.iter()).unwrap();
+        for i in 0..self.constraints.len() {
+            if let Constraint::Vanishes { expr: e, .. } = self.constraints.get_mut(i).unwrap() {
+                e.do_expand_inv(&get_module, &mut new_cols)
+                    .with_context(|| anyhow!("while expanding inverses"))?;
+            }
+        }
+
+        let mut inversion_constraints = vec![];
+        for (inverted_handle, inverted_expr) in new_cols.into_iter() {
+            if self.columns.by_handle(&inverted_handle).is_err() {
+                validate_inv(&mut inversion_constraints, &inverted_expr, &inverted_handle)?;
+                let inverted_id = self.columns.insert_column_and_register(
+                    Column::builder()
+                        .handle(inverted_handle.to_owned())
+                        .kind(Kind::Composite(Box::new(())))
+                        .build(),
+                    true,
+                )?;
+                self.computations.insert(
+                    &inverted_id,
+                    Computation::Composite {
+                        target: inverted_handle.clone().into(),
+                        exp: invert_expr(&inverted_expr),
                     },
-                    _t: Some(Type::Column(Magma::Integer)),
-                }
+                )?;
             }
-            Ok(())
         }
-        _ => Ok(()),
+        if !inversion_constraints.is_empty() {
+            self.constraints.push(Constraint::Vanishes {
+                handle: Handle::new("RESERVED", "INV_CONSTRAINTS"),
+                domain: None,
+                expr: Box::new(Expression::List(inversion_constraints).into()),
+            });
+        }
+
+        Ok(())
     }
 }
 
 fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result<()> {
-    cs.push(Intrinsic::Mul.call(&[
-        x_expr.clone(),
-        Intrinsic::Sub.call(&[
-            Intrinsic::Mul.call(&[
-                x_expr.clone(),
-                Node {
-                    _e: Expression::Column {
-                        handle: inv_x_col.clone(),
-                        kind: Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
-                        padding_value: None,
-                        base: Base::Hex,
-                    },
-                    _t: Some(Type::Column(Magma::Integer)),
-                },
+    cs.push(
+        Intrinsic::Mul.call(&[
+            x_expr.clone(),
+            Intrinsic::Sub.call(&[
+                Intrinsic::Mul.call(&[
+                    x_expr.clone(),
+                    Node::column()
+                        .handle(inv_x_col.clone())
+                        .kind(Kind::Composite(Box::new(
+                            Intrinsic::Inv.call(&[x_expr.clone()])?,
+                        )))
+                        .t(Magma::Integer)
+                        .build(),
+                ])?,
+                Node::one(),
             ])?,
-            Node::one(),
         ])?,
-    ])?);
-    cs.push(Intrinsic::Mul.call(&[
-        Node {
-            _e: Expression::Column {
-                handle: inv_x_col.clone(),
-                kind: Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
-                padding_value: None,
-                base: Base::Hex,
-            },
-            _t: Some(Type::Column(Magma::Integer)),
-        },
-        Intrinsic::Sub.call(&[
-            Intrinsic::Mul.call(&[
-                x_expr.clone(),
-                Node {
-                    _e: Expression::Column {
-                        handle: inv_x_col.clone(),
-                        kind: Kind::Composite(Box::new(Intrinsic::Inv.call(&[x_expr.clone()])?)),
-                        padding_value: None,
-                        base: Base::Hex,
-                    },
-                    _t: Some(Type::Column(Magma::Integer)),
-                },
+    );
+    cs.push(
+        Intrinsic::Mul.call(&[
+            Node::column()
+                .handle(inv_x_col.clone())
+                .kind(Kind::Composite(Box::new(
+                    Intrinsic::Inv.call(&[x_expr.clone()])?,
+                )))
+                .base(Base::Hex)
+                .t(Magma::Integer)
+                .build(),
+            Intrinsic::Sub.call(&[
+                Intrinsic::Mul.call(&[
+                    x_expr.clone(),
+                    Node::column()
+                        .handle(inv_x_col.clone())
+                        .kind(Kind::Composite(Box::new(
+                            Intrinsic::Inv.call(&[x_expr.clone()])?,
+                        )))
+                        .base(Base::Hex)
+                        .t(Magma::Integer)
+                        .build(),
+                ])?,
+                Node::one(),
             ])?,
-            Node::one(),
         ])?,
-    ])?);
+    );
 
     Ok(())
 }
 
 pub fn expand_invs(cs: &mut ConstraintSet) -> Result<()> {
-    let mut new_cs_inv = vec![];
-    for c in cs.constraints.iter_mut() {
-        if let Constraint::Vanishes { expr: e, .. } = c {
-            do_expand_inv(e, &mut cs.modules, &mut cs.computations, &mut new_cs_inv)?;
-        }
-    }
-    if !new_cs_inv.is_empty() {
-        cs.constraints.push(Constraint::Vanishes {
-            handle: Handle::new("RESERVED", "INV_CONSTRAINTS"),
-            domain: None,
-            expr: Box::new(Expression::List(new_cs_inv).into()),
-        });
-    }
-
-    cs.update_ids();
-    Ok(())
+    cs.expand_invs()
 }

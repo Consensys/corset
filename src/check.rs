@@ -88,18 +88,13 @@ fn columns_len(
         .dependencies()
         .into_iter()
         .map(|handle| {
-            columns
-                .get(&handle)
-                .with_context(|| anyhow!("can not find column `{}`", handle))
-                .map(|c| {
-                    if with_padding {
-                        c.padded_len()
-                    } else {
-                        c.len()
-                    }
-                })
+            if with_padding {
+                columns.padded_len(&handle)
+            } else {
+                columns.len(&handle)
+            }
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Vec<_>>();
     if cols_lens.is_empty() {
         return Ok(None);
     }
@@ -119,15 +114,12 @@ fn columns_len(
             expr.dependencies()
                 .iter()
                 .map(|handle| format!(
-                    "\t{}: {}/{:?}",
+                    "\t{}: {}",
                     handle,
                     columns
-                        .get(handle)
-                        .unwrap()
-                        .padded_len()
+                        .padded_len(handle)
                         .map(|x| x.to_string())
                         .unwrap_or_else(|| "nil".into()),
-                    columns.get(handle).unwrap().spilling
                 ))
                 .collect::<Vec<_>>()
                 .join("\n")
@@ -149,36 +141,31 @@ fn columns_len(
 /// * `expr`     - The expression to dissect
 /// * `i`        - The evaluation point; may be negative
 /// * `wrap`     - If set, negative indices wrap; otherwise they go into the padding
-/// * `columns`  - The numeric values for evaluation of `expr` at `i`
 /// * `settings` - The global debugging settings
 fn fail(
+    cs: &ConstraintSet,
     expr: &Node,
     i: isize,
     wrap: bool,
-    columns: &ColumnSet,
     settings: DebugSettings,
 ) -> Result<()> {
-    let module = expr.dependencies().iter().next().unwrap().module.clone();
     let handles = if settings.full_trace {
-        columns
-            .cols
-            .get(&module)
-            .unwrap()
-            .keys()
-            .map(|name| Handle::new(&module, name))
-            .sorted_by_key(|h| h.name.clone())
+        cs.columns
+            .all()
+            .into_iter()
+            .sorted_by_key(|h| cs.handle(h).name.clone())
             .collect::<Vec<_>>()
     } else {
         expr.dependencies()
             .iter()
             .cloned()
-            .sorted_by_cached_key(Handle::to_string)
+            // .sorted_by_cached_key(Handle::to_string)
             .collect::<Vec<_>>()
     };
 
     let mut m_columns = vec![vec![String::new()]
         .into_iter()
-        .chain(handles.iter().map(|h| h.name.to_string()))
+        .chain(handles.iter().map(|h| cs.handle(h).name.to_string()))
         .collect::<Vec<_>>()];
 
     let (eval_columns_range, idx_highlight) = if wrap {
@@ -198,9 +185,9 @@ fn fail(
             vec![j.to_string()]
                 .into_iter()
                 .chain(handles.iter().map(|handle| {
-                    let col = columns.get(handle).unwrap();
-                    col.get(j, true)
-                        .map(|x| x.pretty_with_base(col.base))
+                    cs.columns
+                        .get(handle, j, true)
+                        .map(|x| x.pretty_with_base(cs.columns.get_col(handle).unwrap().base))
                         .unwrap_or_else(|| "nil".into())
                 }))
                 .collect(),
@@ -237,7 +224,7 @@ fn fail(
             + &expr.debug(
                 &|n| n.eval(
                     i,
-                    &mut |handle, i, wrap| columns._cols[handle.id.unwrap()].get(i, wrap).cloned(),
+                    &mut |handle, i, wrap| cs.columns.get(handle, i, wrap).cloned(),
                     &mut None,
                     &Default::default(),
                 ),
@@ -248,26 +235,26 @@ fn fail(
 }
 
 fn check_constraint_at(
+    cs: &ConstraintSet,
     expr: &Node,
     i: isize,
     wrap: bool,
-    columns: &ColumnSet,
     fail_on_oob: bool,
     cache: &mut Option<SizedCache<Fr, Fr>>,
     settings: DebugSettings,
 ) -> Result<()> {
     let r = expr.eval(
         i,
-        &mut |handle, i, wrap| columns._cols[handle.id.unwrap()].get_raw(i, wrap).cloned(),
+        &mut |handle, i, wrap| cs.columns.get_raw(handle, i, wrap).cloned(),
         cache,
         &Default::default(),
     );
     if let Some(r) = r {
         if !r.is_zero() {
-            return fail(expr, i, wrap, columns, settings);
+            return fail(cs, expr, i, wrap, settings);
         }
     } else if fail_on_oob {
-        return fail(expr, i, wrap, columns, settings);
+        return fail(cs, expr, i, wrap, settings);
     }
     Ok(())
 }
@@ -279,9 +266,7 @@ fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Fr) -> R
             let r = expr
                 .eval(
                     i,
-                    &mut |handle, i, wrap| {
-                        columns._cols[handle.id.unwrap()].get_raw(i, wrap).cloned()
-                    },
+                    &mut |handle, i, wrap| columns.get_raw(handle, i, wrap).cloned(),
                     &mut None,
                     &Default::default(),
                 )
@@ -302,25 +287,24 @@ fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Fr) -> R
 }
 
 fn check_constraint(
+    cs: &ConstraintSet,
     expr: &Node,
     domain: &Option<Vec<isize>>,
-    columns: &ColumnSet,
     name: &Handle,
     settings: DebugSettings,
 ) -> Result<()> {
-    let l = columns_len(expr, columns, name, true)?;
+    let l = columns_len(expr, &cs.columns, name, true)?;
     if let Some(l) = l {
         let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
         match domain {
             Some(is) => {
                 for i in is {
-                    check_constraint_at(expr, *i, true, columns, true, &mut cache, settings)?;
+                    check_constraint_at(cs, expr, *i, true, true, &mut cache, settings)?;
                 }
             }
             None => {
                 for i in 0..l as isize {
-                    let err =
-                        check_constraint_at(expr, i, false, columns, false, &mut cache, settings);
+                    let err = check_constraint_at(cs, expr, i, false, false, &mut cache, settings);
 
                     if err.is_err() {
                         if settings.continue_on_error {
@@ -377,12 +361,12 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
     let children_empty = children
         .iter()
         .flat_map(|e| e.dependencies().into_iter())
-        .map(|h| cs.modules.by_handle(&h).unwrap().len().unwrap_or_default())
+        .map(|h| cs.columns.len(&h).unwrap_or_default())
         .all(|l| l == 0);
     let parent_empty = parents
         .iter()
         .flat_map(|n| n.dependencies().into_iter())
-        .map(|h| cs.modules.by_handle(&h).unwrap().len().unwrap_or_default())
+        .map(|h| cs.columns.len(&h).unwrap_or_default())
         .all(|l| l == 0);
     match (children_empty, parent_empty) {
         (true, true) | (true, false) => {
@@ -438,7 +422,7 @@ pub fn check(
     expand: bool,
     settings: DebugSettings,
 ) -> Result<()> {
-    if cs.modules.is_empty() {
+    if cs.columns.is_empty() {
         info!("Skipping empty trace");
         return Ok(());
     }
@@ -497,8 +481,7 @@ pub fn check(
                     match expr.as_ref().e() {
                         Expression::List(es) => {
                             for e in es {
-                                if let Err(trace) =
-                                    check_constraint(e, domain, &cs.modules, name, settings)
+                                if let Err(trace) = check_constraint(cs, e, domain, name, settings)
                                 {
                                     if settings.report {
                                         error!(
@@ -513,9 +496,7 @@ pub fn check(
                             None
                         }
                         _ => {
-                            if let Err(trace) =
-                                check_constraint(expr, domain, &cs.modules, name, settings)
-                            {
+                            if let Err(trace) = check_constraint(cs, expr, domain, name, settings) {
                                 if settings.report {
                                     error!(
                                         "{} failed:\n{}\n",
@@ -554,7 +535,7 @@ pub fn check(
                     None
                 }
                 Constraint::InRange { handle, exp, max } => {
-                    if let Err(trace) = check_inrange(handle, exp, &cs.modules, max) {
+                    if let Err(trace) = check_inrange(handle, exp, &cs.columns, max) {
                         if settings.report {
                             error!("{} failed:\n{:?}\n", handle, trace);
                         }

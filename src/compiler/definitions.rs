@@ -5,7 +5,7 @@ use num_traits::FromPrimitive;
 
 use super::generator::{Defined, Function, FunctionClass};
 use super::tables::Scope;
-use super::{Expression, Magma, Node, Type};
+use super::{ColumnRef, Expression, Node};
 use crate::column::Computation;
 use crate::compiler::parser::*;
 use crate::pretty::Base;
@@ -24,10 +24,18 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
 
         Token::DefConstraint { name, .. } => ctx.insert_constraint(name),
         Token::DefModule(name) => {
-            *ctx = ctx.root_derived(name, false, true, false);
+            *ctx = ctx.derived_from_root(name, false, true, false);
             Ok(())
         }
-        Token::DefColumns(cols) => cols.iter().fold(Ok(()), |ax, col| ax.and(reduce(col, ctx))),
+        Token::DefColumns(columns) => columns
+            .iter()
+            .fold(Ok(()), |ax, col| ax.and(reduce(col, ctx))),
+        Token::DefPerspective { name, columns, .. } => {
+            let mut new_ctx = ctx.create_perspective(name)?;
+            columns
+                .iter()
+                .fold(Ok(()), |ax, col| ax.and(reduce(col, &mut new_ctx)))
+        }
         Token::DefColumn {
             name: col,
             t,
@@ -38,7 +46,8 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             let module_name = ctx.module();
             let symbol = Node {
                 _e: Expression::Column {
-                    handle: Handle::new(module_name, col),
+                    handle: Handle::maybe_with_perspective(module_name, col, ctx.perspective())
+                        .into(),
                     kind: match kind {
                         Kind::Atomic => Kind::Atomic,
                         Kind::Phantom => Kind::Phantom,
@@ -58,14 +67,14 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             t,
             base,
         } => {
-            let handle = Handle::new(ctx.module(), col);
+            let handle = Handle::maybe_with_perspective(ctx.module(), col, ctx.perspective());
             // those are inserted for symbol lookups
             for i in range {
                 ctx.insert_symbol(
                     &handle.ith(*i).name,
                     Node {
                         _e: Expression::Column {
-                            handle: handle.ith(*i),
+                            handle: handle.ith(*i).into(),
                             kind: Kind::Atomic,
                             base: *base,
                             padding_value: None,
@@ -109,34 +118,28 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                 );
             }
 
-            let mut _froms = Vec::new();
-            let mut _tos = Vec::new();
+            let mut _froms = Vec::<ColumnRef>::new();
+            let mut _tos = Vec::<ColumnRef>::new();
             for (to, from) in tos.iter().zip(froms.iter()) {
                 let to_handle = Handle::new(ctx.module(), to);
-                let from_actual_handle = if let Expression::Column { handle, .. } = ctx
-                    .resolve_symbol(from)
-                    .with_context(|| "while defining permutation")?
-                    .e()
-                {
-                    handle.to_owned()
+                let from_actual = ctx.resolve_symbol(from)?;
+
+                if let Expression::Column { handle, .. } = from_actual.e() {
+                    ctx.insert_symbol(
+                        to,
+                        Node::column()
+                            .handle(to_handle.clone())
+                            .kind(Kind::Phantom)
+                            .t(from_actual.t().magma())
+                            .base(Base::Hex)
+                            .build(),
+                    )
+                    .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
+                    _froms.push(handle.clone());
+                    _tos.push(to_handle.into());
                 } else {
                     unreachable!()
                 };
-                ctx.insert_symbol(
-                    to,
-                    Node {
-                        _e: Expression::Column {
-                            handle: to_handle.clone(),
-                            kind: Kind::Phantom,
-                            padding_value: None,
-                            base: Base::Hex,
-                        },
-                        _t: Some(Type::Column(Magma::Integer)),
-                    },
-                )
-                .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
-                _froms.push(from_actual_handle);
-                _tos.push(to_handle);
             }
 
             ctx.insert_many_computations(
@@ -195,7 +198,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
 }
 
 pub fn pass(ast: &Ast, ctx: Scope) -> Result<()> {
-    let mut module = ctx.clone();
+    let mut module = ctx;
     for e in ast.exprs.iter() {
         reduce(e, &mut module)?;
     }

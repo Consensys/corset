@@ -1,4 +1,4 @@
-use super::{generator::Function, Expression, Magma, Node, Type};
+use super::{generator::Function, ColumnRef, Expression, Magma, Node, Type};
 use crate::{
     column::Computation,
     compiler::{generator::FunctionClass, Builtin, Form, Intrinsic},
@@ -21,8 +21,10 @@ use std::{
 };
 
 lazy_static::lazy_static! {
+    /// This map contains all the special forms, builtin functions and field operations that are directly
+    /// implemented by Corset.
     pub static ref BUILTINS: HashMap<&'static str, Function> = maplit::hashmap!{
-        // forms
+        // Special forms
         "for" => Function {
             handle: Handle::new(super::MAIN_MODULE, "for"),
             class: FunctionClass::Form(Form::For),
@@ -40,17 +42,21 @@ lazy_static::lazy_static! {
             class: FunctionClass::Form(Form::Let),
         },
 
-        // special functions
-        "nth" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "nth"),
-            class: FunctionClass::Intrinsic(Intrinsic::Nth),
-        },
+        // Builtin special functions
         "len" => Function {
             handle: Handle::new(super::MAIN_MODULE, Builtin::Len.to_string()),
             class: FunctionClass::Builtin(Builtin::Len),
         },
+        "force-bool" => Function {
+            handle:Handle::new(super::MAIN_MODULE, "force-bool"),
+            class: FunctionClass::Builtin(Builtin::ForceBool),
+        },
+        "reduce" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "reduce"),
+            class: FunctionClass::Form(Form::Reduce)
+        },
 
-        // monadic
+        // Intrinsics
         "inv" => Function {
             handle: Handle::new(super::MAIN_MODULE, "inv"),
             class: FunctionClass::Intrinsic(Intrinsic::Inv)
@@ -63,8 +69,10 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "not"),
             class: FunctionClass::Intrinsic(Intrinsic::Not),
         },
-
-        // Dyadic
+        "nth" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "nth"),
+            class: FunctionClass::Intrinsic(Intrinsic::Nth),
+        },
         "eq" => Function{
             handle: Handle::new(super::MAIN_MODULE, "eq"),
             class: FunctionClass::Intrinsic(Intrinsic::Eq),
@@ -73,9 +81,6 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "shift"),
             class: FunctionClass::Intrinsic(Intrinsic::Shift),
         },
-
-
-        // polyadic
         "+" => Function {
             handle: Handle::new(super::MAIN_MODULE, "+"),
             class: FunctionClass::Intrinsic(Intrinsic::Add)
@@ -92,12 +97,10 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "-"),
             class: FunctionClass::Intrinsic(Intrinsic::Sub)
         },
-
         "begin" => Function{
             handle: Handle::new(super::MAIN_MODULE, "begin"),
             class: FunctionClass::Intrinsic(Intrinsic::Begin)
         },
-
         "if-zero" => Function {
             handle: Handle::new(super::MAIN_MODULE, "if-zero"),
             class: FunctionClass::Intrinsic(Intrinsic::IfZero)
@@ -106,45 +109,51 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "if-not-zero"),
             class: FunctionClass::Intrinsic(Intrinsic::IfNotZero)
         },
-
-        "force-bool" => Function {
-            handle:Handle::new(super::MAIN_MODULE, "force-bool"),
-            class: FunctionClass::Builtin(Builtin::ForceBool),
-        },
-        "reduce" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "reduce"),
-            class: FunctionClass::Form(Form::Reduce)
-        },
     };
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct ComputationTable {
-    dependencies: HashMap<Handle, usize>,
-    computations: Vec<Computation>,
+    pub(crate) dependencies: HashMap<ColumnRef, usize>,
+    pub(crate) computations: Vec<Computation>,
 }
 impl ComputationTable {
-    pub fn update_ids(&mut self, set_id: &dyn Fn(&mut Handle)) {
-        self.computations
-            .iter_mut()
-            .for_each(|x| x.add_id_to_handles(set_id));
+    /// Return, if it exists, the computation of ID `id`.
+    pub fn get(&self, id: usize) -> Option<&Computation> {
+        self.computations.get(id)
     }
-    pub fn get(&self, i: usize) -> Option<&Computation> {
-        self.computations.get(i)
+
+    /// Return, if it exists, the computation of ID `id`.
+    pub fn get_mut(&mut self, id: usize) -> Option<&mut Computation> {
+        self.computations.get_mut(id)
     }
+
+    /// Iterate over all the defined computations.
     pub fn iter(&'_ self) -> impl Iterator<Item = &'_ Computation> {
         self.computations.iter()
     }
-    pub fn insert(&mut self, target: &Handle, computation: Computation) -> Result<()> {
+
+    /// Iterate over mutable references to all the defined computations.
+    pub fn iter_mut(&'_ mut self) -> impl Iterator<Item = &'_ mut Computation> {
+        self.computations.iter_mut()
+    }
+
+    /// Insert the computation defining `target`. Will fail if `target` is already defined by an existing computation.
+    pub fn insert(&mut self, target: &ColumnRef, computation: Computation) -> Result<()> {
+        if !target.is_id() {
+            panic!("computations must be inserted by ID")
+        }
         if self.dependencies.contains_key(target) {
-            bail!("`{}` already present as a computation target", target);
+            panic!("`{}` already present as a computation target", target);
         }
         self.computations.push(computation);
         self.dependencies
             .insert(target.to_owned(), self.computations.len() - 1);
         Ok(())
     }
-    pub fn insert_many(&mut self, targets: &[Handle], computation: Computation) -> Result<()> {
+
+    /// Insert a computation defining multiple columns at once (e.g. permutations).
+    pub fn insert_many(&mut self, targets: &[ColumnRef], computation: Computation) -> Result<()> {
         self.computations.push(computation);
         for target in targets.iter() {
             self.dependencies
@@ -152,13 +161,27 @@ impl ComputationTable {
         }
         Ok(())
     }
-    pub fn computation_for(&self, target: &Handle) -> Option<&Computation> {
+
+    /// Insert a computation defining multiple columns at once (e.g. permutations).
+    pub fn add_dependency(&mut self, target: ColumnRef, computation_id: usize) -> Result<()> {
+        if computation_id > self.computations.len() {
+            bail!("non-existing computation")
+        } else {
+            self.dependencies.insert(target, computation_id);
+            Ok(())
+        }
+    }
+
+    /// Given a handle, returns, if there is one, the computation defining this column.
+    pub fn computation_for(&self, target: &ColumnRef) -> Option<&Computation> {
         self.dependencies
             .iter()
             .find(|(k, _)| *k == target)
             .map(|x| &self.computations[*x.1])
     }
-    pub fn computation_idx_for(&self, target: &Handle) -> Option<usize> {
+
+    /// Given a handle, returns, if there is one, the ID of computation defining this column.
+    pub fn computation_idx_for(&self, target: &ColumnRef) -> Option<usize> {
         self.dependencies
             .iter()
             .find(|(k, _)| *k == target)
@@ -173,13 +196,48 @@ pub enum Symbol {
 
 #[derive(Default)]
 pub struct GlobalData {
-    pub computations: ComputationTable,
+    computations: ComputationTable,
+    pub perspectives: HashMap<String, HashMap<String, Option<Expression>>>, // module -> {Perspectives}
+}
+impl GlobalData {
+    pub fn set_perspective_trigger(
+        &mut self,
+        module: &str,
+        perspective: &str,
+        _trigger: Expression,
+    ) -> Result<()> {
+        let trigger = self
+            .perspectives
+            .get_mut(module)
+            .with_context(|| anyhow!("module {} has no perspectives", module))?
+            .get_mut(perspective)
+            .with_context(|| {
+                anyhow!("perspective {} not found in module {}", perspective, module)
+            })?;
+        if trigger.is_some() {
+            bail!("trigger already set for {}%{}", module, perspective)
+        } else {
+            *trigger = Some(_trigger);
+            Ok(())
+        }
+    }
+
+    pub fn get_perspective_trigger(&self, module: &str, perspective: &str) -> Result<Expression> {
+        self.perspectives
+            .get(module)
+            .with_context(|| anyhow!("module {} has no perspectives", module))?
+            .get(perspective)
+            .with_context(|| anyhow!("perspective {} not found in module {}", perspective, module))?
+            .clone()
+            .ok_or_else(|| anyhow!("perspective {}%{} has no trigger yet", module, perspective))
+    }
 }
 
 type SymbolTableTree = Tree<SymbolTable, GlobalData>;
 pub struct Scope {
     pub tree: Rc<RefCell<SymbolTableTree>>,
     id: NodeID,
+    perspective: Option<String>,
 }
 
 macro_rules! data {
@@ -217,6 +275,7 @@ impl Scope {
         Scope {
             tree: Rc::new(RefCell::new(tree)),
             id: root,
+            perspective: None,
         }
     }
 
@@ -241,12 +300,19 @@ impl Scope {
                 Scope {
                     tree: self.tree.clone(),
                     id: new_node,
+                    perspective: self.perspective.clone(),
                 }
             }
         }
     }
 
-    pub fn root_derived(&mut self, name: &str, closed: bool, public: bool, global: bool) -> Scope {
+    pub fn derived_from_root(
+        &mut self,
+        name: &str,
+        closed: bool,
+        public: bool,
+        global: bool,
+    ) -> Scope {
         let root = self.tree.borrow().root();
         let maybe_child = self.tree.borrow().find_child(root, |n| n.name == name);
         match maybe_child {
@@ -268,6 +334,7 @@ impl Scope {
                 Scope {
                     tree: self.tree.clone(),
                     id: new_node,
+                    perspective: None,
                 }
             }
         }
@@ -281,13 +348,17 @@ impl Scope {
         data!(self).name.to_owned()
     }
 
+    pub fn perspective(&self) -> Option<String> {
+        self.perspective.clone()
+    }
+
     pub fn computations(&self) -> ComputationTable {
         self.tree.borrow().metadata().computations.clone()
     }
 
     pub fn insert_many_computations(
         &self,
-        targets: &[Handle],
+        targets: &[ColumnRef],
         computation: Computation,
     ) -> Result<()> {
         self.tree
@@ -301,11 +372,12 @@ impl Scope {
         Scope {
             tree: self.tree.clone(),
             id,
+            perspective: self.perspective.clone(),
         }
     }
 
     fn parent(&self) -> Option<Scope> {
-        let parent = self.tree.borrow().parent(self.id).clone();
+        let parent = self.tree.borrow().parent(self.id);
         parent.map(|p| self.at(p))
     }
 
@@ -600,7 +672,7 @@ impl Scope {
         self.root()._resolve_symbol_with_path(&components)
     }
 
-    fn _resolve_symbol_with_path<'a>(&mut self, path: &[&str]) -> Result<Node> {
+    fn _resolve_symbol_with_path(&mut self, path: &[&str]) -> Result<Node> {
         if path.len() == 1 {
             self.resolve_symbol(path[0])
         } else {
@@ -620,12 +692,59 @@ impl Scope {
     pub fn print(&self) {
         self.tree.borrow().print(|s| {
             format!(
-                "{} - S = {{{}}} F = {{{}}}",
+                "{} - Sym = {{{}}} Fn = {{{}}}",
                 s.name,
                 s.symbols.keys().join(" "),
                 s.funcs.keys().join(" ")
             )
         });
+    }
+
+    pub fn create_perspective(&self, perspective_name: &str) -> Result<Self> {
+        let module = self.module();
+        let exist = self
+            .tree
+            .borrow_mut()
+            .metadata_mut()
+            .perspectives
+            .entry(module)
+            .or_default()
+            .insert(perspective_name.to_owned(), None)
+            .is_some();
+
+        if exist {
+            bail!(
+                "perspective {} already exist in module {}",
+                perspective_name,
+                self.module()
+            ) // TODO better error
+        } else {
+            Ok(Scope {
+                tree: self.tree.clone(),
+                id: self.id,
+                perspective: Some(perspective_name.to_owned()),
+            })
+        }
+    }
+
+    pub fn clone_in_perspective(&self, perspective: &str) -> Result<Self> {
+        let module = self.module();
+        let _exist = self
+            .tree
+            .borrow()
+            .metadata()
+            .perspectives
+            .get(&module)
+            .with_context(|| anyhow!("module {} has no perspectives", module))?
+            .get(perspective)
+            .with_context(|| anyhow!("perspective {}%{} not found", module, perspective))?
+            .is_some();
+
+        Ok(Scope {
+            tree: self.tree.clone(),
+            id: self.id,
+            perspective: Some(perspective.to_owned()),
+        })
     }
 }
 
@@ -634,6 +753,7 @@ impl std::clone::Clone for Scope {
         Scope {
             tree: self.tree.clone(),
             id: self.id,
+            perspective: self.perspective.clone(),
         }
     }
 }

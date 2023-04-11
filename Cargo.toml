@@ -35,7 +35,7 @@ md5 = "0.7"
 names = { version = "0.14.0", default-features = false }
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
-once_cell = "1.16"
+once_cell = "1.17"
 pairing_ce = "0.28"
 pest_derive = { version = "2.4", optional = true }
 pest = { version = "2.4", optional = true }
@@ -46,6 +46,8 @@ serde_json = { version = "1", features = ["arbitrary_precision"] }
 serde = { version = "1", features = ["derive"] }
 sorbus = "0.9"
 thiserror = "1.0.38"
+buildstructor = "0.5.2"
+either = { version = "1.8.1", features = ["serde"] }
 
 
 [target.'cfg(all(target_arch = "x86_64", target_feature = "avx"))'.dependencies]
