@@ -547,9 +547,13 @@ impl Scope {
         }
     }
 
+    fn root(&self) -> Scope {
+        self.at(self.tree.borrow().root())
+    }
+
     fn resolve_symbol_with_path(&mut self, name: &str) -> Result<Node> {
         let components = name.split('.').collect::<Vec<_>>();
-        self._resolve_symbol_with_path(&components)
+        self.root()._resolve_symbol_with_path(&components)
     }
 
     fn _resolve_symbol_with_path<'a>(&mut self, path: &[&str]) -> Result<Node> {
