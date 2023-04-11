@@ -59,6 +59,23 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             base,
         } => {
             let handle = Handle::new(ctx.module(), col);
+            // those are inserted for symbol lookups
+            for i in range {
+                ctx.insert_symbol(
+                    &handle.ith(*i).name,
+                    Node {
+                        _e: Expression::Column {
+                            handle: handle.ith(*i),
+                            kind: Kind::Atomic,
+                            base: *base,
+                            padding_value: None,
+                        },
+                        _t: Some(*t),
+                    },
+                )?;
+            }
+
+            // and this one for validating calls to `nth`
             ctx.insert_symbol(
                 col,
                 Node {

@@ -232,30 +232,6 @@ impl ColumnSet {
         }
     }
 
-    pub fn insert_array(
-        &mut self,
-        handle: &Handle,
-        range: &[usize],
-        t: Type,
-        allow_dup: bool,
-        padding_value: Option<i64>,
-        base: Base,
-    ) -> Result<()> {
-        for i in range.iter() {
-            self.insert_column(
-                &handle.ith(*i),
-                t,
-                true,
-                Kind::Atomic,
-                allow_dup,
-                padding_value,
-                None,
-                base,
-            )?;
-        }
-        Ok(())
-    }
-
     pub fn is_empty(&self) -> bool {
         const IGNORED: &[&str] = &[
             "shift-table",

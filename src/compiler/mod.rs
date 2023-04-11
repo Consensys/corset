@@ -126,21 +126,6 @@ pub fn make<S: AsRef<str>>(
                             )?,
                         }
                     }
-                    Expression::ArrayColumn {
-                        handle,
-                        domain: range,
-                        base,
-                    } => {
-                        // // NOTE we may need custom padding value for arrays at some point
-                        columns.insert_array(
-                            handle,
-                            range,
-                            symbol.t(),
-                            settings.allow_dups,
-                            None,
-                            *base,
-                        )?
-                    }
                     Expression::Const(ref x, _) => {
                         constants.insert(handle, x.clone());
                     }
