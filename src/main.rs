@@ -210,6 +210,32 @@ enum Commands {
             help = "perform all expansion operations before checking"
         )]
         expand: bool,
+        #[arg(
+            short = 'C',
+            long = "columns",
+            help = "show columns and their properties"
+        )]
+        show_columns: bool,
+        #[arg(
+            short = 'c',
+            long = "constraints",
+            help = "display constraint expressions"
+        )]
+        show_constraints: bool,
+        #[arg(
+            long = "only",
+            help = "only show these constraints",
+            value_delimiter = ',',
+            requires = "show_constraints"
+        )]
+        only: Option<Vec<String>>,
+        #[arg(
+            long = "skip",
+            help = "do not show these constraints",
+            value_delimiter = ',',
+            requires = "show_constraints"
+        )]
+        skip: Vec<String>,
     },
     /// Given a set of constraints, indefinitely check the traces from an SQL table
     #[cfg(feature = "postgres")]
@@ -503,7 +529,13 @@ fn main() -> Result<()> {
             .with_context(|| format!("while checking `{}`", tracefile))?;
             info!("{}: SUCCESS", tracefile)
         }
-        Commands::Debug { expand } => {
+        Commands::Debug {
+            expand,
+            show_columns,
+            show_constraints,
+            only,
+            skip,
+        } => {
             if expand {
                 transformer::validate_nhood(&mut constraints)
                     .with_context(|| anyhow!("while creating nhood constraints"))?;
@@ -516,7 +548,16 @@ fn main() -> Result<()> {
                 transformer::expand_invs(&mut constraints)
                     .with_context(|| anyhow!("while expanding inverses"))?;
             }
-            exporters::debug(&constraints)?;
+            if !show_columns && !show_constraints {
+                error!("no elements specified to debug");
+            }
+            exporters::debug(
+                &constraints,
+                show_constraints,
+                show_columns,
+                only.as_ref(),
+                &skip,
+            )?;
         }
         Commands::Compile { outfile, pretty } => {
             std::fs::File::create(&outfile)

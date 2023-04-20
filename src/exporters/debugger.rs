@@ -2,6 +2,7 @@ use crate::compiler::codetyper::Tty;
 use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
 use crate::pretty::Pretty;
 use anyhow::*;
+use itertools::Itertools;
 use std::cmp::Ordering;
 
 fn priority(a: Intrinsic, b: Intrinsic) -> Ordering {
@@ -124,50 +125,77 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty) {
     }
 }
 
-fn render_constraints(cs: &[Constraint]) {
+fn render_constraints(cs: &[Constraint], only: Option<&Vec<String>>, skip: &[String]) {
     for c in cs.iter() {
-        match c {
-            Constraint::Vanishes {
-                handle,
-                domain: _,
-                expr,
-            } => {
-                let mut tty = Tty::new();
-                pretty_expr(expr, None, &mut tty);
-                println!("\n{}", handle.pretty());
-                println!("{}", tty.page_feed());
-            }
-            Constraint::Plookup {
-                including,
-                included,
-                ..
-            } => {
-                println!(
-                    "{{{}}} ⊂ {{{}}}",
-                    included
-                        .iter()
-                        .map(|n| n.pretty())
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    including
-                        .iter()
-                        .map(|n| n.pretty())
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                )
-            }
-            Constraint::Permutation { .. } => (),
-            Constraint::InRange { handle, exp, max } => {
-                let mut tty = Tty::new();
-                pretty_expr(exp, None, &mut tty);
-                println!("\n{}", handle.pretty());
-                println!("{} < {}", tty.page_feed(), max);
+        if !skip.contains(&c.name()) && only.map(|o| o.contains(&c.name())).unwrap_or(true) {
+            match c {
+                Constraint::Vanishes {
+                    handle,
+                    domain: _,
+                    expr,
+                } => {
+                    let mut tty = Tty::new();
+                    pretty_expr(expr, None, &mut tty);
+                    println!("\n{}", handle.pretty());
+                    println!("{}", tty.page_feed());
+                }
+                Constraint::Plookup {
+                    including,
+                    included,
+                    ..
+                } => {
+                    println!(
+                        "{{{}}} ⊂ {{{}}}",
+                        included
+                            .iter()
+                            .map(|n| n.pretty())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                        including
+                            .iter()
+                            .map(|n| n.pretty())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    )
+                }
+                Constraint::Permutation { .. } => (),
+                Constraint::InRange { handle, exp, max } => {
+                    let mut tty = Tty::new();
+                    pretty_expr(exp, None, &mut tty);
+                    println!("\n{}", handle.pretty());
+                    println!("{} < {}", tty.page_feed(), max);
+                }
             }
         }
     }
 }
 
-pub fn debug(cs: &ConstraintSet) -> Result<()> {
-    render_constraints(&cs.constraints);
+fn render_columns(cs: &ConstraintSet) {
+    for col in cs.columns.iter_cols().sorted_by_key(|c| c.1.register) {
+        println!(
+            "{:>30}   {:>20}   {:>4}",
+            format!("{:?}", col.0),
+            format!("{:?}", col.1.t),
+            col.1
+                .register
+                .map(|r| format!("∈ r{}", r))
+                .unwrap_or_default()
+        );
+    }
+}
+
+pub fn debug(
+    cs: &ConstraintSet,
+    show_constraints: bool,
+    show_columns: bool,
+    only: Option<&Vec<String>>,
+    skip: &[String],
+) -> Result<()> {
+    if show_constraints {
+        render_constraints(&cs.constraints, only, skip);
+    }
+    if show_columns {
+        render_columns(&cs);
+    }
     Ok(())
 }

@@ -103,7 +103,7 @@ impl Pretty for Node {
 
 impl Pretty for Handle {
     fn pretty(&self) -> String {
-        format!("{}::{}", self.module.blue(), self.name.white().bold())
+        format!("{}.{}", self.module.blue(), self.name.white().bold())
     }
     fn pretty_with_base(&self, _base: Base) -> String {
         self.pretty()
