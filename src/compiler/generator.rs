@@ -584,9 +584,17 @@ fn apply_builtin(
 
     match b {
         Builtin::ForceBool => {
-            Ok(Some(traversed_args[0].clone().with_type(
-                traversed_args[0].t().same_scale(Magma::Boolean),
-            )))
+            let arg = traversed_args[0].to_owned();
+            if traversed_args[0].t().is_bool() {
+                warn!(
+                    "useless use of force-bool: {} is already boolean",
+                    traversed_args[0].pretty()
+                );
+                Ok(Some(arg))
+            } else {
+                let new_type = arg.t().same_scale(Magma::Boolean);
+                Ok(Some(arg.with_type(new_type)))
+            }
         }
         Builtin::Len => {
             if let Expression::ArrayColumn {
