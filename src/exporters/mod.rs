@@ -1,6 +1,8 @@
 use log::*;
 
 pub mod besu;
+#[cfg(feature = "conflater")]
+pub mod conflater;
 mod debugger;
 pub mod go;
 pub mod latex;

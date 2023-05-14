@@ -55,6 +55,7 @@ simd-json = "0.7.0"
 default = ["interactive"]
 interactive = ["dep:indicatif", "dep:pest", "dep:pest_derive"]
 postgres = ["dep:postgres"]
+conflater = []
 
 [package.metadata.release]
 tag-prefix = ""

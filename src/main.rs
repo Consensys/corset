@@ -111,6 +111,12 @@ enum Commands {
         #[arg(short = 'o', long = "out", help = "where to render the columns")]
         filename: Option<String>,
     },
+    #[cfg(feature = "conflater")]
+    /// Export columns in a format usable by the trace conflater
+    Conflater {
+        #[arg(short = 'o', long = "out", help = "where to render the columns")]
+        filename: Option<String>,
+    },
     /// Produce a LaTeX file describing the constraints
     Latex {
         #[arg(
@@ -316,6 +322,10 @@ fn main() -> Result<()> {
         }
         Commands::Besu { package, filename } => {
             exporters::besu::render(&constraints, &package, filename.as_ref())?;
+        }
+        #[cfg(feature = "conflater")]
+        Commands::Conflater { filename } => {
+            exporters::conflater::render(&constraints, filename.as_ref())?;
         }
         Commands::WizardIOP {
             out_filename,
