@@ -16,3 +16,9 @@ const (
 	{{this.go_name}} column.ColumnID = "{{this.corset_name}}"
 	{{/each}}
 )
+
+var AllColumns = column.ColumnList{
+	{{#each columns}}
+	{{this.go_name}},
+	{{/each}}
+}
