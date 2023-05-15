@@ -12,7 +12,13 @@ struct ConflaterModule {
     member_name: String,
     klass_name: String,
     original_name: String,
-    columns: Vec<String>,
+    columns: Vec<ConflaterColumn>,
+}
+
+#[derive(Serialize)]
+struct ConflaterColumn {
+    json_name: String,
+    safe_name: String,
 }
 
 #[derive(Serialize)]
@@ -22,13 +28,16 @@ struct TemplateData {
 
 pub fn render(cs: &ConstraintSet, outfile: Option<&String>) -> Result<()> {
     const TEMPLATE: &str = include_str!("conflater.kt");
-    let mut modules: HashMap<String, Vec<String>> = Default::default();
+    let mut modules: HashMap<String, Vec<ConflaterColumn>> = Default::default();
     for (handle, c) in cs.modules.iter_cols() {
         if matches!(c.kind, Kind::Atomic) {
             modules
                 .entry(handle.module)
                 .or_default()
-                .push(handle.name.to_case(Case::ScreamingSnake));
+                .push(ConflaterColumn {
+                    json_name: handle.name.to_owned(),
+                    safe_name: handle.name.to_case(Case::ScreamingSnake),
+                });
         }
     }
 
@@ -49,7 +58,10 @@ pub fn render(cs: &ConstraintSet, outfile: Option<&String>) -> Result<()> {
             member_name: module.to_case(Case::Camel),
             klass_name: module.to_case(Case::Pascal),
             original_name: module,
-            columns: cols.into_iter().sorted().collect(),
+            columns: cols
+                .into_iter()
+                .sorted_by_cached_key(|c| c.safe_name.to_owned())
+                .collect(),
         })
         .collect::<Vec<_>>();
 

@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 
 val MODULES = listOf(
 {{ #each modules }}
-  Pair("{{ this.original_name }}", {{ this.klass_name }}::class.java),
+  Pair(listOf("{{ this.original_name }}"), {{ this.klass_name }}::class.java),
 {{ /each }}
 )
 {{ #each modules }}
@@ -13,7 +13,7 @@ val MODULES = listOf(
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class {{ this.klass_name }}(
   {{ #each this.columns }}
-  @JsonProperty("{{ this }}") val {{ this }}: MutableList<String> = arrayListOf(),
+  @JsonProperty("{{ this.json_name }}") val {{ this.safe_name }}: MutableList<String> = arrayListOf(),
   {{ /each }}
 )
 {{ /each }}
