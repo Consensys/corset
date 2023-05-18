@@ -463,9 +463,10 @@ fn apply_form(
                         Expression::Const(BigInt::from(*i), Fr::from_str(&i.to_string())).into(),
                     )?;
 
-                    let r = reduce(&body.clone(), &mut for_ctx, settings)?.unwrap();
-                    t = t.max(r.t());
-                    l.push(r);
+                    if let Some(r) = reduce(&body.clone(), &mut for_ctx, settings)? {
+                        t = t.max(r.t());
+                        l.push(r);                        
+                    };
                 }
 
                 Ok(Some(Node {
