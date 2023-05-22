@@ -466,6 +466,8 @@ fn apply_form(
                     if let Some(r) = reduce(&body.clone(), &mut for_ctx, settings)? {
                         t = t.max(r.t());
                         l.push(r);                        
+                    } else {
+                        warn!("empty for loop body: {}", body.src.white().bold())
                     };
                 }
 
