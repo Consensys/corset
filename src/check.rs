@@ -334,6 +334,10 @@ fn check_constraint(
         };
         Ok(())
     } else {
+        warn!(
+            "constraint {} will not be checked, because it does not involve any column",
+            name.pretty()
+        );
         Ok(())
     }
 }
