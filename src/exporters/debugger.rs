@@ -178,10 +178,10 @@ fn render_columns(cs: &ConstraintSet) {
     println!("\n{}", "=== Columns ===".bold().yellow());
     for (r, col) in cs.columns.iter().sorted_by_key(|c| c.1.register) {
         println!(
-            "{:>70}   {:>20}{}",
+            "{}{:>70}   {:>20}{}",
+            r.as_id(),
             format!(
-                "{}/{}{:?}",
-                r.as_id(),
+                "{}{}",
                 col.handle
                     .perspective
                     .as_ref()
