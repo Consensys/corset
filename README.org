@@ -1,11 +1,11 @@
 * Corset
-Corset is a Lisp-based DSL designed to implement constraint systems in the context of zero-knowledge proof systems. It aims at simplifying the writing and understanding of complicated, intricate, commitments by abstracting over cryptographic polynomial primitives; all the while letting users work at their preferred granularity level.
+Corset is a Lisp-based DSL (Domain-Specific Language), designed to implement constraint systems in the context of zero-knowledge proof systems. It aims at simplifying the writing and understanding of complicated, intricate, commitments by abstracting over cryptographic polynomial primitives while letting users work at their preferred granularity level.
 
 It offers all the tools to:
-1. implement constraint system in a high-level, dynamically but strongly typed dialect of Lisp;
-2. parse, compile down to polynomial arithmetic, and serialize constraint systems written in Corset Lisp;
-3. export those constraint systems in many formats, from Go to LaTeX;
-4. check & debug traces against a compiled constraint system.
+1. Implement a constraint system in a high-level, dynamically but strongly typed dialect of Lisp;
+2. Parse, compile down to polynomial arithmetic, and serialize constraint systems written in Corset Lisp;
+3. Export those constraint systems in many formats, from Go to LaTeX;
+4. Check & debug traces against a compiled constraint system.
 * Installation
 The only dependency to run Corset is [[https://www.rust-lang.org/][the Rust compiler]]. Once it is available, Corset can be installed with ~cargo install --git https://github.com/ConsenSys/corset~; or, within a local copy of the repo: ~cargo install --path .~
 * Usage
@@ -41,27 +41,27 @@ Options:
 #+end_src
 
 ** General Concept
-A program takes the form of a list of lisp-like expression written in the Corset dialect of lisp, that are then parsed as a list of constraint lisp and compiled as a succession of constraints expressed as composition of the aforementioned base functions.
+A program takes the form of a list of Lisp-like expression written in the Corset dialect of Lisp, that are then parsed as a list of Lisp constraints and compiled as a succession of constraints expressed as composition of the aforementioned base functions.
 
-Once formalized by the Corset compiler, these "programs" can then be exported to any backend – althoug for now, only Go exporting is implemented.
+Once formalized by the Corset compiler, these "programs" can then be exported to any backend – although for now, only Go exporting is implemented.
 
 * Programming in Corset
 ** General Form of a Corset Program
-A Corset program is defined as a succession of top-level forms. Each of these form define a pieve of the final program, which can be a *column*, a *constant*, a *function*, an *alias*, or a *constraint*.
+A Corset program is defined as a succession of top-level forms. Each of these forms define a piece of the final program, which can be a *column*, a *constant*, a *function*, an *alias*, or a *constraint*.
 *** Columns
-Columns are the basic building block of Corset programs, as they represent the values that the constraint system will be checked against. Columns are defined with the ~defcolumns~ keyword, and can be either *scalar* or *composite* (/i.e./ array-like). All the elements of a column can be *integer* (/i.e./ field elements), *bytes* (integers in the 0-255 range), *nibbles* (integers in the 0-32 range) or *booleans*.
+Columns are the basic building block of Corset programs, as they represent the values that the constraint system will be checked against. Columns are defined with the ~defcolumns~ keyword, and can be either *scalar* or *composite* (/i.e./ array-like). All the elements of a column can be: *integer* (/i.e./ field elements), *bytes* (integers in the 0-255 range), *nibbles* (integers in the 0-32 range) or *booleans*.
 
 #+begin_src lisp
   ;; Columns can be defined one at a time...
   (defcolumns ALPHA)
   (defcolumns BETA)
 
-  ;; ..or several at once
+  ;; ...or several at once
   (defcolumns
     GAMMA DELTA EPSILON
     X Y Z)
 
-  ;; Columns may have a stype
+  ;; Columns may have a type
   (defcolumns A (B :BOOLEAN) (C :NIBBLE))
 
   ;; Columns can be scalar...
@@ -121,7 +121,7 @@ Functions can be defined to factorize common operations. This is done using the 
 **** Pure Functions
 Functions close over their environment, and thus capture or shadow columns accessible from their declaration point, which are available within the body, along the function parameters.
 
-In contrats, *pure functions* can only operate on their arguments and constants, thus ensuring that no shadowing or other surprising behavior ever happen.
+In contrast, *pure functions* can only operate on their arguments and constants, thus ensuring that no shadowing or other surprising behavior ever happens.
 
 #+begin_src lisp
   (defconstant W 10)
@@ -131,8 +131,8 @@ In contrats, *pure functions* can only operate on their arguments and constants,
   (defpurefun (f X) (eq X A)) ;; KO: f can not access A
 #+end_src
 *** Aliases
-Aliases create new bindings of an existing column or function under a new name. While the aliased object behave xactly as its target, it may prove easier to read in certain contexts.
-**** Columns Aliases
+Aliases create new bindings of an existing column or function under a new name. While the aliased object behaves exactly as its target does, it may prove easier to read in certain contexts.
+**** Column Aliases
 Column aliases are defined using the ~defalias~ function, which takes one or more pairs of ~ALIAS TARGET~ pairs.
 #+begin_src lisp
   (defcolumn T)
@@ -146,8 +146,8 @@ Column aliases are defined using the ~defalias~ function, which takes one or mor
     Z C)
   ;; (X, Y, Z) now behave like (A, B, C)
 #+end_src
-**** Functions Aliases
-Functions aliases, defined using the ~defunalias~ function, works the same way as column aliases, but act on functions instead of columns.
+**** Function Aliases
+Function aliases, defined using the ~defunalias~ function, work the same way as column aliases, but act on functions instead of columns.
 #+begin_src lisp
   (defcolumns A B)
 
@@ -157,7 +157,7 @@ Functions aliases, defined using the ~defunalias~ function, works the same way a
     (eq (sub A B) (minus A B)))
 #+end_src
 *** Constraints
-Constraints are the parts of a Corset program that will be compiled and featured in the final product, and represent an epxression of the defined columns that should alway evaluate to 0. Their definition follow the syntax ~(defconstraint NAME (LIMITERS) EXPRESSION)~.
+Constraints are the parts of a Corset program that will be compiled and featured in the final product, and represent an epxression of the defined columns that should always evaluate to 0. Their definitions follow the syntax ~(defconstraint NAME (LIMITERS) EXPRESSION)~.
 
 The ~LIMITERS~ is a list of conditions limiting where the constraint must hold true. If it is empty, then ~EXPRESSION~ must hold for its whole definition domain. The available limiters are:
   - ~:domain RANGE~ :: a range that specifies a finite set of positions where the constraint must hold true; /e.g./ ={0 -1}=;
@@ -196,21 +196,21 @@ The boolean operators work under the assumption that their operands are binary.
   - ~(is-binary x)~
 *** Special Forms
 **** ~nth~
-The ~nth~ function is used to access the element of a column array.
+The ~nth~ function is used to access an element of a column array.
 #+begin_src lisp
   (defcolumns A B[1:3])
 
   (defconstraint foo (1 2)
     (eq A (nth B 2)))
 
-  ;; Creates a function accessin the i-th element of B
+  ;; Creates a function accessing the i-th element of B
   (defun (nth-B i) (nth B i))
 
   (defconstraint bar ()
     (eq A (nth-B 2)))
 #+end_src
 **** ~begin~
-The ~begin~ forms define a list of conditions that should all be verified. They are useful /e.g./ in function definnitions or within ~if~ branches.
+The ~begin~ forms define a list of conditions that should all be verified. They are useful /e.g./ in function definitions or within ~if~ branches.
 #+begin_src lisp
   (defcolumns A B C)
 
@@ -227,9 +227,9 @@ The ~begin~ forms define a list of conditions that should all be verified. They 
   (defconstraint bar ()
     (two-change A B))
 #+end_src
-It should be noted that ~begin~ will automatically flatten its argument; /i.e./ if one of its argument is already a ~begin~ form, then its element will be added piecewise to the outer ~begin~ instead of forming a list containing another list.
+It should be noted that ~begin~ will automatically flatten its argument; /i.e./ if one of its arguments is already a ~begin~ form, then its element will be added piecewise to the outer ~begin~ instead of forming a list containing another list.
 **** ~for~
-The ~for~ forms generate similar constraints, parametrized by the specified iteration variable, ranging over the provided range.
+The ~for~ forms generate similar constraints, parametrized by the specified iteration variable, corresponding to the provided range.
 #+begin_src lisp
   (defcolumns A[4] C[2:4])
 
@@ -258,7 +258,7 @@ The ~for~ forms generate similar constraints, parametrized by the specified iter
 **** ~force-bool~
 The ~force-bool~ form forces the type of its argument to coalesce to boolean.
 
-The main use for this form is to trigger optimization by forcing type inference that can not be performed atomatically. For instance, given two boolean columns ~B1~ and ~B2~ that happen to be mutually exclusive, the type system can not determine that ~(+ B1 B2)~ is also boolean. However, ~(force-bool (+ B1 B2))~ will ensure that this expression is typed as boolean, and will thus trigger related optimizations, typically as ~if-zero~ conditions.
+The main use for this form is to trigger optimization by forcing type inference that can not be performed automatically. For instance, given two boolean columns ~B1~ and ~B2~ that happen to be mutually exclusive, the type system can not determine that ~(+ B1 B2)~ is also boolean. However, ~(force-bool (+ B1 B2))~ will ensure that this expression is typed as boolean, and will thus trigger related optimizations, typically as ~if-zero~ conditions.
 *** Branching Forms
 Corset features several branching operations. Although they ought to be simplified in coming revisions of Corset, they are still quite clumsy.
 **** Branching Forms
@@ -302,12 +302,12 @@ Arguments:
   [SOURCE]...  Either a file or a string containing the Corset code to process
 
 Options:
-  -o, --out <OUTFILE>      compiled Corset file to create
+  -o, --out <OUTFILE>      cCreate a compiled Corset file
   -v, --verbose...         More output per occurrence
   -q, --quiet...           Less output per occurrence
       --debug              Compile code in debug mode
       --allow-dups         Whether to allow re-declaration of symbols
-  -t, --threads <THREADS>  number of threads to use [default: 1]
+  -t, --threads <THREADS>  Number of threads to use [default: 1]
   -h, --help               Print help information
   -V, --version            Print version information
 #+end_src
@@ -336,7 +336,7 @@ Options:
   -V, --version                  Print version information
 #+end_src
 * Exporting Corset Constraint Systems
-Corset programs can be exported in multiple formats. For now, backends are provided to export in LaTeX, in zkGeth-compatible go, or in Wizard-IOP go.
+Corset programs can be exported in multiple formats. For now, backends are provided to export in LaTeX, in zkGeth-compatible Go, or in Wizard-IOP Go.
 * An Example
 ** General Example of a Corset Program
 #+begin_src lisp
