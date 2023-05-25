@@ -2,6 +2,112 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.0.0-rc] - 2023-05-25
+
+### Bug Fixes
+
+- Do not hard fail on missing columns
+- Missing spills
+- Better implementation of pretty_with_base
+- Fix parsing of hex & bin values
+- Postgres feature
+- Do not output SIZE constants for the wizard
+- Flatten if within other function calls
+- Missing case
+- `defpermutation` failing on aliases
+- Fail when defining invalid alias
+- Insert constant symbols before computing them in a later pass
+- Forgotten debug
+- Besu templates
+- Misunderstood SSE documentation
+- Also convert padding to BE
+- &str -> &[u8]
+- Cross-module symbol referencing
+- Insert array subcolumns earlier for easier lookup
+- Global symbols lookup must start at the root scope
+- Can address foreign symbols
+- Introduce global/local scopes
+- Ensure that JSON names are exported to the conflater
+- Do not crash on empty loop bodies
+- Warn when a constraint will not be checked
+
+### Documentation
+
+- Explicit linking modes in Go example
+
+### Features
+
+- Optimize trace expansion speed
+- Add caching to JSON import/export
+- Add a `--fail-on-missing` flag
+- Add a `:padding` setting to columns
+- Add a `force-bool` form
+- Expose libcorset through FFI
+- Leverage errno for error codes
+- Implement `reduce`; re-organize function hierarchy
+- Add `todo` form
+- Add a `debug` command
+- Accept hexadecimal and binary constants
+- `todo` can take any number of arguments
+- Add `did-inc` and `did-dec` to the stdlib
+- Add `either` to the standard library
+- Add a setting to set display base
+- Improve debug output
+- Add a trace-checking function to the FFI
+- Expose a function to load the constraint system from a string
+- Expand the FFI interface
+- Add java export for zkBesu
+- Improve LaTeX export
+- Add more time-related logging
+- Add (SIMD) big-endianness conversion in FFI
+- Use simd_json for better performances when available
+- Render plookups in debug mode
+- Implement partially sorted permutation constraints
+- Add a conflater-specific exporter
+- Export AllColumns for zkGeth
+- Warn when a for loop body evals to empty
+- Add columns to the debugging output
+- Emit warnings for useless use of force-bool
+- Implement perspectives
+- Add the `~` self-inversion operator
+
+### Miscellaneous Tasks
+
+- Cleanup
+- Formatting
+- Clippy
+- Update dependencies
+- Clippy
+- Update dependencies
+- Add git-cliff as dependency
+- Prettier debugger
+- Clippy
+- Update dependencies
+
+### Performance
+
+- Parallelize columns rendering in FFI
+
+### Refactor
+
+- Move read_trace to the compute module
+- Split zkEVM parsing from trace computation in FFI
+- Move symbol & computation tables to their own module
+- Drop useless code
+- Simplify unfallible function
+- Simplify the zkGeth exporter
+- Modularize errors
+- Convert Expression::(Array)Column from tuple to struct
+- Use sorbus to implement the scope tree
+
+### Build
+
+- Always optimize dependencies
+
+### Debug
+
+- Add logs
+
 ## [7.1.0] - 2023-02-17
 
 ### Bug Fixes
@@ -17,6 +123,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous Tasks
 
 - Clippy
+- Release corset version 7.1.0
 
 ### Refactor
 
