@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 buche = "0.7"
-cached = { version = "0.42", default-features = false }
+cached = { version = "0.43", default-features = false }
 clap-verbosity-flag = "2"
 clap = { version = "4", features = ["derive", "wrap_help", "cargo"] }
 colored = "2.0"
@@ -51,7 +51,7 @@ either = { version = "1.8.1", features = ["serde"] }
 
 
 [target.'cfg(all(target_arch = "x86_64", target_feature = "avx"))'.dependencies]
-simd-json = "0.7.0"
+simd-json = "0.10"
 
 [features]
 default = ["interactive"]
