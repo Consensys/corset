@@ -89,13 +89,15 @@ pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Resu
                 let handle: ColumnRef = Handle::new(&module, &path[path.len() - 1]).into();
                 // The first column sets the size of its module
                 let module_raw_size = cs.raw_len_for_or_set(&module, xs.len() as isize);
-                let module_spilling = cs.spilling_for(&handle).unwrap();
                 // The min length can be set if the module contains range
                 // proofs, that require a minimal length of a certain power of 2
                 let module_min_len = cs.columns.min_len.get(&module).cloned().unwrap_or(0);
 
                 if let Result::Ok(crate::column::Column { t, .. }) = cs.columns.get_col(&handle) {
                     trace!("Inserting {} ({})", handle, xs.len());
+                    let module_spilling = cs
+                        .spilling_for(&handle)
+                        .expect(&format!("no spilling for {}", handle));
 
                     if xs.len() as isize != module_raw_size {
                         bail!(

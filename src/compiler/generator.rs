@@ -486,8 +486,6 @@ impl ConstraintSet {
                                 } else {
                                     unimplemented!("non-column perspectives not yet supported");
                                 };
-                            } else {
-                                unreachable!()
                             };
                         }
                     }
@@ -590,8 +588,12 @@ impl ConstraintSet {
     }
 
     pub fn spilling_for(&self, h: &ColumnRef) -> Option<isize> {
-        let col = self.columns.get_col(h).ok()?;
-        self.columns.spilling.get(&col.handle.module).cloned()
+        let module = if h.is_handle() {
+            &h.as_handle().module
+        } else {
+            &self.columns.get_col(h).ok()?.handle.module
+        };
+        self.columns.spilling.get(module).cloned()
     }
 
     fn compute_spilling(&mut self, m: &str) -> isize {

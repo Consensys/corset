@@ -855,6 +855,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             if signs.is_empty() {
                 bail!("no sorting criterion found")
             }
+            signs.resize(from.len(), true); // ensure that signs & froms are the same size
 
             Ok(AstNode {
                 class: Token::DefPermutation { from, to, signs },

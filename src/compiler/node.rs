@@ -189,7 +189,7 @@ impl Node {
     pub fn t(&self) -> Type {
         self._t.unwrap_or_else(|| match &self.e() {
             Expression::Funcall { func, args } => {
-                dbg!(func).typing(&dbg!(&args).iter().map(|a| a.t()).collect::<Vec<_>>())
+                func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
             }
             Expression::Const(ref x, _) => {
                 if Zero::is_zero(x) || One::is_one(x) {
