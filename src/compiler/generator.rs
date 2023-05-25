@@ -213,10 +213,6 @@ impl FuncVerifier<Node> for Intrinsic {
             ))
         }
     }
-    fn validate_args(&self, args: &[Node]) -> Result<()> {
-        FuncVerifier::validate_arity(self, args)
-            .with_context(|| format!("while validating {}", self))
-    }
 }
 
 pub type PerspectiveTable = HashMap<String, HashMap<String, Node>>;
@@ -244,10 +240,10 @@ impl ConstraintSet {
             computations,
             perspectives,
         };
-        r.fill_spilling();
         r.convert_refs_to_ids()?;
         r.allocate_registers();
         r.fill_perspectives()?;
+        r.fill_spilling();
         r.validate()?;
         Ok(r)
     }
