@@ -41,6 +41,10 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "let"),
             class: FunctionClass::Form(Form::Let),
         },
+        "reduce" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "reduce"),
+            class: FunctionClass::Form(Form::Reduce)
+        },
 
         // Builtin special functions
         "len" => Function {
@@ -51,9 +55,9 @@ lazy_static::lazy_static! {
             handle:Handle::new(super::MAIN_MODULE, "force-bool"),
             class: FunctionClass::Builtin(Builtin::ForceBool),
         },
-        "reduce" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "reduce"),
-            class: FunctionClass::Form(Form::Reduce)
+        "~" => Function {
+            handle:Handle::new(super::MAIN_MODULE, "~"),
+            class: FunctionClass::Builtin(Builtin::SelfInv),
         },
 
         // Intrinsics
