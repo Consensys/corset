@@ -24,7 +24,7 @@ fn create_sort_constraint(
     }
     let module = cs.columns.get_col(&froms[0]).unwrap().handle.module.clone();
     for from in froms {
-        let from_col = cs.columns.get_col(&from).unwrap();
+        let from_col = cs.columns.get_col(from).unwrap();
         if from_col.handle.module != *module {
             bail!(
                 "column {} does not belong to the same module as {}",

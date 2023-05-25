@@ -268,7 +268,7 @@ pub fn debug(
     skip: &[String],
 ) -> Result<()> {
     if show_constraints {
-        render_constraints(&cs, only, skip);
+        render_constraints(cs, only, skip);
     }
     if show_columns {
         render_columns(cs);

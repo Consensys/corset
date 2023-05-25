@@ -9,9 +9,7 @@ use colored::Colorize;
 use itertools::Itertools;
 use pairing_ce::{bn256::Fr, ff::Field};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-};
+use std::collections::{HashMap, HashSet};
 
 pub type RegisterID = usize;
 pub type ColumnID = usize;
@@ -224,14 +222,14 @@ impl ColumnSet {
 
     pub fn get_col(&self, h: &ColumnRef) -> Result<&Column> {
         match &h.0 {
-            either::Either::Left(ref handle) => self.by_handle(&handle),
+            either::Either::Left(ref handle) => self.by_handle(handle),
             either::Either::Right(id) => self._cols.get(*id).ok_or_else(|| unreachable!()),
         }
     }
 
     pub fn get_col_mut(&mut self, h: &ColumnRef) -> Option<&mut Column> {
         match &h.0 {
-            either::Either::Left(ref handle) => self.by_handle_mut(&handle),
+            either::Either::Left(ref handle) => self.by_handle_mut(handle),
             either::Either::Right(id) => self._cols.get_mut(*id),
         }
     }
@@ -239,19 +237,19 @@ impl ColumnSet {
     pub fn all(&self) -> Vec<ColumnRef> {
         (0..self._cols.len())
             .into_iter()
-            .map(|i| ColumnRef::from(i))
+            .map(ColumnRef::from)
             .collect()
     }
 
     pub fn by_handle(&self, handle: &Handle) -> Result<&Column> {
         self.cols
-            .get(&handle)
+            .get(handle)
             .and_then(|i| self._cols.get(*i))
             .ok_or_else(|| anyhow!(errors::CompileError::NotFound(handle.to_owned())))
     }
 
     pub fn by_handle_mut(&mut self, handle: &Handle) -> Option<&mut Column> {
-        self.cols.get(&handle).and_then(|i| self._cols.get_mut(*i))
+        self.cols.get(handle).and_then(|i| self._cols.get_mut(*i))
     }
 
     pub fn modules(&self) -> HashSet<String> {
@@ -278,7 +276,7 @@ impl ColumnSet {
     }
     pub fn id_of(&self, handle: &ColumnRef) -> usize {
         match &handle.0 {
-            either::Either::Left(handle) => *self.cols.get(&handle).unwrap(),
+            either::Either::Left(handle) => *self.cols.get(handle).unwrap(),
             either::Either::Right(i) => *i,
         }
     }
@@ -336,7 +334,7 @@ impl ColumnSet {
         allow_dup: bool,
     ) -> Result<ColumnRef> {
         column.register = Some(self.new_register(column.handle.clone()));
-        self.insert_column(column, allow_dup).map(|id| id.into())
+        self.insert_column(column, allow_dup)
     }
 
     pub fn is_empty(&self) -> bool {

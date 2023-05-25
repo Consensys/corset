@@ -77,7 +77,7 @@ fn make_chain(cs: &ConstraintSet, xs: &[Node], operand: &str, surround: bool) ->
 /// Render an expression, panicking if it is not a handle
 fn render_handle(cs: &ConstraintSet, e: &Node) -> String {
     match e.e() {
-        Expression::Column { handle, .. } => reg_mangle(cs, &handle).unwrap(),
+        Expression::Column { handle, .. } => reg_mangle(cs, handle).unwrap(),
         _ => unreachable!(),
     }
 }
