@@ -285,7 +285,7 @@ impl ConstraintSet {
 
         // module-global columns all have their own register
         for c in pool.root {
-            let reg = self.columns.new_register(Handle::new("reg", c.to_string()));
+            let reg = self.columns.new_register(self.handle(&c).to_owned());
             self.columns.assign_register(&c, reg).unwrap();
         }
 

@@ -70,17 +70,15 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             let handle = Handle::maybe_with_perspective(ctx.module(), col, ctx.perspective());
             // those are inserted for symbol lookups
             for i in range {
-                ctx.insert_symbol(
-                    &handle.ith(*i).name,
-                    Node {
-                        _e: Expression::Column {
-                            handle: handle.ith(*i).into(),
-                            kind: Kind::Atomic,
-                            base: *base,
-                            padding_value: None,
-                        },
-                        _t: Some(*t),
-                    },
+                let ith_handle = handle.ith(*i);
+                ctx.insert_used_symbol(
+                    &ith_handle.name,
+                    Node::column()
+                        .handle(ith_handle.clone())
+                        .kind(Kind::Atomic)
+                        .base(*base)
+                        .t(t.magma())
+                        .build(),
                 )?;
             }
 
