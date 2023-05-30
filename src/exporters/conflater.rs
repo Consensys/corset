@@ -29,14 +29,14 @@ struct TemplateData {
 pub fn render(cs: &ConstraintSet, outfile: Option<&String>) -> Result<()> {
     const TEMPLATE: &str = include_str!("conflater.kt");
     let mut modules: HashMap<String, Vec<ConflaterColumn>> = Default::default();
-    for (handle, c) in cs.modules.iter_cols() {
+    for c in cs.columns.iter_cols() {
         if matches!(c.kind, Kind::Atomic) {
             modules
-                .entry(handle.module)
+                .entry(c.handle.module.to_owned())
                 .or_default()
                 .push(ConflaterColumn {
-                    json_name: handle.name.to_owned(),
-                    safe_name: handle.name.to_case(Case::ScreamingSnake),
+                    json_name: c.handle.name.to_owned(),
+                    safe_name: c.handle.name.to_case(Case::ScreamingSnake),
                 });
         }
     }

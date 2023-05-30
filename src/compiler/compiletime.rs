@@ -1,3 +1,4 @@
+#![cfg(feature = "parser")]
 use anyhow::*;
 
 use super::{

@@ -31,7 +31,7 @@ pub struct CompileSettings {
     pub allow_dups: bool,
 }
 
-#[cfg(feature = "interactive")]
+#[cfg(feature = "parser")]
 pub fn make<S: AsRef<str>>(
     sources: &[(&str, S)],
     settings: &CompileSettings,

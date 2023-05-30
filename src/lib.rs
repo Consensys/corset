@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #[macro_use]
-#[cfg(feature = "interactive")]
+#[cfg(feature = "parser")]
 extern crate pest_derive;
 use anyhow::*;
 use compiler::ConstraintSet;

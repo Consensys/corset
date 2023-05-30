@@ -3,7 +3,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use colored::Colorize;
 use itertools::Itertools;
 use num_bigint::BigInt;
-#[cfg(feature = "interactive")]
+#[cfg(feature = "parser")]
 use pest::{iterators::Pair, Parser};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -11,7 +11,7 @@ use std::fmt::Debug;
 
 use super::{ColumnRef, Magma, Type};
 
-#[cfg(feature = "interactive")]
+#[cfg(feature = "parser")]
 #[derive(Parser)]
 #[grammar = "corset.pest"]
 struct CorsetParser;
@@ -605,6 +605,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
     })
 }
 
+#[cfg(feature = "parser")]
 fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
     let lc = pair.as_span().start_pos().line_col();
     let src = pair.as_str().to_owned();
@@ -867,7 +868,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
     }
 }
 
-#[cfg(feature = "interactive")]
+#[cfg(feature = "parser")]
 fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
     use num_traits::{FromPrimitive, Num};
 
@@ -1013,7 +1014,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
     }
 }
 
-#[cfg(feature = "interactive")]
+#[cfg(feature = "parser")]
 pub fn parse(source: &str) -> Result<Ast> {
     let mut ast = Ast { exprs: vec![] };
 

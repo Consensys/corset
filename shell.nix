@@ -3,7 +3,7 @@
 pkgs.mkShell {
   buildInputs = [
     pkgs.cargo pkgs.rust-analyzer pkgs.rustc pkgs.rustfmt pkgs.clippy
-    pkgs.libiconv pkgs.go pkgs.gopls
+    pkgs.libiconv
     pkgs.git-cliff
   ];
 }

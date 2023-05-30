@@ -1,5 +1,6 @@
+#![cfg(feature = "cli")]
 #[macro_use]
-#[cfg(feature = "interactive")]
+#[cfg(feature = "parser")]
 extern crate pest_derive;
 use is_terminal::IsTerminal;
 use log::*;
@@ -68,6 +69,7 @@ pub struct Args {
 
 #[derive(Subcommand)]
 enum Commands {
+    #[cfg(feature = "exporters")]
     /// Export columns in a format usable by zkGeth
     Go {
         #[arg(
@@ -85,6 +87,7 @@ enum Commands {
         )]
         filename: Option<String>,
     },
+    #[cfg(feature = "exporters")]
     /// Produce a WizardIOP constraint system
     WizardIOP {
         #[arg(short = 'o', long = "out", help = "where to render the constraints")]
@@ -98,6 +101,7 @@ enum Commands {
         )]
         package: String,
     },
+    #[cfg(feature = "exporters")]
     /// Export columns in a format usable by zkBesu
     Besu {
         #[arg(
@@ -117,6 +121,7 @@ enum Commands {
         #[arg(short = 'o', long = "out", help = "where to render the columns")]
         filename: Option<String>,
     },
+    #[cfg(all(feature = "parser", feature = "exporters"))]
     /// Produce a LaTeX file describing the constraints
     Latex {
         #[arg(
@@ -294,6 +299,7 @@ enum Commands {
     },
 }
 
+#[cfg(feature = "cli")]
 fn main() -> Result<()> {
     let args = Args::parse();
     buche::new()
@@ -307,7 +313,7 @@ fn main() -> Result<()> {
         .build_global()
         .unwrap();
 
-    let (ast, mut constraints) = if args.source.len() == 1
+    let (ast, mut constraints): (Vec<compiler::Ast>, _) = if args.source.len() == 1
         && Path::new(&args.source[0])
             .extension()
             .map(|e| e == "bin")
@@ -315,7 +321,7 @@ fn main() -> Result<()> {
     {
         info!("Loading `{}`", &args.source[0]);
         (
-            Vec::new(),
+            Default::default(),
             ron::from_str(
                 &std::fs::read_to_string(&args.source[0])
                     .with_context(|| anyhow!("while reading `{}`", &args.source[0]))?,
@@ -323,7 +329,7 @@ fn main() -> Result<()> {
             .with_context(|| anyhow!("while parsing `{}`", &args.source[0]))?,
         )
     } else {
-        #[cfg(feature = "interactive")]
+        #[cfg(feature = "parser")]
         {
             info!("Parsing Corset source files...");
             let mut inputs = vec![];
@@ -349,17 +355,19 @@ fn main() -> Result<()> {
             )?
         }
 
-        #[cfg(not(feature = "interactive"))]
+        #[cfg(not(feature = "parser"))]
         {
-            panic!("Compile Corset with the `interactive` feature to enable the compiler")
+            panic!("Compile Corset with the `parser` feature to enable the compiler")
         }
     };
     transformer::precompute(&mut constraints);
 
     match args.command {
+        #[cfg(feature = "exporters")]
         Commands::Go { package, filename } => {
             exporters::go::render(&constraints, &package, filename.as_ref())?;
         }
+        #[cfg(feature = "exporters")]
         Commands::Besu { package, filename } => {
             exporters::besu::render(&constraints, &package, filename.as_ref())?;
         }
@@ -367,6 +375,7 @@ fn main() -> Result<()> {
         Commands::Conflater { filename } => {
             exporters::conflater::render(&constraints, filename.as_ref())?;
         }
+        #[cfg(feature = "exporters")]
         Commands::WizardIOP {
             out_filename,
             package,
@@ -385,6 +394,7 @@ fn main() -> Result<()> {
             };
             wiop_exporter.render(&constraints)?;
         }
+        #[cfg(all(feature = "parser", feature = "exporters"))]
         Commands::Latex {
             constraints_filename,
         } => {
