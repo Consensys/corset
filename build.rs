@@ -12,6 +12,18 @@ fn main() {
         .unwrap_or_else(|| "UNKNW".into());
     println!("cargo:rustc-env=GIT_HASH={}", git_hash);
 
+    if cfg!(all(target_arch = "x86_64", target_feature = "avx")) {
+        println!(
+            "cargo:rustc-env=SIMD_ENABLED={}",
+            "SIMD JSON parsing enabled"
+        );
+    } else {
+        println!(
+            "cargo:rustc-env=SIMD_ENABLED={}",
+            "SIMD JSON parsing unavailable"
+        );
+    }
+
     // Generate C FFI bindings
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let package_name = env::var("CARGO_PKG_NAME").unwrap();

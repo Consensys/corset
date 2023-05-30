@@ -18,7 +18,7 @@ mod errors;
 mod exporters;
 #[cfg_attr(
     all(target_arch = "x86_64", target_feature = "avx"),
-    path = "import.rs"
+    path = "import_simd.rs"
 )]
 #[cfg_attr(not(all(target_arch = "x86_64")), path = "import.rs")]
 mod import;
@@ -30,7 +30,7 @@ mod transformer;
 mod utils;
 
 #[derive(Parser)]
-#[command(author, version = concat!(clap::crate_version!(), " ", std::env!("GIT_HASH")), propagate_version = true)]
+#[command(author, version = concat!(clap::crate_version!(), " ", std::env!("GIT_HASH"), " ", std::env!("SIMD_ENABLED")), propagate_version = true)]
 pub struct Args {
     #[clap(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
