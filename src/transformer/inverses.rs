@@ -36,12 +36,11 @@ impl Node {
                 }
                 if matches!(func, Intrinsic::Inv) {
                     let module = gm(&args[0].dependencies());
-                    let inverted_expr = invert_expr(&args[0]);
                     let inverted_handle = Handle::new(module, expression_to_name(&args[0], "INV"));
-                    new_cols.push((inverted_handle.clone(), inverted_expr));
+                    new_cols.push((inverted_handle.clone(), args[0].to_owned()));
                     *self = Node::column()
                         .handle(inverted_handle)
-                        .kind(Kind::Atomic)
+                        .kind(Kind::Phantom)
                         // TODO:
                         // .t(match dbg!(&self).t().magma() {
                         //     Magma::Boolean => Magma::Boolean,
@@ -70,7 +69,6 @@ impl ConstraintSet {
         let mut inversion_constraints = vec![];
         for (inverted_handle, inverted_expr) in new_cols.into_iter() {
             if self.columns.by_handle(&inverted_handle).is_err() {
-                validate_inv(&mut inversion_constraints, &inverted_expr, &inverted_handle)?;
                 let inverted_id = self.columns.insert_column_and_register(
                     Column::builder()
                         .handle(inverted_handle.to_owned())
@@ -81,10 +79,11 @@ impl ConstraintSet {
                 self.computations.insert(
                     &inverted_id,
                     Computation::Composite {
-                        target: inverted_handle.clone().into(),
+                        target: inverted_id.clone().into(),
                         exp: invert_expr(&inverted_expr),
                     },
                 )?;
+                validate_inv(&mut inversion_constraints, &inverted_expr, &inverted_id)?;
             }
         }
         if !inversion_constraints.is_empty() {
@@ -99,7 +98,7 @@ impl ConstraintSet {
     }
 }
 
-fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result<()> {
+fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Result<()> {
     cs.push(
         Intrinsic::Mul.call(&[
             x_expr.clone(),
@@ -108,9 +107,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result
                     x_expr.clone(),
                     Node::column()
                         .handle(inv_x_col.clone())
-                        .kind(Kind::Composite(Box::new(
-                            Intrinsic::Inv.call(&[x_expr.clone()])?,
-                        )))
+                        .kind(Kind::Phantom)
                         .t(Magma::Integer)
                         .build(),
                 ])?,
@@ -122,9 +119,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result
         Intrinsic::Mul.call(&[
             Node::column()
                 .handle(inv_x_col.clone())
-                .kind(Kind::Composite(Box::new(
-                    Intrinsic::Inv.call(&[x_expr.clone()])?,
-                )))
+                .kind(Kind::Phantom)
                 .base(Base::Hex)
                 .t(Magma::Integer)
                 .build(),
@@ -133,9 +128,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &Handle) -> Result
                     x_expr.clone(),
                     Node::column()
                         .handle(inv_x_col.clone())
-                        .kind(Kind::Composite(Box::new(
-                            Intrinsic::Inv.call(&[x_expr.clone()])?,
-                        )))
+                        .kind(Kind::Phantom)
                         .base(Base::Hex)
                         .t(Magma::Integer)
                         .build(),
