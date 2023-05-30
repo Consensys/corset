@@ -121,7 +121,7 @@ impl Trace {
                             padding
                         },
                     },
-                    column.handle.to_string(),
+                    c.handle(i.into()).to_string(),
                 )
             })
             .collect::<Vec<_>>();
@@ -189,14 +189,7 @@ fn reverse_fr_x86_64(v: &mut [u64; 4]) {
     }
 }
 
-fn _corset_from_file(zkevmfile: &str) -> Result<Corset> {
-    info!("Loading `{}`", &zkevmfile);
-    let mut constraints = ron::from_str(
-        &std::fs::read_to_string(zkevmfile)
-            .with_context(|| anyhow!("while reading `{}`", zkevmfile))?,
-    )
-    .with_context(|| anyhow!("while parsing `{}`", zkevmfile))?;
-
+fn make_corset(mut constraints: ConstraintSet) -> Result<Corset> {
     transformer::validate_nhood(&mut constraints)?;
     transformer::lower_shifts(&mut constraints);
     transformer::expand_ifs(&mut constraints);
@@ -206,18 +199,22 @@ fn _corset_from_file(zkevmfile: &str) -> Result<Corset> {
 
     Ok(constraints)
 }
+
+fn _corset_from_file(zkevmfile: &str) -> Result<Corset> {
+    info!("Loading `{}`", &zkevmfile);
+    let constraints = ron::from_str(
+        &std::fs::read_to_string(zkevmfile)
+            .with_context(|| anyhow!("while reading `{}`", zkevmfile))?,
+    )
+    .with_context(|| anyhow!("while parsing `{}`", zkevmfile))?;
+    make_corset(constraints)
+}
+
 fn _corset_from_str(zkevmstr: &str) -> Result<Corset> {
-    let mut constraints =
+    let constraints =
         ron::from_str(zkevmstr).with_context(|| anyhow!("while parsing the provided zkEVM"))?;
 
-    transformer::validate_nhood(&mut constraints)?;
-    transformer::lower_shifts(&mut constraints);
-    transformer::expand_ifs(&mut constraints);
-    transformer::expand_constraints(&mut constraints)?;
-    transformer::sorts(&mut constraints)?;
-    transformer::expand_invs(&mut constraints)?;
-
-    Ok(constraints)
+    make_corset(constraints)
 }
 
 fn _compute_trace_from_file(
@@ -331,6 +328,23 @@ pub extern "C" fn trace_check(
     }
 }
 
+fn init_rayon(threads: c_uint) -> Result<()> {
+    if rayon::ThreadPoolBuilder::new()
+        .num_threads(if let Result::Ok(t) = threads.try_into() {
+            t
+        } else {
+            set_errno(Errno(ERR_NOT_AN_USIZE));
+            bail!("not an usize");
+        })
+        .build_global()
+        .is_err()
+    {
+        set_errno(Errno(ERR_COULD_NOT_INITIALIZE_RAYON));
+        bail!("unable to initialize rayon")
+    }
+    Ok(())
+}
+
 #[no_mangle]
 pub extern "C" fn trace_compute_from_file(
     corset: *mut Corset,
@@ -339,17 +353,7 @@ pub extern "C" fn trace_compute_from_file(
     convert_to_be: bool,
     fail_on_missing: bool,
 ) -> *mut Trace {
-    if rayon::ThreadPoolBuilder::new()
-        .num_threads(if let Result::Ok(t) = threads.try_into() {
-            t
-        } else {
-            set_errno(Errno(ERR_NOT_AN_USIZE));
-            return std::ptr::null_mut();
-        })
-        .build_global()
-        .is_err()
-    {
-        set_errno(Errno(ERR_COULD_NOT_INITIALIZE_RAYON));
+    if init_rayon(threads).is_err() {
         return std::ptr::null_mut();
     }
 
@@ -377,17 +381,7 @@ pub extern "C" fn trace_compute_from_string(
     convert_to_be: bool,
     fail_on_missing: bool,
 ) -> *mut Trace {
-    if rayon::ThreadPoolBuilder::new()
-        .num_threads(if let Result::Ok(t) = threads.try_into() {
-            t
-        } else {
-            set_errno(Errno(ERR_NOT_AN_USIZE));
-            return std::ptr::null_mut();
-        })
-        .build_global()
-        .is_err()
-    {
-        set_errno(Errno(ERR_COULD_NOT_INITIALIZE_RAYON));
+    if init_rayon(threads).is_err() {
         return std::ptr::null_mut();
     }
 
