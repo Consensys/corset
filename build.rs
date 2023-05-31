@@ -32,10 +32,8 @@ fn main() {
         .display()
         .to_string();
 
-    let config = Config {
-        language: cbindgen::Language::C,
-        ..Default::default()
-    };
+    let mut config = Config::default();
+    config.language = cbindgen::Language::C;
 
     cbindgen::generate_with_config(crate_dir, config)
         .unwrap()
