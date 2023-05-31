@@ -100,6 +100,7 @@ pub fn make<S: AsRef<str>>(
                         kind: k,
                         padding_value,
                         base,
+                        ..
                     } => {
                         let column = Column::builder()
                             .and_padding_value(padding_value.to_owned())

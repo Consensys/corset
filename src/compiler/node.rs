@@ -92,6 +92,7 @@ pub enum Expression {
         kind: Kind<Node>,
         padding_value: Option<i64>,
         base: Base,
+        fetched: bool,
     },
     ArrayColumn {
         handle: Handle,
@@ -143,6 +144,7 @@ impl Node {
                 kind: Kind::Phantom,
                 padding_value: None,
                 base: Base::Hex,
+                fetched: false,
             },
             _t: None,
         }
@@ -167,6 +169,7 @@ impl Node {
                 kind,
                 padding_value,
                 base: base.unwrap_or(Base::Hex),
+                fetched: false,
             },
             _t: Some(Type::Column(t.unwrap_or(Magma::Integer))),
         }
@@ -487,6 +490,24 @@ impl Node {
             .collect()
     }
 
+    pub fn core_dependencies(&self) -> HashSet<ColumnRef> {
+        self.leaves()
+            .into_iter()
+            .filter_map(|e| match e.e() {
+                Expression::Column {
+                    handle, fetched, ..
+                } => {
+                    if *fetched {
+                        None
+                    } else {
+                        Some(handle.clone())
+                    }
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Evaluate a compile-time known value
     pub fn pure_eval(&self) -> Result<BigInt> {
         match self.e() {
@@ -777,8 +798,16 @@ impl Debug for Node {
 
         match self.e() {
             Expression::Const(x, _) => write!(f, "{}", x),
-            Expression::Column { handle, .. } => {
-                write!(f, "{:?}:{:?}", handle, self._t)
+            Expression::Column {
+                handle, fetched, ..
+            } => {
+                write!(
+                    f,
+                    "{}{:?}:{:?}",
+                    if *fetched { "F:" } else { "" },
+                    handle,
+                    self._t
+                )
             }
             Expression::ArrayColumn {
                 handle,

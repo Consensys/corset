@@ -56,6 +56,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     },
                     padding_value: padding_value.to_owned(),
                     base: *base,
+                    fetched: false,
                 },
                 _t: Some(*t),
             };

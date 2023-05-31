@@ -27,7 +27,7 @@ use crate::compiler::parser::*;
 use crate::dag::ComputationDag;
 use crate::errors::{self, CompileError, RuntimeError};
 use crate::pretty::Pretty;
-use crate::structs::Handle;
+use crate::structs::{Handle, PERSPECTIVE_SEPARATOR};
 
 static COUNTER: OnceCell<AtomicUsize> = OnceCell::new();
 
@@ -1242,9 +1242,45 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
             }),
         })),
         Token::Symbol(name) => {
-            let r = ctx
-                .resolve_symbol(name)
-                .with_context(|| make_ast_error(e))?;
+            let r = if name.contains(PERSPECTIVE_SEPARATOR) {
+                let mut s = name.split(PERSPECTIVE_SEPARATOR);
+                let perspective = s
+                    .next()
+                    .ok_or_else(|| anyhow!("missing perspective name"))?;
+                let name = s.next().ok_or_else(|| anyhow!("missing column name"))?;
+                let mut symbol = ctx
+                    .resolve_symbol(name)
+                    .with_context(|| make_ast_error(e))?;
+
+                if let Expression::Column {
+                    handle, fetched, ..
+                } = symbol.e_mut()
+                {
+                    if let Some(col_perspective) = handle.as_handle().perspective.as_ref() {
+                        if col_perspective != perspective {
+                            bail!(
+                                "column {} found in perspective {}, not {}",
+                                handle.pretty(),
+                                col_perspective.bright_white().bold(),
+                                perspective.bright_white().bold()
+                            );
+                        }
+                    } else {
+                        bail!(
+                            "column {} not found in perspective {}",
+                            handle.pretty(),
+                            perspective.bright_white().bold()
+                        );
+                    }
+                    *fetched = true;
+                } else {
+                    unreachable!()
+                }
+                dbg!(symbol)
+            } else {
+                ctx.resolve_symbol(name)
+                    .with_context(|| make_ast_error(e))?
+            };
             Ok(Some(r))
         }
 
@@ -1409,26 +1445,14 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
 }
 
 fn perspective_of<'a, H: IntoIterator<Item = &'a Handle>>(hs: H) -> Result<Option<String>> {
-    // TODO: make better errors
-    // for h in hs.into_iter() {
-    //     match c.perspective {
-    //         Some(ref p) if *p != perspective => {
-    //             bail!(anyhow!(
-    //                 "column {} that is not available in perspective {}",
-    //                 handle.pretty(),
-    //                 c.pretty(),
-    //                 perspective.bold(),
-    //             ));
-    //         }
-    //         _ => {}
-    //     }
-    // }
     let ps = hs
         .into_iter()
         .filter_map(|h| h.perspective.clone())
         .collect::<HashSet<_>>();
     if ps.len() > 1 {
-        bail!("no unique perspective")
+        bail!(
+            "mixing perspectives {:?}; use PERSP/COL syntax to import column from other perspectives", ps
+        )
     }
 
     Ok(ps.into_iter().next())
@@ -1458,7 +1482,8 @@ fn reduce_toplevel(
             };
             // Check that no constraint crosses perspective boundaries
             let body = if let Some(perspective) =
-                perspective_of(body.dependencies().iter().map(|h| h.as_handle()))?
+                perspective_of(body.core_dependencies().iter().map(|h| h.as_handle()))
+                    .with_context(|| anyhow!("while compiling {}", handle.pretty()))?
             {
                 let persp_guard = ctx
                     .tree
