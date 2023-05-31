@@ -17,6 +17,7 @@ use std::{
 
 use crate::{
     compiler::{ColumnRef, ConstraintSet, Type},
+    pretty::Pretty,
     structs::Handle,
     utils::validate,
 };
@@ -118,7 +119,7 @@ pub fn fill_traces(v: &Value, path: Vec<Cow<'_, str>>, cs: &mut ConstraintSet) -
 
                     let module_spilling = cs
                         .spilling_for(&handle)
-                        .expect(&format!("module {} not found", handle));
+                        .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 
                     if xs.len() as isize != module_raw_size {
                         bail!(
@@ -144,7 +145,7 @@ pub fn fill_traces(v: &Value, path: Vec<Cow<'_, str>>, cs: &mut ConstraintSet) -
                     }
                     cs.columns.set_value(&handle, xs, module_spilling)?
                 } else {
-                    error!("failed to insert {}", handle);
+                    info!("ignoring unknown column {}", handle.pretty());
                 }
             }
             Ok(())

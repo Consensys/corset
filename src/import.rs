@@ -101,7 +101,7 @@ pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Resu
 
                     let module_spilling = cs
                         .spilling_for(&handle)
-                        .expect(&format!("no spilling for {}", handle));
+                        .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 
                     if xs.len() as isize != module_raw_size {
                         bail!(
@@ -127,7 +127,7 @@ pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Resu
                     }
                     cs.columns.set_value(&handle, xs, module_spilling)?
                 } else {
-                    warn!("ignoring unknown column {}", handle.pretty());
+                    info!("ignoring unknown column {}", handle.pretty());
                 }
             }
             Ok(())
