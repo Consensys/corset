@@ -132,3 +132,46 @@ impl Pretty for ColumnRef {
         self.pretty()
     }
 }
+
+lazy_static::lazy_static! {
+    pub static ref SUBSCRIPT: std::collections::HashMap<char,char> = maplit::hashmap!{
+        'a' => 'ₐ',
+        'e' => 'ₑ',
+        'x' => 'ₓ',
+        '0' => '₀',
+        '1' => '₁',
+        '2' => '₂',
+        '3' => '₃',
+        '4' => '₄',
+        '5' => '₅',
+        '6' => '₆',
+        '7' => '₇',
+        '8' => '₈',
+        '9' => '₉',
+    };
+    pub static ref SUPERSCRIPT: std::collections::HashMap<char,char> = maplit::hashmap!{
+        'a' => 'ᵃ',
+        'b' => 'ᵇ',
+        'c' => 'ᶜ',
+        'd' => 'ᵈ',
+        'e' => 'ᵉ',
+        'f' => 'ᶠ',
+        'x' => 'ˣ',
+        '0' => '⁰',
+        '1' => '¹',
+        '2' => '²',
+        '3' => '³',
+        '4' => '⁴',
+        '5' => '⁵',
+        '6' => '⁶',
+        '7' => '⁷',
+        '8' => '⁸',
+        '9' => '⁹',
+    };
+}
+
+pub fn subscript(s: &str) -> String {
+    s.chars()
+        .map(|c| SUBSCRIPT.get(&c).cloned().unwrap_or('ᵋ'))
+        .collect()
+}

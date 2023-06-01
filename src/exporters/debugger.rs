@@ -6,6 +6,7 @@ use crate::structs::Handle;
 use anyhow::*;
 use colored::Colorize;
 use itertools::Itertools;
+use num_traits::ToPrimitive;
 use std::cmp::Ordering;
 
 fn priority(a: Intrinsic, b: Intrinsic) -> Ordering {
@@ -25,6 +26,21 @@ fn priority(a: Intrinsic, b: Intrinsic) -> Ordering {
 
 fn pretty_expr(cs: &ConstraintSet, n: &Node, prev: Option<Intrinsic>, tty: &mut Tty) {
     const INDENT: usize = 4;
+    let colors = [
+        colored::Color::Red,
+        colored::Color::Green,
+        colored::Color::Yellow,
+        colored::Color::Magenta,
+        colored::Color::Cyan,
+        colored::Color::Blue,
+        colored::Color::BrightRed,
+        colored::Color::BrightGreen,
+        colored::Color::BrightYellow,
+        colored::Color::BrightMagenta,
+        colored::Color::BrightCyan,
+        colored::Color::BrightBlue,
+    ];
+    let c = colors[tty.depth() % colors.len()];
     match n.e() {
         Expression::Funcall { func: f, args } => match f {
             Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => {
@@ -49,9 +65,9 @@ fn pretty_expr(cs: &ConstraintSet, n: &Node, prev: Option<Intrinsic>, tty: &mut 
             }
             Intrinsic::Shift => {
                 pretty_expr(cs, &args[0], None, tty);
-                tty.write("[");
-                pretty_expr(cs, &args[1], None, tty);
-                tty.write("]");
+                let subponent = args[1].pure_eval().unwrap().to_i64().unwrap();
+                tty.write(if subponent > 0 { "₊" } else { "₋" }.to_string());
+                tty.write(crate::pretty::subscript(&subponent.to_string()));
             }
             Intrinsic::Neg => {
                 tty.write("-");
@@ -70,7 +86,7 @@ fn pretty_expr(cs: &ConstraintSet, n: &Node, prev: Option<Intrinsic>, tty: &mut 
             }
             Intrinsic::Begin => todo!(),
             Intrinsic::IfZero => {
-                tty.write("ifzero ");
+                tty.write("ifzero ".color(c).to_string());
                 pretty_expr(cs, &args[0], Some(Intrinsic::Mul), tty);
                 tty.shift(INDENT);
                 tty.cr();
@@ -78,17 +94,17 @@ fn pretty_expr(cs: &ConstraintSet, n: &Node, prev: Option<Intrinsic>, tty: &mut 
                 if let Some(a) = args.get(2) {
                     tty.unshift();
                     tty.cr();
-                    tty.write("else");
+                    tty.write("else".color(c).to_string());
                     tty.shift(INDENT);
                     tty.cr();
                     pretty_expr(cs, a, prev, tty);
                 }
                 tty.unshift();
                 tty.cr();
-                tty.write("endif");
+                tty.write("endif".color(c).to_string());
             }
             Intrinsic::IfNotZero => {
-                tty.write("ifnotzero ");
+                tty.write("ifnotzero ".color(c).to_string());
                 pretty_expr(cs, &args[0], Some(Intrinsic::Mul), tty);
                 tty.shift(INDENT);
                 tty.cr();
@@ -96,20 +112,20 @@ fn pretty_expr(cs: &ConstraintSet, n: &Node, prev: Option<Intrinsic>, tty: &mut 
                 if let Some(a) = args.get(2) {
                     tty.unshift();
                     tty.cr();
-                    tty.write("else");
+                    tty.write("else".color(c).to_string());
                     tty.shift(INDENT);
                     tty.cr();
                     pretty_expr(cs, a, prev, tty);
                 }
                 tty.unshift();
                 tty.cr();
-                tty.write("endif");
+                tty.write("endif".color(c).to_string());
             }
         },
         Expression::Const(x, _) => tty.write(x.to_string()),
         Expression::Column { handle, .. } => tty.write(cs.handle(handle).to_string()),
         Expression::List(xs) => {
-            tty.write("{");
+            tty.write("{".color(c).to_string());
             tty.shift(INDENT);
             tty.cr();
             let mut xs = xs.iter().peekable();
@@ -121,7 +137,7 @@ fn pretty_expr(cs: &ConstraintSet, n: &Node, prev: Option<Intrinsic>, tty: &mut 
             }
             tty.unshift();
             tty.cr();
-            tty.write("}");
+            tty.write("}".color(c).to_string());
         }
         Expression::ArrayColumn { .. } => unreachable!(),
         Expression::Void => unreachable!(),

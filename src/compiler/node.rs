@@ -299,11 +299,10 @@ impl Node {
                         colored::Color::White
                     };
 
-                    tty.write(format!("({fname} ").color(c).to_string());
-                    tty.shift(fname.len() + 2);
-                    if let Some(a) = args.get(0) {
+                    if matches!(func, Intrinsic::Shift) {
+                        let subponent = args[1].pure_eval().unwrap().to_i64().unwrap();
                         _debug(
-                            a,
+                            &args[0],
                             tty,
                             f,
                             faulty,
@@ -311,31 +310,46 @@ impl Node {
                             dim,
                             v.is_zero() || zero_context,
                         );
-                        tty.cr();
-                    }
-                    let mut args = args.iter().skip(1).peekable();
-                    while let Some(a) = args.next() {
-                        _debug(
-                            a,
-                            tty,
-                            f,
-                            faulty,
-                            unclutter,
-                            dim,
-                            v.is_zero() || zero_context,
-                        );
-                        if args.peek().is_some() {
+                        tty.write(if subponent > 0 { "₊" } else { "₋" }.to_string());
+                        tty.write(crate::pretty::subscript(&subponent.to_string()));
+                    } else {
+                        tty.write(format!("({fname} ").color(c).to_string());
+                        tty.shift(fname.len() + 2);
+                        if let Some(a) = args.get(0) {
+                            _debug(
+                                a,
+                                tty,
+                                f,
+                                faulty,
+                                unclutter,
+                                dim,
+                                v.is_zero() || zero_context,
+                            );
                             tty.cr();
                         }
+                        let mut args = args.iter().skip(1).peekable();
+                        while let Some(a) = args.next() {
+                            _debug(
+                                a,
+                                tty,
+                                f,
+                                faulty,
+                                unclutter,
+                                dim,
+                                v.is_zero() || zero_context,
+                            );
+                            if args.peek().is_some() {
+                                tty.cr();
+                            }
+                        }
+                        tty.unshift();
+                        tty.cr();
+                        tty.write(")".color(c).to_string());
                     }
-                    tty.unshift();
-                    tty.cr();
-                    tty.write(")".color(c).to_string());
-                    tty.write(
-                        format!("[{}]", v.pretty_with_base(Base::Hex))
-                            .color(c_v)
-                            .to_string(),
-                    );
+                    tty.buffer_end(format!(
+                        " = {}",
+                        v.pretty_with_base(Base::Hex).color(c_v).bold().to_string()
+                    ));
                 }
                 Expression::Const(x, _) => {
                     let c = if dim && zero_context {
@@ -356,12 +370,11 @@ impl Node {
                     };
 
                     let h = h.as_handle();
-                    tty.write(
-                        format!("{}[{}]", h.name, v.pretty_with_base(Base::Hex))
-                            .color(c)
-                            .bold()
-                            .to_string(),
-                    );
+                    tty.write(format!("{}", h));
+                    tty.buffer_end(format!(
+                        " → {}",
+                        v.pretty_with_base(Base::Hex).color(c).bold().to_string()
+                    ));
                 }
                 Expression::ArrayColumn { handle, .. } => tty.write(handle.to_string()),
                 Expression::List(ns) => {
