@@ -195,7 +195,7 @@ pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Resu
                     }
                     cs.columns.set_value(&handle, xs, module_spilling)?
                 } else {
-                    info!("ignoring unknown column {}", handle.pretty());
+                    debug!("ignoring unknown column {}", handle.pretty());
                 }
             }
             Ok(())

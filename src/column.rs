@@ -24,11 +24,10 @@ pub struct Register {
 impl Register {
     pub fn make_with_spilling(
         f: &mut dyn FnMut(isize) -> Fr,
-        len: isize,
+        len: usize,
         spilling: isize,
     ) -> Vec<Fr> {
-        let spilling = spilling.abs();
-        (-spilling..len + spilling).map(f).collect()
+        (-spilling..len as isize).map(f).collect()
     }
 
     pub fn set_value(&mut self, v: Vec<Fr>, spilling: isize) -> Result<()> {
