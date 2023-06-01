@@ -2,7 +2,6 @@ use crate::compiler::ColumnID;
 use anyhow::*;
 use cached::Cached;
 use colored::{ColoredString, Colorize};
-use either::Either;
 use num_bigint::BigInt;
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use pairing_ce::ff::Field;
@@ -20,47 +19,75 @@ use crate::structs::Handle;
 use super::{ConstraintSet, EvalSettings, Intrinsic, Kind, Magma, Type};
 
 #[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq)]
-pub struct ColumnRef(pub Either<Handle, ColumnID>);
+pub struct ColumnRef {
+    h: Option<Handle>,
+    id: Option<ColumnID>,
+}
 impl ColumnRef {
     pub fn of_handle(h: Handle) -> ColumnRef {
-        ColumnRef(Either::Left(h))
+        ColumnRef {
+            h: Some(h),
+            id: None,
+        }
     }
     pub fn of_id(i: ColumnID) -> ColumnRef {
-        ColumnRef(Either::Right(i))
+        ColumnRef {
+            h: None,
+            id: Some(i),
+        }
     }
     pub fn as_handle(&self) -> &Handle {
-        self.0.as_ref().left().unwrap()
+        self.h.as_ref().unwrap()
     }
     pub fn as_id(&self) -> ColumnID {
-        *self.0.as_ref().right().unwrap()
+        self.id.unwrap()
     }
     pub fn is_id(&self) -> bool {
-        matches!(self.0, Either::Right(_))
+        self.id.is_some()
     }
     pub fn is_handle(&self) -> bool {
-        matches!(self.0, Either::Left(_))
+        self.h.is_some()
     }
     pub fn set_id(&mut self, i: ColumnID) {
-        if self.is_handle() {
-            self.0 = Either::Right(i)
+        if let Some(id) = self.id {
+            if id != i {
+                panic!("can not re-assign ID")
+            }
+        }
+
+        self.id = Some(i);
+    }
+    pub fn map<T, F, G>(&self, f: F, g: G) -> T
+    where
+        F: FnOnce(ColumnID) -> T,
+        G: FnOnce(&Handle) -> T,
+    {
+        if let Some(handle) = self.h.as_ref() {
+            g(handle)
+        } else if let Some(id) = self.id {
+            f(id)
+        } else {
+            unreachable!()
         }
     }
 }
 impl std::cmp::PartialEq for ColumnRef {
     fn eq(&self, other: &Self) -> bool {
-        match (&self.0, &other.0) {
-            (Either::Left(x), Either::Left(y)) => x.eq(y),
-            (Either::Left(_), Either::Right(_)) => false,
-            (Either::Right(_), Either::Left(_)) => false,
-            (Either::Right(x), Either::Right(y)) => x.eq(y),
-        }
+        self.id
+            .zip(other.id)
+            .map(|(x, y)| x.eq(&y))
+            .or(self.h.as_ref().zip(other.h.as_ref()).map(|(x, y)| x.eq(&y)))
+            .unwrap_or(false)
     }
 }
 impl Display for ColumnRef {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.0 {
-            Either::Left(handle) => write!(f, "{}", handle),
-            Either::Right(id) => write!(f, "{}", id),
+        if self.is_handle() {
+            write!(f, "{}", self.as_handle())
+        } else if self.is_id() {
+            write!(f, "{}", self.as_id())
+        } else {
+            unreachable!()
         }
     }
 }

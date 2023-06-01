@@ -123,10 +123,7 @@ impl Pretty for Handle {
 
 impl Pretty for ColumnRef {
     fn pretty(&self) -> String {
-        match &self.0 {
-            either::Either::Left(h) => h.pretty(),
-            either::Either::Right(id) => format!("Col.#{}", id),
-        }
+        self.map(|id| format!("Col.#{}", id), |h| h.pretty())
     }
     fn pretty_with_base(&self, _base: Base) -> String {
         self.pretty()
@@ -148,6 +145,8 @@ lazy_static::lazy_static! {
         '7' => '₇',
         '8' => '₈',
         '9' => '₉',
+        '-' => '₋',
+        '+' => '₊',
     };
     pub static ref SUPERSCRIPT: std::collections::HashMap<char,char> = maplit::hashmap!{
         'a' => 'ᵃ',
@@ -167,6 +166,8 @@ lazy_static::lazy_static! {
         '7' => '⁷',
         '8' => '⁸',
         '9' => '⁹',
+        '-' => '⁻',
+        '+' => '⁺',
     };
 }
 

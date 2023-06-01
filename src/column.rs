@@ -215,16 +215,22 @@ impl ColumnSet {
     }
 
     pub fn get_col(&self, h: &ColumnRef) -> Result<&Column> {
-        match &h.0 {
-            either::Either::Left(ref handle) => self.by_handle(handle),
-            either::Either::Right(id) => self._cols.get(*id).ok_or_else(|| unreachable!()),
+        if h.is_id() {
+            self._cols.get(h.as_id()).ok_or_else(|| unreachable!())
+        } else if h.is_handle() {
+            self.by_handle(h.as_handle())
+        } else {
+            unreachable!()
         }
     }
 
     pub fn get_col_mut(&mut self, h: &ColumnRef) -> Option<&mut Column> {
-        match &h.0 {
-            either::Either::Left(ref handle) => self.by_handle_mut(handle),
-            either::Either::Right(id) => self._cols.get_mut(*id),
+        if h.is_id() {
+            self._cols.get_mut(h.as_id())
+        } else if h.is_handle() {
+            self.by_handle_mut(h.as_handle())
+        } else {
+            unreachable!()
         }
     }
 
@@ -268,10 +274,13 @@ impl ColumnSet {
 
         Ok(ps.into_iter().next())
     }
-    pub fn id_of(&self, handle: &ColumnRef) -> usize {
-        match &handle.0 {
-            either::Either::Left(handle) => *self.cols.get(handle).unwrap(),
-            either::Either::Right(i) => *i,
+    pub fn id_of(&self, h: &ColumnRef) -> usize {
+        if h.is_id() {
+            h.as_id()
+        } else if h.is_handle() {
+            *self.cols.get(h.as_handle()).unwrap()
+        } else {
+            unreachable!()
         }
     }
 

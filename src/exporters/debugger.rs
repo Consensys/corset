@@ -66,7 +66,7 @@ fn pretty_expr(cs: &ConstraintSet, n: &Node, prev: Option<Intrinsic>, tty: &mut 
             Intrinsic::Shift => {
                 pretty_expr(cs, &args[0], None, tty);
                 let subponent = args[1].pure_eval().unwrap().to_i64().unwrap();
-                tty.write(if subponent > 0 { "₊" } else { "₋" }.to_string());
+                tty.write(if subponent > 0 { "₊" } else { "" }.to_string());
                 tty.write(crate::pretty::subscript(&subponent.to_string()));
             }
             Intrinsic::Neg => {
@@ -123,7 +123,7 @@ fn pretty_expr(cs: &ConstraintSet, n: &Node, prev: Option<Intrinsic>, tty: &mut 
             }
         },
         Expression::Const(x, _) => tty.write(x.to_string()),
-        Expression::Column { handle, .. } => tty.write(cs.handle(handle).to_string()),
+        Expression::Column { handle, .. } => tty.write(handle.to_string()),
         Expression::List(xs) => {
             tty.write("{".color(c).to_string());
             tty.shift(INDENT);
