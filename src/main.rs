@@ -16,11 +16,6 @@ mod compute;
 mod dag;
 mod errors;
 mod exporters;
-#[cfg_attr(
-    all(target_arch = "x86_64", target_feature = "avx"),
-    path = "import_simd.rs"
-)]
-#[cfg_attr(not(all(target_arch = "x86_64")), path = "import.rs")]
 mod import;
 mod pretty;
 mod structs;

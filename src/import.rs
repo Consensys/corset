@@ -9,10 +9,13 @@ use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},
 };
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
 use serde_json::Value;
+#[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
+use simd_json::BorrowedValue as Value;
 use std::{
     fs::File,
-    io::{BufReader, Seek},
+    io::{BufReader, Read, Seek},
 };
 
 use crate::{
@@ -25,29 +28,66 @@ use crate::{
 #[time("info", "Parsing trace from JSON file with SIMD")]
 pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
     let mut f = File::open(tracefile).with_context(|| format!("while opening `{}`", tracefile))?;
+    let mut gz = GzDecoder::new(BufReader::new(&f));
 
-    let gz = GzDecoder::new(BufReader::new(&f));
-    let v: Value = match gz.header() {
-        Some(_) => serde_json::from_reader(gz),
-        None => {
-            f.rewind()?;
-            serde_json::from_reader(BufReader::new(&f))
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
+    {
+        let mut content = Vec::new();
+        match gz.header() {
+            Some(_) => gz.read_to_end(&mut content),
+            None => {
+                f.rewind()?;
+                BufReader::new(&f).read_to_end(&mut content)
+            }
         }
+        .with_context(|| format!("while reading `{}`", tracefile))?;
+        let v = simd_json::to_borrowed_value(&mut content)
+            .map_err(|e| anyhow!("while parsing json: {}", e))?;
+        fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
     }
-    .with_context(|| format!("while reading `{}`", tracefile))?;
-    fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
+    {
+        let v: Value = match gz.header() {
+            Some(_) => serde_json::from_reader(gz),
+            None => {
+                f.rewind()?;
+                serde_json::from_reader(BufReader::new(&f))
+            }
+        }
+        .with_context(|| format!("while reading `{}`", tracefile))?;
+        fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
+    }
 }
 
 #[time("info", "Parsing trace from JSON with SIMD")]
 pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
-    let gz = GzDecoder::new(BufReader::new(tracestr));
-    let v: Value = match gz.header() {
-        Some(_) => serde_json::from_reader(gz),
-        None => serde_json::from_reader(BufReader::new(tracestr)),
-    }?;
-    fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
+    let mut gz = GzDecoder::new(BufReader::new(tracestr));
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
+    {
+        let mut content = Vec::new();
+        match gz.header() {
+            Some(_) => {
+                gz.read_to_end(&mut content)?;
+            }
+            None => {
+                content = tracestr.to_vec();
+            }
+        };
+        let v = simd_json::to_borrowed_value(&mut content)
+            .map_err(|e| anyhow!("while parsing json: {}", e))?;
+        fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
+    {
+        let v: Value = match gz.header() {
+            Some(_) => serde_json::from_reader(gz),
+            None => serde_json::from_reader(BufReader::new(tracestr)),
+        }?;
+        fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
+    }
 }
 
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
 fn parse_column(xs: &[Value], t: Type) -> Result<Vec<Fr>> {
     let mut cache_num = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut cache_str = cached::SizedCache::with_size(200000); // ~1.60MB cache
@@ -70,6 +110,34 @@ fn parse_column(xs: &[Value], t: Type) -> Result<Vec<Fr>> {
     Ok(r)
 }
 
+#[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
+fn parse_column(xs: &[Value], t: Type) -> Result<Vec<Fr>> {
+    let mut cache = cached::SizedCache::with_size(200000); // ~1.60MB cache
+    let mut r = vec![Fr::zero()];
+    let xs = xs
+        .iter()
+        .map(|x| {
+            let s = match x {
+                Value::Static(n) => match n {
+                    simd_json::StaticNode::I64(i) => i.to_string(),
+                    simd_json::StaticNode::U64(i) => i.to_string(),
+                    _ => {
+                        unreachable!()
+                    }
+                },
+                Value::String(s) => s.to_string(),
+                _ => bail!("expected numeric value, found `{}`", x),
+            };
+            cache
+                .cache_get_or_set_with(s.clone(), || Fr::from_str(&s))
+                .with_context(|| format!("while parsing Fr from `{:?}`", x))
+                .and_then(|x| crate::utils::validate(t, x))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    r.extend(xs);
+    Ok(r)
+}
+
 pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Result<()> {
     match v {
         Value::Object(map) => {
@@ -79,7 +147,7 @@ pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Resu
                     fill_traces(v, path.clone(), cs)?;
                 } else {
                     let mut path = path.clone();
-                    path.push(k.to_owned());
+                    path.push(k.to_string());
                     fill_traces(v, path, cs)?;
                 }
             }
