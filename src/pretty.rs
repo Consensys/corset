@@ -56,7 +56,14 @@ impl Pretty for Fr {
                         )
                     }
                 }
-                Base::Bin => todo!(),
+                Base::Bin => format!(
+                    "0b{:b}",
+                    u64::from_str_radix(
+                        self.into_repr().to_string()[2..].trim_start_matches('0'),
+                        16
+                    )
+                    .expect("too big to represent as binary"),
+                ),
             }
         }
     }
