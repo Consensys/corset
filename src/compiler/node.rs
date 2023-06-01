@@ -369,7 +369,7 @@ impl Node {
                         colored::Color::BrightWhite
                     };
 
-                    let h = h.as_handle();
+                    // let h = h.as_handle();
                     tty.write(format!("{}", h));
                     tty.buffer_end(format!(
                         " → {}",
