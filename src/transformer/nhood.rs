@@ -19,7 +19,6 @@ fn process_nhood(
         Column::builder()
             .handle(Handle::new(module, format!("AUX_2_{}_HOOD", n)))
             .kind(Kind::Phantom)
-            .base(Base::Bin)
             .build(),
         false,
     )?;
@@ -40,7 +39,6 @@ fn process_nhood(
         Column::builder()
             .handle(Handle::new(module, format!("INTRLD_AUX_2_{}_HOOD", n)))
             .kind(Kind::Interleaved(vec![], Some(interleaving.to_owned())))
-            .base(Base::Bin)
             .build(),
         false,
     )?;
@@ -56,7 +54,6 @@ fn process_nhood(
         Column::builder()
             .handle(Handle::new(module, format!("SRT_INTRLD_AUX_2_{}_HOOD", n)))
             .kind(Kind::Phantom)
-            .base(Base::Bin)
             .build(),
         true,
     )?;
