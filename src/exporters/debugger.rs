@@ -4,9 +4,9 @@ use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
 use crate::pretty::Pretty;
 use crate::structs::Handle;
 use anyhow::*;
-use colored::Colorize;
 use itertools::Itertools;
 use num_traits::ToPrimitive;
+use owo_colors::{colored::Color, OwoColorize};
 use std::cmp::Ordering;
 
 fn priority(a: Intrinsic, b: Intrinsic) -> Ordering {
@@ -27,18 +27,18 @@ fn priority(a: Intrinsic, b: Intrinsic) -> Ordering {
 fn pretty_expr(cs: &ConstraintSet, n: &Node, prev: Option<Intrinsic>, tty: &mut Tty) {
     const INDENT: usize = 4;
     let colors = [
-        colored::Color::Red,
-        colored::Color::Green,
-        colored::Color::Yellow,
-        colored::Color::Magenta,
-        colored::Color::Cyan,
-        colored::Color::Blue,
-        colored::Color::BrightRed,
-        colored::Color::BrightGreen,
-        colored::Color::BrightYellow,
-        colored::Color::BrightMagenta,
-        colored::Color::BrightCyan,
-        colored::Color::BrightBlue,
+        Color::Red,
+        Color::Green,
+        Color::Yellow,
+        Color::Magenta,
+        Color::Cyan,
+        Color::Blue,
+        Color::BrightRed,
+        Color::BrightGreen,
+        Color::BrightYellow,
+        Color::BrightMagenta,
+        Color::BrightCyan,
+        Color::BrightBlue,
     ];
     let c = colors[tty.depth() % colors.len()];
     match n.e() {

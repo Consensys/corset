@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Context, Result};
-use colored::Colorize;
 use log::*;
 use logging_timer::time;
+use owo_colors::OwoColorize;
 use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},

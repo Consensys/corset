@@ -1,8 +1,8 @@
 use cached::SizedCache;
-use colored::Colorize;
 #[cfg(feature = "interactive")]
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use rayon::prelude::*;
 use std::collections::HashSet;
 

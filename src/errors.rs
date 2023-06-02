@@ -1,5 +1,5 @@
 use super::pretty::Pretty;
-use colored::Colorize;
+use owo_colors::OwoColorize;
 use pairing_ce::bn256::Fr;
 use thiserror::Error;
 
@@ -36,7 +36,7 @@ pub enum RuntimeError<'a> {
 }
 
 pub mod parser {
-    use colored::Colorize;
+    use owo_colors::OwoColorize;
 
     pub fn make_src_error(src: &str, lc: (usize, usize)) -> String {
         let src_str = src
@@ -58,7 +58,7 @@ pub mod parser {
 
 pub(crate) mod compiler {
     use crate::compiler::Type;
-    use colored::Colorize;
+    use owo_colors::OwoColorize;
     use thiserror::Error;
 
     #[derive(Error, Debug)]
@@ -121,7 +121,7 @@ pub(crate) mod compiler {
 }
 
 pub mod symbols {
-    use colored::Colorize;
+    use owo_colors::OwoColorize;
     use thiserror::Error;
 
     #[derive(Error, Debug)]

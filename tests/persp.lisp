@@ -18,7 +18,7 @@
 
 (defconstraint pipo () (mul B C))
 
-(defconstraint asdf () (= X B ( set1\A)))
+(defconstraint asdf2 () (= X B  set1/A))
 
 ;; (defconstraint pipo2 () (+ ZY 5))
 

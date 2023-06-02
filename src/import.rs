@@ -1,10 +1,10 @@
 use super::compiler::ColumnRef;
 use anyhow::*;
 use cached::Cached;
-use colored::Colorize;
 use flate2::bufread::GzDecoder;
 use log::*;
 use logging_timer::time;
+use owo_colors::OwoColorize;
 use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},

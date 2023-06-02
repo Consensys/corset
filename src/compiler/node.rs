@@ -1,9 +1,9 @@
 use crate::compiler::ColumnID;
 use anyhow::*;
 use cached::Cached;
-use colored::{ColoredString, Colorize};
 use num_bigint::BigInt;
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use owo_colors::{colored::Color, OwoColorize};
 use pairing_ce::ff::Field;
 use pairing_ce::{bn256::Fr, ff::PrimeField};
 use serde::{Deserialize, Serialize};
@@ -242,11 +242,13 @@ impl Node {
     }
 
     pub fn pretty_with_handle(&self, cs: &ConstraintSet) -> String {
-        fn rec_pretty(s: &Node, depth: usize, cs: &ConstraintSet) -> ColoredString {
+        fn rec_pretty(s: &Node, depth: usize, cs: &ConstraintSet) -> String {
             let c = &COLORS[depth % COLORS.len()];
             match s.e() {
-                Expression::Const(x, _) => format!("{}", x).color(*c),
-                Expression::Column { handle, .. } => cs.handle(handle).to_string().color(*c),
+                Expression::Const(x, _) => format!("{}", x).color(*c).to_string(),
+                Expression::Column { handle, .. } => {
+                    cs.handle(handle).to_string().color(*c).to_string()
+                }
                 Expression::ArrayColumn {
                     handle,
                     domain: range,
@@ -257,12 +259,17 @@ impl Node {
                     range.first().unwrap(),
                     range.last().unwrap(),
                 )
-                .color(*c),
-                Expression::List(ns) => format!("{{{}}}", format_list(ns, depth + 1, cs)).color(*c),
+                .color(*c)
+                .to_string(),
+                Expression::List(ns) => format!("{{{}}}", format_list(ns, depth + 1, cs))
+                    .color(*c)
+                    .to_string(),
                 Expression::Funcall { func, args } => {
-                    format!("({:?} {})", func, format_list(args, depth + 1, cs)).color(*c)
+                    format!("({:?} {})", func, format_list(args, depth + 1, cs))
+                        .color(*c)
+                        .to_string()
                 }
-                Expression::Void => "nil".color(*c),
+                Expression::Void => "nil".color(*c).to_string(),
             }
         }
         fn format_list(ns: &[Node], depth: usize, cs: &ConstraintSet) -> String {
@@ -286,21 +293,21 @@ impl Node {
             zero_context: bool, // whether we are in a zero-path
         ) {
             let colors = [
-                colored::Color::Red,
-                colored::Color::Green,
-                colored::Color::Yellow,
-                colored::Color::Blue,
-                colored::Color::Magenta,
-                colored::Color::Cyan,
-                colored::Color::BrightRed,
-                colored::Color::BrightGreen,
-                colored::Color::BrightYellow,
-                colored::Color::BrightBlue,
-                colored::Color::BrightMagenta,
-                colored::Color::BrightCyan,
+                Color::Red,
+                Color::Green,
+                Color::Yellow,
+                Color::Blue,
+                Color::Magenta,
+                Color::Cyan,
+                Color::BrightRed,
+                Color::BrightGreen,
+                Color::BrightYellow,
+                Color::BrightBlue,
+                Color::BrightMagenta,
+                Color::BrightCyan,
             ];
             let c = if dim && zero_context {
-                colored::Color::BrightBlack
+                Color::BrightBlack
             } else {
                 colors[tty.depth() % colors.len()]
             };
@@ -309,21 +316,21 @@ impl Node {
                 Expression::Funcall { func, args } => {
                     let v = f(n).unwrap_or_default();
                     if v.is_zero() && unclutter {
-                        tty.write("...".color(colored::Color::BrightBlack).to_string());
+                        tty.write("...".color(Color::BrightBlack).to_string());
                         return;
                     }
                     let fname = func.to_string();
                     let c = if v.is_zero() && zero_context {
-                        colored::Color::BrightBlack
+                        Color::BrightBlack
                     } else {
                         c
                     };
                     let c_v = if dim && (zero_context || v.is_zero()) {
-                        colored::Color::BrightBlack
+                        Color::BrightBlack
                     } else if v.eq(faulty) {
-                        colored::Color::Red
+                        Color::Red
                     } else {
-                        colored::Color::White
+                        Color::White
                     };
 
                     if matches!(func, Intrinsic::Shift) {
@@ -380,20 +387,20 @@ impl Node {
                 }
                 Expression::Const(x, _) => {
                     let c = if dim && zero_context {
-                        colored::Color::BrightBlack
+                        Color::BrightBlack
                     } else {
-                        colored::Color::White
+                        Color::White
                     };
                     tty.write(x.to_string().color(c).bold().to_string());
                 }
                 Expression::Column { handle: h, .. } => {
                     let v = f(n).unwrap_or_default();
                     let c = if dim && zero_context {
-                        colored::Color::BrightBlack
+                        Color::BrightBlack
                     } else if v.eq(faulty) {
-                        colored::Color::Red
+                        Color::Red
                     } else {
-                        colored::Color::BrightWhite
+                        Color::BrightWhite
                     };
 
                     // let h = h.as_handle();
@@ -407,7 +414,7 @@ impl Node {
                 Expression::List(ns) => {
                     let v = f(n).unwrap();
                     let c = if v.is_zero() && dim {
-                        colored::Color::BrightBlack
+                        Color::BrightBlack
                     } else {
                         c
                     };

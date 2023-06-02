@@ -6,11 +6,11 @@ use crate::{
     structs::Handle,
 };
 use anyhow::*;
-use colored::Colorize;
 use itertools::Itertools;
 use log::*;
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
+use owo_colors::OwoColorize;
 use pairing_ce::ff::PrimeField;
 use serde::{Deserialize, Serialize};
 use sorbus::{NodeID, Tree};

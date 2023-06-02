@@ -1,4 +1,4 @@
-use colored::{Color, Colorize};
+use owo_colors::{colored::Color, OwoColorize};
 
 pub struct Tty {
     depths: Vec<usize>,

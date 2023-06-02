@@ -1,4 +1,4 @@
-use colored::{Color, ColoredString, Colorize};
+use owo_colors::{colored::Color, OwoColorize};
 use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},
@@ -71,11 +71,11 @@ impl Pretty for Fr {
 
 impl Pretty for Node {
     fn pretty(&self) -> String {
-        fn rec_pretty(s: &Node, depth: usize) -> ColoredString {
+        fn rec_pretty(s: &Node, depth: usize) -> String {
             let c = &COLORS[depth % COLORS.len()];
             match s.e() {
-                Expression::Const(x, _) => format!("{}", x).color(*c),
-                Expression::Column { handle, .. } => handle.to_string().color(*c),
+                Expression::Const(x, _) => format!("{}", x).color(*c).to_string(),
+                Expression::Column { handle, .. } => handle.to_string().color(*c).to_string(),
                 Expression::ArrayColumn {
                     handle,
                     domain: range,
@@ -86,12 +86,17 @@ impl Pretty for Node {
                     range.first().unwrap(),
                     range.last().unwrap(),
                 )
-                .color(*c),
-                Expression::List(cs) => format!("{{{}}}", format_list(cs, depth + 1)).color(*c),
+                .color(*c)
+                .to_string(),
+                Expression::List(cs) => format!("{{{}}}", format_list(cs, depth + 1))
+                    .color(*c)
+                    .to_string(),
                 Expression::Funcall { func, args } => {
-                    format!("({:?} {})", func, format_list(args, depth + 1)).color(*c)
+                    format!("({:?} {})", func, format_list(args, depth + 1))
+                        .color(*c)
+                        .to_string()
                 }
-                Expression::Void => "nil".color(*c),
+                Expression::Void => "nil".color(*c).to_string(),
             }
         }
         fn format_list(cs: &[Node], depth: usize) -> String {

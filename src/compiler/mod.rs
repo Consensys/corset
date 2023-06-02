@@ -36,8 +36,8 @@ pub fn make<S: AsRef<str>>(
     sources: &[(&str, S)],
     settings: &CompileSettings,
 ) -> Result<(Vec<Ast>, ConstraintSet)> {
-    use colored::Colorize;
     use num_bigint::BigInt;
+    use owo_colors::OwoColorize;
 
     use crate::{
         column::Column,

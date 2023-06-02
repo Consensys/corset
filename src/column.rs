@@ -5,8 +5,8 @@ use crate::{
     structs::Handle,
 };
 use anyhow::*;
-use colored::Colorize;
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use pairing_ce::{bn256::Fr, ff::Field};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

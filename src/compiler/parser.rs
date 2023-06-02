@@ -1,6 +1,5 @@
 use crate::{errors, pretty::Base};
 use anyhow::{anyhow, bail, Context, Result};
-use colored::Colorize;
 use itertools::Itertools;
 use num_bigint::BigInt;
 #[cfg(feature = "parser")]
@@ -607,6 +606,8 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
 
 #[cfg(feature = "parser")]
 fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
+    use owo_colors::OwoColorize;
+
     let lc = pair.as_span().start_pos().line_col();
     let src = pair.as_str().to_owned();
 

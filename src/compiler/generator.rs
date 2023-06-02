@@ -1,6 +1,5 @@
 use anyhow::*;
 use cached::Cached;
-use colored::Colorize;
 use itertools::Itertools;
 use log::*;
 use logging_timer::time;
@@ -8,6 +7,7 @@ use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
 use num_traits::{One, Zero};
 use once_cell::sync::OnceCell;
+use owo_colors::OwoColorize;
 use pairing_ce::bn256::Fr;
 use pairing_ce::ff::{Field, PrimeField};
 use serde::{Deserialize, Serialize};
