@@ -22,6 +22,7 @@ pub enum Form {
 pub enum Builtin {
     Len,
     Eq,
+    SelfInv,
 }
 impl std::fmt::Display for Builtin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -31,6 +32,7 @@ impl std::fmt::Display for Builtin {
             match self {
                 Builtin::Len => "len",
                 Builtin::Eq => "eq",
+                Builtin::SelfInv => "~",
             }
         )
     }
@@ -176,6 +178,7 @@ impl FuncVerifier<Node> for Builtin {
         match self {
             Builtin::Eq => Arity::Dyadic,
             Builtin::Len => Arity::Monadic,
+            Builtin::SelfInv => Arity::Monadic,
         }
     }
 
@@ -184,6 +187,7 @@ impl FuncVerifier<Node> for Builtin {
         let expected_t: &[&[Type]] = match self {
             Builtin::Eq => &[&[Type::Column(Magma::Any), Type::Scalar(Magma::Any)]],
             Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
+            Builtin::SelfInv => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
         };
 
         if super::compatible_with(expected_t, &args_t) {

@@ -1106,6 +1106,17 @@ fn apply_builtin(
                 bail!(RuntimeError::NotAnArray(traversed_args[0].e().clone()))
             }
         }
+        Builtin::SelfInv => Ok(Some(if traversed_args[0].t().is_bool() {
+            traversed_args[0].clone()
+        } else {
+            Intrinsic::Mul
+                .call(&[
+                    traversed_args[0].clone(),
+                    Intrinsic::Inv.call(&[traversed_args[0].clone()])?,
+                ])?
+                // X × /X is always 0 or 1 by construction
+                .with_type(traversed_args[0].t().with_magma(Magma::Boolean))
+        })),
         Builtin::Eq => {
             let x = &traversed_args[0];
             let y = &traversed_args[1];
