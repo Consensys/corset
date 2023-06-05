@@ -22,5 +22,5 @@ typing = @{ "NATURAL" | "BOOLEAN" | "BYTE" | "NIBBLE" }
 
 integer = @{ "-"? ~ natural }
 natural = @{ "0x" ~ ASCII_HEX_DIGIT+ | "0b" ~ ASCII_BIN_DIGIT+ | ASCII_DIGIT+ }
-symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" | "," | "." | "'" | "/" )+ }
+symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" | "," | "." | "'" | "/" | "!")+ }
 keyword = @{ ":" ~ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" )+  }

@@ -32,7 +32,7 @@ impl Type {
         }
     }
 
-    pub fn same_scale(&self, new: Magma) -> Self {
+    pub fn with_magma(&self, new: Magma) -> Self {
         match self {
             Type::Void => todo!(),
             Type::Scalar(_) => Type::Scalar(new),
@@ -42,7 +42,7 @@ impl Type {
         }
     }
 
-    pub fn same_magma(&self, new: Type) -> Self {
+    pub fn with_scale(&self, new: Type) -> Self {
         let magma = self.magma();
         match new {
             Type::Void => Type::Void,

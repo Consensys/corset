@@ -5,6 +5,10 @@
 (defunalias mul *)
 (defunalias either *)
 (defunalias all +)
+(defpurefun ((force-bool :boolean :nowarn) x) x)
+(defpurefun ((not :boolean :nowarn) (x :boolean)) (- 1 x))
+(defpurefun ((~ :boolean :nowarn) x) (* x (inv x)))
+
 
 (defunalias add +)
 
@@ -17,7 +21,7 @@
                       (* 2 e0 e1)))
 (defpurefun (is-binary e0) (* e0 (- 1 e0)))
 
-;; Chronological forms
+;; Chronological functions
 (defpurefun (next X) (shift X 1))
 (defpurefun (prev X) (shift X -1))
 (defpurefun (inc e0 offset) (eq (next e0)

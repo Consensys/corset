@@ -135,14 +135,34 @@ pub enum FunctionClass {
 pub struct Defined {
     pub pure: bool,
     pub args: Vec<String>,
+    pub in_magmas: Vec<Magma>,
+    pub out_magma: Magma,
     pub body: AstNode,
+    pub nowarn: bool,
 }
 impl FuncVerifier<Node> for Defined {
     fn arity(&self) -> Arity {
         Arity::Exactly(self.args.len())
     }
 
-    fn validate_types(&self, _args: &[Node]) -> Result<()> {
+    fn validate_types(&self, args: &[Node]) -> Result<()> {
+        self.in_magmas
+            .iter()
+            .zip(args.iter().map(|a| a.t()))
+            .enumerate()
+            .map(|(i, ts)| {
+                if ts.1.magma() <= *ts.0 {
+                    Ok(())
+                } else {
+                    bail!(
+                        "{} expects {:?}, found {:?}",
+                        self.args[i].yellow().bold(),
+                        ts.0.blue(),
+                        ts.1.red()
+                    )
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
         Ok(())
     }
 }
@@ -1044,12 +1064,25 @@ fn apply_defined(
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     );
     b.validate_args(&traversed_args)
-        .with_context(|| anyhow!("validating call to `{}`", h))?;
+        .with_context(|| anyhow!("validating call to {}", h.pretty()))?;
     let mut f_ctx = ctx.derived(&f_mangle, b.pure, false, false);
     for (i, f_arg) in b.args.iter().enumerate() {
         f_ctx.insert_symbol(f_arg, traversed_args[i].clone())?;
     }
-    reduce(&b.body, &mut f_ctx, settings)
+    Ok(if let Some(r) = reduce(&b.body, &mut f_ctx, settings)? {
+        if r.t().magma() > b.out_magma && !b.nowarn {
+            warn!(
+                "in call to {}: inferred output type {:?} is incompatible with declared type {:?}",
+                h.pretty(),
+                r.t().yellow(),
+                b.out_magma.blue()
+            )
+        }
+        let new_type = r.t().with_magma(b.out_magma);
+        Some(r.with_type(new_type))
+    } else {
+        None
+    })
 }
 
 fn apply_builtin(
@@ -1061,19 +1094,6 @@ fn apply_builtin(
     b.validate_args(&traversed_args)?;
 
     match b {
-        Builtin::ForceBool => {
-            let arg = traversed_args[0].to_owned();
-            if traversed_args[0].t().is_bool() {
-                warn!(
-                    "useless use of force-bool: {} is already boolean",
-                    traversed_args[0].pretty()
-                );
-                Ok(Some(arg))
-            } else {
-                let new_type = arg.t().same_scale(Magma::Boolean);
-                Ok(Some(arg.with_type(new_type)))
-            }
-        }
         Builtin::Len => {
             if let Expression::ArrayColumn {
                 handle: _,
@@ -1086,20 +1106,6 @@ fn apply_builtin(
                 bail!(RuntimeError::NotAnArray(traversed_args[0].e().clone()))
             }
         }
-        Builtin::SelfInv => Ok(Some(
-            Intrinsic::Mul
-                .call(&[
-                    traversed_args[0].clone(),
-                    Intrinsic::Inv.call(&[traversed_args[0].clone()])?,
-                ])?
-                // X × /X is always 0 or 1 by construction
-                .with_type(traversed_args[0].t().same_scale(Magma::Boolean)),
-        )),
-        Builtin::Not => Ok(Some(
-            Intrinsic::Sub
-                .call(&[Node::one(), traversed_args[0].to_owned()])?
-                .with_type(traversed_args[0].t().same_scale(Magma::Boolean)),
-        )),
         Builtin::Eq => {
             let x = &traversed_args[0];
             let y = &traversed_args[1];
@@ -1111,7 +1117,7 @@ fn apply_builtin(
                             Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
                             Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
                         ])?
-                        .with_type(x.t().same_scale(Magma::Boolean)),
+                        .with_type(x.t().with_magma(Magma::Boolean)),
                 ))
             } else {
                 Ok(Some(Intrinsic::Sub.call(&[
@@ -1332,97 +1338,6 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                         unreachable!()
                     }
                 })?;
-
-                // // Handle perspective stuff
-                // let persp = from_handles
-                //     .iter()
-                //     .filter_map(|h| h.perspective.clone())
-                //     .collect::<HashSet<_>>();
-                // if persp.len() > 1 {
-                //     bail!(
-                //         "unable to interleave columns {} from different perspectives {}",
-                //         from_handles.iter().map(Pretty::pretty).join(", "),
-                //         persp.iter().join(", ")
-                //     );
-                // }
-                // if let Some(persp) = persp.into_iter().next() {
-                //     // Create a new column that will extend the perspective
-                //     // guard to the size of the interleaving.
-                //     // The new guards:
-                //     // 1. does not belong to the perspective
-                //     // 2. is made of interleaving the original guard
-                //     // 3. is assigned as a guard of the automatically
-                //     //    created interleaving representing the interleaved
-                //     //    perspective.
-                //     // TODO: handle the case where the guard is an expression
-                //     let new_perspective = format!("{}%intrld×{}", persp, froms.len());
-                //     let module = ctx.module();
-                //     let guard = ctx
-                //         .tree
-                //         .borrow()
-                //         .metadata()
-                //         .get_perspective_trigger(&module, &persp)?;
-
-                //     if let Expression::Column {
-                //         handle,
-                //         padding_value,
-                //         ..
-                //     } = guard
-                //     {
-                //         let new_name = format!("{}%intrld×{}", handle.name, froms.len());
-                //         let new_handle = Handle::new(&module, &new_name);
-                //         let kind = Kind::Interleaved(
-                //             vec![],
-                //             Some(
-                //                 std::iter::repeat(handle.clone())
-                //                     .take(froms.len())
-                //                     .collect::<Vec<_>>(),
-                //             ),
-                //         );
-
-                //         ctx.insert_symbol(
-                //             &new_name,
-                //             Node::column()
-                //                 .handle(new_handle.clone())
-                //                 .kind(kind.clone())
-                //                 .t(Magma::Integer) // FIXME: get guard type
-                //                 .and_padding_value(padding_value)
-                //                 .build(),
-                //         )?;
-
-                //         if ctx.create_perspective(&new_perspective).is_ok() {
-                //             debug!("defining perspective {}", new_perspective);
-                //             ctx.tree
-                //                 .borrow_mut()
-                //                 .metadata_mut()
-                //                 .set_perspective_trigger(
-                //                     &module,
-                //                     &new_perspective,
-                //                     Expression::Column {
-                //                         handle: new_handle.clone(),
-                //                         kind,
-                //                         padding_value: None,
-                //                         base: Base::Dec,
-                //                     },
-                //                 )?;
-                //         } else {
-                //             debug!("perspective {} already set", new_perspective);
-                //         }
-                //     } else {
-                //         // TODO: implement
-                //         bail!(
-                //             "expression-based perspective ({:?}) are not yet supported",
-                //             guard
-                //         )
-                //     }
-                //     ctx.edit_symbol(name, &|x| {
-                //         if let Expression::Column { handle, .. } = x {
-                //             handle.perspective = Some(new_perspective.clone());
-                //         } else {
-                //             unreachable!()
-                //         }
-                //     })?;
-                // }
                 Ok(None)
             }
             _ => Ok(None),

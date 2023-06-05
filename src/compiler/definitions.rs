@@ -149,7 +149,14 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
         Token::DefAliases(aliases) => aliases
             .iter()
             .fold(Ok(()), |ax, alias| ax.and(reduce(alias, ctx))),
-        Token::Defun { name, args, body } => {
+        Token::Defun {
+            name,
+            args,
+            body,
+            in_magmas,
+            out_magma,
+            nowarn,
+        } => {
             let module_name = ctx.module();
             ctx.insert_function(
                 name,
@@ -158,12 +165,22 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     class: FunctionClass::UserDefined(Defined {
                         pure: false,
                         args: args.to_owned(),
+                        in_magmas: in_magmas.to_vec(),
+                        out_magma: *out_magma,
                         body: *body.clone(),
+                        nowarn: *nowarn,
                     }),
                 },
             )
         }
-        Token::Defpurefun { name, args, body } => {
+        Token::Defpurefun {
+            name,
+            args,
+            body,
+            in_magmas,
+            out_magma,
+            nowarn,
+        } => {
             let module_name = ctx.module();
             ctx.insert_function(
                 name,
@@ -172,7 +189,10 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     class: FunctionClass::UserDefined(Defined {
                         pure: true,
                         args: args.to_owned(),
+                        in_magmas: in_magmas.to_vec(),
+                        out_magma: *out_magma,
                         body: *body.clone(),
+                        nowarn: *nowarn,
                     }),
                 },
             )

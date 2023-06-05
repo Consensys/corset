@@ -175,13 +175,22 @@ pub enum Token {
         name: String,
         /// the arguments are free strings, that will be resolved at evaluation
         args: Vec<String>,
+        /// the magmas of the arguments
+        in_magmas: Vec<Magma>,
+        /// the output magma
+        out_magma: Magma,
         /// the body is any reasonable expression (should it be enforced?)
         body: Box<AstNode>,
+        /// if set, do not warn on type override
+        nowarn: bool,
     },
     Defpurefun {
         name: String,
         args: Vec<String>,
+        in_magmas: Vec<Magma>,
+        out_magma: Magma,
         body: Box<AstNode>,
+        nowarn: bool,
     },
     /// a list of aliases declaration, normally only DefAlias -- XXX should probably be removed
     DefAliases(Vec<AstNode>),
@@ -286,10 +295,13 @@ impl Debug for Token {
                 name,
                 args,
                 body: content,
+                ..
             } => {
                 write!(f, "{}:({:?}) -> {:?}", name, args, content)
             }
-            Token::Defpurefun { name, args, body } => {
+            Token::Defpurefun {
+                name, args, body, ..
+            } => {
                 write!(f, "{}:({:?}) -> {:?}", name, args, body)
             }
             Token::DefAliases(cols) => write!(f, "ALIASES {:?}", cols),
@@ -651,6 +663,41 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             src,
         }),
         kw @ ("defun" | "defpurefun") => {
+            fn parse_typed_symbols(l: AstNode) -> Result<(String, Magma, bool)> {
+                match l.class {
+                    Token::Symbol(s) => Ok((s.to_owned(), Magma::Any, false)),
+                    Token::List(xs) => match xs.as_slice() {
+                        [AstNode {
+                            class: Token::Symbol(s),
+                            ..
+                        }, AstNode {
+                            class: Token::Keyword(t),
+                            ..
+                        }] => Ok((s.to_owned(), Magma::try_from(t.as_str())?, false)),
+                        [AstNode {
+                            class: Token::Symbol(s),
+                            ..
+                        }, AstNode {
+                            class: Token::Keyword(t),
+                            ..
+                        }, AstNode {
+                            class: Token::Keyword(n),
+                            ..
+                        }] => {
+                            if n == ":nowarn" {
+                                Ok((s.to_owned(), Magma::try_from(t.as_str())?, true))
+                            } else {
+                                bail!("SCREW YOU {}", n)
+                            }
+                        }
+                        _ => Err(anyhow!(
+                            "invalid argument format: expected SYMBOL or (SYMBOL :TYPE)"
+                        )),
+                    },
+                    _ => Err(anyhow!("invalid function argument")),
+                }
+            }
+
             let mut decl = tokens
                 .next()
                 .ok_or_else(|| anyhow!("expected function declaration"))??
@@ -659,20 +706,18 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 .to_vec()
                 .into_iter();
 
-            let name = decl
-                .next()
-                .with_context(|| anyhow!("missing function name"))?
-                .as_symbol()
-                .with_context(|| anyhow!("invalid function name"))?
-                .to_owned();
+            let (name, out_magma, nowarn) = parse_typed_symbols(
+                decl.next()
+                    .with_context(|| anyhow!("missing function name"))?,
+            )
+            .with_context(|| anyhow!("invalid function declaration"))?;
 
-            let args = decl
-                .map(|a| {
-                    a.as_symbol()
-                        .with_context(|| anyhow!("invalid function argument"))
-                        .map(|x| x.to_owned())
-                })
-                .collect::<Result<Vec<_>>>()?;
+            let (args, in_magmas): (Vec<String>, Vec<Magma>) = decl
+                .map(parse_typed_symbols)
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .map(|x| (x.0, x.1))
+                .unzip();
 
             let body = Box::new(
                 tokens
@@ -686,9 +731,23 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
 
             Ok(AstNode {
                 class: if kw == "defun" {
-                    Token::Defun { name, args, body }
+                    Token::Defun {
+                        name,
+                        args,
+                        in_magmas,
+                        out_magma,
+                        body,
+                        nowarn,
+                    }
                 } else {
-                    Token::Defpurefun { name, args, body }
+                    Token::Defpurefun {
+                        name,
+                        args,
+                        in_magmas,
+                        out_magma,
+                        body,
+                        nowarn,
+                    }
                 },
                 src,
                 lc,

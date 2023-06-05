@@ -22,9 +22,6 @@ pub enum Form {
 pub enum Builtin {
     Len,
     Eq,
-    ForceBool,
-    SelfInv,
-    Not,
 }
 impl std::fmt::Display for Builtin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -32,11 +29,8 @@ impl std::fmt::Display for Builtin {
             f,
             "{}",
             match self {
-                Builtin::ForceBool => "force-bool",
                 Builtin::Len => "len",
                 Builtin::Eq => "eq",
-                Builtin::Not => "not",
-                Builtin::SelfInv => "~",
             }
         )
     }
@@ -180,11 +174,8 @@ pub trait FuncVerifier<T: Clone> {
 impl FuncVerifier<Node> for Builtin {
     fn arity(&self) -> Arity {
         match self {
-            Builtin::Not => Arity::Monadic,
             Builtin::Eq => Arity::Dyadic,
-            Builtin::ForceBool => Arity::Monadic,
             Builtin::Len => Arity::Monadic,
-            Builtin::SelfInv => Arity::Monadic,
         }
     }
 
@@ -192,14 +183,7 @@ impl FuncVerifier<Node> for Builtin {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
         let expected_t: &[&[Type]] = match self {
             Builtin::Eq => &[&[Type::Column(Magma::Any), Type::Scalar(Magma::Any)]],
-            Builtin::Not => &[&[Type::Scalar(Magma::Boolean), Type::Column(Magma::Boolean)]],
-            Builtin::ForceBool => &[&[
-                Type::Scalar(Magma::Any),
-                Type::Column(Magma::Any),
-                Type::List(Magma::Any),
-            ]],
             Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
-            Builtin::SelfInv => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
         };
 
         if super::compatible_with(expected_t, &args_t) {
