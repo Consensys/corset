@@ -154,10 +154,8 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Sub => Arity::AtLeast(1),
             Intrinsic::Mul => Arity::AtLeast(1),
             Intrinsic::Exp => Arity::Dyadic,
-            Intrinsic::Eq => Arity::Dyadic,
             Intrinsic::Neg => Arity::Monadic,
             Intrinsic::Inv => Arity::Monadic,
-            Intrinsic::Not => Arity::Monadic,
             Intrinsic::Shift => Arity::Dyadic,
             Intrinsic::Begin => Arity::AtLeast(1),
             Intrinsic::IfZero => Arity::Between(2, 3),
@@ -167,6 +165,17 @@ impl FuncVerifier<Node> for Intrinsic {
     }
     fn validate_types(&self, args: &[Node]) -> Result<()> {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
+        // The typing of functions is represented as a list of list.
+        //
+        // The elements of the first-level list represent the acceptable typing
+        // for the arguments of the function, in their order.
+        //
+        // Each nested second-level list represent the acceptable typings for
+        // the argument they type.
+        //
+        // The first-level list is cycled as many times is needed to validate
+        // all the arguments. Therefore, for function taking homogeneous
+        // arguments (e.g. Add), a single second-level list is required.
         let expected_t: &[&[Type]] = match self {
             Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => {
                 &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]]
@@ -175,8 +184,6 @@ impl FuncVerifier<Node> for Intrinsic {
                 &[Type::Scalar(Magma::Any), Type::Column(Magma::Any)],
                 &[Type::Scalar(Magma::Any)],
             ],
-            Intrinsic::Eq => &[&[Type::Column(Magma::Any), Type::Scalar(Magma::Any)]],
-            Intrinsic::Not => &[&[Type::Scalar(Magma::Boolean), Type::Column(Magma::Boolean)]],
             Intrinsic::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
             Intrinsic::Inv => &[&[Type::Column(Magma::Any)]],
             Intrinsic::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
@@ -1091,6 +1098,31 @@ fn apply_builtin(
                 // X × /X is always 0 or 1 by construction
                 .with_type(traversed_args[0].t().same_scale(Magma::Boolean)),
         )),
+        Builtin::Not => Ok(Some(
+            Intrinsic::Sub
+                .call(&[Node::one(), traversed_args[0].to_owned()])?
+                .with_type(traversed_args[0].t().same_scale(Magma::Boolean)),
+        )),
+        Builtin::Eq => {
+            let x = &traversed_args[0];
+            let y = &traversed_args[1];
+            if x.t().is_bool() && y.t().is_bool() {
+                // NOTE in this very specific case, we are sure that (x - y)² is boolean
+                Ok(Some(
+                    Intrinsic::Mul
+                        .call(&[
+                            Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
+                            Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
+                        ])?
+                        .with_type(x.t().same_scale(Magma::Boolean)),
+                ))
+            } else {
+                Ok(Some(Intrinsic::Sub.call(&[
+                    traversed_args[0].to_owned(),
+                    traversed_args[1].to_owned(),
+                ])?))
+            }
+        }
     }
 }
 
@@ -1157,32 +1189,6 @@ fn apply_intrinsic(
                 unreachable!()
             }
         }
-        Intrinsic::Not => Ok(Some(
-            Intrinsic::Sub
-                .call(&[Node::one(), traversed_args[0].to_owned()])?
-                .with_type(traversed_args[0].t().same_scale(Magma::Boolean)),
-        )),
-
-        Intrinsic::Eq => {
-            let x = &traversed_args[0];
-            let y = &traversed_args[1];
-            if traversed_args_t[0].is_bool() && traversed_args_t[1].is_bool() {
-                Ok(Some(Node {
-                    _e: Intrinsic::Mul.raw_call(&[
-                        Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
-                        Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
-                    ]),
-                    // NOTE in this very specific case, we are sure that (x - y)² is boolean
-                    _t: Some(x.t().same_scale(Magma::Boolean)),
-                }))
-            } else {
-                Ok(Some(Intrinsic::Sub.call(&[
-                    traversed_args[0].to_owned(),
-                    traversed_args[1].to_owned(),
-                ])?))
-            }
-        }
-
         b @ (Intrinsic::Add
         | Intrinsic::Sub
         | Intrinsic::Mul

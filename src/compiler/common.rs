@@ -21,8 +21,10 @@ pub enum Form {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Builtin {
     Len,
+    Eq,
     ForceBool,
     SelfInv,
+    Not,
 }
 impl std::fmt::Display for Builtin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -32,6 +34,8 @@ impl std::fmt::Display for Builtin {
             match self {
                 Builtin::ForceBool => "force-bool",
                 Builtin::Len => "len",
+                Builtin::Eq => "eq",
+                Builtin::Not => "not",
                 Builtin::SelfInv => "~",
             }
         )
@@ -49,10 +53,8 @@ pub enum Intrinsic {
     Shift,
     Neg,
     Inv,
-    Not,
 
     Nth,
-    Eq,
     Begin,
 
     IfZero,
@@ -82,13 +84,6 @@ impl Intrinsic {
                 }
             }
             Intrinsic::Exp => argtype[0],
-            Intrinsic::Eq => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
-            Intrinsic::Not => argtype
-                .iter()
-                .max()
-                .cloned()
-                .unwrap_or(Type::INFIMUM)
-                .same_scale(Magma::Boolean),
             Intrinsic::Mul => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
             Intrinsic::IfZero | Intrinsic::IfNotZero => {
                 argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
@@ -107,7 +102,6 @@ impl std::fmt::Display for Intrinsic {
             f,
             "{}",
             match self {
-                Intrinsic::Eq => "eq",
                 Intrinsic::Add => "+",
                 Intrinsic::Sub => "-",
                 Intrinsic::Mul => "*",
@@ -115,7 +109,6 @@ impl std::fmt::Display for Intrinsic {
                 Intrinsic::Shift => "shift",
                 Intrinsic::Neg => "-",
                 Intrinsic::Inv => "inv",
-                Intrinsic::Not => "not",
                 Intrinsic::Nth => "nth",
                 Intrinsic::Begin => "begin",
                 Intrinsic::IfZero => "if-zero",
@@ -189,6 +182,8 @@ pub trait FuncVerifier<T: Clone> {
 impl FuncVerifier<Node> for Builtin {
     fn arity(&self) -> Arity {
         match self {
+            Builtin::Not => Arity::Monadic,
+            Builtin::Eq => Arity::Dyadic,
             Builtin::ForceBool => Arity::Monadic,
             Builtin::Len => Arity::Monadic,
             Builtin::SelfInv => Arity::Monadic,
@@ -198,6 +193,8 @@ impl FuncVerifier<Node> for Builtin {
     fn validate_types(&self, args: &[Node]) -> Result<()> {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
         let expected_t: &[&[Type]] = match self {
+            Builtin::Eq => &[&[Type::Column(Magma::Any), Type::Scalar(Magma::Any)]],
+            Builtin::Not => &[&[Type::Scalar(Magma::Boolean), Type::Column(Magma::Boolean)]],
             Builtin::ForceBool => &[&[
                 Type::Scalar(Magma::Any),
                 Type::Column(Magma::Any),

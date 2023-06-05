@@ -672,19 +672,6 @@ impl Node {
                     let shift = args[1].pure_eval().unwrap().to_isize().unwrap();
                     args[0].eval_fold(i + shift, get, cache, &EvalSettings { wrap: false }, f)
                 }
-                Intrinsic::Eq => {
-                    let (x, y) = (
-                        args[0].eval_fold(i, get, cache, settings, f)?,
-                        args[1].eval_fold(i, get, cache, settings, f)?,
-                    );
-                    if args[0].t().is_bool() && args[1].t().is_bool() {
-                        Some(if x.eq(&y) { Fr::zero() } else { Fr::one() })
-                    } else {
-                        let mut ax = x;
-                        ax.sub_assign(&y);
-                        Some(ax)
-                    }
-                }
                 Intrinsic::Neg => args[0].eval_fold(i, get, cache, settings, f).map(|mut x| {
                     x.negate();
                     x
@@ -699,15 +686,6 @@ impl Node {
                         })
                     } else {
                         x.and_then(|x| x.inverse()).or_else(|| Some(Fr::zero()))
-                    }
-                }
-                Intrinsic::Not => {
-                    let mut r = Fr::one();
-                    if let Some(x) = args[0].eval_fold(i, get, cache, settings, f) {
-                        r.sub_assign(&x);
-                        Some(r)
-                    } else {
-                        None
                     }
                 }
                 Intrinsic::Nth => {

@@ -46,7 +46,7 @@ lazy_static::lazy_static! {
             class: FunctionClass::Form(Form::Reduce)
         },
 
-        // Builtin special functions
+        // Builtin functions
         "len" => Function {
             handle: Handle::new(super::MAIN_MODULE, Builtin::Len.to_string()),
             class: FunctionClass::Builtin(Builtin::Len),
@@ -59,6 +59,15 @@ lazy_static::lazy_static! {
             handle:Handle::new(super::MAIN_MODULE, "~"),
             class: FunctionClass::Builtin(Builtin::SelfInv),
         },
+        "not" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "not"),
+            class: FunctionClass::Builtin(Builtin::Not),
+        },
+        "eq" => Function{
+            handle: Handle::new(super::MAIN_MODULE, "eq"),
+            class: FunctionClass::Builtin(Builtin::Eq),
+        },
+
 
         // Intrinsics
         "inv" => Function {
@@ -69,17 +78,9 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "neg"),
             class: FunctionClass::Intrinsic(Intrinsic::Neg)
         },
-        "not" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "not"),
-            class: FunctionClass::Intrinsic(Intrinsic::Not),
-        },
         "nth" => Function {
             handle: Handle::new(super::MAIN_MODULE, "nth"),
             class: FunctionClass::Intrinsic(Intrinsic::Nth),
-        },
-        "eq" => Function{
-            handle: Handle::new(super::MAIN_MODULE, "eq"),
-            class: FunctionClass::Intrinsic(Intrinsic::Eq),
         },
         "shift" => Function{
             handle: Handle::new(super::MAIN_MODULE, "shift"),

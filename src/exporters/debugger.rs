@@ -77,13 +77,7 @@ fn pretty_expr(cs: &ConstraintSet, n: &Node, prev: Option<Intrinsic>, tty: &mut 
                 tty.write("INV");
                 pretty_expr(cs, &args[0], prev, tty);
             }
-            Intrinsic::Not => unreachable!(),
             Intrinsic::Nth => unreachable!(),
-            Intrinsic::Eq => {
-                pretty_expr(cs, &args[0], None, tty);
-                tty.write(" == ");
-                pretty_expr(cs, &args[1], None, tty);
-            }
             Intrinsic::Begin => todo!(),
             Intrinsic::IfZero => {
                 tty.write("ifzero ".color(c).to_string());
