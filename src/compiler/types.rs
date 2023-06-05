@@ -4,6 +4,10 @@ use std::cmp::Ordering;
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 
+pub fn max_type<'a, TS: IntoIterator<Item = &'a Type>>(ts: TS) -> Type {
+    ts.into_iter().fold(Type::INFIMUM, |a, b| a.max(*b))
+}
+
 /// The type of a column in the IR. This struct contains both the dimensionality
 /// of the type and its underlying magma.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, Serialize, Deserialize)]

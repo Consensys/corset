@@ -952,10 +952,7 @@ fn apply_form(
                     };
                 }
 
-                Ok(Some(Node {
-                    _e: Expression::List(l),
-                    _t: Some(t),
-                }))
+                Ok(Some(Node::from(Expression::List(l)).with_type(t)))
             } else {
                 unreachable!()
             }
@@ -1136,9 +1133,10 @@ fn apply_intrinsic(
     let traversed_args_t = traversed_args.iter().map(|a| a.t()).collect::<Vec<_>>();
     match b {
         // Begin flattens & concatenate any list argument
-        Intrinsic::Begin => Ok(Some(Node {
-            _e: Expression::List(traversed_args.into_iter().fold(vec![], |mut ax, mut e| {
-                match e.e_mut() {
+        Intrinsic::Begin => Ok(Some(
+            Node::from(Expression::List(traversed_args.into_iter().fold(
+                vec![],
+                |mut ax, mut e| match e.e_mut() {
                     Expression::List(ref mut es) => {
                         ax.append(es);
                         ax
@@ -1147,14 +1145,10 @@ fn apply_intrinsic(
                         ax.push(e.to_owned());
                         ax
                     }
-                }
-            })),
-            _t: Some(
-                traversed_args_t
-                    .iter()
-                    .fold(Type::INFIMUM, |a, b| a.max(*b)),
-            ),
-        })),
+                },
+            )))
+            .with_type(super::max_type(&traversed_args_t)),
+        )),
 
         b @ (Intrinsic::IfZero | Intrinsic::IfNotZero) => Ok(Some(b.call(&traversed_args)?)),
 
@@ -1239,14 +1233,15 @@ fn apply(
 pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<Option<Node>> {
     match &e.class {
         Token::Keyword(_) | Token::Type(_) | Token::Range(_) => Ok(None),
-        Token::Value(x) => Ok(Some(Node {
-            _e: Expression::Const(x.clone(), Fr::from_str(&x.to_string())),
-            _t: Some(if *x >= Zero::zero() && *x <= One::one() {
-                Type::Scalar(Magma::Boolean)
-            } else {
-                Type::Scalar(Magma::Integer)
-            }),
-        })),
+        Token::Value(x) => Ok(Some(
+            Node::from(Expression::Const(x.clone(), Fr::from_str(&x.to_string()))).with_type(
+                if *x >= Zero::zero() && *x <= One::one() {
+                    Type::Scalar(Magma::Boolean)
+                } else {
+                    Type::Scalar(Magma::Integer)
+                },
+            ),
+        )),
         Token::Symbol(name) => {
             let r = if name.contains(PERSPECTIVE_SEPARATOR) {
                 let mut s = name.split(PERSPECTIVE_SEPARATOR);

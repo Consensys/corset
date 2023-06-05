@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::errors::CompileError;
 
 use super::parser::{AstNode, Token};
-use super::{Expression, Magma, Node, Type};
+use super::{max_type, Expression, Magma, Node, Type};
 
 /// A form is an applicable that operates directly on the AST
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -77,7 +77,7 @@ impl Intrinsic {
         match self {
             Intrinsic::Add | Intrinsic::Sub | Intrinsic::Neg | Intrinsic::Inv => {
                 // Boolean is a corner case, as it is not stable under these operations
-                match argtype.iter().fold(Type::INFIMUM, |a, b| a.max(*b)) {
+                match max_type(argtype) {
                     Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::Integer),
                     Type::Column(Magma::Boolean) => Type::Column(Magma::Integer),
                     x => x,
@@ -88,9 +88,7 @@ impl Intrinsic {
             Intrinsic::IfZero | Intrinsic::IfNotZero => {
                 argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
             }
-            Intrinsic::Begin => {
-                Type::List(argtype.iter().fold(Type::INFIMUM, |a, b| a.max(*b)).magma())
-            }
+            Intrinsic::Begin => Type::List(max_type(argtype).magma()),
             Intrinsic::Nth => Type::Column(argtype[0].magma()),
             Intrinsic::Shift => argtype[0],
         }

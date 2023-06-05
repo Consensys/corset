@@ -661,10 +661,7 @@ impl Scope {
             data_mut!(self).symbols.insert(
                 name.to_owned(),
                 Symbol::Final(
-                    Node {
-                        _e: Expression::Const(value, Some(fr)),
-                        _t: Some(t),
-                    },
+                    Node::from_expr(Expression::Const(value, Some(fr))).with_type(t),
                     false,
                 ),
             );

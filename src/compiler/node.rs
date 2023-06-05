@@ -132,8 +132,8 @@ pub enum Expression {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Node {
-    pub _e: Expression,
-    pub _t: Option<Type>,
+    _e: Expression,
+    _t: Option<Type>,
 }
 impl From<Expression> for Node {
     fn from(e: Expression) -> Self {
