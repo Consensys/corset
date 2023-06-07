@@ -1120,22 +1120,20 @@ fn apply_builtin(
         Builtin::Eq => {
             let x = &traversed_args[0];
             let y = &traversed_args[1];
-            if x.t().is_bool() && y.t().is_bool() {
-                // NOTE in this very specific case, we are sure that (x - y)² is boolean
-                Ok(Some(
-                    Intrinsic::Mul
-                        .call(&[
-                            Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
-                            Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
-                        ])?
-                        .with_type(x.t().with_magma(Magma::Boolean)),
-                ))
-            } else {
-                Ok(Some(Intrinsic::Sub.call(&[
-                    traversed_args[0].to_owned(),
-                    traversed_args[1].to_owned(),
-                ])?))
-            }
+
+            Ok(Some(
+                if x.t().is_bool() && y.t().is_bool() {
+                    // NOTE in this very specific case, we are sure that (x - y)² is boolean
+                    Intrinsic::Mul.call(&[
+                        Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
+                        Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
+                    ])?
+                } else {
+                    Intrinsic::Sub
+                        .call(&[traversed_args[0].to_owned(), traversed_args[1].to_owned()])?
+                }
+                .with_type(x.t().with_magma(Magma::Loobean)),
+            ))
         }
     }
 }
@@ -1294,7 +1292,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                 } else {
                     unreachable!()
                 }
-                dbg!(symbol)
+                symbol
             } else {
                 ctx.resolve_symbol(name)
                     .with_context(|| make_ast_error(e))?
@@ -1421,6 +1419,17 @@ fn reduce_toplevel(
             } else {
                 body
             };
+
+            if body.t().magma() != Magma::Loobean {
+                error!(
+                    "constraint {} should be of type {}, found {:?}",
+                    handle.pretty(),
+                    "Loobean".yellow().bold(),
+                    body.t().magma().red().bold()
+                )
+            } else {
+                println!("All good :) {}", handle.pretty())
+            }
 
             Ok(Some(Constraint::Vanishes {
                 handle,

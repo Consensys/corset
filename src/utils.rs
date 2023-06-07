@@ -8,7 +8,10 @@ use postgres::Client;
 #[cfg(feature = "postgres")]
 use std::io::Read;
 
-use crate::errors::RuntimeError;
+use crate::{
+    compiler::{Magma, Type},
+    errors::RuntimeError,
+};
 
 pub fn is_file_empty(f: &str) -> Result<bool> {
     std::fs::metadata(f)
@@ -44,31 +47,32 @@ lazy_static::lazy_static! {
     static ref F_255: Fr = Fr::from_str("255").unwrap();
 }
 
-pub fn validate(t: crate::compiler::Type, x: Fr) -> Result<Fr> {
+pub fn validate(t: Type, x: Fr) -> Result<Fr> {
     match t.magma() {
-        crate::compiler::Magma::Boolean => {
+        Magma::Boolean => {
             if x.is_zero() || x == Fr::one() {
                 Ok(x)
             } else {
                 bail!(RuntimeError::InvalidValue("bool", x))
             }
         }
-        crate::compiler::Magma::Nibble => {
+        Magma::Nibble => {
             if x.le(&F_15) {
                 Ok(x)
             } else {
                 bail!(RuntimeError::InvalidValue("nibble", x))
             }
         }
-        crate::compiler::Magma::Byte => {
+        Magma::Byte => {
             if x.le(&F_255) {
                 Ok(x)
             } else {
                 bail!(RuntimeError::InvalidValue("byte", x))
             }
         }
-        crate::compiler::Magma::Integer => Ok(x),
-        crate::compiler::Magma::Any => unreachable!(),
+        Magma::Integer => Ok(x),
+        Magma::Any => unreachable!(),
+        Magma::Loobean => unreachable!(), // input should never be declared as loobeans
     }
 }
 

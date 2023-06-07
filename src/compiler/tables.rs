@@ -55,8 +55,8 @@ lazy_static::lazy_static! {
             handle:Handle::new(super::MAIN_MODULE, "~"),
             class: FunctionClass::Builtin(Builtin::SelfInv),
         },
-        "eq" => Function{
-            handle: Handle::new(super::MAIN_MODULE, "eq"),
+        "eq!" => Function{
+            handle: Handle::new(super::MAIN_MODULE, "eq!"),
             class: FunctionClass::Builtin(Builtin::Eq),
         },
 
@@ -98,12 +98,12 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "begin"),
             class: FunctionClass::Intrinsic(Intrinsic::Begin)
         },
-        "if-zero" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "if-zero"),
+        "if!" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "if!"),
             class: FunctionClass::Intrinsic(Intrinsic::IfZero)
         },
-        "if-not-zero" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "if-not-zero"),
+        "if" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "if"),
             class: FunctionClass::Intrinsic(Intrinsic::IfNotZero)
         },
     };

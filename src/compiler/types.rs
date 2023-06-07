@@ -105,6 +105,7 @@ impl std::cmp::PartialOrd for Type {
 /// [ill-named] A magma is a set where some operations stay within itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum Magma {
+    Loobean,
     Boolean,
     /// 4-bits
     Nibble,
@@ -120,6 +121,7 @@ impl std::convert::TryFrom<&str> for Magma {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s.to_lowercase().as_str() {
+            ":loobean" | ":loob" => Ok(Magma::Loobean),
             ":boolean" | ":bool" => Ok(Magma::Boolean),
             ":nibble" => Ok(Magma::Nibble),
             ":byte" => Ok(Magma::Byte),
@@ -161,6 +163,16 @@ impl std::cmp::PartialOrd for Magma {
             (Magma::Any, Magma::Any) => Some(Ordering::Equal),
             (Magma::Any, _) => Some(Ordering::Greater),
             (_, Magma::Any) => Some(Ordering::Less),
+
+            (Magma::Loobean, Magma::Loobean) => Some(Ordering::Equal),
+            (Magma::Loobean, Magma::Boolean) => Some(Ordering::Greater),
+            (Magma::Loobean, Magma::Nibble) => todo!(),
+            (Magma::Loobean, Magma::Byte) => todo!(),
+            (Magma::Loobean, Magma::Integer) => Some(Ordering::Greater),
+            (Magma::Boolean, Magma::Loobean) => Some(Ordering::Less),
+            (Magma::Nibble, Magma::Loobean) => todo!(),
+            (Magma::Byte, Magma::Loobean) => Some(Ordering::Less),
+            (Magma::Integer, Magma::Loobean) => Some(Ordering::Less),
         }
     }
 }

@@ -44,6 +44,7 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
                         Magma::Byte => "UnsignedByte",
                         Magma::Integer => "BigInteger",
                         Magma::Any => unreachable!(),
+                        Magma::Loobean => unreachable!(),
                     }
                     .into(),
                     appender_name: format!("append{}", c.handle.name.to_case(Case::Pascal)),
