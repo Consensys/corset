@@ -18,6 +18,19 @@ pub enum Type {
     ArrayColumn(Magma),
     List(Magma),
 }
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Type::Void => write!(f, "∅"),
+            Type::Scalar(m) => write!(f, "{}", m),
+            Type::Column(m) => write!(f, "[{}]", m),
+            Type::ArrayColumn(m) => write!(f, "[[{}]]", m),
+            Type::List(m) => write!(f, "{{{}}}", m),
+        }
+    }
+}
+
 impl Type {
     pub const SUPREMUM: Self = Type::Column(Magma::SUPREMUM);
     pub const INFIMUM: Self = Type::Void;
@@ -168,11 +181,23 @@ impl std::cmp::PartialOrd for Magma {
             (Magma::Loobean, Magma::Boolean) => Some(Ordering::Greater),
             (Magma::Loobean, Magma::Nibble) => todo!(),
             (Magma::Loobean, Magma::Byte) => todo!(),
-            (Magma::Loobean, Magma::Integer) => Some(Ordering::Greater),
+            (Magma::Loobean, Magma::Integer) => Some(Ordering::Less),
             (Magma::Boolean, Magma::Loobean) => Some(Ordering::Less),
             (Magma::Nibble, Magma::Loobean) => todo!(),
             (Magma::Byte, Magma::Loobean) => Some(Ordering::Less),
-            (Magma::Integer, Magma::Loobean) => Some(Ordering::Less),
+            (Magma::Integer, Magma::Loobean) => Some(Ordering::Greater),
+        }
+    }
+}
+impl std::fmt::Display for Magma {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Magma::Loobean => write!(f, "!𝔹"),
+            Magma::Boolean => write!(f, "𝔹"),
+            Magma::Nibble => write!(f, "Nib."),
+            Magma::Byte => write!(f, "Byte"),
+            Magma::Integer => write!(f, "Fr"),
+            Magma::Any => write!(f, "∀"),
         }
     }
 }

@@ -236,6 +236,8 @@ enum Commands {
             help = "display perspective details"
         )]
         show_perspectives: bool,
+        #[arg(short = 'T', long = "types", help = "display types information")]
+        show_debug: bool,
         #[arg(
             long = "only",
             help = "only show these constraints",
@@ -556,6 +558,7 @@ fn main() -> Result<()> {
             show_constraints,
             show_computations,
             show_perspectives,
+            show_debug,
             only,
             skip,
         } => {
@@ -591,6 +594,7 @@ fn main() -> Result<()> {
                 show_columns,
                 show_computations,
                 show_perspectives,
+                show_debug,
                 only.as_ref(),
                 &skip,
             )?;
