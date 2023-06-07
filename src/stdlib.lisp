@@ -11,24 +11,18 @@
 ;;
 ;; !-suffix denotes reverse boolean algebra (i.e. 0 == true)
 ;; ~-prefix denotes normalized-functions (i.e. output is 0/1)
-(defpurefun (aand a b) (* a b))
+(defpurefun (and a b) (* a b))
 (defpurefun ((~and :bool) a b) (~ (and a b)))
 (defpurefun ((and! :loob) a b) (+ a b))
 (defpurefun ((~and! :bool) a b) (~ (and! a b)))
 
-(defpurefun (oor a b) (+ a b))
+(defpurefun (or a b) (+ a b))
 (defpurefun ((~or :boolean) a b) (~ (or a b)))
 (defpurefun ((or! :loob) a b) (* a b))
 (defpurefun ((~or! :boolean) a b) (~ (or! a b)))
 
-(defpurefun ((not :boolean) (x :boolean)) (- 1 x))
+(defpurefun ((not :boolean :nowarn) (x :boolean)) (- 1 x))
 
-;; (defunalias ~not not)
-;; (defpurefun ((not! :loob) a) (~ a))
-;; (defpurefun (~not! a) (~ a))
-
-;; (defpurefun (eq! a b) (- a b))
-;; (defpurefun (~eq a b) (~ (eq a b)))
 
 ;; Variadic versions of and/or
 (defunalias either +)
@@ -39,35 +33,45 @@
 ;; Boolean functions
 (defpurefun (is-not-zero e0) (* e0 (inv e0)))
 (defpurefun (is-zero e0) (- 1 (* e0 (inv e0))))
-(defpurefun (neq a b) (not (eq a b)))
-(defpurefun (is-binary e0) (* e0 (- 1 e0)))
+(defpurefun ((neq :loob) a b) (not (~ (eq! a b))))
+(defpurefun ((is-binary :loob :nowarn) e0) (* e0 (- 1 e0)))
 
 ;; Chronological functions
 (defpurefun (next X) (shift X 1))
 (defpurefun (prev X) (shift X -1))
-(defpurefun (will-inc e0 offset) (will-eq e0 (+ e0 offset)))
-(defpurefun (did-inc e0 offset) (eq! e0 (+ (prev e0) offset)))
 
-(defpurefun (will-dec e0 offset) (eq! (next e0) (- e0 offset)))
-(defpurefun (did-dec e0 offset) (eq!  e0 (- (prev e0) offset)))
+;; Ensure that e0 has (resp. will) increase (resp. decrease) of offset
+;; w.r.t. the previous (resp. next) row.
+(defpurefun (did-inc! e0 offset) (eq! e0 (+ (prev e0) offset)))
+(defpurefun (did-dec! e0 offset) (eq!  e0 (- (prev e0) offset)))
+(defpurefun (will-inc! e0 offset) (will-eq! e0 (+ e0 offset)))
+(defpurefun (will-dec! e0 offset) (eq! (next e0) (- e0 offset)))
 
-(defpurefun (remains-constant e0) (will-eq e0 e0)) ;; FIXME: new name
-(defpurefun (didnt-change e0) (- e0 (prev e0))) ;; FIXME: new name
-(defpurefun (did-change e0) (neq e0 (prev e0)))
+;; Ensure (in loobean logic) that e0 remained (resp. will be) constant
+;; with regards to the previous (resp. next) row.
+(defpurefun (remained-constant! e0) (eq! e0 (prev e0)))
+(defpurefun (will-remain-constant! e0) (will-eq! e0 e0))
 
-(defpurefun (will-eq e0 e1) (eq! (next e0) e1))
-(defpurefun (was-eq e0 e1) (eq! (prev e0) e1))
+;; Ensure (in loobean logic) that e0 has changed (resp. will change) its value
+;; with regards to the previous (resp. next) row.
+(defpurefun (did-change! e0) (neq e0 (prev e0)))
+(defpurefun (will-change! e0) (neq e0 (next e0)))
+
+;; Ensure (in loobean logic) that e0 was (resp. will be) equal to e1 in the
+;; previous (resp. next) row.
+(defpurefun (was-eq! e0 e1) (eq! (prev e0) e1))
+(defpurefun (will-eq! e0 e1) (eq! (next e0) e1))
 
 
 ;; Helpers
 (defpurefun ((vanishes :loob :nowarn) e0) e0)
-(defpurefun (if-eq e0 e1 e2) (if! (eq! e0 e1) e2))
-(defpurefun (if-eq-else e0 e1 e2 e3) (if! (eq! e0 e1) e2 e3))
+(defpurefun (if-eq x val then) (if! (eq! x val) then))
+(defpurefun (if-eq-else x val then else) (if! (eq! x val) then else))
 
 ;; counter constancy constraint
-(defpurefun (counter-constancy ct X)
+(defpurefun ((counter-constancy :loob) ct X)
   (if-not-zero ct
-               (didnt-change X)))
+               (remained-constant! X)))
 
 ;; byte decomposition constraint
 (defpurefun (byte-decomposition ct acc bytes)
@@ -80,14 +84,14 @@
   (begin (debug-assert (stamp-constancy CT C))
          (if-zero C
                   (eq! X 1)
-                  (if-zero CT
-                           (vanishes X)
-                           (if-eq-else CT C
-                                       (eq! X (+ (prev X) 1)) ;; TODO: did-inc
-                                       (didnt-change X))))))
+                  (if! CT
+                       (vanishes X)
+                       (if! (eq!  CT C)
+                            (did-inc! X 1)
+                            (remained-constant! X))))))
 
 ;; stamp constancy imposes that the column C may only
 ;; change at rows where the STAMP column changes.
 (defpurefun (stamp-constancy STAMP C)
-  (if-zero (remains-constant STAMP)
-           (remains-constant C)))
+  (if! (will-remain-constant! STAMP)
+       (will-remain-constant! C)))
