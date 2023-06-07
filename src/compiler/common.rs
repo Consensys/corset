@@ -71,7 +71,8 @@ impl Intrinsic {
 
     pub fn typing(&self, argtype: &[Type]) -> Type {
         match self {
-            Intrinsic::Add | Intrinsic::Sub | Intrinsic::Neg | Intrinsic::Inv => {
+            Intrinsic::Inv => argtype[0],
+            Intrinsic::Add | Intrinsic::Sub | Intrinsic::Neg => {
                 // Boolean is a corner case, as it is not stable under these operations
                 match max_type(argtype) {
                     Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::Integer),

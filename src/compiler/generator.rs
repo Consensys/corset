@@ -136,7 +136,7 @@ pub struct Defined {
     pub pure: bool,
     pub args: Vec<String>,
     pub in_magmas: Vec<Magma>,
-    pub out_magma: Magma,
+    pub out_magma: Option<Magma>,
     pub body: AstNode,
     pub nowarn: bool,
 }
@@ -1070,16 +1070,20 @@ fn apply_defined(
         f_ctx.insert_symbol(f_arg, traversed_args[i].clone())?;
     }
     Ok(if let Some(r) = reduce(&b.body, &mut f_ctx, settings)? {
-        if r.t().magma() > b.out_magma && !b.nowarn {
-            warn!(
+        let final_type = if let Some(expected_magma) = b.out_magma {
+            if r.t().magma() > expected_magma && !b.nowarn {
+                warn!(
                 "in call to {}: inferred output type {:?} is incompatible with declared type {:?}",
                 h.pretty(),
                 r.t().yellow(),
                 b.out_magma.blue()
             )
-        }
-        let new_type = r.t().with_magma(b.out_magma);
-        Some(r.with_type(new_type))
+            }
+            r.t().with_magma(expected_magma)
+        } else {
+            r.t()
+        };
+        Some(r.with_type(final_type))
     } else {
         None
     })
@@ -1427,8 +1431,6 @@ fn reduce_toplevel(
                     "Loobean".yellow().bold(),
                     body.t().magma().red().bold()
                 )
-            } else {
-                println!("All good :) {}", handle.pretty())
             }
 
             Ok(Some(Constraint::Vanishes {

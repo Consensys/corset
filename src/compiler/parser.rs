@@ -178,7 +178,7 @@ pub enum Token {
         /// the magmas of the arguments
         in_magmas: Vec<Magma>,
         /// the output magma
-        out_magma: Magma,
+        out_magma: Option<Magma>,
         /// the body is any reasonable expression (should it be enforced?)
         body: Box<AstNode>,
         /// if set, do not warn on type override
@@ -188,7 +188,7 @@ pub enum Token {
         name: String,
         args: Vec<String>,
         in_magmas: Vec<Magma>,
-        out_magma: Magma,
+        out_magma: Option<Magma>,
         body: Box<AstNode>,
         nowarn: bool,
     },
@@ -663,9 +663,9 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             src,
         }),
         kw @ ("defun" | "defpurefun") => {
-            fn parse_typed_symbols(l: AstNode) -> Result<(String, Magma, bool)> {
+            fn parse_typed_symbols(l: AstNode) -> Result<(String, Option<Magma>, bool)> {
                 match l.class {
-                    Token::Symbol(s) => Ok((s.to_owned(), Magma::Any, false)),
+                    Token::Symbol(s) => Ok((s.to_owned(), None, false)),
                     Token::List(xs) => match xs.as_slice() {
                         [AstNode {
                             class: Token::Symbol(s),
@@ -673,7 +673,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                         }, AstNode {
                             class: Token::Keyword(t),
                             ..
-                        }] => Ok((s.to_owned(), Magma::try_from(t.as_str())?, false)),
+                        }] => Ok((s.to_owned(), Some(Magma::try_from(t.as_str())?), false)),
                         [AstNode {
                             class: Token::Symbol(s),
                             ..
@@ -685,7 +685,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                             ..
                         }] => {
                             if n == ":nowarn" {
-                                Ok((s.to_owned(), Magma::try_from(t.as_str())?, true))
+                                Ok((s.to_owned(), Some(Magma::try_from(t.as_str())?), true))
                             } else {
                                 bail!("SCREW YOU {}", n)
                             }
@@ -716,7 +716,8 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 .map(parse_typed_symbols)
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
-                .map(|x| (x.0, x.1))
+                // if an argument type is unspecified, it can be of any type
+                .map(|x| (x.0, x.1.unwrap_or(Magma::Any)))
                 .unzip();
 
             let body = Box::new(
