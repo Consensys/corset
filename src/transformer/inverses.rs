@@ -41,7 +41,7 @@ impl Node {
                     *self = Node::column()
                         .handle(inverted_handle)
                         .kind(Kind::Phantom)
-                        .t(match dbg!(&self).t().magma() {
+                        .t(match self.t().magma() {
                             Magma::Boolean => Magma::Boolean,
                             _ => Magma::Integer,
                         }) // boolean are stable by inversion

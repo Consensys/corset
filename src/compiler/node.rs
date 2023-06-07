@@ -164,18 +164,6 @@ impl Node {
             })),
         }
     }
-    pub fn phantom_column(x: &ColumnRef) -> Node {
-        Node {
-            _e: Expression::Column {
-                handle: x.to_owned(),
-                kind: Kind::Phantom,
-                padding_value: None,
-                base: Base::Hex,
-                fetched: false,
-            },
-            _t: None,
-        }
-    }
     pub fn with_type(self, t: Type) -> Self {
         Node {
             _t: Some(t),
@@ -201,8 +189,17 @@ impl Node {
             _t: Some(Type::Column(t.unwrap_or(Magma::Integer))),
         }
     }
-    pub fn typed_phantom_column(x: &ColumnRef, t: Type) -> Node {
-        Self::phantom_column(x).with_type(t)
+    pub fn phantom_column(x: &ColumnRef, m: Magma) -> Node {
+        Node {
+            _e: Expression::Column {
+                handle: x.to_owned(),
+                kind: Kind::Phantom,
+                padding_value: None,
+                base: Base::Hex,
+                fetched: false,
+            },
+            _t: Some(Type::Column(m)),
+        }
     }
     pub fn one() -> Node {
         Self::from_expr(Expression::Const(One::one(), Some(Fr::one())))
@@ -228,8 +225,8 @@ impl Node {
                     Type::Scalar(Magma::Integer)
                 }
             }
-            Expression::Column { .. } => Type::Void,
-            Expression::ArrayColumn { .. } => Type::Void,
+            Expression::Column { .. } => unreachable!("COLUMN SHOULD BE TYPED"),
+            Expression::ArrayColumn { .. } => unreachable!("ARRAYCOLUMN SHOULD BE TYPED"),
             Expression::List(xs) => Type::List(
                 xs.iter()
                     .map(Node::t)
@@ -828,7 +825,7 @@ impl Debug for Node {
             } => {
                 write!(
                     f,
-                    "{}{:?}:{:?}",
+                    "{}{}:{:?}",
                     if *fetched { "F:" } else { "" },
                     handle,
                     self._t

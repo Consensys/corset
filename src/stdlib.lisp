@@ -33,7 +33,7 @@
 ;; Boolean functions
 (defpurefun (is-not-zero e0) (* e0 (inv e0)))
 (defpurefun (is-zero e0) (- 1 (* e0 (inv e0))))
-(defpurefun ((neq :loob) a b) (not (~ (eq! a b))))
+(defpurefun ((neq :loob :nowarn) a b) (not (~ (eq! a b))))
 (defpurefun ((is-binary :loob :nowarn) e0) (* e0 (- 1 e0)))
 
 ;; Chronological functions
@@ -64,7 +64,7 @@
 
 
 ;; Helpers
-(defpurefun ((vanishes :loob :nowarn) e0) e0)
+(defpurefun ((vanishes! :loob :nowarn) e0) e0)
 (defpurefun (if-eq x val then) (if! (eq! x val) then))
 (defpurefun (if-eq-else x val then else) (if! (eq! x val) then else))
 
@@ -85,7 +85,7 @@
          (if-zero C
                   (eq! X 1)
                   (if! CT
-                       (vanishes X)
+                       (vanishes! X)
                        (if! (eq!  CT C)
                             (did-inc! X 1)
                             (remained-constant! X))))))

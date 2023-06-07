@@ -4,7 +4,7 @@ use pairing_ce::ff::PrimeField;
 
 use crate::{
     column::{Column, Computation},
-    compiler::{ColumnRef, Constraint, ConstraintSet, Intrinsic, Kind, Magma, Node, Type},
+    compiler::{ColumnRef, Constraint, ConstraintSet, Intrinsic, Kind, Magma, Node},
     pretty::{Base, Pretty},
     structs::Handle,
 };
@@ -108,10 +108,10 @@ fn create_sort_constraint(
         handle: Handle::new(&module, format!("{}-is-binary", cs.handle(&eq).name)),
         domain: None,
         expr: Box::new(Intrinsic::Mul.call(&[
-            Node::typed_phantom_column(&eq, Type::Column(Magma::Boolean)),
+            Node::phantom_column(&eq, Magma::Boolean),
             Intrinsic::Sub.call(&[
                 Node::from_const(1),
-                Node::typed_phantom_column(&eq, Type::Column(Magma::Boolean)),
+                Node::phantom_column(&eq, Magma::Boolean),
             ])?,
         ])?),
     });
@@ -120,10 +120,10 @@ fn create_sort_constraint(
             handle: Handle::new(&module, format!("{}-is-binary", cs.handle(at).name)),
             domain: None,
             expr: Box::new(Intrinsic::Mul.call(&[
-                Node::typed_phantom_column(at, Type::Column(Magma::Boolean)),
+                Node::phantom_column(at, Magma::Boolean),
                 Intrinsic::Sub.call(&[
                     Node::from_const(1),
-                    Node::typed_phantom_column(at, Type::Column(Magma::Boolean)),
+                    Node::phantom_column(at, Magma::Boolean),
                 ])?,
             ])?),
         });
@@ -135,7 +135,7 @@ fn create_sort_constraint(
         domain: None,
         expr: Box::new(
             Intrinsic::Sub.call(&[
-                Node::phantom_column(&delta),
+                Node::phantom_column(&delta, Magma::Integer),
                 Intrinsic::Add.call(
                     &delta_bytes
                         .iter()
@@ -143,7 +143,7 @@ fn create_sort_constraint(
                         .map(|(i, byte)| {
                             Intrinsic::Mul.call(&[
                                 Node::from_bigint(BigInt::from(256).pow(i as u32)),
-                                Node::typed_phantom_column(byte, Type::Column(Magma::Byte)),
+                                Node::phantom_column(byte, Magma::Byte),
                             ])
                         })
                         .collect::<Result<Vec<_>>>()?,
@@ -152,16 +152,16 @@ fn create_sort_constraint(
         ),
     });
 
-    // Create the bytehood constraint
+    // Create the bytehood constraints
     for delta_byte in delta_bytes.iter() {
         cs.constraints.push(Constraint::InRange {
             handle: Handle::new(&module, format!("{}-is-byte", cs.handle(delta_byte).name)),
-            exp: Node::phantom_column(delta_byte),
+            exp: Node::phantom_column(delta_byte, Magma::Byte),
             max: pairing_ce::bn256::Fr::from_str("256").unwrap(),
         })
     }
 
-    // Create the @ constraints
+    // // Create the @ constraints
     for (i, at) in ats.iter().enumerate() {
         // ∑_k=0^i-1 @_k = 0...
         let sum_ats = if i > 0 {
@@ -169,7 +169,7 @@ fn create_sort_constraint(
                 Node::from_const(1),
                 Intrinsic::Add.call(
                     &(0..i)
-                        .map(|j| Node::phantom_column(&ats[j]))
+                        .map(|j| Node::phantom_column(&ats[j], Magma::Boolean))
                         .collect::<Vec<_>>(),
                 )?,
             ])?
@@ -178,23 +178,27 @@ fn create_sort_constraint(
             Node::from_const(1)
         };
 
+        let sorted_t = cs.columns.get_col(&sorted[i])?.t.magma();
         cs.constraints.push(Constraint::Vanishes {
             handle: Handle::new(&module, format!("{at}-0")),
             domain: None,
-            expr: Box::new(
-                Intrinsic::Mul.call(&[
-                    // ∑_k=0^i-1 @_k = 0...
-                    sum_ats.clone(),
-                    // && @ = 0 ...
-                    Intrinsic::Sub.call(&[Node::from_const(1), Node::phantom_column(at)])?,
-                    // => sorted_i = sorted_i[-1]
-                    Intrinsic::Sub.call(&[
-                        Node::phantom_column(&sorted[i]),
-                        Intrinsic::Shift
-                            .call(&[Node::phantom_column(&sorted[i]), Node::from_const(-1)])?,
+            expr: Box::new(Intrinsic::Mul.call(&[
+                // ∑_k=0^i-1 @_k = 0...
+                sum_ats.clone(),
+                // && @ = 0 ...
+                Intrinsic::Sub.call(&[
+                    Node::from_const(1),
+                    Node::phantom_column(at, Magma::Boolean),
+                ])?,
+                // => sorted_i = sorted_i[-1]
+                Intrinsic::Sub.call(&[
+                    Node::phantom_column(&sorted[i], sorted_t),
+                    Intrinsic::Shift.call(&[
+                        Node::phantom_column(&sorted[i], sorted_t),
+                        Node::from_const(-1),
                     ])?,
                 ])?,
-            ),
+            ])?),
         });
         cs.constraints.push(Constraint::Vanishes {
             handle: Handle::new(&module, format!("{at}-1")),
@@ -203,13 +207,15 @@ fn create_sort_constraint(
                 // ∑_k=0^i-1 @_k = 0...
                 sum_ats.clone(),
                 // && @ ≠ 0
-                Node::phantom_column(at),
+                Node::phantom_column(at, Magma::Boolean),
                 // => sorted_i ≠ sorted_i[-1]
                 {
                     let diff = Intrinsic::Sub.call(&[
-                        Node::phantom_column(&sorted[i]),
-                        Intrinsic::Shift
-                            .call(&[Node::phantom_column(&sorted[i]), Node::from_const(-1)])?,
+                        Node::phantom_column(&sorted[i], sorted_t),
+                        Intrinsic::Shift.call(&[
+                            Node::phantom_column(&sorted[i], sorted_t),
+                            Node::from_const(-1),
+                        ])?,
                     ])?;
                     let diff_inv = Intrinsic::Inv.call(&[diff.clone()])?;
 
@@ -220,7 +226,7 @@ fn create_sort_constraint(
         });
     }
 
-    // Create the Eq + ∑@ = 1 (i.e. Eq = 1 XOR ∑@ = 1)
+    // // Create the Eq + ∑@ = 1 (i.e. Eq = 1 XOR ∑@ = 1)
     cs.constraints.push(Constraint::Vanishes {
         handle: Handle::new(&module, format!("Eq_@_{suffix}")),
         domain: None,
@@ -228,33 +234,40 @@ fn create_sort_constraint(
             Intrinsic::Sub.call(&[
                 Node::from_const(1),
                 Intrinsic::Add.call(
-                    &vec![Node::phantom_column(&eq)]
+                    &vec![Node::phantom_column(&eq, Magma::Boolean)]
                         .into_iter()
-                        .chain(ats.iter().map(Node::phantom_column))
+                        .chain(
+                            ats.iter()
+                                .map(|at| Node::phantom_column(at, Magma::Boolean)),
+                        )
                         .collect::<Vec<_>>(),
                 )?,
             ])?,
         ),
     });
 
-    // Create the Eq[i] = 0 constraint
+    // // Create the Eq[i] = 0 constraint
     cs.constraints.push(Constraint::Vanishes {
         handle: Handle::new(&module, format!("__SRT__Eq_i_{suffix}")),
         domain: None,
         expr: Box::new(
             Intrinsic::Mul.call(&[
                 // Eq = 0
-                Intrinsic::Sub.call(&[Node::from_const(1), Node::phantom_column(&eq)])?,
+                Intrinsic::Sub.call(&[
+                    Node::from_const(1),
+                    Node::phantom_column(&eq, Magma::Boolean),
+                ])?,
                 // Δ = ∑ ε_i × @_i × δSorted_i
                 Intrinsic::Sub.call(&[
-                    Node::phantom_column(&delta),
+                    Node::phantom_column(&delta, Magma::Integer), // TODO: fixme GL
                     Intrinsic::Add.call(
                         (0..signs.len())
                             .map(|l| {
+                                let sorted_l_t = cs.columns.get_col(&sorted[l])?.t.magma();
                                 let tgt_diff = Intrinsic::Sub.call(&[
-                                    Node::phantom_column(&sorted[l]),
+                                    Node::phantom_column(&sorted[l], sorted_l_t),
                                     Intrinsic::Shift.call(&[
-                                        Node::phantom_column(&sorted[l]),
+                                        Node::phantom_column(&sorted[l], sorted_l_t),
                                         Node::from_const(-1),
                                     ])?,
                                 ])?;
@@ -264,7 +277,7 @@ fn create_sort_constraint(
                                     } else {
                                         Node::from_const(1)
                                     },
-                                    Node::phantom_column(&ats[l]),
+                                    Node::phantom_column(&ats[l], Magma::Boolean),
                                     tgt_diff,
                                 ])
                             })

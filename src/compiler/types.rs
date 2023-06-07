@@ -178,21 +178,15 @@ impl std::cmp::PartialOrd for Magma {
             (_, Magma::Any) => Some(Ordering::Less),
 
             (Magma::Loobean, Magma::Loobean) => Some(Ordering::Equal),
-            (Magma::Loobean, Magma::Boolean) => Some(Ordering::Greater),
-            (Magma::Loobean, Magma::Nibble) => todo!(),
-            (Magma::Loobean, Magma::Byte) => todo!(),
-            (Magma::Loobean, Magma::Integer) => Some(Ordering::Less),
-            (Magma::Boolean, Magma::Loobean) => Some(Ordering::Less),
-            (Magma::Nibble, Magma::Loobean) => todo!(),
-            (Magma::Byte, Magma::Loobean) => Some(Ordering::Less),
-            (Magma::Integer, Magma::Loobean) => Some(Ordering::Greater),
+            (Magma::Loobean, _) => Some(Ordering::Less),
+            (_, Magma::Loobean) => Some(Ordering::Greater),
         }
     }
 }
 impl std::fmt::Display for Magma {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Magma::Loobean => write!(f, "!𝔹"),
+            Magma::Loobean => write!(f, "𝕃"),
             Magma::Boolean => write!(f, "𝔹"),
             Magma::Nibble => write!(f, "Nib."),
             Magma::Byte => write!(f, "Byte"),
