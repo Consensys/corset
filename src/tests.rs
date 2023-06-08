@@ -36,7 +36,7 @@ fn types_declaration() -> Result<()> {
 fn defun_too_many_args() {
     must_fail(
         "too-big",
-        "(defcolumns X Y) (defun (f A B) (eq A 3) (eq C 5)) (defconstraint asdf () (f X Y))",
+        "(defcolumns X Y) (defun (f A B) (eq! A 3) (eq! C 5)) (defconstraint asdf () (f X Y))",
     );
 }
 
@@ -44,7 +44,7 @@ fn defun_too_many_args() {
 fn defpure_ok() {
     must_run(
         "defpurefun",
-        "(defcolumns x y) (defpurefun (f a b) (eq a b))",
+        "(defcolumns x y) (defpurefun (f a b) (eq! a b))",
     );
 }
 
@@ -52,7 +52,7 @@ fn defpure_ok() {
 fn defpure_ok_const() {
     must_run(
         "defpurefun",
-        "(defconst A 123) (defcolumns x) (defpurefun (f a) (eq a A)) (defconstraint asdf () (f x))",
+        "(defconst A 123) (defcolumns x) (defpurefun (f a) (eq! a A)) (defconstraint asdf () (f x))",
     );
 }
 
@@ -60,7 +60,7 @@ fn defpure_ok_const() {
 fn defpure_ko() {
     must_fail(
             "defpurefun",
-            "(defcolumns X Y Z) (defpurefun (f A B) (begin (eq A 3) (eq B Z))) (defconstraint asdf () (f X Y))",
+            "(defcolumns X Y Z) (defpurefun (f A B) (begin (eq! A 3) (eq! B Z))) (defconstraint asdf () (f X Y))",
         )
 }
 
@@ -86,9 +86,9 @@ fn array_ok() {
   (EXAMPLE3 :ARRAY[2:10:2])  ;; EXAMPLE3 is defined over {2, 4, 6, 8, 10}
   (EXAMPLE4 :ARRAY{1 6 8}))  ;; EXAMPLE4 is defined over {1, 6, 8}
 
-(defconstraint asdf () (eq (nth B 3) (nth C 8)))
-(defconstraint fdsa () (eq A (nth D 28)))
-(defconstraint fdsa2 () (eq A (nth qq 28)))
+(defconstraint asdf () (eq! (nth B 3) (nth C 8)))
+(defconstraint fdsa () (eq! A (nth D 28)))
+(defconstraint fdsa2 () (eq! A (nth qq 28)))
 ",
     );
 }
@@ -139,7 +139,7 @@ fn ko_let() {
 
     must_fail(
         "let-4",
-        "(defcolumns a b c) (defconstraint test () (let  ((z 1) (q 3)) (+ a b c) (eq 3 4)))",
+        "(defcolumns a b c) (defconstraint test () (let  ((z 1) (q 3)) (+ a b c) (eq! 3 4)))",
     );
 }
 
@@ -147,15 +147,15 @@ fn ko_let() {
 fn array_len() {
     must_run(
         "len ok",
-        "(defcolumns (a[5]) b c) (defconstraint test () (eq (len a) 5))",
+        "(defcolumns (a[5]) b c) (defconstraint test () (eq! (len a) 5))",
     );
     must_fail(
         "not an array",
-        "(defcolumns (a[5]) b c) (defconstraint test () (eq (len b) 5))",
+        "(defcolumns (a[5]) b c) (defconstraint test () (eq! (len b) 5))",
     );
     must_fail(
         "not an array 2",
-        "(defcolumns (a[5]) b c) (defconstraint test () (eq (len (nth a 2)) 5))",
+        "(defcolumns (a[5]) b c) (defconstraint test () (eq! (len (nth a 2)) 5))",
     );
 }
 
