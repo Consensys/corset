@@ -205,10 +205,11 @@ pub fn compute_composite(
                             .get(handle, j, false)
                             .cloned()
                             .or_else(|| {
-                                // This is triggered when filling the spilling of an expression with past
-                                // spilling.
-                                // In this case, the expression will overflow past the past spilling,
-                                // and None should be converted to the padding value or 0.
+                                // This is triggered when filling the spilling
+                                // of an expression with past spilling. In this
+                                // case, the expression will overflow past the
+                                // past spilling, and None should be converted
+                                // to the padding value or 0.
                                 cs.columns
                                     .get_col(handle)
                                     .unwrap()
@@ -222,7 +223,8 @@ pub fn compute_composite(
                 &mut cache,
                 &EvalSettings { wrap: false },
             );
-            // This should never fail, as we always provide a default value for column accesses
+            // This should never fail, as we always provide a default value for
+            // column accesses
             r.unwrap()
         })
         .collect();

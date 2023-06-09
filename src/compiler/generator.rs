@@ -619,6 +619,10 @@ impl ConstraintSet {
         self.columns.spilling.get(module).cloned()
     }
 
+    pub fn spilling(&self, module: &str) -> Option<isize> {
+        self.columns.spilling.get(module).cloned()
+    }
+
     fn compute_spilling(&mut self, m: &str) -> isize {
         self.computations
             .iter()

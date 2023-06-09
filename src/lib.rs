@@ -11,7 +11,7 @@ use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},
 };
-use rayon::prelude::*;
+use rayon::{prelude::*, ThreadPool};
 use std::ffi::{c_uint, CStr, CString};
 
 use crate::{column::Computation, compiler::EvalSettings};
@@ -344,7 +344,7 @@ pub extern "C" fn trace_check(
             set_errno(CorsetError::NotAnUsize.into());
             return false;
         })
-        .build_global()
+        .build()
         .is_err()
     {
         set_errno(CorsetError::InitializingRayon.into());
@@ -364,21 +364,22 @@ pub extern "C" fn trace_check(
     }
 }
 
-fn init_rayon(threads: c_uint) -> Result<()> {
-    if rayon::ThreadPoolBuilder::new()
+fn init_rayon(threads: c_uint) -> Result<ThreadPool> {
+    match rayon::ThreadPoolBuilder::new()
         .num_threads(if let Result::Ok(t) = threads.try_into() {
             t
         } else {
             set_errno(CorsetError::NotAnUsize.into());
             bail!("not an usize");
         })
-        .build_global()
-        .is_err()
+        .build()
     {
-        set_errno(CorsetError::InitializingRayon.into());
-        bail!("unable to initialize rayon")
+        Err(e) => {
+            set_errno(CorsetError::InitializingRayon.into());
+            bail!(e)
+        }
+        Result::Ok(tp) => Ok(tp),
     }
-    Ok(())
 }
 
 #[no_mangle]
@@ -389,23 +390,26 @@ pub extern "C" fn trace_compute_from_file(
     convert_to_be: bool,
     fail_on_missing: bool,
 ) -> *mut Trace {
-    if init_rayon(threads).is_err() {
-        return std::ptr::null_mut();
-    }
-
-    let tracefile = cstr_to_string(tracefile);
-    let constraints = Corset::mut_from_ptr(corset);
-    let r = _compute_trace_from_file(constraints, tracefile, convert_to_be, fail_on_missing);
-    match r {
-        Err(e) => {
-            eprintln!("{:?}", e);
-            set_errno(CorsetError::ComputeTraceFailed.into());
-            std::ptr::null_mut()
+    match init_rayon(threads) {
+        Result::Ok(tp) => {
+            let tracefile = cstr_to_string(tracefile);
+            let constraints = Corset::mut_from_ptr(corset);
+            let r = tp.install(|| {
+                _compute_trace_from_file(constraints, tracefile, convert_to_be, fail_on_missing)
+            });
+            match r {
+                Err(e) => {
+                    eprintln!("{:?}", e);
+                    set_errno(CorsetError::ComputeTraceFailed.into());
+                    std::ptr::null_mut()
+                }
+                Result::Ok(x) => {
+                    set_errno(Errno(0));
+                    Box::into_raw(Box::new(x))
+                }
+            }
         }
-        Result::Ok(x) => {
-            set_errno(Errno(0));
-            Box::into_raw(Box::new(x))
-        }
+        Err(_) => std::ptr::null_mut(),
     }
 }
 
@@ -417,28 +421,33 @@ pub extern "C" fn trace_compute_from_string(
     convert_to_be: bool,
     fail_on_missing: bool,
 ) -> *mut Trace {
-    if init_rayon(threads).is_err() {
-        set_errno(CorsetError::InitializingRayon.into());
-        return std::ptr::null_mut();
-    }
+    match init_rayon(threads) {
+        Result::Ok(tp) => {
+            let tracestr = cstr_to_string(tracestr);
+            if tracestr.is_empty() {
+                set_errno(CorsetError::EmptyTrace.into());
+                return std::ptr::null_mut();
+            }
 
-    let tracestr = cstr_to_string(tracestr);
-    if tracestr.is_empty() {
-        set_errno(CorsetError::EmptyTrace.into());
-        return std::ptr::null_mut();
-    }
-
-    let constraints = Corset::mut_from_ptr(corset);
-    let r = _compute_trace_from_str(constraints, tracestr, convert_to_be, fail_on_missing);
-    match r {
-        Err(e) => {
-            eprintln!("{:?}", e);
-            set_errno(CorsetError::ComputeTraceFailed.into());
-            std::ptr::null_mut()
+            let constraints = Corset::mut_from_ptr(corset);
+            let r = tp.install(|| {
+                _compute_trace_from_str(constraints, tracestr, convert_to_be, fail_on_missing)
+            });
+            match r {
+                Err(e) => {
+                    eprintln!("{:?}", e);
+                    set_errno(CorsetError::ComputeTraceFailed.into());
+                    std::ptr::null_mut()
+                }
+                Result::Ok(x) => {
+                    set_errno(Errno(0));
+                    Box::into_raw(Box::new(x))
+                }
+            }
         }
-        Result::Ok(x) => {
-            set_errno(Errno(0));
-            Box::into_raw(Box::new(x))
+        Err(_) => {
+            set_errno(CorsetError::InitializingRayon.into());
+            std::ptr::null_mut()
         }
     }
 }
