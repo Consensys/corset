@@ -197,19 +197,40 @@ pub fn compute_composite(
     let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
     let values = (-spilling..length as isize)
         .map(|i| {
-            exp.eval(
+            let r = exp.eval(
                 i,
-                &mut |handle, j, _| cs.columns.get(handle, j, false).cloned(),
+                &mut |handle, j, _| {
+                    Some(
+                        cs.columns
+                            .get(handle, j, false)
+                            .cloned()
+                            .or_else(|| {
+                                // This is triggered when filling the spilling of an expression with past
+                                // spilling.
+                                // In this case, the expression will overflow past the past spilling,
+                                // and None should be converted to the padding value or 0.
+                                cs.columns
+                                    .get_col(handle)
+                                    .unwrap()
+                                    .padding_value
+                                    .as_ref()
+                                    .map(|x| x.1)
+                            })
+                            .unwrap_or_else(Fr::zero),
+                    )
+                },
                 &mut cache,
                 &EvalSettings { wrap: false },
-            )
-            .unwrap_or_else(Fr::zero)
+            );
+            // This should never fail, as we always provide a default value for column accesses
+            r.unwrap()
         })
         .collect();
 
     Ok(vec![(target.to_owned(), values, spilling)])
 }
 
+/// Compared to `compute_composite`, this function directly return the compute values without any other informations
 pub fn compute_composite_static(cs: &ConstraintSet, exp: &Node) -> Result<Vec<Fr>> {
     let cols_in_expr = exp.dependencies();
     for c in &cols_in_expr {
