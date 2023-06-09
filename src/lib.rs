@@ -70,8 +70,8 @@ impl Trace {
                 let empty_vec = Vec::new();
                 let column = &c.columns._cols[i.as_id()];
                 let value = c.columns.value(i).unwrap_or(&empty_vec);
-                let padding = if let Some(x) = column.padding_value {
-                    Fr::from_str(&x.to_string()).unwrap()
+                let padding = if let Some((_, fr)) = column.padding_value {
+                    fr
                 } else {
                     value.get(0).cloned().unwrap_or_else(|| {
                         c.computations

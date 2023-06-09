@@ -7,7 +7,10 @@ use crate::{
 use anyhow::*;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pairing_ce::{bn256::Fr, ff::Field};
+use pairing_ce::{
+    bn256::Fr,
+    ff::{Field, PrimeField},
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -128,7 +131,7 @@ impl Register {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Column {
     pub register: Option<RegisterID>,
-    pub padding_value: Option<i64>,
+    pub padding_value: Option<(i64, Fr)>,
     pub used: bool,
     pub kind: Kind<()>,
     pub t: Type,
@@ -152,7 +155,7 @@ impl Column {
     ) -> Self {
         Column {
             register,
-            padding_value,
+            padding_value: padding_value.map(|x| (x, Fr::from_str(&x.to_string()).unwrap())),
             used: used.unwrap_or(true),
             kind,
             t: Type::Column(t.unwrap_or(Magma::Integer)),
