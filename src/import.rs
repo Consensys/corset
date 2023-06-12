@@ -13,9 +13,12 @@ use pairing_ce::{
 use serde_json::Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
 use simd_json::BorrowedValue as Value;
+#[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
+use std::io::Read;
+
 use std::{
     fs::File,
-    io::{BufReader, Read, Seek},
+    io::{BufReader, Seek},
 };
 
 use crate::{
@@ -55,7 +58,7 @@ pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
             }
         }
         .with_context(|| format!("while reading `{}`", tracefile))?;
-        fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
+        fill_traces(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
     }
 }
 
@@ -83,7 +86,7 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
             Some(_) => serde_json::from_reader(gz),
             None => serde_json::from_reader(BufReader::new(tracestr)),
         }?;
-        fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
+        fill_traces(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
     }
 }
 
@@ -138,17 +141,24 @@ fn parse_column(xs: &[Value], t: Type) -> Result<Vec<Fr>> {
     Ok(r)
 }
 
-pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Result<()> {
+pub fn fill_traces(
+    v: &Value,
+    path: Vec<String>,
+    cs: &mut ConstraintSet,
+    initiator: &mut Option<&mut String>,
+) -> Result<()> {
     match v {
         Value::Object(map) => {
             for (k, v) in map.iter() {
                 if k == "Trace" {
                     debug!("Importing {}", path[path.len() - 1]);
-                    fill_traces(v, path.clone(), cs)?;
+                    let mut first_column = String::new();
+                    let mut initiator = Some(&mut first_column);
+                    fill_traces(v, path.clone(), cs, &mut initiator)?;
                 } else {
                     let mut path = path.clone();
                     path.push(k.to_string());
-                    fill_traces(v, path, cs)?;
+                    fill_traces(v, path, cs, initiator)?;
                 }
             }
             Ok(())
@@ -162,6 +172,11 @@ pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Resu
 
                 if let Result::Ok(Column { t, .. }) = cs.columns.get_col(&handle) {
                     trace!("inserting {} ({})", handle, xs.len());
+                    if let Some(first_column) = initiator.as_mut() {
+                        if first_column.is_empty() {
+                            first_column.push_str(&handle.pretty());
+                        }
+                    }
 
                     // The min length can be set if the module contains range
                     // proofs, that require a minimal length of a certain power of 2
@@ -173,10 +188,11 @@ pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Resu
 
                     if xs.len() as isize != module_raw_size {
                         bail!(
-                            "{} has an incorrect length: expected {}, found {}",
+                            "{} has an incorrect length: expected {} (from {}), found {}",
                             handle.to_string().blue(),
+                            module_raw_size.to_string().red().bold(),
+                            initiator.as_ref().unwrap(),
                             xs.len().to_string().yellow().bold(),
-                            module_raw_size.to_string().red().bold()
                         );
                     }
 
@@ -188,6 +204,7 @@ pub fn fill_traces(v: &Value, path: Vec<String>, cs: &mut ConstraintSet) -> Resu
                     // required.
                     // Atomic columns are always padded with zeroes, so there is
                     // no need to trigger a more complex padding system.
+                    // FIXME: pad with column.padding_value
                     if xs.len() < module_min_len {
                         xs.reverse();
                         xs.resize_with(module_min_len, Default::default);
