@@ -5,6 +5,7 @@
 (defunalias if-not-zero if)
 
 (defpurefun ((force-bool :boolean :nowarn) x) x)
+(defpurefun ((is-binary :loob :nowarn) e0) (* e0 (- 1 e0)))
 
 ;;
 ;; Boolean functions
@@ -25,16 +26,17 @@
 
 
 ;; Variadic versions of and/or
-(defunalias either +)
-(defunalias either! *)
+(defunalias any +)
+(defunalias any! *)
 (defunalias all *)
 (defunalias all! +)
 
 ;; Boolean functions
 (defpurefun (is-not-zero e0) (* e0 (inv e0)))
 (defpurefun (is-zero e0) (- 1 (* e0 (inv e0))))
-(defpurefun ((neq :loob :nowarn) a b) (not (~ (eq! a b))))
-(defpurefun ((is-binary :loob :nowarn) e0) (* e0 (- 1 e0)))
+(defpurefun ((neq! :loob :nowarn) a b) (not (~ (eq! a b))))
+
+
 
 ;; Chronological functions
 (defpurefun (next X) (shift X 1))
@@ -54,8 +56,8 @@
 
 ;; Ensure (in loobean logic) that e0 has changed (resp. will change) its value
 ;; with regards to the previous (resp. next) row.
-(defpurefun (did-change! e0) (neq e0 (prev e0)))
-(defpurefun (will-change! e0) (neq e0 (next e0)))
+(defpurefun (did-change! e0) (neq! e0 (prev e0)))
+(defpurefun (will-change! e0) (neq! e0 (next e0)))
 
 ;; Ensure (in loobean logic) that e0 was (resp. will be) equal to e1 in the
 ;; previous (resp. next) row.
