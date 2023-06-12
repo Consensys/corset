@@ -46,7 +46,7 @@ pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
         .with_context(|| format!("while reading `{}`", tracefile))?;
         let v = simd_json::to_borrowed_value(&mut content)
             .map_err(|e| anyhow!("while parsing json: {}", e))?;
-        fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
+        fill_traces(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
     }
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
     {
@@ -78,7 +78,7 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
         };
         let v = simd_json::to_borrowed_value(&mut content)
             .map_err(|e| anyhow!("while parsing json: {}", e))?;
-        fill_traces(&v, vec![], cs).with_context(|| "while reading columns")
+        fill_traces(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
     }
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
     {
