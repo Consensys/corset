@@ -1579,14 +1579,25 @@ pub fn make_ast_error(exp: &AstNode) -> String {
     errors::parser::make_src_error(&exp.src, exp.lc)
 }
 
-pub fn pass(ast: &Ast, ctx: Scope, settings: &CompileSettings) -> Result<Vec<Constraint>> {
-    let mut r = vec![];
+pub fn pass(
+    ast: &Ast,
+    ctx: Scope,
+    source_name: &str,
+    settings: &CompileSettings,
+) -> Vec<Result<Constraint>> {
     let mut module = ctx;
 
-    for exp in ast.exprs.iter() {
-        if let Some(c) = reduce_toplevel(exp, &mut module, settings)? {
-            r.push(c)
-        }
-    }
-    Ok(r)
+    ast.exprs
+        .iter()
+        .filter_map(|exp| {
+            reduce_toplevel(exp, &mut module, settings)
+                .with_context(|| {
+                    anyhow!(
+                        "compiling constraints in {}",
+                        source_name.bright_white().bold()
+                    )
+                })
+                .transpose()
+        })
+        .collect()
 }

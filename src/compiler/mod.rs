@@ -31,6 +31,29 @@ pub struct CompileSettings {
     pub allow_dups: bool,
 }
 
+fn maybe_bail<R>(errs: Vec<Result<R>>) -> Result<Vec<R>> {
+    let mut err_count = 0;
+    let mut r = vec![];
+
+    for e in errs.into_iter() {
+        match e {
+            Result::Ok(o) => {
+                r.push(o);
+            }
+            Err(e) => {
+                err_count += 1;
+                error!("{:?}", e);
+            }
+        }
+    }
+
+    if err_count > 0 {
+        bail!("{} errors found", err_count)
+    } else {
+        Ok(r)
+    }
+}
+
 #[cfg(feature = "parser")]
 pub fn make<S: AsRef<str>>(
     sources: &[(&str, S)],
@@ -45,16 +68,27 @@ pub fn make<S: AsRef<str>>(
         errors::CompileError,
     };
 
-    let mut asts = vec![];
+    let mut asts: Vec<(&str, Ast)> = vec![];
     let mut ctx = Scope::new();
 
-    for (name, content) in sources.iter() {
-        info!("Parsing {}", name.bright_white().bold());
-        let ast = parser::parse(content.as_ref()).with_context(|| anyhow!("parsing `{}`", name))?;
-        definitions::pass(&ast, ctx.clone())
-            .with_context(|| anyhow!("parsing definitions in `{}`", name))?;
-        asts.push((name, ast));
-    }
+    maybe_bail(
+        sources
+            .iter()
+            .map(|(name, content)| {
+                info!("Parsing {}", name.bright_white().bold());
+                parser::parse(content.as_ref())
+                    .with_context(|| anyhow!("parsing `{}`", name))
+                    .and_then(|ast| {
+                        let r = definitions::pass(&ast, ctx.clone())
+                            .with_context(|| anyhow!("parsing definitions in `{}`", name));
+                        if r.is_ok() {
+                            asts.push((name, ast));
+                        }
+                        r
+                    })
+            })
+            .collect::<Vec<_>>(),
+    )?;
 
     let mut columns: ColumnSet = Default::default();
     let mut constants: HashMap<Handle, BigInt> = Default::default();
@@ -73,18 +107,16 @@ pub fn make<S: AsRef<str>>(
         })?
     }
 
-    let constraints = asts
-        .iter()
-        .map(|(name, ast)| {
-            generator::pass(ast, ctx.clone(), settings)
-                .with_context(|| anyhow!("compiling constraints in {}", name.bright_white().bold()))
-        })
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
-        .flatten()
-        // Sort by decreasing complexity for more efficient multi-threaded computation
-        .sorted_by_cached_key(|x| -(x.size() as isize))
-        .collect::<Vec<_>>();
+    let constraints = maybe_bail(
+        asts.iter()
+            .map(|(name, ast)| generator::pass(ast, ctx.clone(), name, settings))
+            .flatten()
+            .collect(),
+    )?
+    .into_iter()
+    // Sort by decreasing complexity for more efficient multi-threaded computation
+    .sorted_by_cached_key(|x| -(x.size() as isize))
+    .collect::<Vec<_>>();
 
     ctx.visit_mut::<()>(&mut |handle, symbol| {
         match symbol {
