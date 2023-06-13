@@ -1428,20 +1428,29 @@ fn reduce_toplevel(
                 body
             };
 
-            if body.t().magma() != Magma::Loobean {
+            if body.t() == Type::Void {
                 error!(
                     "constraint {} should be of type {}, found {:?}",
                     handle.pretty(),
                     "Loobean".yellow().bold(),
-                    body.t().magma().red().bold()
-                )
+                    body.t().red().bold()
+                );
+                Ok(None)
+            } else {
+                if body.t().magma() != Magma::Loobean {
+                    error!(
+                        "constraint {} should be of type {}, found {:?}",
+                        handle.pretty(),
+                        "Loobean".yellow().bold(),
+                        body.t().magma().red().bold()
+                    )
+                }
+                Ok(Some(Constraint::Vanishes {
+                    handle,
+                    domain: domain.to_owned(),
+                    expr: Box::new(body),
+                }))
             }
-
-            Ok(Some(Constraint::Vanishes {
-                handle,
-                domain: domain.to_owned(),
-                expr: Box::new(body),
-            }))
         }
         Token::DefPlookup {
             name,
