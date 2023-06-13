@@ -637,8 +637,12 @@ impl ConstraintSet {
                 _ => None,
             })
             .chain(self.constraints.iter().filter_map(|c| match c {
-                Constraint::Vanishes { expr, .. } => {
-                    Some(expr.past_spill().abs().max(expr.future_spill().abs()))
+                Constraint::Vanishes { handle, expr, .. } => {
+                    if handle.module == m {
+                        Some(expr.past_spill().abs().max(expr.future_spill().abs()))
+                    } else {
+                        None
+                    }
                 }
                 _ => None,
             }))
