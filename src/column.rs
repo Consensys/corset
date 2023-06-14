@@ -324,7 +324,10 @@ impl ColumnSet {
 
     pub fn insert_column(&mut self, column: Column, allow_dup: bool) -> Result<ColumnRef> {
         if self.cols.contains_key(&column.handle) && !allow_dup {
-            bail!("{} already exists", column.handle.to_string().red().bold())
+            panic!(
+                "column {} already exists",
+                column.handle.to_string().red().bold()
+            )
         } else {
             let i = self._cols.len();
 

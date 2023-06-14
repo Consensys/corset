@@ -254,6 +254,7 @@ fn render_node(n: &AstNode, state: State) -> Result<String> {
             name,
             domain,
             guard: _,
+            perspective: _,
             body,
         } => Ok(format!(
             "\n\\begin{{constraint}}[{}{} {}]\n\\begin{{gather*}}\n{}\n\\end{{gather*}}\n\\end{{constraint}}\n",

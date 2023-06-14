@@ -17,8 +17,8 @@ const (
 	{{/each}}
 )
 
-var AllColumns = column.ColumnList{
-	{{#each columns}}
-	{{this.go_name}},
+var AllRegisters = column.ColumnList{
+	{{#each registers}}
+	"{{this}}",
 	{{/each}}
 }

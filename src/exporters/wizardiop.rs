@@ -376,14 +376,7 @@ func ZkEVMDefine(build *zkevm.Builder) {{
 {}
 }}
 "#,
-            &self.package,
-            // SIZE,
-            // self.sizes
-            //     .iter()
-            //     .sorted()
-            //     .fold(String::new(), |ax, s| ax + &format!("{} = SIZE\n", s)),
-            columns,
-            constraints,
+            &self.package, columns, constraints,
         );
 
         if let Some(filename) = self.out_filename.as_ref() {

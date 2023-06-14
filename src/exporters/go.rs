@@ -5,7 +5,7 @@ use itertools::Itertools;
 use serde::Serialize;
 use std::io::Write;
 
-use crate::compiler::*;
+use crate::{column::Register, compiler::*};
 
 #[derive(Serialize)]
 struct GoConstant {
@@ -22,6 +22,14 @@ struct TemplateData {
     module: String,
     columns: Vec<GoColumn>,
     constants: Vec<GoConstant>,
+    registers: Vec<String>,
+}
+
+fn reg_to_string(r: &Register, i: usize) -> String {
+    r.handle
+        .as_ref()
+        .map(|h| h.mangled_name())
+        .unwrap_or_else(|| format!("r{}", i))
 }
 
 pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Result<()> {
@@ -31,8 +39,10 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
         .iter_cols()
         .filter_map(|c| {
             if matches!(c.kind, Kind::Atomic) {
+                let r = c.register.unwrap();
+                let register = reg_to_string(&cs.columns.registers[r], r);
                 Some(GoColumn {
-                    corset_name: c.handle.name.to_string(),
+                    corset_name: register,
                     go_name: c.handle.mangled_name(),
                 })
             } else {
@@ -41,6 +51,15 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
         })
         .sorted_by(|a, b| a.corset_name.cmp(&b.corset_name))
         .collect::<Vec<_>>();
+
+    let registers = cs
+        .columns
+        .registers
+        .iter()
+        .enumerate()
+        .map(|(i, r)| reg_to_string(r, i))
+        .collect::<Vec<_>>();
+
     let constants = cs
         .constants
         .iter()
@@ -56,6 +75,7 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
         &TemplateData {
             module: package.to_owned(),
             columns,
+            registers,
             constants,
         },
     )?;

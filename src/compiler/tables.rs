@@ -3,7 +3,7 @@ use crate::{
     column::Computation,
     compiler::{generator::FunctionClass, Builtin, Form, Intrinsic},
     errors::symbols,
-    structs::Handle,
+    structs::{Handle, PERSPECTIVE_SEPARATOR},
 };
 use anyhow::*;
 use itertools::Itertools;
@@ -194,14 +194,14 @@ pub enum Symbol {
 #[derive(Default)]
 pub struct GlobalData {
     computations: ComputationTable,
-    pub perspectives: HashMap<String, HashMap<String, Option<Expression>>>, // module -> {Perspectives}
+    pub perspectives: HashMap<String, HashMap<String, Option<Node>>>, // module -> {Perspectives}
 }
 impl GlobalData {
     pub fn set_perspective_trigger(
         &mut self,
         module: &str,
         perspective: &str,
-        _trigger: Expression,
+        _trigger: Node,
     ) -> Result<()> {
         let trigger = self
             .perspectives
@@ -219,7 +219,7 @@ impl GlobalData {
         }
     }
 
-    pub fn get_perspective_trigger(&self, module: &str, perspective: &str) -> Result<Expression> {
+    pub fn get_perspective_trigger(&self, module: &str, perspective: &str) -> Result<Node> {
         self.perspectives
             .get(module)
             .with_context(|| anyhow!("module {} has no perspectives", module))?
@@ -230,19 +230,31 @@ impl GlobalData {
     }
 }
 
+/// All the symbols are stored in a tree.
+/// The nodes are the nested symbol tables, one per context.
+/// The tree also contains a data repository, that is used to store global data
+/// (notably perspectives) as the parsing goes.
 type SymbolTableTree = Tree<SymbolTable, GlobalData>;
+
+/// A Scope is conceptually a pointer to a node in the [`SymbolTableTree`], that
+/// contains most of the methods used to interact with the tree.
 pub struct Scope {
+    /// a shared reference to the global tree
     pub tree: Rc<RefCell<SymbolTableTree>>,
+    /// the ID of the tree node this [`Scope`] points to
     id: NodeID,
-    perspective: Option<String>,
 }
 
+/// A helper macro to access to the [`SymbolTable`] pointed by [`Scope`]
+/// parameter
 macro_rules! data {
     ($i:ident) => {
         $i.tree.clone().borrow()[$i.id].unwrap_data()
     };
 }
 
+/// A helper macro to mutably access to the [`SymbolTable`] pointed by [`Scope`]
+/// parameter
 macro_rules! data_mut {
     ($i:ident) => {
         $i.tree.clone().borrow_mut()[$i.id].unwrap_data_mut()
@@ -256,6 +268,8 @@ impl Scope {
             None,
             Some(SymbolTable {
                 name: super::MAIN_MODULE.to_owned(),
+                module: super::MAIN_MODULE.to_owned(),
+                perspective: None,
                 closed: true,
                 public: true,
                 global: false,
@@ -272,73 +286,124 @@ impl Scope {
         Scope {
             tree: Rc::new(RefCell::new(tree)),
             id: root,
-            perspective: None,
         }
     }
 
-    pub fn derived(&mut self, name: &str, closed: bool, public: bool, global: bool) -> Scope {
+    pub fn derive(&mut self, name: &str) -> Result<Scope> {
         let maybe_child = self.tree.borrow().find_child(self.id, |n| n.name == name);
         match maybe_child {
-            Some(n) => self.at(n),
+            Some(_) => {
+                bail!("symbol table {} already exists in {}", name, self.name());
+            }
             None => {
+                let module = self.module().clone();
                 let current_global = data!(self).global;
                 let new_node = self.tree.borrow_mut().add_node(
                     Some(self.id),
                     Some(SymbolTable {
                         name: name.to_owned(),
-                        closed,
-                        public,
-                        global: global || current_global,
+                        module,
+                        closed: false,
+                        public: false,
+                        global: current_global,
                         constraints: Default::default(),
                         funcs: Default::default(),
                         symbols: Default::default(),
+                        perspective: None,
                     }),
                 );
-                Scope {
+                Ok(Scope {
                     tree: self.tree.clone(),
                     id: new_node,
-                    perspective: self.perspective.clone(),
-                }
+                })
             }
         }
     }
 
-    pub fn derived_from_root(
-        &mut self,
-        name: &str,
-        closed: bool,
-        public: bool,
-        global: bool,
-    ) -> Scope {
+    pub fn switch_to_module(&mut self, name: &str) -> Result<Scope> {
         let root = self.tree.borrow().root();
         let maybe_child = self.tree.borrow().find_child(root, |n| n.name == name);
         match maybe_child {
-            Some(n) => self.at(n),
+            Some(n) => Ok(self.at(n)),
             None => {
                 let current_global = data!(self).global;
                 let new_node = self.tree.borrow_mut().add_node(
                     Some(root),
                     Some(SymbolTable {
                         name: name.to_owned(),
-                        closed,
-                        public,
-                        global: global || current_global,
+                        module: name.to_owned(),
+                        closed: false,
+                        public: false,
+                        global: current_global,
                         constraints: Default::default(),
                         funcs: Default::default(),
                         symbols: Default::default(),
+                        perspective: None,
                     }),
                 );
-                Scope {
+                Ok(Scope {
                     tree: self.tree.clone(),
                     id: new_node,
-                    perspective: None,
-                }
+                })
             }
         }
     }
 
+    pub fn jump_in(&mut self, name: &str) -> Result<Scope> {
+        let maybe_child = self.tree.borrow().find_child(self.id, |n| n.name == name);
+        match maybe_child {
+            Some(n) => Ok(self.at(n)),
+            None => {
+                bail!(
+                    "{} not found in {}",
+                    name.bold().red(),
+                    self.name().bold().yellow(),
+                )
+            }
+        }
+    }
+
+    pub fn closed(self, closed: bool) -> Self {
+        data_mut!(self).closed = closed;
+        self
+    }
+
+    pub fn global(self, global: bool) -> Self {
+        data_mut!(self).global = global;
+        self
+    }
+
+    pub fn public(self, public: bool) -> Self {
+        data_mut!(self).public = public;
+        self
+    }
+
+    pub fn with_perspective(self, perspective: &str) -> Result<Self> {
+        let module = self.module();
+        let perspective_already_exists = self
+            .tree
+            .borrow_mut()
+            .metadata_mut()
+            .perspectives
+            .entry(module)
+            .or_default()
+            .insert(perspective.to_owned(), None)
+            .is_some();
+
+        if perspective_already_exists {
+            bail!(
+                "perspective {} already exist in module {}",
+                perspective,
+                self.module()
+            ) // TODO: better error message
+        } else {
+            data_mut!(self).perspective = Some(perspective.to_owned());
+            Ok(self)
+        }
+    }
+
     pub fn module(&self) -> String {
-        data!(self).name.to_owned()
+        data!(self).module.to_owned()
     }
 
     pub fn name(&self) -> String {
@@ -346,7 +411,7 @@ impl Scope {
     }
 
     pub fn perspective(&self) -> Option<String> {
-        self.perspective.clone()
+        data!(self).perspective.clone()
     }
 
     pub fn computations(&self) -> ComputationTable {
@@ -369,7 +434,6 @@ impl Scope {
         Scope {
             tree: self.tree.clone(),
             id,
-            perspective: self.perspective.clone(),
         }
     }
 
@@ -409,14 +473,39 @@ impl Scope {
         Ok(())
     }
 
-    pub fn resolve_symbol(&mut self, name: &str) -> Result<Node> {
+    pub fn resolve_symbol(&mut self, name: &str) -> Result<Node, symbols::Error> {
+        let module = self.module().to_owned();
         let global = data!(self).global;
+
         if name.contains('.') {
             if global {
                 self.resolve_symbol_with_path(name)
             } else {
-                bail!(symbols::Error::NotAGlobalScope)
+                Err(symbols::Error::NotAGlobalScope)
             }
+        } else if name.contains(PERSPECTIVE_SEPARATOR) {
+            let mut s = name.split(PERSPECTIVE_SEPARATOR);
+            let perspective = s
+                .next()
+                .ok_or_else(|| symbols::Error::MissingColumn(name.into()))?;
+            let name = s
+                .next()
+                .ok_or_else(|| symbols::Error::MissingPerspective(name.into()))?;
+            Self::_resolve_symbol_in_perspective(
+                self.id,
+                &mut self.tree.borrow_mut(),
+                name,
+                perspective,
+            )
+            .map_err(|e| match e {
+                symbols::Error::SymbolNotFound(s, _, _) => {
+                    symbols::Error::SymbolNotFound(s, module, Some(perspective.into()))
+                }
+                symbols::Error::PerspectiveNotFound(p, _) => {
+                    symbols::Error::PerspectiveNotFound(p, module)
+                }
+                _ => unreachable!(),
+            })
         } else {
             Self::_resolve_symbol(
                 self.id,
@@ -426,10 +515,16 @@ impl Scope {
                 false,
                 false,
             )
+            .map_err(|_| symbols::Error::SymbolNotFound(name.to_owned(), module, None))
         }
     }
 
-    pub fn resolve_handle(&mut self, h: &Handle) -> Result<Node> {
+    fn resolve_symbol_with_path(&mut self, name: &str) -> Result<Node, symbols::Error> {
+        let components = name.split('.').collect::<Vec<_>>();
+        self.root()._resolve_symbol_with_path(&components)
+    }
+
+    pub fn resolve_handle(&mut self, h: &Handle) -> Result<Node, symbols::Error> {
         let global = data!(self).global;
         if global {
             self.resolve_symbol(&h.to_string())
@@ -445,9 +540,9 @@ impl Scope {
         ax: &mut HashSet<String>,
         absolute_path: bool,
         pure: bool,
-    ) -> Result<Node> {
+    ) -> Result<Node, symbols::Error> {
         if ax.contains(name) {
-            bail!("circular definition found for {}", name)
+            Err(symbols::Error::CircularDefinition(name.to_string()))
         } else {
             ax.insert(name.to_owned());
             match tree[n].unwrap_data_mut().symbols.get_mut(name) {
@@ -457,29 +552,18 @@ impl Scope {
                 }
                 Some(Symbol::Final(exp, ref mut visited)) => {
                     if pure && !matches!(exp.e(), Expression::Const(..)) {
-                        bail!(
-                            "symbol {} can not be used in a pure context",
-                            exp.to_string().blue()
-                        )
+                        Err(symbols::Error::UnavailableInPureContext(exp.to_string()))
                     } else {
                         *visited = true;
-                        Ok(exp.clone())
+                        Result::Ok(exp.clone())
                     }
                 }
                 None => {
                     if absolute_path {
-                        Err(anyhow!(symbols::Error::SymbolNotFound(
-                            name.to_owned(),
-                            tree.unwrap_data(n).name.to_string()
-                        )))
+                        Err(symbols::Error::SymbolNotFound(name.into(), "".into(), None))
                     } else {
                         tree.parent(n).map_or(
-                            {
-                                Err(anyhow!(symbols::Error::SymbolNotFound(
-                                    name.to_owned(),
-                                    tree[n].unwrap_data().name.to_string(),
-                                )))
-                            },
+                            Err(symbols::Error::SymbolNotFound(name.into(), "".into(), None)),
                             |parent| {
                                 Self::_resolve_symbol(
                                     parent,
@@ -494,6 +578,45 @@ impl Scope {
                     }
                 }
             }
+        }
+    }
+
+    fn _resolve_symbol_in_perspective(
+        n: usize,
+        tree: &mut SymbolTableTree,
+        name: &str,
+        perspective: &str,
+    ) -> Result<Node, symbols::Error> {
+        match tree.find_child(n, |o| {
+            o.perspective
+                .as_ref()
+                .map(|p| p == perspective)
+                .unwrap_or(false)
+        }) {
+            Some(o) => Self::_resolve_symbol(o, tree, name, &mut HashSet::new(), true, false),
+            None => tree.parent(n).map_or(
+                Err(symbols::Error::PerspectiveNotFound(
+                    perspective.into(),
+                    tree[n].data().unwrap().module.clone(),
+                )),
+                |parent| Self::_resolve_symbol_in_perspective(parent, tree, name, perspective),
+            ),
+        }
+    }
+
+    fn _resolve_symbol_with_path(&mut self, path: &[&str]) -> Result<Node, symbols::Error> {
+        if path.len() == 1 {
+            self.resolve_symbol(path[0])
+        } else {
+            for c in self.children() {
+                if data!(c).name == path[0] {
+                    return self.at(c.id)._resolve_symbol_with_path(&path[1..]);
+                }
+            }
+            return Err(symbols::Error::ModuleNotFound(
+                path.join("."),
+                self.tree.borrow()[self.id].unwrap_data().name.to_string(),
+            ));
         }
     }
 
@@ -521,6 +644,7 @@ impl Scope {
                     Err(anyhow!(symbols::Error::SymbolNotFound(
                         name.to_owned(),
                         tree[n].unwrap_data().name.to_owned(),
+                        None,
                     ))),
                     |parent| Self::_edit_symbol(parent, tree, name, f, ax),
                 ),
@@ -667,27 +791,6 @@ impl Scope {
         self.at(self.tree.borrow().root())
     }
 
-    fn resolve_symbol_with_path(&mut self, name: &str) -> Result<Node> {
-        let components = name.split('.').collect::<Vec<_>>();
-        self.root()._resolve_symbol_with_path(&components)
-    }
-
-    fn _resolve_symbol_with_path(&mut self, path: &[&str]) -> Result<Node> {
-        if path.len() == 1 {
-            self.resolve_symbol(path[0])
-        } else {
-            for c in self.children() {
-                if data!(c).name == path[0] {
-                    return self.at(c.id)._resolve_symbol_with_path(&path[1..]);
-                }
-            }
-            bail!(symbols::Error::ModuleNotFound(
-                path.join("."),
-                self.tree.borrow()[self.id].unwrap_data().name.to_string(),
-            ))
-        }
-    }
-
     #[allow(dead_code)]
     pub fn print(&self) {
         self.tree.borrow().print(|s| {
@@ -699,53 +802,6 @@ impl Scope {
             )
         });
     }
-
-    pub fn create_perspective(&self, perspective_name: &str) -> Result<Self> {
-        let module = self.module();
-        let exist = self
-            .tree
-            .borrow_mut()
-            .metadata_mut()
-            .perspectives
-            .entry(module)
-            .or_default()
-            .insert(perspective_name.to_owned(), None)
-            .is_some();
-
-        if exist {
-            bail!(
-                "perspective {} already exist in module {}",
-                perspective_name,
-                self.module()
-            ) // TODO better error
-        } else {
-            Ok(Scope {
-                tree: self.tree.clone(),
-                id: self.id,
-                perspective: Some(perspective_name.to_owned()),
-            })
-        }
-    }
-
-    pub fn clone_in_perspective(&self, perspective: &str) -> Result<Self> {
-        let module = self.module();
-        let _exist = self
-            .tree
-            .borrow()
-            .metadata()
-            .perspectives
-            .get(&module)
-            .with_context(|| anyhow!("module {} has no perspectives", module))?
-            .get(perspective)
-            .with_context(|| anyhow!("perspective {}%{} not found", module, perspective))?
-            .is_some();
-
-        Ok(Scope {
-            tree: self.tree.clone(),
-            id: self.id,
-            perspective: Some(perspective.to_owned()),
-        })
-    }
 }
 
 impl std::clone::Clone for Scope {
@@ -753,7 +809,6 @@ impl std::clone::Clone for Scope {
         Scope {
             tree: self.tree.clone(),
             id: self.id,
-            perspective: self.perspective.clone(),
         }
     }
 }
@@ -762,6 +817,8 @@ impl std::clone::Clone for Scope {
 pub struct SymbolTable {
     // The name of this table
     pub name: String,
+    pub module: String,
+    pub perspective: Option<String>,
     // The parent relationship is only used for contextual
     // semantics (i.e. for & functions), not modules
     closed: bool,

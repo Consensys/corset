@@ -225,7 +225,9 @@ impl Node {
                     Type::Scalar(Magma::Integer)
                 }
             }
-            Expression::Column { .. } => unreachable!("COLUMN SHOULD BE TYPED"),
+            Expression::Column { handle, .. } => {
+                unreachable!("COLUMN {} SHOULD BE TYPED", handle.pretty())
+            }
             Expression::ArrayColumn { .. } => unreachable!("ARRAYCOLUMN SHOULD BE TYPED"),
             Expression::List(xs) => Type::List(
                 xs.iter()

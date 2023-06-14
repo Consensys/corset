@@ -24,14 +24,17 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
 
         Token::DefConstraint { name, .. } => ctx.insert_constraint(name),
         Token::DefModule(name) => {
-            *ctx = ctx.derived_from_root(name, false, true, false);
+            *ctx = ctx.switch_to_module(name)?.public(true);
             Ok(())
         }
         Token::DefColumns(columns) => columns
             .iter()
             .fold(Ok(()), |ax, col| ax.and(reduce(col, ctx))),
         Token::DefPerspective { name, columns, .. } => {
-            let mut new_ctx = ctx.create_perspective(name)?;
+            let mut new_ctx = ctx
+                .derive(&format!("in-{}", name))?
+                .public(true)
+                .with_perspective(name)?;
             columns
                 .iter()
                 .fold(Ok(()), |ax, col| ax.and(reduce(col, &mut new_ctx)))
@@ -50,7 +53,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     Kind::Atomic => Kind::Atomic,
                     Kind::Phantom => Kind::Phantom,
                     Kind::Composite(_) => Kind::Phantom, // The actual expression is computed by the generator
-                    Kind::Interleaved(_, _) => Kind::Phantom, // The interleaving is later on set by the generator
+                    Kind::Interleaved(_, _) => Kind::Phantom, // The interleaving is later on set by the generator TODO: move me @emile
                 },
                 padding_value: padding_value.to_owned(),
                 base: *base,
@@ -211,6 +214,9 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
     }
 }
 
+/// The `Definitions` pass skim through an [`Ast`] and fill the
+/// [`SymbolTableTree`] with all the required elements (columns, functions,
+/// perspectives, constraints, aliases, ...)
 pub fn pass(ast: &Ast, ctx: Scope) -> Result<()> {
     let mut module = ctx;
     for e in ast.exprs.iter() {

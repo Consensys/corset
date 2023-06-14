@@ -129,8 +129,11 @@ pub mod symbols {
         #[error("module {} not found in {}", .0.red(), .1.blue())]
         ModuleNotFound(String, String),
 
-        #[error("symbol {} not found in module {}", .0.red(), .1.blue())]
-        SymbolNotFound(String, String),
+        #[error("symbol {} not found in module {}{}", .0.red(), .1.blue(), if let Some(p) = .2 {format!("/{}", p.yellow())} else {"".to_string()})]
+        SymbolNotFound(String, String, Option<String>),
+
+        #[error("perspective {} not found in module {}", .0.red(), .1.blue())]
+        PerspectiveNotFound(String, String),
 
         #[error("symbol {} already exists in {}", .0.yellow(), .1.blue())]
         SymbolAlreadyExists(String, String),
@@ -146,5 +149,14 @@ pub mod symbols {
 
         #[error("other modules can not be reached from here")]
         NotAGlobalScope,
+
+        #[error("symbol {} can not be used in a pure context", .0.red().bold())]
+        UnavailableInPureContext(String),
+
+        #[error("missing column name in {}", 0.yellow().bold())]
+        MissingColumn(String),
+
+        #[error("missing perspective name in {}", 0.yellow().bold())]
+        MissingPerspective(String),
     }
 }

@@ -202,7 +202,7 @@ fn render_columns(cs: &ConstraintSet) {
     println!("\n{}", "=== Columns ===".bold().yellow());
     for (r, col) in cs.columns.iter().sorted_by_key(|c| c.1.register) {
         println!(
-            "{}{:>70}   {:>20}{}",
+            "{:4}{:>80} {:>20}{}",
             r.as_id(),
             format!(
                 "{}{}",

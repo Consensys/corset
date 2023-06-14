@@ -27,9 +27,19 @@ use crate::compiler::parser::*;
 use crate::dag::ComputationDag;
 use crate::errors::{self, CompileError, RuntimeError};
 use crate::pretty::Pretty;
-use crate::structs::{Handle, PERSPECTIVE_SEPARATOR};
+use crate::structs::Handle;
 
 static COUNTER: OnceCell<AtomicUsize> = OnceCell::new();
+
+fn uniquify(n: String) -> String {
+    format!(
+        "{}-{}",
+        n,
+        COUNTER
+            .get_or_init(|| AtomicUsize::new(0))
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+    )
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Constraint {
@@ -954,19 +964,8 @@ fn apply_form(
                 let mut l = vec![];
                 let mut t = Type::INFIMUM;
                 for i in is {
-                    let mut for_ctx = ctx.derived(
-                        &format!(
-                            "{}-for-{}-{}",
-                            ctx.name(),
-                            COUNTER
-                                .get_or_init(|| AtomicUsize::new(0))
-                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-                            i
-                        ),
-                        false,
-                        false,
-                        false,
-                    );
+                    let mut for_ctx = ctx.derive(&uniquify(format!("{}-for-{}", ctx.name(), i)))?;
+
                     for_ctx.insert_symbol(
                         i_name,
                         Expression::Const(BigInt::from(*i), Fr::from_str(&i.to_string())).into(),
@@ -1012,8 +1011,8 @@ fn apply_form(
             Ok(None)
         }
         Form::Let => {
-            let sub_ctx_name = format!("let-{}", ctx.module());
-            let mut sub_ctx = ctx.derived(&sub_ctx_name, false, false, false);
+            let sub_ctx_name = uniquify(format!("{}-let", ctx.name()));
+            let mut sub_ctx = ctx.derive(&sub_ctx_name)?;
             for pair in args[0].as_list().unwrap().iter() {
                 let pair = pair.as_list().unwrap();
                 let name = pair[0].as_symbol().unwrap();
@@ -1064,16 +1063,10 @@ fn apply_defined(
     ctx: &mut Scope,
     settings: &CompileSettings,
 ) -> Result<Option<Node>> {
-    let f_mangle = format!(
-        "fn-{}-{}",
-        h,
-        COUNTER
-            .get_or_init(|| AtomicUsize::new(0))
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    );
+    let f_mangle = uniquify(format!("fn-{}", h));
     b.validate_args(&traversed_args)
         .with_context(|| anyhow!("validating call to {}", h.pretty()))?;
-    let mut f_ctx = ctx.derived(&f_mangle, b.pure, false, false);
+    let mut f_ctx = ctx.derive(&f_mangle)?.closed(b.pure);
     for (i, f_arg) in b.args.iter().enumerate() {
         f_ctx.insert_symbol(f_arg, traversed_args[i].clone())?;
     }
@@ -1269,49 +1262,10 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                 },
             ),
         )),
-        Token::Symbol(name) => {
-            let r = if name.contains(PERSPECTIVE_SEPARATOR) {
-                let mut s = name.split(PERSPECTIVE_SEPARATOR);
-                let perspective = s
-                    .next()
-                    .ok_or_else(|| anyhow!("missing perspective name"))?;
-                let name = s.next().ok_or_else(|| anyhow!("missing column name"))?;
-                let mut symbol = ctx
-                    .resolve_symbol(name)
-                    .with_context(|| make_ast_error(e))?;
-
-                if let Expression::Column {
-                    handle, fetched, ..
-                } = symbol.e_mut()
-                {
-                    if let Some(col_perspective) = handle.as_handle().perspective.as_ref() {
-                        if col_perspective != perspective {
-                            bail!(
-                                "column {} found in perspective {}, not {}",
-                                handle.pretty(),
-                                col_perspective.bright_white().bold(),
-                                perspective.bright_white().bold()
-                            );
-                        }
-                    } else {
-                        bail!(
-                            "column {} not found in perspective {}",
-                            handle.pretty(),
-                            perspective.bright_white().bold()
-                        );
-                    }
-                    *fetched = true;
-                } else {
-                    unreachable!()
-                }
-                symbol
-            } else {
-                ctx.resolve_symbol(name)
-                    .with_context(|| make_ast_error(e))?
-            };
-            Ok(Some(r))
-        }
-
+        Token::Symbol(name) => Ok(Some(
+            ctx.resolve_symbol(name)
+                .with_context(|| make_ast_error(e))?,
+        )),
         Token::List(args) => {
             if args.is_empty() {
                 Ok(Some(Expression::List(vec![]).into()))
@@ -1381,20 +1335,6 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
     .with_context(|| make_ast_error(e))
 }
 
-fn perspective_of<'a, H: IntoIterator<Item = &'a Handle>>(hs: H) -> Result<Option<String>> {
-    let ps = hs
-        .into_iter()
-        .filter_map(|h| h.perspective.clone())
-        .collect::<HashSet<_>>();
-    if ps.len() > 1 {
-        bail!(
-            "mixing perspectives {:?}; use PERSP/COL syntax to import column from other perspectives", ps
-        )
-    }
-
-    Ok(ps.into_iter().next())
-}
-
 fn reduce_toplevel(
     e: &AstNode,
     ctx: &mut Scope,
@@ -1405,10 +1345,14 @@ fn reduce_toplevel(
             name,
             domain,
             guard,
+            perspective,
             body,
         } => {
             let handle = Handle::new(ctx.module(), name);
             let module = ctx.module();
+            if let Some(perspective) = perspective {
+                *ctx = ctx.jump_in(&format!("in-{perspective}"))?;
+            };
             let body = reduce(body, ctx, settings)?.unwrap_or_else(|| Expression::Void.into());
             let body = if let Some(guard) = guard {
                 let guard_expr = reduce(guard, ctx, settings)?
@@ -1418,10 +1362,7 @@ fn reduce_toplevel(
                 body
             };
             // Check that no constraint crosses perspective boundaries
-            let body = if let Some(perspective) =
-                perspective_of(body.core_dependencies().iter().map(|h| h.as_handle()))
-                    .with_context(|| anyhow!("while compiling {}", handle.pretty()))?
-            {
+            let body = if let Some(perspective) = perspective {
                 let persp_guard = ctx
                     .tree
                     .borrow()
@@ -1461,7 +1402,7 @@ fn reduce_toplevel(
             including: parent,
             included: child,
         } => {
-            *ctx = ctx.derived(&format!("plookup-{}", name), false, false, true);
+            *ctx = ctx.derive(&format!("plookup-{}", name))?.global(true);
             let handle = Handle::new(ctx.module(), name);
             let parents = parent
                 .iter()
@@ -1508,21 +1449,28 @@ fn reduce_toplevel(
         } => {
             // Create the new perspective in the current module and ensures it does not exist
             let module = ctx.module();
-            let trigger = reduce(trigger, ctx, settings)?.unwrap().e().to_owned();
+            let trigger = reduce(trigger, ctx, settings)?
+                .ok_or_else(|| {
+                    anyhow!(
+                        "guard for perspective {} can not be empty",
+                        name.bold().yellow()
+                    )
+                })?
+                .to_owned();
             ctx.tree
                 .borrow_mut()
                 .metadata_mut()
                 .set_perspective_trigger(&module, name, trigger)?;
 
             // Insert all columns in this new perspective
-            let mut new_ctx = ctx.clone_in_perspective(name)?;
+            let mut new_ctx = ctx.jump_in(&format!("in-{name}"))?;
             for c in columns {
                 reduce(c, &mut new_ctx, settings)?;
             }
             Ok(None)
         }
         Token::DefModule(name) => {
-            *ctx = ctx.derived(name, false, true, false);
+            *ctx = ctx.switch_to_module(name)?;
             Ok(None)
         }
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
@@ -1552,7 +1500,7 @@ fn reduce_toplevel(
                 .collect::<Result<Vec<_>>>()?;
             to.iter()
                 .map(|f| ctx.resolve_symbol(f))
-                .collect::<Result<Vec<_>>>()
+                .collect::<Result<Vec<_>, errors::symbols::Error>>()
                 .with_context(|| anyhow!("while defining permutation"))?;
 
             let tos = to

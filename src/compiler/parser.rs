@@ -192,10 +192,10 @@ pub enum Token {
         body: Box<AstNode>,
         nowarn: bool,
     },
-    /// a list of aliases declaration, normally only DefAlias -- XXX should probably be removed
+    /// a list of aliases declaration, normally only DefAlias -- FIXME: should probably be removed
     DefAliases(Vec<AstNode>),
     DefAlias(String, String),
-    /// Declaration of a function alias -- XXX should probably be removed
+    /// Declaration of a function alias -- FIXME: should probably be removed
     DefunAlias(String, String),
 
     /// Declaration of a constraint;
@@ -206,6 +206,9 @@ pub enum Token {
         domain: Option<Vec<isize>>,
         /// an expression that enables the constraint only when it is non zero
         guard: Option<Box<AstNode>>,
+        /// if the constraint is set in a perspective, it is automatically
+        /// guarded and additional rules are applied to symbol resolution
+        perspective: Option<String>,
         /// this expression has to reduce to 0 for the constraint to be satisfied
         body: Box<AstNode>,
     },
@@ -332,6 +335,7 @@ fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
         Begin,
         Guard,
         Domain,
+        Perspective,
     }
 
     let name = tokens
@@ -340,7 +344,7 @@ fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
         .as_symbol()?
         .to_owned();
 
-    let (domain, guard) = {
+    let (domain, guard, perspective) = {
         let guards = tokens
             .next()
             .with_context(|| anyhow!("missing guards in constraint definitions"))??
@@ -349,18 +353,30 @@ fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
         let mut status = GuardParser::Begin;
         let mut domain = None;
         let mut guard = None;
+        let mut perspective = None;
         for x in guards.iter() {
             match status {
                 GuardParser::Begin => match x.class {
                     Token::Keyword(ref kw) if kw == ":guard" => status = GuardParser::Guard,
                     Token::Keyword(ref kw) if kw == ":domain" => status = GuardParser::Domain,
-                    _ => bail!("expected :guard or :domain, found `{:?}`", x),
+                    Token::Keyword(ref kw) if kw == ":perspective" => {
+                        status = GuardParser::Perspective
+                    }
+                    _ => bail!("expected :guard, :domain or :perspective, found `{:?}`", x),
                 },
                 GuardParser::Guard => {
                     if guard.is_some() {
                         bail!("guard already defined: `{:?}`", guard.unwrap())
                     } else {
                         guard = Some(Box::new(x.clone()));
+                        status = GuardParser::Begin;
+                    }
+                }
+                GuardParser::Perspective => {
+                    if guard.is_some() {
+                        bail!("perspective already defined: `{:?}`", guard.unwrap())
+                    } else {
+                        perspective = Some(x.as_symbol()?.to_owned());
                         status = GuardParser::Begin;
                     }
                 }
@@ -383,9 +399,10 @@ fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
             GuardParser::Begin => {}
             GuardParser::Guard => bail!("expected guard expression, found nothing"),
             GuardParser::Domain => bail!("expected domain value, found nothing"),
+            GuardParser::Perspective => bail!("expected perspective name, found nothing"),
         }
 
-        (domain, guard)
+        (domain, guard, perspective)
     };
 
     let body = Box::new(
@@ -403,6 +420,7 @@ fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
             name,
             domain,
             guard,
+            perspective,
             body,
         },
         src,

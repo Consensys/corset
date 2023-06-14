@@ -18,7 +18,9 @@ pub struct Handle {
 // The equality relation is only used in a semantic way, not computational
 impl std::cmp::PartialEq for Handle {
     fn eq(&self, other: &Self) -> bool {
-        (self.module == other.module) && (self.name == other.name)
+        (self.module == other.module)
+            && (self.name == other.name)
+            && (self.perspective == other.perspective)
     }
 }
 impl std::cmp::Eq for Handle {}
@@ -90,15 +92,34 @@ impl Handle {
 }
 impl std::fmt::Debug for Handle {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}.{}", self.module, self.name)
+        write!(f, "{}.{}%{:?}", self.module, self.name, self.perspective)
     }
 }
 impl std::fmt::Display for Handle {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if self.module == MAIN_MODULE {
-            write!(f, "{}", self.name)
+            write!(
+                f,
+                "{}{}",
+                if let Some(p) = self.perspective.as_ref() {
+                    format!("{}/", p)
+                } else {
+                    "".to_owned()
+                },
+                self.name,
+            )
         } else {
-            write!(f, "{}.{}", self.module, self.name)
+            write!(
+                f,
+                "{}.{}{}",
+                self.module,
+                if let Some(p) = self.perspective.as_ref() {
+                    format!("{}/", p)
+                } else {
+                    "".to_owned()
+                },
+                self.name,
+            )
         }
     }
 }
