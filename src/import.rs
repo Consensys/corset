@@ -170,7 +170,10 @@ pub fn fill_traces(
                 // The first column sets the size of its module
                 let module_raw_size = cs.raw_len_for_or_set(&module, xs.len() as isize);
 
-                if let Result::Ok(Column { t, .. }) = cs.columns.get_col(&handle) {
+                if let Result::Ok(Column {
+                    t, padding_value, ..
+                }) = cs.columns.get_col(&handle)
+                {
                     trace!("inserting {} ({})", handle, xs.len());
                     if let Some(first_column) = initiator.as_mut() {
                         if first_column.is_empty() {
@@ -204,10 +207,11 @@ pub fn fill_traces(
                     // required.
                     // Atomic columns are always padded with zeroes, so there is
                     // no need to trigger a more complex padding system.
-                    // FIXME: pad with column.padding_value
                     if xs.len() < module_min_len {
                         xs.reverse();
-                        xs.resize_with(module_min_len, Default::default);
+                        xs.resize_with(module_min_len, || {
+                            padding_value.map(|v| v.1).unwrap_or_default()
+                        });
                         xs.reverse();
                     }
                     cs.columns.set_value(&handle, xs, module_spilling)?
