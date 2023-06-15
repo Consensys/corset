@@ -18,7 +18,7 @@ use crate::structs::Handle;
 
 use super::{ConstraintSet, EvalSettings, Intrinsic, Kind, Magma, Type};
 
-#[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq)]
 pub struct ColumnRef {
     h: Option<Handle>,
     id: Option<ColumnID>,
@@ -96,10 +96,16 @@ impl std::cmp::PartialEq for ColumnRef {
         self.id
             .zip(other.id)
             .map(|(x, y)| x.eq(&y))
-            .or(self.h.as_ref().zip(other.h.as_ref()).map(|(x, y)| x.eq(&y)))
+            .or(self.h.as_ref().zip(other.h.as_ref()).map(|(x, y)| x.eq(y)))
             .unwrap_or(false)
     }
 }
+impl std::hash::Hash for ColumnRef {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_id().hash(state);
+    }
+}
+
 impl Display for ColumnRef {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.is_handle() {
@@ -309,12 +315,12 @@ impl Node {
         }
         fn format_list(ns: &[Node], depth: usize, cs: &ConstraintSet) -> String {
             ns.iter()
-                .map(|n| rec_pretty(n, depth, cs).to_string())
+                .map(|n| rec_pretty(n, depth, cs))
                 .collect::<Vec<_>>()
                 .join(" ")
         }
 
-        format!("{}", rec_pretty(self, 0, cs))
+        rec_pretty(self, 0, cs)
     }
 
     pub fn debug(&self, f: &dyn Fn(&Node) -> Option<Fr>, unclutter: bool, dim: bool) -> String {
@@ -379,7 +385,7 @@ impl Node {
                             dim,
                             v.is_zero() || zero_context,
                         );
-                        tty.write(if subponent > 0 { "₊" } else { "₋" }.to_string());
+                        tty.write(if subponent > 0 { "₊" } else { "₋" });
                         tty.write(crate::pretty::subscript(&subponent.to_string()));
                     } else {
                         tty.write(format!("({fname} ").color(c).to_string());
@@ -417,7 +423,7 @@ impl Node {
                     }
                     tty.buffer_end(format!(
                         " = {}",
-                        v.pretty_with_base(Base::Hex).color(c_v).bold().to_string()
+                        v.pretty_with_base(Base::Hex).color(c_v).bold()
                     ));
                 }
                 Expression::Const(x, _) => {
@@ -442,7 +448,7 @@ impl Node {
                     tty.write(format!("{}", h));
                     tty.buffer_end(format!(
                         " → {}",
-                        v.pretty_with_base(Base::Hex).color(c).bold().to_string()
+                        v.pretty_with_base(Base::Hex).color(c).bold()
                     ));
                 }
                 Expression::ArrayColumn { handle, .. } => tty.write(handle.to_string()),

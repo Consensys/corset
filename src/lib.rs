@@ -157,7 +157,7 @@ impl Trace {
                             padding
                         },
                     },
-                    c.handle(i.into()).to_string(),
+                    c.handle(i).to_string(),
                 )
             })
             .collect::<Vec<_>>();

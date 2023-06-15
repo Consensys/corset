@@ -296,8 +296,8 @@ impl ConstraintSet {
 
         let mut pool: ColumnPool = Default::default();
         for (h, col) in self.columns.iter() {
-            match &col.kind {
-                Kind::Atomic => match &col.handle.perspective {
+            if col.kind == Kind::Atomic {
+                match &col.handle.perspective {
                     Some(name) => {
                         let module = col.handle.module.to_string();
                         let magma = col.t.magma();
@@ -315,8 +315,7 @@ impl ConstraintSet {
                     None => {
                         pool.root.push(h.to_owned());
                     }
-                },
-                _ => {}
+                }
             }
         }
 
@@ -344,7 +343,7 @@ impl ConstraintSet {
                             .filter_map(|v| v.get(i))
                             .map(|r| self.handle(r).name.to_owned())
                             .join("_xor_");
-                        let reg = self.columns.new_register(Handle::new(&module, names));
+                        let reg = self.columns.new_register(Handle::new(module, names));
                         for cols in sets.values() {
                             if let Some(col_id) = cols.get(i) {
                                 self.columns.assign_register(col_id, reg).unwrap();
@@ -885,28 +884,26 @@ impl ConstraintSet {
 
         // Check that no constraint mixes cardinalities
         for c in self.constraints.iter() {
-            match c {
-                Constraint::Vanishes {
-                    handle,
-                    domain: _,
-                    expr,
-                } => {
-                    let mut sizes = expr.dependencies().into_iter();
-                    if let Some(first) = sizes.next() {
-                        let first_size = self.length_multiplier(&first);
-                        for other in sizes {
-                            let other_size = self.length_multiplier(&other);
-                            if first_size != other_size {
-                                bail!(
+            if let Constraint::Vanishes {
+                handle,
+                domain: _,
+                expr,
+            } = c
+            {
+                let mut sizes = expr.dependencies().into_iter();
+                if let Some(first) = sizes.next() {
+                    let first_size = self.length_multiplier(&first);
+                    for other in sizes {
+                        let other_size = self.length_multiplier(&other);
+                        if first_size != other_size {
+                            bail!(
                                     "constraint {} mixes columns {} (×{}) and {} (×{}) of different size factors ",
                                     handle.pretty(), first.pretty(), first_size,
                                     other.pretty(), other_size,
                                 );
-                            }
                         }
                     }
                 }
-                _ => {}
             }
         }
 
@@ -1366,8 +1363,8 @@ fn reduce_toplevel(
                     .tree
                     .borrow()
                     .metadata()
-                    .get_perspective_trigger(&module, &perspective)?;
-                Intrinsic::Mul.call(&[persp_guard.into(), body])?
+                    .get_perspective_trigger(&module, perspective)?;
+                Intrinsic::Mul.call(&[persp_guard, body])?
             } else {
                 body
             };
@@ -1448,14 +1445,12 @@ fn reduce_toplevel(
         } => {
             // Create the new perspective in the current module and ensures it does not exist
             let module = ctx.module();
-            let trigger = reduce(trigger, ctx, settings)?
-                .ok_or_else(|| {
-                    anyhow!(
-                        "guard for perspective {} can not be empty",
-                        name.bold().yellow()
-                    )
-                })?
-                .to_owned();
+            let trigger = reduce(trigger, ctx, settings)?.ok_or_else(|| {
+                anyhow!(
+                    "guard for perspective {} can not be empty",
+                    name.bold().yellow()
+                )
+            })?;
             ctx.tree
                 .borrow_mut()
                 .metadata_mut()

@@ -101,12 +101,11 @@ impl Pretty for Node {
         }
         fn format_list(cs: &[Node], depth: usize) -> String {
             cs.iter()
-                .map(|c| rec_pretty(c, depth).to_string())
+                .map(|c| rec_pretty(c, depth))
                 .collect::<Vec<_>>()
                 .join(" ")
         }
-
-        format!("{}", rec_pretty(self, 0))
+        rec_pretty(self, 0)
     }
     fn pretty_with_base(&self, _base: Base) -> String {
         self.pretty()

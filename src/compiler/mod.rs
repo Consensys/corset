@@ -109,8 +109,7 @@ pub fn make<S: AsRef<str>>(
 
     let constraints = maybe_bail(
         asts.iter()
-            .map(|(name, ast)| generator::pass(ast, ctx.clone(), name, settings))
-            .flatten()
+            .flat_map(|(name, ast)| generator::pass(ast, ctx.clone(), name, settings))
             .collect(),
     )?
     .into_iter()
@@ -183,7 +182,7 @@ pub fn make<S: AsRef<str>>(
                 persps
                     .iter()
                     .map(|(perspective, trigger)| {
-                        (perspective.to_owned(), trigger.clone().unwrap().into())
+                        (perspective.to_owned(), trigger.clone().unwrap())
                     })
                     .collect::<HashMap<_, _>>(),
             )

@@ -10,7 +10,7 @@ pub fn max_type<'a, TS: IntoIterator<Item = &'a Type>>(ts: TS) -> Type {
 
 /// The type of a column in the IR. This struct contains both the dimensionality
 /// of the type and its underlying magma.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Type {
     Void,
     Scalar(Magma),
@@ -91,29 +91,29 @@ impl Type {
         self.is_scalar() || self.is_column()
     }
 }
-impl std::cmp::PartialOrd for Type {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self, other) {
-            (Type::Void, Type::Void) => Some(Ordering::Equal),
-            (Type::Void, _) => Some(Ordering::Less),
-            (Type::Scalar(_), Type::Void) => Some(Ordering::Greater),
-            (Type::Scalar(_), Type::Column(_)) => None,
-            (Type::Scalar(x), Type::Scalar(y)) => Some(x.cmp(y)),
-            (Type::Column(_), Type::Void) => Some(Ordering::Greater),
-            (Type::Column(x), Type::Column(y)) => Some(x.cmp(y)),
-            (Type::Column(_), Type::Scalar(_)) => None,
+// impl std::cmp::PartialOrd for Type {
+//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+//         match (self, other) {
+//             (Type::Void, Type::Void) => Some(Ordering::Equal),
+//             (Type::Void, _) => Some(Ordering::Less),
+//             (Type::Scalar(_), Type::Void) => Some(Ordering::Greater),
+//             (Type::Scalar(_), Type::Column(_)) => None,
+//             (Type::Scalar(x), Type::Scalar(y)) => Some(x.cmp(y)),
+//             (Type::Column(_), Type::Void) => Some(Ordering::Greater),
+//             (Type::Column(x), Type::Column(y)) => Some(x.cmp(y)),
+//             (Type::Column(_), Type::Scalar(_)) => None,
 
-            (Type::ArrayColumn(x), Type::ArrayColumn(y)) => Some(x.cmp(y)),
-            (Type::ArrayColumn(_), _) => None,
-            (_, Type::ArrayColumn(_)) => None,
+//             (Type::ArrayColumn(x), Type::ArrayColumn(y)) => Some(x.cmp(y)),
+//             (Type::ArrayColumn(_), _) => None,
+//             (_, Type::ArrayColumn(_)) => None,
 
-            (Type::List(_), Type::Column(_)) => None,
-            (Type::Column(_), Type::List(_)) => None,
+//             (Type::List(_), Type::Column(_)) => None,
+//             (Type::Column(_), Type::List(_)) => None,
 
-            (x, y) => unimplemented!("{:?} <?> {:?}", x, y),
-        }
-    }
-}
+//             (x, y) => unimplemented!("{:?} <?> {:?}", x, y),
+//         }
+//     }
+// }
 
 /// [ill-named] A magma is a set where some operations stay within itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]

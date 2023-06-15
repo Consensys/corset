@@ -237,7 +237,7 @@ enum Commands {
         )]
         show_perspectives: bool,
         #[arg(short = 'T', long = "types", help = "display types information")]
-        show_debug: bool,
+        show_types: bool,
         #[arg(
             long = "only",
             help = "only show these constraints",
@@ -558,7 +558,7 @@ fn main() -> Result<()> {
             show_constraints,
             show_computations,
             show_perspectives,
-            show_debug,
+            show_types,
             only,
             skip,
         } => {
@@ -588,13 +588,15 @@ fn main() -> Result<()> {
                 error!("no elements specified to debug");
             }
 
-            exporters::debug(
+            exporters::debugger::debug(
                 &constraints,
-                show_constraints,
-                show_columns,
-                show_computations,
-                show_perspectives,
-                show_debug,
+                exporters::debugger::DebugSettings {
+                    constraints: show_constraints,
+                    columns: show_columns,
+                    types: show_types,
+                    perspectives: show_perspectives,
+                    computations: show_computations,
+                },
                 only.as_ref(),
                 &skip,
             )?;

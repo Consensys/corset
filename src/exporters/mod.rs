@@ -4,7 +4,7 @@ use log::*;
 pub mod besu;
 #[cfg(feature = "conflater")]
 pub mod conflater;
-mod debugger;
+pub(crate) mod debugger;
 #[cfg(feature = "exporters")]
 pub mod go;
 #[cfg(all(feature = "parser", feature = "exporters"))]
@@ -12,7 +12,6 @@ pub mod latex;
 #[cfg(feature = "exporters")]
 mod wizardiop;
 
-pub use debugger::debug;
 #[cfg(feature = "exporters")]
 pub use wizardiop::WizardIOP;
 

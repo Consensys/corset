@@ -48,7 +48,7 @@ impl Register {
         } else {
             self.value = Some(Self::make_with_spilling(
                 &mut |i| v.get(i as usize).cloned().unwrap_or_else(Fr::zero),
-                v.len().try_into().expect("demented size"),
+                v.len(),
                 spilling,
             ));
         }
@@ -238,10 +238,7 @@ impl ColumnSet {
     }
 
     pub fn all(&self) -> Vec<ColumnRef> {
-        (0..self._cols.len())
-            .into_iter()
-            .map(ColumnRef::from)
-            .collect()
+        (0..self._cols.len()).map(ColumnRef::from).collect()
     }
 
     pub fn by_handle(&self, handle: &Handle) -> Result<&Column> {
@@ -288,9 +285,7 @@ impl ColumnSet {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (ColumnRef, &Column)> {
-        (0..self._cols.len())
-            .into_iter()
-            .map(|i| (ColumnRef::from(i), &self._cols[i]))
+        (0..self._cols.len()).map(|i| (ColumnRef::from(i), &self._cols[i]))
     }
 
     pub fn iter_cols(&self) -> impl Iterator<Item = &Column> {

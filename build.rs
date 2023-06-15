@@ -1,6 +1,5 @@
 use std::{env, path::PathBuf, process::Command};
 
-use cbindgen::Config;
 fn main() {
     // Export the current git hash
     let git_hash = Command::new("git")
@@ -13,15 +12,9 @@ fn main() {
     println!("cargo:rustc-env=GIT_HASH={}", git_hash);
 
     if cfg!(all(target_arch = "x86_64", target_feature = "avx")) {
-        println!(
-            "cargo:rustc-env=SIMD_ENABLED={}",
-            "SIMD JSON parsing enabled"
-        );
+        println!("cargo:rustc-env=SIMD_ENABLED=SIMD JSON parsing enabled");
     } else {
-        println!(
-            "cargo:rustc-env=SIMD_ENABLED={}",
-            "SIMD JSON parsing unavailable"
-        );
+        println!("cargo:rustc-env=SIMD_ENABLED=SIMD JSON parsing unavailable");
     }
 
     // Generate C FFI bindings
@@ -32,8 +25,10 @@ fn main() {
         .display()
         .to_string();
 
-    let mut config = Config::default();
-    config.language = cbindgen::Language::C;
+    let config = cbindgen::Config {
+        language: cbindgen::Language::C,
+        ..Default::default()
+    };
 
     cbindgen::generate_with_config(crate_dir, config)
         .unwrap()

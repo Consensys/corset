@@ -683,7 +683,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
         kw @ ("defun" | "defpurefun") => {
             fn parse_typed_symbols(l: AstNode) -> Result<(String, Option<Magma>, bool)> {
                 match l.class {
-                    Token::Symbol(s) => Ok((s.to_owned(), None, false)),
+                    Token::Symbol(s) => Ok((s, None, false)),
                     Token::List(xs) => match xs.as_slice() {
                         [AstNode {
                             class: Token::Symbol(s),

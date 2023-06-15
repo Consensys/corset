@@ -25,13 +25,7 @@ fn priority(a: Intrinsic, b: Intrinsic) -> Ordering {
     }
 }
 
-fn pretty_expr(
-    cs: &ConstraintSet,
-    n: &Node,
-    prev: Option<Intrinsic>,
-    tty: &mut Tty,
-    show_types: bool,
-) {
+fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: bool) {
     const INDENT: usize = 4;
     let colors = [
         Color::Red,
@@ -56,7 +50,7 @@ fn pretty_expr(
                 }
                 let mut args = args.iter().peekable();
                 while let Some(a) = args.next() {
-                    pretty_expr(cs, a, Some(*f), tty, show_types);
+                    pretty_expr(a, Some(*f), tty, show_types);
                     if args.peek().is_some() {
                         tty.write(format!(" {} ", f));
                     }
@@ -66,39 +60,39 @@ fn pretty_expr(
                 }
             }
             Intrinsic::Exp => {
-                pretty_expr(cs, &args[0], Some(*f), tty, show_types);
+                pretty_expr(&args[0], Some(*f), tty, show_types);
                 tty.write("^");
-                pretty_expr(cs, &args[1], Some(*f), tty, show_types);
+                pretty_expr(&args[1], Some(*f), tty, show_types);
             }
             Intrinsic::Shift => {
-                pretty_expr(cs, &args[0], None, tty, show_types);
+                pretty_expr(&args[0], None, tty, show_types);
                 let subponent = args[1].pure_eval().unwrap().to_i64().unwrap();
-                tty.write(if subponent > 0 { "₊" } else { "" }.to_string());
+                tty.write(if subponent > 0 { "₊" } else { "" });
                 tty.write(crate::pretty::subscript(&subponent.to_string()));
             }
             Intrinsic::Neg => {
                 tty.write("-");
-                pretty_expr(cs, &args[0], prev, tty, show_types);
+                pretty_expr(&args[0], prev, tty, show_types);
             }
             Intrinsic::Inv => {
                 tty.write("INV");
-                pretty_expr(cs, &args[0], prev, tty, show_types);
+                pretty_expr(&args[0], prev, tty, show_types);
             }
             Intrinsic::Nth => unreachable!(),
             Intrinsic::Begin => todo!(),
             Intrinsic::IfZero => {
                 tty.write("ifzero ".color(c).to_string());
-                pretty_expr(cs, &args[0], Some(Intrinsic::Mul), tty, show_types);
+                pretty_expr(&args[0], Some(Intrinsic::Mul), tty, show_types);
                 tty.shift(INDENT);
                 tty.cr();
-                pretty_expr(cs, &args[1], None, tty, show_types);
+                pretty_expr(&args[1], None, tty, show_types);
                 if let Some(a) = args.get(2) {
                     tty.unshift();
                     tty.cr();
                     tty.write("else".color(c).to_string());
                     tty.shift(INDENT);
                     tty.cr();
-                    pretty_expr(cs, a, prev, tty, show_types);
+                    pretty_expr(a, prev, tty, show_types);
                 }
                 tty.unshift();
                 tty.cr();
@@ -106,17 +100,17 @@ fn pretty_expr(
             }
             Intrinsic::IfNotZero => {
                 tty.write("ifnotzero ".color(c).to_string());
-                pretty_expr(cs, &args[0], Some(Intrinsic::Mul), tty, show_types);
+                pretty_expr(&args[0], Some(Intrinsic::Mul), tty, show_types);
                 tty.shift(INDENT);
                 tty.cr();
-                pretty_expr(cs, &args[1], None, tty, show_types);
+                pretty_expr(&args[1], None, tty, show_types);
                 if let Some(a) = args.get(2) {
                     tty.unshift();
                     tty.cr();
                     tty.write("else".color(c).to_string());
                     tty.shift(INDENT);
                     tty.cr();
-                    pretty_expr(cs, a, prev, tty, show_types);
+                    pretty_expr(a, prev, tty, show_types);
                 }
                 tty.unshift();
                 tty.cr();
@@ -131,7 +125,7 @@ fn pretty_expr(
             tty.cr();
             let mut xs = xs.iter().peekable();
             while let Some(x) = xs.next() {
-                pretty_expr(cs, x, None, tty, show_types);
+                pretty_expr(x, None, tty, show_types);
                 if xs.peek().is_some() {
                     tty.cr();
                 }
@@ -164,7 +158,7 @@ fn render_constraints(
                     expr,
                 } => {
                     let mut tty = Tty::new();
-                    pretty_expr(cs, expr, None, &mut tty, show_types);
+                    pretty_expr(expr, None, &mut tty, show_types);
                     println!("\n{}", handle.pretty());
                     println!("{}", tty.page_feed());
                 }
@@ -190,7 +184,7 @@ fn render_constraints(
                 Constraint::Permutation { .. } => (),
                 Constraint::InRange { handle, exp, max } => {
                     let mut tty = Tty::new();
-                    pretty_expr(cs, exp, None, &mut tty, false);
+                    pretty_expr(exp, None, &mut tty, false);
                     println!("\n{}", handle.pretty());
                     println!("{} < {}", tty.page_feed(), max);
                 }
@@ -283,26 +277,30 @@ fn render_perspectives(cs: &ConstraintSet) {
     }
 }
 
-pub fn debug(
+pub(crate) struct DebugSettings {
+    pub constraints: bool,
+    pub columns: bool,
+    pub computations: bool,
+    pub perspectives: bool,
+    pub types: bool,
+}
+
+pub(crate) fn debug(
     cs: &ConstraintSet,
-    show_constraints: bool,
-    show_columns: bool,
-    show_computations: bool,
-    show_perspectives: bool,
-    show_types: bool,
+    settings: DebugSettings,
     only: Option<&Vec<String>>,
     skip: &[String],
 ) -> Result<()> {
-    if show_constraints {
-        render_constraints(cs, only, skip, show_types);
+    if settings.constraints {
+        render_constraints(cs, only, skip, settings.types);
     }
-    if show_columns {
+    if settings.columns {
         render_columns(cs);
     }
-    if show_computations {
+    if settings.computations {
         render_computations(cs);
     }
-    if show_perspectives {
+    if settings.perspectives {
         render_perspectives(cs);
     }
     Ok(())

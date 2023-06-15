@@ -296,7 +296,7 @@ impl Scope {
                 bail!("symbol table {} already exists in {}", name, self.name());
             }
             None => {
-                let module = self.module().clone();
+                let module = self.module();
                 let current_global = data!(self).global;
                 let new_node = self.tree.borrow_mut().add_node(
                     Some(self.id),
@@ -474,7 +474,7 @@ impl Scope {
     }
 
     pub fn resolve_symbol(&mut self, name: &str) -> Result<Node, symbols::Error> {
-        let module = self.module().to_owned();
+        let module = self.module();
         let global = data!(self).global;
 
         if name.contains('.') {

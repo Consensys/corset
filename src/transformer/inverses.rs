@@ -78,7 +78,7 @@ impl ConstraintSet {
                 self.computations.insert(
                     &inverted_id,
                     Computation::Composite {
-                        target: inverted_id.clone().into(),
+                        target: inverted_id.clone(),
                         exp: invert_expr(&inverted_expr),
                     },
                 )?;
