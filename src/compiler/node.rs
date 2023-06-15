@@ -102,7 +102,11 @@ impl std::cmp::PartialEq for ColumnRef {
 }
 impl std::hash::Hash for ColumnRef {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_id().hash(state);
+        if self.is_id() {
+            self.as_id().hash(state);
+        } else {
+            self.as_handle().hash(state);
+        }
     }
 }
 
