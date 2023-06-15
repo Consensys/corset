@@ -1137,7 +1137,7 @@ fn apply_builtin(
                     Intrinsic::Sub
                         .call(&[traversed_args[0].to_owned(), traversed_args[1].to_owned()])?
                 }
-                .with_type(x.t().with_magma(Magma::Loobean)),
+                .with_type(x.t().max(y.t()).with_magma(Magma::Loobean)),
             ))
         }
     }
