@@ -24,17 +24,37 @@ pub struct ColumnRef {
     id: Option<ColumnID>,
 }
 impl ColumnRef {
-    pub fn of_handle(h: Handle) -> ColumnRef {
+    pub fn from_handle(h: Handle) -> ColumnRef {
         ColumnRef {
             h: Some(h),
             id: None,
         }
     }
-    pub fn of_id(i: ColumnID) -> ColumnRef {
+    pub fn from_id(i: ColumnID) -> ColumnRef {
         ColumnRef {
             h: None,
             id: Some(i),
         }
+    }
+    pub fn id(mut self, i: ColumnID) -> Self {
+        if let Some(id) = self.id {
+            if id != i {
+                panic!("can not re-assign ID")
+            }
+        }
+
+        self.id = Some(i);
+        self
+    }
+    pub fn handle(mut self, h: Handle) -> Self {
+        if let Some(ho) = self.h {
+            if ho != h {
+                panic!("can not re-assign handle")
+            }
+        }
+
+        self.h = Some(h);
+        self
     }
     pub fn as_handle(&self) -> &Handle {
         self.h.as_ref().unwrap()
@@ -85,7 +105,7 @@ impl Display for ColumnRef {
         if self.is_handle() {
             write!(f, "{}", self.as_handle())
         } else if self.is_id() {
-            write!(f, "{}", self.as_id())
+            write!(f, "col#{}", self.as_id())
         } else {
             unreachable!()
         }
@@ -93,17 +113,17 @@ impl Display for ColumnRef {
 }
 impl From<&Handle> for ColumnRef {
     fn from(h: &Handle) -> ColumnRef {
-        ColumnRef::of_handle(h.to_owned())
+        ColumnRef::from_handle(h.to_owned())
     }
 }
 impl From<Handle> for ColumnRef {
     fn from(h: Handle) -> ColumnRef {
-        ColumnRef::of_handle(h)
+        ColumnRef::from_handle(h)
     }
 }
 impl From<ColumnID> for ColumnRef {
     fn from(i: ColumnID) -> ColumnRef {
-        ColumnRef::of_id(i)
+        ColumnRef::from_id(i)
     }
 }
 

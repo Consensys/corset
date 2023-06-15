@@ -332,8 +332,9 @@ impl ColumnSet {
             let i = self._cols.len();
 
             self.cols.insert(column.handle.to_owned(), i);
+            let r = ColumnRef::from_handle(column.handle.clone()).id(i);
             self._cols.push(column);
-            Ok(ColumnRef::from(i))
+            Ok(r)
         }
     }
 
