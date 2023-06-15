@@ -1,7 +1,18 @@
-package net.consensys.linea.jsonrpc
+package net.consensys.linea.traces
 
-import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.annotation.JsonAutoDetect
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.annotation.JsonProperty
+import io.vertx.core.json.JsonObject
+import kotlin.Pair
+
+fun JsonObject.getTrace(jsonPath: List<String>): JsonObject? {
+  var jsonObject: JsonObject? = this
+  for (node in jsonPath) {
+    jsonObject = jsonObject?.getJsonObject(node)
+  }
+  return jsonObject?.getJsonObject("Trace")
+}
 
 val MODULES = listOf(
 {{ #each modules }}
