@@ -82,7 +82,14 @@ impl Handle {
 
     /// Uniquely mangle the name of a symbol into something usable in Go
     pub fn mangled_name(&self) -> String {
-        purify(&self.name)
+        purify(&format!(
+            "{}{}",
+            self.perspective
+                .clone()
+                .map(|s| format!("{s}__"))
+                .unwrap_or_default(),
+            &self.name
+        ))
     }
 
     /// Uniquely mangle the module of a symbol into something usable in Go
