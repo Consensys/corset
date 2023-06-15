@@ -1177,7 +1177,7 @@ fn apply_intrinsic(
                 let i = traversed_args[1].pure_eval()?.to_usize().ok_or_else(|| {
                     anyhow!("{:?} is not a valid indice", traversed_args[1].pure_eval())
                 })?;
-                let array = ctx.resolve_handle(handle)?;
+                let array = ctx.resolve_handle(handle.as_handle())?;
                 match array.e() {
                     Expression::ArrayColumn {
                         handle,
@@ -1187,7 +1187,7 @@ fn apply_intrinsic(
                         if range.contains(&i) {
                             Ok(Some(
                                 Node::column()
-                                    .handle(handle.ith(i))
+                                    .handle(handle.as_handle().ith(i))
                                     .kind(Kind::Atomic)
                                     .base(*base)
                                     .t(array.t().magma())
@@ -1279,7 +1279,6 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                 Err(anyhow!("not a function: `{:?}`", args[0])).with_context(|| make_ast_error(e))
             }
         }
-
         Token::DefColumn {
             name,
             t: _,

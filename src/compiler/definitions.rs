@@ -47,19 +47,24 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             base,
         } => {
             let module_name = ctx.module();
-            let symbol = Node::from_expr(Expression::Column {
-                handle: Handle::maybe_with_perspective(module_name, col, ctx.perspective()).into(),
-                kind: match kind {
+            let symbol = Node::column()
+                .handle(Handle::maybe_with_perspective(
+                    module_name,
+                    col,
+                    ctx.perspective(),
+                ))
+                .base(*base)
+                .kind(match kind {
                     Kind::Atomic => Kind::Atomic,
                     Kind::Phantom => Kind::Phantom,
-                    Kind::Composite(_) => Kind::Phantom, // The actual expression is computed by the generator
-                    Kind::Interleaved(_, _) => Kind::Phantom, // The interleaving is later on set by the generator TODO: move me @emile
-                },
-                padding_value: padding_value.to_owned(),
-                base: *base,
-                fetched: false,
-            })
-            .with_type(*t);
+                    // The actual expression is computed by the generator
+                    Kind::Composite(_) => Kind::Phantom,
+                    // The interleaving is later on set by the generator TODO: move me @emile
+                    Kind::Interleaved(_, _) => Kind::Phantom,
+                })
+                .and_padding_value(*padding_value)
+                .t(t.magma())
+                .build();
             ctx.insert_symbol(col, symbol)
         }
         Token::DefArrayColumn {
@@ -86,12 +91,12 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             // and this one for validating calls to `nth`
             ctx.insert_symbol(
                 col,
-                Node::from_expr(Expression::ArrayColumn {
-                    handle,
-                    domain: range.to_owned(),
-                    base: *base,
-                })
-                .with_type(*t),
+                Node::array_column()
+                    .handle(handle)
+                    .domain(range.to_owned())
+                    .base(*base)
+                    .t(t.magma())
+                    .build(),
             )?;
             Ok(())
         }

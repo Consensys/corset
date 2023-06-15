@@ -43,7 +43,7 @@ impl Handle {
         module: S1,
         name: S2,
         perspective: Option<String>,
-    ) -> Self {
+    ) -> Handle {
         Handle {
             module: module.as_ref().to_owned(),
             name: name.as_ref().to_owned(),

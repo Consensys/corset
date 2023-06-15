@@ -82,7 +82,7 @@ impl Pretty for Node {
                     ..
                 } => format!(
                     "{}[{}:{}]",
-                    handle.name,
+                    handle.as_handle().name,
                     range.first().unwrap(),
                     range.last().unwrap(),
                 )

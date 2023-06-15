@@ -122,7 +122,7 @@ pub enum Expression {
         fetched: bool,
     },
     ArrayColumn {
-        handle: Handle,
+        handle: ColumnRef,
         domain: Vec<usize>,
         base: Base,
     },
@@ -187,6 +187,22 @@ impl Node {
                 fetched: false,
             },
             _t: Some(Type::Column(t.unwrap_or(Magma::Integer))),
+        }
+    }
+    #[builder(entry = "array_column", exit = "build", visibility = "pub")]
+    fn new_array_column(
+        handle: ColumnRef,
+        domain: Vec<usize>,
+        base: Option<Base>,
+        t: Option<Magma>,
+    ) -> Node {
+        Node {
+            _e: Expression::ArrayColumn {
+                handle,
+                domain,
+                base: base.unwrap_or(Base::Hex),
+            },
+            _t: Some(Type::ArrayColumn(t.unwrap_or(Magma::Integer))),
         }
     }
     pub fn phantom_column(x: &ColumnRef, m: Magma) -> Node {
@@ -254,7 +270,7 @@ impl Node {
                     ..
                 } => format!(
                     "{}[{}:{}]",
-                    handle.name,
+                    handle.as_handle().name,
                     range.first().unwrap(),
                     range.last().unwrap(),
                 )
@@ -701,7 +717,7 @@ impl Node {
                         if !range.contains(&idx) {
                             panic!("trying to access `{}` at index `{}`", h, idx);
                         }
-                        get(&h.ith(idx).into(), i, settings.wrap)
+                        get(&h.as_handle().ith(idx).into(), i, settings.wrap)
                     } else {
                         unreachable!()
                     }
@@ -821,38 +837,31 @@ impl Debug for Node {
         }
 
         match self.e() {
-            Expression::Const(x, _) => write!(f, "{}", x),
+            Expression::Const(x, _) => write!(f, "{}", x)?,
             Expression::Column {
                 handle, fetched, ..
-            } => {
-                write!(
-                    f,
-                    "{}{}:{:?}",
-                    if *fetched { "F:" } else { "" },
-                    handle,
-                    self._t
-                )
-            }
+            } => write!(f, "{}{}", if *fetched { "F:" } else { "" }, handle,)?,
             Expression::ArrayColumn {
                 handle,
                 domain: range,
                 ..
-            } => {
-                write!(
-                    f,
-                    "{}:{:?}[{}:{}]",
-                    handle,
-                    self.t(),
-                    range.first().unwrap(),
-                    range.last().unwrap(),
-                )
-            }
-            Expression::List(cs) => write!(f, "'({})", format_list(cs)),
-            Expression::Funcall { func, args } => {
-                write!(f, "({:?} {})", func, format_list(args))
-            }
-            Expression::Void => write!(f, "nil"),
+            } => write!(
+                f,
+                "{}:{:?}[{}:{}]",
+                handle,
+                self.t(),
+                range.first().unwrap(),
+                range.last().unwrap(),
+            )?,
+            Expression::List(cs) => write!(f, "'({})", format_list(cs))?,
+            Expression::Funcall { func, args } => write!(f, "({:?} {})", func, format_list(args))?,
+            Expression::Void => write!(f, "nil")?,
             // Expression::Permutation(froms, tos) => write!(f, "{:?}<=>{:?}", froms, tos),
+        };
+        if let Some(t) = self._t {
+            write!(f, ":{}", t)
+        } else {
+            write!(f, ":?")
         }
     }
 }
