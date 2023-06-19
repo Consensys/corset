@@ -73,7 +73,6 @@ impl ConstraintSet {
                         .handle(inverted_handle.to_owned())
                         .kind(Kind::Composite(Box::new(())))
                         .build(),
-                    true,
                 )?;
                 self.computations.insert(
                     &inverted_id,

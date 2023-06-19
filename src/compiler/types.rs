@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::cmp::Ordering;
 
 use anyhow::bail;

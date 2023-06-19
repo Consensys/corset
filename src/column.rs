@@ -317,8 +317,8 @@ impl ColumnSet {
         Ok(())
     }
 
-    pub fn insert_column(&mut self, column: Column, allow_dup: bool) -> Result<ColumnRef> {
-        if self.cols.contains_key(&column.handle) && !allow_dup {
+    pub fn insert_column(&mut self, column: Column) -> Result<ColumnRef> {
+        if self.cols.contains_key(&column.handle) {
             panic!(
                 "column {} already exists",
                 column.handle.to_string().red().bold()
@@ -333,13 +333,9 @@ impl ColumnSet {
         }
     }
 
-    pub fn insert_column_and_register(
-        &mut self,
-        mut column: Column,
-        allow_dup: bool,
-    ) -> Result<ColumnRef> {
+    pub fn insert_column_and_register(&mut self, mut column: Column) -> Result<ColumnRef> {
         column.register = Some(self.new_register(column.handle.clone()));
-        self.insert_column(column, allow_dup)
+        self.insert_column(column)
     }
 
     pub fn is_empty(&self) -> bool {

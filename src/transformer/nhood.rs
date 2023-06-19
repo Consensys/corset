@@ -21,7 +21,6 @@ fn process_nhood(
             .kind(Kind::Phantom)
             .t(Magma::Integer) // TODO: tighten for GL
             .build(),
-        false,
     )?;
     cs.computations.insert(
         &_aux_id,
@@ -41,7 +40,6 @@ fn process_nhood(
             .handle(Handle::new(module, format!("INTRLD_AUX_2_{}_HOOD", n)))
             .kind(Kind::Interleaved(vec![], Some(interleaving.to_owned())))
             .build(),
-        false,
     )?;
     cs.computations.insert(
         &_intrld_aux_xs_id,
@@ -56,7 +54,6 @@ fn process_nhood(
             .handle(Handle::new(module, format!("SRT_INTRLD_AUX_2_{}_HOOD", n)))
             .kind(Kind::Phantom)
             .build(),
-        true,
     )?;
     cs.computations.insert(
         &srt_intrld_aux_xs_id,

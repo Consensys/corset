@@ -40,13 +40,6 @@ pub struct Args {
     debug: bool,
 
     #[arg(
-        long = "allow-dups",
-        help = "Whether to allow re-declaration of symbols",
-        global = true
-    )]
-    allow_dups: bool,
-
-    #[arg(
         short = 't',
         long = "threads",
         help = "number of threads to use",
@@ -345,10 +338,7 @@ fn main() -> Result<()> {
             }
             compiler::make(
                 inputs.as_slice(),
-                &compiler::CompileSettings {
-                    debug: args.debug,
-                    allow_dups: args.allow_dups,
-                },
+                &compiler::CompileSettings { debug: args.debug },
             )?
         }
 

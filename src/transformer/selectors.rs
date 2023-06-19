@@ -25,7 +25,6 @@ fn do_expand_expr(
                     .handle(new_handle.clone())
                     .kind(Kind::Phantom)
                     .build(),
-                true,
             )?;
 
             let _ = comps.insert(

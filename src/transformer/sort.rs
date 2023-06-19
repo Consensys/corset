@@ -65,7 +65,6 @@ fn create_sort_constraint(
                     .t(Magma::Boolean)
                     .intrinsic_size_factor(size)
                     .build(),
-                false,
             )
         })
         .collect::<Result<Vec<_>>>()?;
@@ -78,7 +77,6 @@ fn create_sort_constraint(
             .kind(Kind::Phantom)
             .padding_value(1)
             .build(),
-        false,
     )?;
     let delta = cs.columns.insert_column_and_register(
         Column::builder()
@@ -87,7 +85,6 @@ fn create_sort_constraint(
             .intrinsic_size_factor(cs.length_multiplier(&froms[0]))
             .base(Base::Hex)
             .build(),
-        false,
     )?;
     let delta_bytes = (0..16)
         .map(|i| {
@@ -98,7 +95,6 @@ fn create_sort_constraint(
                     .t(Magma::Byte)
                     .intrinsic_size_factor(cs.length_multiplier(&froms[0]))
                     .build(),
-                false,
             )
         })
         .collect::<Result<Vec<_>>>()?;

@@ -28,7 +28,6 @@ pub(crate) const MAIN_MODULE: &str = "<prelude>";
 
 pub struct CompileSettings {
     pub debug: bool,
-    pub allow_dups: bool,
 }
 
 fn maybe_bail<R>(errs: Vec<Result<R>>) -> Result<Vec<R>> {
@@ -141,7 +140,7 @@ pub fn make<S: AsRef<str>>(
                             .t(symbol.t().magma())
                             .base(*base)
                             .build();
-                        let id = columns.insert_column(column, settings.allow_dups)?;
+                        let id = columns.insert_column(column)?;
                         match k {
                             Kind::Atomic | Kind::Phantom => (),
                             Kind::Composite(e) => computations.insert(
