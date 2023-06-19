@@ -4,14 +4,7 @@ use anyhow::*;
 fn make(name: &str, source: &str) -> Result<()> {
     let inputs = vec![("stdlib", include_str!("stdlib.lisp")), (name, source)];
 
-    compiler::make(
-        inputs.as_slice(),
-        &CompileSettings {
-            debug: false,
-            allow_dups: true,
-        },
-    )
-    .map(|_| ())
+    compiler::make(inputs.as_slice(), &CompileSettings { debug: false }).map(|_| ())
 }
 
 fn must_run(name: &str, source: &str) {

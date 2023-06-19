@@ -10,7 +10,7 @@
 ;;
 ;; Boolean functions
 ;;
-;; !-suffix denotes reverse boolean algebra (i.e. 0 == true)
+;; !-suffix denotes loobean algebra (i.e. 0 == true)
 ;; ~-prefix denotes normalized-functions (i.e. output is 0/1)
 (defpurefun (and a b) (* a b))
 (defpurefun ((~and :bool) a b) (~ (and a b)))
