@@ -6,6 +6,7 @@ use crate::structs::Handle;
 use anyhow::*;
 use itertools::Itertools;
 use num_traits::ToPrimitive;
+use owo_colors::XtermColors;
 use owo_colors::{colored::Color, OwoColorize};
 use std::cmp::Ordering;
 
@@ -81,7 +82,7 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
             Intrinsic::Nth => unreachable!(),
             Intrinsic::Begin => todo!(),
             Intrinsic::IfZero => {
-                tty.write("ifzero ".color(c).to_string());
+                tty.write("if-zero ".color(c).bold().to_string());
                 pretty_expr(&args[0], Some(Intrinsic::Mul), tty, show_types);
                 tty.shift(INDENT);
                 tty.cr();
@@ -89,17 +90,17 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
                 if let Some(a) = args.get(2) {
                     tty.unshift();
                     tty.cr();
-                    tty.write("else".color(c).to_string());
+                    tty.write("else".color(c).bold().to_string());
                     tty.shift(INDENT);
                     tty.cr();
                     pretty_expr(a, prev, tty, show_types);
                 }
                 tty.unshift();
                 tty.cr();
-                tty.write("endif".color(c).to_string());
+                tty.write("endif".color(c).bold().to_string());
             }
             Intrinsic::IfNotZero => {
-                tty.write("ifnotzero ".color(c).to_string());
+                tty.write("if-not-zero ".color(c).bold().to_string());
                 pretty_expr(&args[0], Some(Intrinsic::Mul), tty, show_types);
                 tty.shift(INDENT);
                 tty.cr();
@@ -107,18 +108,26 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
                 if let Some(a) = args.get(2) {
                     tty.unshift();
                     tty.cr();
-                    tty.write("else".color(c).to_string());
+                    tty.write("else".color(c).bold().to_string());
                     tty.shift(INDENT);
                     tty.cr();
                     pretty_expr(a, prev, tty, show_types);
                 }
                 tty.unshift();
                 tty.cr();
-                tty.write("endif".color(c).to_string());
+                tty.write("endif".color(c).bold().to_string());
             }
         },
         Expression::Const(x, _) => tty.write(x.to_string()),
-        Expression::Column { handle, .. } => tty.write(handle.to_string()),
+        Expression::Column { handle, .. } => {
+            let color = handle.to_string().chars().fold(0, |ax, c| ax + c as usize) % 255 + 1;
+            tty.write(
+                handle
+                    .to_string()
+                    .color(XtermColors::from(color as u8))
+                    .to_string(),
+            )
+        }
         Expression::List(xs) => {
             tty.write("{".color(c).to_string());
             tty.shift(INDENT);
