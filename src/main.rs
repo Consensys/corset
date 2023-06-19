@@ -183,6 +183,12 @@ enum Commands {
         dim: bool,
 
         #[arg(
+            long = "debug-src",
+            help = "display the original source code along its compiled form"
+        )]
+        with_src: bool,
+
+        #[arg(
             long = "only",
             help = "only check these constraints",
             value_delimiter = ','
@@ -291,6 +297,8 @@ enum Commands {
 
 #[cfg(feature = "cli")]
 fn main() -> Result<()> {
+    use owo_colors::OwoColorize;
+
     let args = Args::parse();
     buche::new()
         .verbosity(args.verbose.log_level_filter())
@@ -501,6 +509,7 @@ fn main() -> Result<()> {
             continue_on_error,
             unclutter,
             dim,
+            with_src,
         } => {
             if utils::is_file_empty(&tracefile)? {
                 warn!("`{}` is empty, exiting", tracefile);
@@ -533,12 +542,13 @@ fn main() -> Result<()> {
                 check::DebugSettings::new()
                     .unclutter(unclutter)
                     .dim(dim)
+                    .src(with_src)
                     .continue_on_error(continue_on_error)
                     .report(args.verbose.log_level_filter() >= log::Level::Warn)
                     .full_trace(full_trace)
                     .context_span(trace_span),
             )
-            .with_context(|| format!("while checking `{}`", tracefile))?;
+            .with_context(|| format!("while checking {}", tracefile.bright_white().bold()))?;
             info!("{}: SUCCESS", tracefile)
         }
         Commands::Debug {

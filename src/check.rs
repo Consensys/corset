@@ -34,6 +34,8 @@ pub struct DebugSettings {
     context_span: isize,
     /// whether to report all the module columns in a failing constraint or only the involved ones
     full_trace: bool,
+    /// whether to display the original source code along the compiled form
+    src: bool,
 }
 impl DebugSettings {
     pub fn new() -> Self {
@@ -44,6 +46,7 @@ impl DebugSettings {
             report: false,
             context_span: 2,
             full_trace: false,
+            src: false,
         }
     }
     pub fn dim(self, x: bool) -> Self {
@@ -54,6 +57,9 @@ impl DebugSettings {
             unclutter: x,
             ..self
         }
+    }
+    pub fn src(self, x: bool) -> Self {
+        Self { src: x, ..self }
     }
     pub fn continue_on_error(self, x: bool) -> Self {
         Self {
@@ -229,7 +235,8 @@ fn fail(
                     &Default::default(),
                 ),
                 settings.unclutter,
-                settings.dim
+                settings.dim,
+                settings.src,
             )
     )
 }

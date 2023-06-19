@@ -1251,6 +1251,9 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                 .with_context(|| make_ast_error(e))?,
         )),
         Token::List(args) => {
+            fn make_debug_info(n: &AstNode) -> String {
+                n.to_string()
+            }
             if args.is_empty() {
                 Ok(Some(Expression::List(vec![]).into()))
             } else if let Token::Symbol(verb) = &args[0].class {
@@ -1258,7 +1261,13 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                     .resolve_function(verb)
                     .with_context(|| make_ast_error(e))?;
 
-                apply(&func, &args[1..], ctx, settings)
+                let r = apply(&func, &args[1..], ctx, settings);
+                match func.class {
+                    FunctionClass::UserDefined(_) => {
+                        r.map(|o| o.map(|n| n.with_debug(make_debug_info(e))))
+                    }
+                    _ => r,
+                }
             } else {
                 Err(anyhow!("not a function: `{:?}`", args[0])).with_context(|| make_ast_error(e))
             }

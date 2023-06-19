@@ -164,6 +164,7 @@ pub enum Expression {
 pub struct Node {
     _e: Expression,
     _t: Option<Type>,
+    dbg: Option<String>,
 }
 impl From<Expression> for Node {
     fn from(e: Expression) -> Self {
@@ -173,7 +174,11 @@ impl From<Expression> for Node {
 #[buildstructor::buildstructor]
 impl Node {
     pub fn from_expr(e: Expression) -> Node {
-        Node { _e: e, _t: None }
+        Node {
+            _e: e,
+            _t: None,
+            dbg: None,
+        }
     }
     pub fn from_const(x: isize) -> Node {
         Node {
@@ -182,6 +187,7 @@ impl Node {
                 0 | 1 => Magma::Boolean,
                 _ => Magma::Integer,
             })),
+            dbg: None,
         }
     }
     pub fn from_bigint(x: BigInt) -> Node {
@@ -192,11 +198,18 @@ impl Node {
             } else {
                 Magma::Integer
             })),
+            dbg: None,
         }
     }
     pub fn with_type(self, t: Type) -> Self {
         Node {
             _t: Some(t),
+            ..self
+        }
+    }
+    pub fn with_debug(self, dbg: String) -> Self {
+        Node {
+            dbg: Some(dbg),
             ..self
         }
     }
@@ -217,6 +230,7 @@ impl Node {
                 fetched: false,
             },
             _t: Some(Type::Column(t.unwrap_or(Magma::Integer))),
+            dbg: None,
         }
     }
     #[builder(entry = "array_column", exit = "build", visibility = "pub")]
@@ -233,6 +247,7 @@ impl Node {
                 base: base.unwrap_or(Base::Hex),
             },
             _t: Some(Type::ArrayColumn(t.unwrap_or(Magma::Integer))),
+            dbg: None,
         }
     }
     pub fn phantom_column(x: &ColumnRef, m: Magma) -> Node {
@@ -245,6 +260,7 @@ impl Node {
                 fetched: false,
             },
             _t: Some(Type::Column(m)),
+            dbg: None,
         }
     }
     pub fn one() -> Node {
@@ -327,7 +343,13 @@ impl Node {
         rec_pretty(self, 0, cs)
     }
 
-    pub fn debug(&self, f: &dyn Fn(&Node) -> Option<Fr>, unclutter: bool, dim: bool) -> String {
+    pub fn debug(
+        &self,
+        f: &dyn Fn(&Node) -> Option<Fr>,
+        unclutter: bool,
+        dim: bool,
+        src: bool,
+    ) -> String {
         fn spacer(tty: &mut Tty, with_newlines: bool) {
             if with_newlines {
                 tty.cr();
@@ -344,6 +366,7 @@ impl Node {
             dim: bool,           // whether the user enabled --debug-dim
             zero_context: bool,  // whether we are in a zero-path
             with_newlines: bool, // whether we want the expression to span several lines
+            with_src: bool,
         ) {
             let colors = [
                 Color::Red,
@@ -368,10 +391,16 @@ impl Node {
             match n.e() {
                 Expression::Funcall { func, args } => {
                     let v = f(n).unwrap_or_default();
-                    let zero_context = v.is_zero() || zero_context;
-                    if v.is_zero() && unclutter && n.depth() > 1 {
+                    let zero_context = (v.is_zero() || zero_context) && dim;
+                    if v.is_zero() && unclutter && n.depth() >= 1 {
                         tty.write("...".color(Color::BrightBlack).to_string());
                         return;
+                    }
+                    if with_src {
+                        if let Some(dbg) = n.dbg.as_ref() {
+                            tty.write(dbg.color(Color::BrightBlack).bold().to_string());
+                            spacer(tty, with_newlines);
+                        }
                     }
                     let fname = func.to_string();
                     let c = if zero_context { Color::BrightBlack } else { c };
@@ -394,6 +423,7 @@ impl Node {
                             dim,
                             zero_context,
                             false,
+                            with_src,
                         );
                         if subponent > 0 {
                             tty.write("₊");
@@ -415,6 +445,7 @@ impl Node {
                                 dim,
                                 zero_context,
                                 a.depth() > 2,
+                                with_src,
                             );
                             spacer(tty, with_newlines);
                         }
@@ -429,6 +460,7 @@ impl Node {
                                 dim,
                                 zero_context,
                                 a.depth() > 2,
+                                with_src,
                             );
                             if args.peek().is_some() {
                                 spacer(tty, with_newlines)
@@ -495,6 +527,7 @@ impl Node {
                             dim,
                             v.is_zero() || zero_context,
                             n.depth() > 2,
+                            with_src,
                         );
                         if ns.peek().is_some() {
                             spacer(tty, true);
@@ -510,7 +543,7 @@ impl Node {
 
         let mut tty = Tty::new();
         let faulty = f(self).unwrap_or_default();
-        _debug(self, &mut tty, f, &faulty, unclutter, dim, false, true);
+        _debug(self, &mut tty, f, &faulty, unclutter, dim, false, true, src);
         tty.page_feed()
     }
 
