@@ -571,14 +571,9 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                 },
                                 ColumnParser::Base => {
                                     base = if let Token::Keyword(ref kw) = x.class {
-                                        match kw.to_lowercase().as_str() {
-                                            ":bin" => Base::Bin,
-                                            ":dec" => Base::Dec,
-                                            ":hex" => Base::Hex,
-                                            _ => bail!(":display expects one of :hex, :dec, :bin; found {}", kw)
-                                        }
+                                        kw.as_str().try_into()?
                                     } else {
-                                        bail!(":display expects one of :hex, :dec, :bin; found {}", x)
+                                        bail!("missing argument to :display")
                                     };
                                     ColumnParser::Begin
                                 },

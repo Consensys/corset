@@ -25,6 +25,23 @@ pub enum Base {
     Dec,
     Hex,
     Bin,
+    Bytes,
+}
+impl std::convert::TryFrom<&str> for Base {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            ":bin" => Ok(Base::Bin),
+            ":dec" => Ok(Base::Dec),
+            ":hex" => Ok(Base::Hex),
+            ":bytes" => Ok(Base::Bytes),
+            _ => anyhow::bail!(
+                ":display expects one of :hex, :dec, :bin, :bytes; found {}",
+                value
+            ),
+        }
+    }
 }
 
 pub trait Pretty {
@@ -64,6 +81,27 @@ impl Pretty for Fr {
                     )
                     .expect("too big to represent as binary"),
                 ),
+                Base::Bytes => {
+                    // ugly, but works
+                    if self.is_zero() {
+                        String::from("0")
+                    } else {
+                        let mut bytes = self.into_repr().to_string()[2..]
+                            .trim_start_matches('0')
+                            .to_string();
+                        if bytes.len() % 2 != 0 {
+                            bytes.insert(0, '0');
+                        }
+
+                        let mut out = String::with_capacity(2 * bytes.len());
+                        let mut z = bytes.chars().peekable();
+                        while z.peek().is_some() {
+                            out.push_str(z.by_ref().take(2).collect::<String>().as_str());
+                            out.push(' ');
+                        }
+                        out
+                    }
+                }
             }
         }
     }

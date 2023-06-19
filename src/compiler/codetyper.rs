@@ -32,13 +32,14 @@ impl Tty {
             self.o.last_mut().unwrap().push_str(ending);
             self.end_line = None;
         }
-        let indent = self
-            .depths
-            .iter()
-            .skip(1)
-            .map(|d| " ".repeat((*d as isize - 1).max(0) as usize))
-            .collect::<Vec<_>>()
-            .join("│".color(Color::BrightBlack).to_string().as_str());
+        let indent = " ".to_string() // Account for the skipped first '|'
+            + &self
+                .depths
+                .iter()
+                .skip(1)
+                .map(|d| " ".repeat((*d as isize - 1).max(0) as usize))
+                .collect::<Vec<_>>()
+                .join("│".color(Color::BrightBlack).to_string().as_str());
         self.o.push(indent);
     }
     pub fn page_feed(&self) -> String {

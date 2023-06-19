@@ -328,14 +328,22 @@ impl Node {
     }
 
     pub fn debug(&self, f: &dyn Fn(&Node) -> Option<Fr>, unclutter: bool, dim: bool) -> String {
+        fn spacer(tty: &mut Tty, with_newlines: bool) {
+            if with_newlines {
+                tty.cr();
+            } else {
+                tty.write(" ");
+            }
+        }
         fn _debug(
             n: &Node,
             tty: &mut Tty,
             f: &dyn Fn(&Node) -> Option<Fr>,
             faulty: &Fr, // the non-zero value of the constraint
             unclutter: bool,
-            dim: bool,          // whether the user enabled --debug-dim
-            zero_context: bool, // whether we are in a zero-path
+            dim: bool,           // whether the user enabled --debug-dim
+            zero_context: bool,  // whether we are in a zero-path
+            with_newlines: bool, // whether we want the expression to span several lines
         ) {
             let colors = [
                 Color::Red,
@@ -360,17 +368,14 @@ impl Node {
             match n.e() {
                 Expression::Funcall { func, args } => {
                     let v = f(n).unwrap_or_default();
-                    if v.is_zero() && unclutter {
+                    let zero_context = v.is_zero() || zero_context;
+                    if v.is_zero() && unclutter && n.depth() > 1 {
                         tty.write("...".color(Color::BrightBlack).to_string());
                         return;
                     }
                     let fname = func.to_string();
-                    let c = if v.is_zero() && zero_context {
-                        Color::BrightBlack
-                    } else {
-                        c
-                    };
-                    let c_v = if dim && (zero_context || v.is_zero()) {
+                    let c = if zero_context { Color::BrightBlack } else { c };
+                    let c_v = if dim && zero_context {
                         Color::BrightBlack
                     } else if v.eq(faulty) {
                         Color::Red
@@ -387,24 +392,31 @@ impl Node {
                             faulty,
                             unclutter,
                             dim,
-                            v.is_zero() || zero_context,
+                            zero_context,
+                            false,
                         );
-                        tty.write(if subponent > 0 { "₊" } else { "₋" });
+                        if subponent > 0 {
+                            tty.write("₊");
+                        }
                         tty.write(crate::pretty::subscript(&subponent.to_string()));
                     } else {
-                        tty.write(format!("({fname} ").color(c).to_string());
-                        tty.shift(fname.len() + 2);
+                        tty.write(format!("({fname} ",).color(c).to_string());
+                        if with_newlines {
+                            tty.shift(fname.len() + 2);
+                        }
                         if let Some(a) = args.get(0) {
                             _debug(
                                 a,
                                 tty,
                                 f,
                                 faulty,
-                                unclutter,
+                                unclutter
+                                    && !matches!(func, Intrinsic::IfZero | Intrinsic::IfNotZero),
                                 dim,
-                                v.is_zero() || zero_context,
+                                zero_context,
+                                a.depth() > 2,
                             );
-                            tty.cr();
+                            spacer(tty, with_newlines);
                         }
                         let mut args = args.iter().skip(1).peekable();
                         while let Some(a) = args.next() {
@@ -415,18 +427,21 @@ impl Node {
                                 faulty,
                                 unclutter,
                                 dim,
-                                v.is_zero() || zero_context,
+                                zero_context,
+                                a.depth() > 2,
                             );
                             if args.peek().is_some() {
-                                tty.cr();
+                                spacer(tty, with_newlines)
                             }
                         }
-                        tty.unshift();
-                        tty.cr();
+                        if with_newlines {
+                            tty.unshift();
+                            tty.cr();
+                        }
                         tty.write(")".color(c).to_string());
                     }
                     tty.buffer_end(format!(
-                        " = {}",
+                        " → {}",
                         v.pretty_with_base(Base::Hex).color(c_v).bold()
                     ));
                 }
@@ -448,7 +463,6 @@ impl Node {
                         Color::BrightWhite
                     };
 
-                    // let h = h.as_handle();
                     tty.write(format!("{}", h));
                     tty.buffer_end(format!(
                         " → {}",
@@ -467,22 +481,27 @@ impl Node {
                         tty.write("...".color(c).to_string());
                         return;
                     }
-                    tty.write("{begin".color(c).to_string());
-                    tty.cr();
+                    tty.write("begin {".color(c).to_string());
                     tty.shift(3);
-                    for a in ns.iter() {
+                    tty.cr();
+                    let mut ns = ns.iter().peekable();
+                    while let Some(n) = ns.next() {
                         _debug(
-                            a,
+                            n,
                             tty,
                             f,
                             faulty,
                             unclutter,
                             dim,
                             v.is_zero() || zero_context,
+                            n.depth() > 2,
                         );
-                        tty.cr();
+                        if ns.peek().is_some() {
+                            spacer(tty, true);
+                        }
                     }
                     tty.unshift();
+                    tty.cr();
                     tty.write("}".color(c).to_string());
                 }
                 Expression::Void => tty.write("∅"),
@@ -491,10 +510,11 @@ impl Node {
 
         let mut tty = Tty::new();
         let faulty = f(self).unwrap_or_default();
-        _debug(self, &mut tty, f, &faulty, unclutter, dim, false);
+        _debug(self, &mut tty, f, &faulty, unclutter, dim, false, true);
         tty.page_feed()
     }
 
+    /// Compute the number of operations to execute to fully compute the [`Expression`]
     pub fn size(&self) -> usize {
         match self.e() {
             Expression::Funcall { args, .. } => 1 + args.iter().map(Node::size).sum::<usize>(),
@@ -503,6 +523,20 @@ impl Node {
             Expression::ArrayColumn { .. } => 0,
             Expression::List(xs) => xs.iter().map(Node::size).sum::<usize>(),
             Expression::Void => 0,
+        }
+    }
+
+    /// Compute the depth of the tree representing [`Expression`]
+    pub fn depth(&self) -> usize {
+        match self.e() {
+            Expression::Funcall { args, .. } => {
+                1 + args.iter().map(Node::depth).max().unwrap_or_default()
+            }
+            Expression::List(xs) => 1 + xs.iter().map(Node::depth).max().unwrap_or_default(),
+            Expression::Const(..)
+            | Expression::Column { .. }
+            | Expression::ArrayColumn { .. }
+            | Expression::Void => 0,
         }
     }
 
@@ -752,6 +786,7 @@ impl Node {
                         unreachable!()
                     }
                 }
+                // this is handled in Expression::List
                 Intrinsic::Begin => unreachable!(),
                 Intrinsic::IfZero => {
                     if args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
