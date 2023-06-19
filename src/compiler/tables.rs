@@ -699,6 +699,7 @@ impl Scope {
     }
 
     pub fn insert_function(&mut self, name: &str, f: Function) -> Result<()> {
+        let my_name = data!(self).name.to_owned();
         // User-defined function can be polymorphic on their input arguments and
         // thus can be declared multiple times.
         // Polymorphism is handled in the implementation for other classes of
@@ -713,7 +714,7 @@ impl Scope {
                         _ => {
                             bail!(symbols::Error::FunctionAlreadyExists(
                                 name.to_owned(),
-                                data!(self).name.to_owned()
+                                my_name,
                             ))
                         }
                     };
