@@ -3,7 +3,7 @@ use log::*;
 use num_bigint::BigInt;
 use num_traits::FromPrimitive;
 
-use super::generator::{Defined, Function, FunctionClass};
+use super::generator::{Defined, Function, FunctionClass, Specialization};
 use super::tables::Scope;
 use super::{ColumnRef, Expression, Node};
 use crate::column::Computation;
@@ -161,8 +161,8 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             name,
             args,
             body,
-            in_magmas,
-            out_magma,
+            in_types,
+            out_type,
             nowarn,
         } => {
             let module_name = ctx.module();
@@ -171,12 +171,14 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                 Function {
                     handle: Handle::new(module_name, name),
                     class: FunctionClass::UserDefined(Defined {
-                        pure: false,
-                        args: args.to_owned(),
-                        in_magmas: in_magmas.to_vec(),
-                        out_magma: *out_magma,
-                        body: *body.clone(),
-                        nowarn: *nowarn,
+                        specializations: vec![Specialization {
+                            pure: false,
+                            args: args.to_owned(),
+                            in_types: in_types.to_vec(),
+                            out_type: *out_type,
+                            body: *body.clone(),
+                            nowarn: *nowarn,
+                        }],
                     }),
                 },
             )
@@ -185,8 +187,8 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             name,
             args,
             body,
-            in_magmas,
-            out_magma,
+            in_types,
+            out_type,
             nowarn,
         } => {
             let module_name = ctx.module();
@@ -195,12 +197,14 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                 Function {
                     handle: Handle::new(module_name, name),
                     class: FunctionClass::UserDefined(Defined {
-                        pure: true,
-                        args: args.to_owned(),
-                        in_magmas: in_magmas.to_vec(),
-                        out_magma: *out_magma,
-                        body: *body.clone(),
-                        nowarn: *nowarn,
+                        specializations: vec![Specialization {
+                            pure: true,
+                            args: args.to_owned(),
+                            in_types: in_types.to_vec(),
+                            out_type: *out_type,
+                            body: *body.clone(),
+                            nowarn: *nowarn,
+                        }],
                     }),
                 },
             )

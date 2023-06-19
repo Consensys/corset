@@ -143,38 +143,54 @@ pub enum FunctionClass {
 
 #[derive(Debug, Clone)]
 pub struct Defined {
-    pub pure: bool,
-    pub args: Vec<String>,
-    pub in_magmas: Vec<Magma>,
-    pub out_magma: Option<Magma>,
-    pub body: AstNode,
-    pub nowarn: bool,
+    pub specializations: Vec<Specialization>,
 }
-impl FuncVerifier<Node> for Defined {
-    fn arity(&self) -> Arity {
-        Arity::Exactly(self.args.len())
-    }
+impl Defined {
+    pub(crate) fn add_specialization(&mut self, other: &Self) -> Result<()> {
+        assert!(other.specializations.len() == 1);
+        let new_specialization = &other.specializations[0];
 
-    fn validate_types(&self, args: &[Node]) -> Result<()> {
-        self.in_magmas
-            .iter()
-            .zip(args.iter().map(|a| a.t()))
-            .enumerate()
-            .map(|(i, ts)| {
-                if ts.1.magma() <= *ts.0 {
-                    Ok(())
-                } else {
-                    bail!(
-                        "{} expects {:?}, found {:?}",
-                        self.args[i].yellow().bold(),
-                        ts.0.blue(),
-                        ts.1.red()
-                    )
-                }
-            })
-            .collect::<Result<Vec<_>>>()?;
+        if self.specializations.iter().any(|current_specialization| {
+            current_specialization.in_types == new_specialization.in_types
+        }) {
+            // TODO: better error
+            bail!("specialization {:?} already defined", new_specialization)
+        } else {
+            self.specializations.push(new_specialization.clone());
+        }
+
         Ok(())
     }
+
+    pub(crate) fn get_specialization(&self, args_t: &[Type]) -> Result<&Specialization> {
+        for s in self.specializations.iter() {
+            if crate::compiler::compatible_with(&s.in_types, &args_t) {
+                return Ok(s);
+            }
+        }
+        error!("available specializations:");
+        for s in self.specializations.iter() {
+            let (expected_str, found_str) =
+                errors::compiler::type_comparison_message(&s.in_types, &args_t);
+            error!(
+                "expected {} mismatches with found {}",
+                expected_str, found_str
+            );
+        }
+        bail!("no implementation found matching given arguments")
+    }
+}
+// User-defined function do not need to implement [`FunctionVerifier`], because
+// their lookup would fail in any case if it is incompatible with the given
+// arguments
+#[derive(Debug, Clone)]
+pub struct Specialization {
+    pub pure: bool,
+    pub args: Vec<String>,
+    pub in_types: Vec<Type>,
+    pub out_type: Option<Type>,
+    pub body: AstNode,
+    pub nowarn: bool,
 }
 
 impl FuncVerifier<Node> for Intrinsic {
@@ -205,15 +221,10 @@ impl FuncVerifier<Node> for Intrinsic {
         //
         // The first-level list is cycled as many times is needed to validate
         // all the arguments. Therefore, for function taking homogeneous
-        // arguments (e.g. Add), a single second-level list is required.
+        // arguments (e.g. Add), a single second-level list is enough.
         let expected_t: &[&[Type]] = match self {
-            Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => {
-                &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]]
-            }
-            Intrinsic::Exp => &[
-                &[Type::Scalar(Magma::Any), Type::Column(Magma::Any)],
-                &[Type::Scalar(Magma::Any)],
-            ],
+            Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => &[&[Type::Any(Magma::Any)]],
+            Intrinsic::Exp => &[&[Type::Any(Magma::Any)], &[Type::Scalar(Magma::Any)]],
             Intrinsic::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
             Intrinsic::Inv => &[&[Type::Column(Magma::Any)]],
             Intrinsic::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
@@ -240,7 +251,7 @@ impl FuncVerifier<Node> for Intrinsic {
             ]],
         };
 
-        if super::compatible_with(expected_t, &args_t) {
+        if super::cyclic_compatible_with(expected_t, &args_t) {
             Ok(())
         } else {
             bail!(CompileError::TypeError(
@@ -449,7 +460,6 @@ impl ConstraintSet {
                                             .kind(Kind::Phantom)
                                             .handle(srt_guard_col_handle)
                                             .build(),
-                                        true,
                                     )
                                     .unwrap();
                                 let srt_guard = Node::column()
@@ -494,7 +504,6 @@ impl ConstraintSet {
                                                 .kind(Kind::Phantom)
                                                 .handle(srt_guard_col_handle)
                                                 .build(),
-                                            true,
                                         )
                                         .unwrap();
                                     let srt_guard = Node::column()
@@ -1061,23 +1070,30 @@ fn apply_defined(
     settings: &CompileSettings,
 ) -> Result<Option<Node>> {
     let f_mangle = uniquify(format!("fn-{}", h));
-    b.validate_args(&traversed_args)
+    let b = b
+        .get_specialization(
+            traversed_args
+                .iter()
+                .map(|a| a.t())
+                .collect::<Vec<_>>()
+                .as_slice(),
+        )
         .with_context(|| anyhow!("validating call to {}", h.pretty()))?;
     let mut f_ctx = ctx.derive(&f_mangle)?.closed(b.pure);
     for (i, f_arg) in b.args.iter().enumerate() {
         f_ctx.insert_symbol(f_arg, traversed_args[i].clone())?;
     }
     Ok(if let Some(r) = reduce(&b.body, &mut f_ctx, settings)? {
-        let final_type = if let Some(expected_magma) = b.out_magma {
-            if r.t().magma() > expected_magma && !b.nowarn {
+        let final_type = if let Some(expected_type) = b.out_type {
+            if r.t() > expected_type && !b.nowarn {
                 warn!(
                 "in call to {}: inferred output type {:?} is incompatible with declared type {:?}",
                 h.pretty(),
                 r.t().yellow(),
-                b.out_magma.blue()
+                b.out_type.blue()
             )
             }
-            r.t().with_magma(expected_magma)
+            expected_type
         } else {
             r.t()
         };
@@ -1119,24 +1135,24 @@ fn apply_builtin(
                 // X × /X is always 0 or 1 by construction
                 .with_type(traversed_args[0].t().with_magma(Magma::Boolean))
         })),
-        Builtin::Eq => {
-            let x = &traversed_args[0];
-            let y = &traversed_args[1];
+        // Builtin::Eq => {
+        //     let x = &traversed_args[0];
+        //     let y = &traversed_args[1];
 
-            Ok(Some(
-                if x.t().is_bool() && y.t().is_bool() {
-                    // NOTE in this very specific case, we are sure that (x - y)² is boolean
-                    Intrinsic::Mul.call(&[
-                        Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
-                        Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
-                    ])?
-                } else {
-                    Intrinsic::Sub
-                        .call(&[traversed_args[0].to_owned(), traversed_args[1].to_owned()])?
-                }
-                .with_type(x.t().max(y.t()).with_magma(Magma::Loobean)),
-            ))
-        }
+        //     Ok(Some(
+        //         if x.t().is_bool() && y.t().is_bool() {
+        //             // NOTE in this very specific case, we are sure that (x - y)² is boolean
+        //             Intrinsic::Mul.call(&[
+        //                 Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
+        //                 Intrinsic::Sub.call(&[x.clone(), y.clone()])?,
+        //             ])?
+        //         } else {
+        //             Intrinsic::Sub
+        //                 .call(&[traversed_args[0].to_owned(), traversed_args[1].to_owned()])?
+        //         }
+        //         .with_type(x.t().max(y.t()).with_magma(Magma::Loobean)),
+        //     ))
+        // }
     }
 }
 

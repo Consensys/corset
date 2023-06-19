@@ -55,11 +55,6 @@ lazy_static::lazy_static! {
             handle:Handle::new(super::MAIN_MODULE, "~"),
             class: FunctionClass::Builtin(Builtin::SelfInv),
         },
-        "eq!" => Function{
-            handle: Handle::new(super::MAIN_MODULE, "eq!"),
-            class: FunctionClass::Builtin(Builtin::Eq),
-        },
-
 
         // Intrinsics
         "inv" => Function {
@@ -704,14 +699,41 @@ impl Scope {
     }
 
     pub fn insert_function(&mut self, name: &str, f: Function) -> Result<()> {
-        if data!(self).funcs.contains_key(name) {
-            bail!(symbols::Error::FunctionAlreadyExists(
-                name.to_owned(),
-                data!(self).name.to_owned()
-            ))
-        } else {
-            data_mut!(self).funcs.insert(name.to_owned(), f);
-            Ok(())
+        // User-defined function can be polymorphic on their input arguments and
+        // thus can be declared multiple times.
+        // Polymorphism is handled in the implementation for other classes of
+        // functions, thus they can only be defined once.
+        match &f.class {
+            FunctionClass::UserDefined(new_specialization) => {
+                if let Some(Function { ref mut class, .. }) = data_mut!(self).funcs.get_mut(name) {
+                    return match class {
+                        FunctionClass::UserDefined(ref mut defined) => defined
+                            .add_specialization(&new_specialization)
+                            .with_context(|| anyhow!("while defining {}", name.yellow())),
+                        _ => {
+                            bail!(symbols::Error::FunctionAlreadyExists(
+                                name.to_owned(),
+                                data!(self).name.to_owned()
+                            ))
+                        }
+                    };
+                }
+
+                // silly if/return instead of if/else due to data_mut! usage
+                data_mut!(self).funcs.insert(name.to_owned(), f);
+                Ok(())
+            }
+            _ => {
+                if data!(self).funcs.contains_key(name) {
+                    bail!(symbols::Error::FunctionAlreadyExists(
+                        name.to_owned(),
+                        data!(self).name.to_owned()
+                    ))
+                } else {
+                    data_mut!(self).funcs.insert(name.to_owned(), f);
+                    Ok(())
+                }
+            }
         }
     }
 

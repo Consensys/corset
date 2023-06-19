@@ -21,7 +21,6 @@ pub enum Form {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Builtin {
     Len,
-    Eq,
     SelfInv,
 }
 impl std::fmt::Display for Builtin {
@@ -31,7 +30,6 @@ impl std::fmt::Display for Builtin {
             "{}",
             match self {
                 Builtin::Len => "len",
-                Builtin::Eq => "eq",
                 Builtin::SelfInv => "~",
             }
         )
@@ -177,7 +175,6 @@ pub trait FuncVerifier<T: Clone> {
 impl FuncVerifier<Node> for Builtin {
     fn arity(&self) -> Arity {
         match self {
-            Builtin::Eq => Arity::Dyadic,
             Builtin::Len => Arity::Monadic,
             Builtin::SelfInv => Arity::Monadic,
         }
@@ -186,12 +183,11 @@ impl FuncVerifier<Node> for Builtin {
     fn validate_types(&self, args: &[Node]) -> Result<()> {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
         let expected_t: &[&[Type]] = match self {
-            Builtin::Eq => &[&[Type::Column(Magma::Any), Type::Scalar(Magma::Any)]],
             Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
             Builtin::SelfInv => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
         };
 
-        if super::compatible_with(expected_t, &args_t) {
+        if super::cyclic_compatible_with(expected_t, &args_t) {
             Ok(())
         } else {
             bail!(CompileError::TypeError(

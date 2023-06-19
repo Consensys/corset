@@ -49,6 +49,7 @@ lazy_static::lazy_static! {
 
 pub fn validate(t: Type, x: Fr) -> Result<Fr> {
     match t.magma() {
+        Magma::None => unreachable!(),
         Magma::Boolean => {
             if x.is_zero() || x == Fr::one() {
                 Ok(x)

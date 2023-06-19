@@ -39,6 +39,7 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
                     corset_name: c.handle.name.to_string(),
                     java_name: c.handle.name.to_case(Case::Camel),
                     tupe: match c.t.magma() {
+                        Magma::None => unreachable!(),
                         Magma::Boolean => "Boolean",
                         Magma::Nibble => "UnsignedByte",
                         Magma::Byte => "UnsignedByte",

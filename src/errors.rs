@@ -58,6 +58,7 @@ pub mod parser {
 
 pub(crate) mod compiler {
     use crate::compiler::Type;
+    use itertools::Itertools;
     use owo_colors::OwoColorize;
     use thiserror::Error;
 
@@ -70,7 +71,47 @@ pub(crate) mod compiler {
         ComputationWithHandles(String),
     }
 
-    pub(crate) fn make_type_error_msg(fname: &str, expected: &[&[Type]], found: &[Type]) -> String {
+    pub(crate) fn type_comparison_message(expected: &[Type], found: &[Type]) -> (String, String) {
+        let expected_str = format!(
+            "({})",
+            expected
+                .iter()
+                .cycle()
+                .zip(found.iter())
+                .map(|(e, f)| {
+                    if e >= f {
+                        e.black().to_string()
+                    } else {
+                        e.blue().to_string()
+                    }
+                })
+                .join(" ")
+                .bold()
+        );
+        let found_str = format!(
+            "({})",
+            expected
+                .iter()
+                .cycle()
+                .zip(found.iter())
+                .map(|(e, f)| {
+                    if e >= f {
+                        f.black().to_string()
+                    } else {
+                        f.red().to_string()
+                    }
+                })
+                .join(" ")
+                .red()
+                .bold()
+        );
+        (expected_str, found_str)
+    }
+
+    pub(crate) fn cyclic_type_comparison_message(
+        expected: &[&[Type]],
+        found: &[Type],
+    ) -> (String, String) {
         let expected_str = format!(
             "({})",
             expected
@@ -78,16 +119,17 @@ pub(crate) mod compiler {
                 .cycle()
                 .zip(found.iter())
                 .map(|(es, f)| {
+                    let es_str = es
+                        .iter()
+                        .map(|e| format!("{:?}", e))
+                        .collect::<Vec<_>>()
+                        .join("|");
                     if es.iter().any(|e| e >= f) {
-                        "..".into()
+                        es_str.black().to_string()
                     } else {
-                        es.iter()
-                            .map(|e| format!("{:?}", e))
-                            .collect::<Vec<_>>()
-                            .join("|")
+                        es_str.blue().to_string()
                     }
                 })
-                .collect::<Vec<_>>()
                 .join(" ")
                 .blue()
                 .bold()
@@ -99,10 +141,10 @@ pub(crate) mod compiler {
                 .cycle()
                 .zip(found.iter())
                 .map(|(e, f)| {
-                    if e.iter().any(|e| f <= e) {
-                        "..".into()
+                    if e.iter().any(|e| e >= f) {
+                        f.black().to_string()
                     } else {
-                        format!("{:?}", f)
+                        f.red().to_string()
                     }
                 })
                 .collect::<Vec<_>>()
@@ -110,7 +152,11 @@ pub(crate) mod compiler {
                 .red()
                 .bold()
         );
+        (expected_str, found_str)
+    }
 
+    pub(crate) fn make_type_error_msg(fname: &str, expected: &[&[Type]], found: &[Type]) -> String {
+        let (expected_str, found_str) = cyclic_type_comparison_message(expected, found);
         format!(
             "{} expects {}, found {}",
             fname.yellow().bold(),

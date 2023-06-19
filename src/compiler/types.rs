@@ -9,11 +9,12 @@ pub fn max_type<'a, TS: IntoIterator<Item = &'a Type>>(ts: TS) -> Type {
 
 /// The type of a column in the IR. This struct contains both the dimensionality
 /// of the type and its underlying magma.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Type {
     Void,
     Scalar(Magma),
     Column(Magma),
+    Any(Magma),
     ArrayColumn(Magma),
     List(Magma),
 }
@@ -24,21 +25,22 @@ impl std::fmt::Display for Type {
             Type::Void => write!(f, "∅"),
             Type::Scalar(m) => write!(f, "{}", m),
             Type::Column(m) => write!(f, "[{}]", m),
+            Type::Any(m) => write!(f, "∀{}", m),
             Type::ArrayColumn(m) => write!(f, "[[{}]]", m),
             Type::List(m) => write!(f, "{{{}}}", m),
         }
     }
 }
-
 impl Type {
     pub const SUPREMUM: Self = Type::Column(Magma::SUPREMUM);
     pub const INFIMUM: Self = Type::Void;
 
     pub fn magma(self) -> Magma {
         match self {
-            Type::Void => todo!(),
+            Type::Void => Magma::None,
             Type::Scalar(m) => m,
             Type::Column(m) => m,
+            Type::Any(m) => m,
             Type::ArrayColumn(m) => m,
             Type::List(m) => m,
         }
@@ -49,6 +51,7 @@ impl Type {
             Type::Void => todo!(),
             Type::Scalar(_) => Type::Scalar(new),
             Type::Column(_) => Type::Column(new),
+            Type::Any(_) => Type::Any(new),
             Type::ArrayColumn(_) => Type::ArrayColumn(new),
             Type::List(_) => Type::List(new),
         }
@@ -60,63 +63,76 @@ impl Type {
             Type::Void => Type::Void,
             Type::Scalar(_) => Type::Scalar(magma),
             Type::Column(_) => Type::Column(magma),
+            Type::Any(_) => Type::Any(magma),
             Type::ArrayColumn(_) => Type::ArrayColumn(magma),
             Type::List(_) => Type::List(magma),
         }
     }
 
-    pub fn as_scalar(&self) -> Self {
-        match self {
-            Type::Column(x) => Type::Scalar(*x),
-            Type::ArrayColumn(x) => Type::Scalar(*x),
-            Type::List(x) => Type::Scalar(*x),
-            _ => *self,
-        }
-    }
     pub fn is_bool(&self) -> bool {
         match self {
             Type::Void | Type::List(_) | Type::ArrayColumn(_) => false,
-            Type::Column(x) => matches!(x, Magma::Boolean),
-            Type::Scalar(x) => matches!(x, Magma::Boolean),
+            Type::Column(x) | Type::Scalar(x) | Type::Any(x) => matches!(x, Magma::Boolean),
         }
     }
-    pub fn is_scalar(&self) -> bool {
-        matches!(self, Type::Scalar(_))
-    }
-    pub fn is_column(&self) -> bool {
-        matches!(self, Type::Column(_))
-    }
-    pub fn is_value(&self) -> bool {
-        self.is_scalar() || self.is_column()
+}
+impl std::cmp::PartialOrd for Type {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
-// impl std::cmp::PartialOrd for Type {
-//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-//         match (self, other) {
-//             (Type::Void, Type::Void) => Some(Ordering::Equal),
-//             (Type::Void, _) => Some(Ordering::Less),
-//             (Type::Scalar(_), Type::Void) => Some(Ordering::Greater),
-//             (Type::Scalar(_), Type::Column(_)) => None,
-//             (Type::Scalar(x), Type::Scalar(y)) => Some(x.cmp(y)),
-//             (Type::Column(_), Type::Void) => Some(Ordering::Greater),
-//             (Type::Column(x), Type::Column(y)) => Some(x.cmp(y)),
-//             (Type::Column(_), Type::Scalar(_)) => None,
-
-//             (Type::ArrayColumn(x), Type::ArrayColumn(y)) => Some(x.cmp(y)),
-//             (Type::ArrayColumn(_), _) => None,
-//             (_, Type::ArrayColumn(_)) => None,
-
-//             (Type::List(_), Type::Column(_)) => None,
-//             (Type::Column(_), Type::List(_)) => None,
-
-//             (x, y) => unimplemented!("{:?} <?> {:?}", x, y),
-//         }
-//     }
-// }
+impl std::cmp::Ord for Type {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Type::Void, Type::Void) => Ordering::Equal,
+            (Type::Void, _) => Ordering::Less,
+            (s, o) => {
+                if s.magma() == o.magma() {
+                    match (s, o) {
+                        (Type::Scalar(_), Type::Void) => Ordering::Greater,
+                        (Type::Scalar(_), Type::Scalar(_)) => Ordering::Equal,
+                        (Type::Scalar(_), Type::Column(_)) => Ordering::Less,
+                        (Type::Scalar(_), Type::Any(_)) => Ordering::Equal,
+                        (Type::Scalar(_), Type::ArrayColumn(_)) => todo!(),
+                        (Type::Scalar(_), Type::List(_)) => todo!(),
+                        (Type::Column(_), Type::Void) => Ordering::Greater,
+                        (Type::Column(_), Type::Scalar(_)) => Ordering::Greater,
+                        (Type::Column(_), Type::Column(_)) => Ordering::Equal,
+                        (Type::Column(_), Type::Any(_)) => Ordering::Equal,
+                        (Type::Column(_), Type::ArrayColumn(_)) => todo!(),
+                        (Type::Column(_), Type::List(_)) => todo!(),
+                        (Type::Any(_), Type::Void) => Ordering::Greater,
+                        (Type::Any(_), Type::Scalar(_)) => Ordering::Equal,
+                        (Type::Any(_), Type::Column(_)) => Ordering::Equal,
+                        (Type::Any(_), Type::Any(_)) => Ordering::Equal,
+                        (Type::Any(_), Type::ArrayColumn(_)) => todo!(),
+                        (Type::Any(_), Type::List(_)) => todo!(),
+                        (Type::ArrayColumn(_), Type::Void) => todo!(),
+                        (Type::ArrayColumn(_), Type::Scalar(_)) => todo!(),
+                        (Type::ArrayColumn(_), Type::Column(_)) => todo!(),
+                        (Type::ArrayColumn(_), Type::Any(_)) => todo!(),
+                        (Type::ArrayColumn(_), Type::ArrayColumn(_)) => todo!(),
+                        (Type::ArrayColumn(_), Type::List(_)) => todo!(),
+                        (Type::List(_), Type::Void) => todo!(),
+                        (Type::List(_), Type::Scalar(_)) => todo!(),
+                        (Type::List(_), Type::Column(_)) => todo!(),
+                        (Type::List(_), Type::Any(_)) => todo!(),
+                        (Type::List(_), Type::ArrayColumn(_)) => todo!(),
+                        (Type::List(_), Type::List(_)) => todo!(),
+                        _ => unreachable!(),
+                    }
+                } else {
+                    s.magma().cmp(&o.magma())
+                }
+            }
+        }
+    }
+}
 
 /// [ill-named] A magma is a set where some operations stay within itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum Magma {
+    None,
     Loobean,
     Boolean,
     /// 4-bits
@@ -152,6 +168,10 @@ impl std::cmp::Ord for Magma {
 impl std::cmp::PartialOrd for Magma {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
+            (Magma::None, Magma::None) => Some(Ordering::Equal),
+            (Magma::None, _) => Some(Ordering::Less),
+            (_, Magma::None) => Some(Ordering::Greater),
+
             (Magma::Boolean, Magma::Boolean) => Some(Ordering::Equal),
             (Magma::Boolean, Magma::Nibble) => Some(Ordering::Less),
             (Magma::Boolean, Magma::Byte) => Some(Ordering::Less),
@@ -185,6 +205,7 @@ impl std::cmp::PartialOrd for Magma {
 impl std::fmt::Display for Magma {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            Magma::None => write!(f, "NONE"),
             Magma::Loobean => write!(f, "𝕃"),
             Magma::Boolean => write!(f, "𝔹"),
             Magma::Nibble => write!(f, "Nib."),
@@ -199,9 +220,22 @@ impl Magma {
     const SUPREMUM: Self = Magma::Integer;
 }
 
-pub fn compatible_with(expected: &[&[Type]], found: &[Type]) -> bool {
+pub fn cyclic_compatible_with(expected: &[&[Type]], found: &[Type]) -> bool {
     for (es, f) in expected.iter().cycle().zip(found.iter()) {
         if !es.iter().any(|e| e >= f) {
+            return false;
+        }
+    }
+    true
+}
+
+pub fn compatible_with(expected: &[Type], found: &[Type]) -> bool {
+    if expected.len() != found.len() {
+        return false;
+    }
+
+    for (e, f) in expected.iter().zip(found.iter()) {
+        if f > e {
             return false;
         }
     }

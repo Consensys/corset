@@ -176,9 +176,9 @@ pub enum Token {
         /// the arguments are free strings, that will be resolved at evaluation
         args: Vec<String>,
         /// the magmas of the arguments
-        in_magmas: Vec<Magma>,
+        in_types: Vec<Type>,
         /// the output magma
-        out_magma: Option<Magma>,
+        out_type: Option<Type>,
         /// the body is any reasonable expression (should it be enforced?)
         body: Box<AstNode>,
         /// if set, do not warn on type override
@@ -187,8 +187,8 @@ pub enum Token {
     Defpurefun {
         name: String,
         args: Vec<String>,
-        in_magmas: Vec<Magma>,
-        out_magma: Option<Magma>,
+        in_types: Vec<Type>,
+        out_type: Option<Type>,
         body: Box<AstNode>,
         nowarn: bool,
     },
@@ -681,7 +681,8 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             src,
         }),
         kw @ ("defun" | "defpurefun") => {
-            fn parse_typed_symbols(l: AstNode) -> Result<(String, Option<Magma>, bool)> {
+            fn parse_typed_symbols(l: AstNode) -> Result<(String, Option<Type>, bool)> {
+                // TODO: revamp type parsing to add column/scalar/any
                 match l.class {
                     Token::Symbol(s) => Ok((s, None, false)),
                     Token::List(xs) => match xs.as_slice() {
@@ -691,7 +692,11 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                         }, AstNode {
                             class: Token::Keyword(t),
                             ..
-                        }] => Ok((s.to_owned(), Some(Magma::try_from(t.as_str())?), false)),
+                        }] => Ok((
+                            s.to_owned(),
+                            Some(Type::Any(Magma::try_from(t.as_str())?)),
+                            false,
+                        )),
                         [AstNode {
                             class: Token::Symbol(s),
                             ..
@@ -703,7 +708,11 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                             ..
                         }] => {
                             if n == ":nowarn" {
-                                Ok((s.to_owned(), Some(Magma::try_from(t.as_str())?), true))
+                                Ok((
+                                    s.to_owned(),
+                                    Some(Type::Any(Magma::try_from(t.as_str())?)),
+                                    true,
+                                ))
                             } else {
                                 bail!("SCREW YOU {}", n)
                             }
@@ -724,18 +733,18 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 .to_vec()
                 .into_iter();
 
-            let (name, out_magma, nowarn) = parse_typed_symbols(
+            let (name, out_type, nowarn) = parse_typed_symbols(
                 decl.next()
                     .with_context(|| anyhow!("missing function name"))?,
             )
             .with_context(|| anyhow!("invalid function declaration"))?;
 
-            let (args, in_magmas): (Vec<String>, Vec<Magma>) = decl
+            let (args, in_types): (Vec<String>, Vec<Type>) = decl
                 .map(parse_typed_symbols)
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 // if an argument type is unspecified, it can be of any type
-                .map(|x| (x.0, x.1.unwrap_or(Magma::Any)))
+                .map(|x| (x.0, x.1.unwrap_or(Type::Any(Magma::Any))))
                 .unzip();
 
             let body = Box::new(
@@ -753,8 +762,8 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                     Token::Defun {
                         name,
                         args,
-                        in_magmas,
-                        out_magma,
+                        in_types,
+                        out_type,
                         body,
                         nowarn,
                     }
@@ -762,8 +771,8 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                     Token::Defpurefun {
                         name,
                         args,
-                        in_magmas,
-                        out_magma,
+                        in_types,
+                        out_type,
                         body,
                         nowarn,
                     }

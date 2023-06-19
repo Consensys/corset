@@ -24,6 +24,11 @@
 
 (defpurefun ((not :boolean :nowarn) (x :boolean)) (- 1 x))
 
+(defpurefun ((eq! :loobean :nowarn) x y) (- x y))
+
+(defpurefun ((eq :boolean :nowarn) (x :boolean) (y :boolean)) (^ (- x y) 2))
+(defpurefun ((eq :boolean :nowarn) x y) (~ (- x y)))
+
 
 ;; Variadic versions of and/or
 (defunalias any +)
