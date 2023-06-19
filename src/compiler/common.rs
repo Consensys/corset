@@ -21,7 +21,6 @@ pub enum Form {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Builtin {
     Len,
-    SelfInv,
 }
 impl std::fmt::Display for Builtin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -30,7 +29,6 @@ impl std::fmt::Display for Builtin {
             "{}",
             match self {
                 Builtin::Len => "len",
-                Builtin::SelfInv => "~",
             }
         )
     }
@@ -176,7 +174,6 @@ impl FuncVerifier<Node> for Builtin {
     fn arity(&self) -> Arity {
         match self {
             Builtin::Len => Arity::Monadic,
-            Builtin::SelfInv => Arity::Monadic,
         }
     }
 
@@ -184,7 +181,6 @@ impl FuncVerifier<Node> for Builtin {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
         let expected_t: &[&[Type]] = match self {
             Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
-            Builtin::SelfInv => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
         };
 
         if super::cyclic_compatible_with(expected_t, &args_t) {

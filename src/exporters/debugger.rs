@@ -76,8 +76,9 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
                 pretty_expr(&args[0], prev, tty, show_types);
             }
             Intrinsic::Inv => {
-                tty.write("INV");
+                tty.write("INV(");
                 pretty_expr(&args[0], prev, tty, show_types);
+                tty.write(")");
             }
             Intrinsic::Nth => unreachable!(),
             Intrinsic::Begin => todo!(),

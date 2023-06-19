@@ -51,10 +51,6 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, Builtin::Len.to_string()),
             class: FunctionClass::Builtin(Builtin::Len),
         },
-        "~" => Function {
-            handle:Handle::new(super::MAIN_MODULE, "~"),
-            class: FunctionClass::Builtin(Builtin::SelfInv),
-        },
 
         // Intrinsics
         "inv" => Function {

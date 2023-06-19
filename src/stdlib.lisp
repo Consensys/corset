@@ -7,6 +7,9 @@
 (defpurefun ((force-bool :boolean :nowarn) x) x)
 (defpurefun ((is-binary :loob :nowarn) e0) (* e0 (- 1 e0)))
 
+(defpurefun ((~ :bool) (x :bool)) x)
+(defpurefun ((~ :bool :nowarn) x) (* x (inv x)))
+
 ;;
 ;; Boolean functions
 ;;
