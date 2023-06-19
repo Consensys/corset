@@ -473,18 +473,15 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
         Begin,
         Array,
         Computation,
-        Interleaved,
         PaddingValue,
         Base,
     }
-
     // A columns definition is a list of column definition
     let columns = tokens
         .map(|c| {
             c.and_then(|c| {
                 let name;
                 let mut t = None;
-                let mut kind = Kind::Atomic;
                 let mut range = None;
                 let mut padding_value = None;
                 let mut base = Base::Dec;
@@ -525,8 +522,6 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                                     }
                                                     ColumnParser::Begin
                                                 }
-                                            // e.g. (A ... :interleaved (X Y Z) ...)
-                                            ":interleaved" => ColumnParser::Interleaved,
                                             // not really used for now.
                                             ":comp" => ColumnParser::Computation,
                                             // e.g. (A :array {1 3 5}) or (A :array [5])
@@ -553,18 +548,6 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                     ColumnParser::Begin
                                 }
                                 ColumnParser::Computation => todo!(),
-                                // :interleaved expects a list of column to interleave into the one
-                                // being defined
-                                ColumnParser::Interleaved => {
-                                    if !matches!(kind, Kind::Atomic) {
-                                        bail!("column {} can not be interleaved; is already {:?}", name, kind)
-                                    }
-                                    kind = Kind::Interleaved(
-                                        x.as_list()?.to_vec(),
-                                        None
-                                    );
-                                    ColumnParser::Begin
-                                }
                                 ColumnParser::PaddingValue => {
                                     padding_value = Some(x.as_i64()?);
                                     ColumnParser::Begin
@@ -592,9 +575,6 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                     ColumnParser::Begin =>
                         Ok(AstNode {
                             class: if let Some(range) = range {
-                                if !matches!(kind, Kind::Atomic){
-                                    bail!("array columns must be atomic")
-                                }
                                 Token::DefArrayColumn {
                                     name,
                                     t: Type::ArrayColumn(t.unwrap_or(Magma::Integer)),
@@ -608,7 +588,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                 Token::DefColumn {
                                     name,
                                     t: Type::Column(t.unwrap_or(Magma::Integer)),
-                                    kind,
+                                    kind: Kind::Atomic,
                                     padding_value,
                                     base
                                 }
@@ -618,7 +598,6 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                         }),
                     ColumnParser::Array => bail!("incomplete :array definition"),
                     ColumnParser::Computation => bail!("incomplate :comp definition"),
-                    ColumnParser::Interleaved => bail!("incomplete :interleaved definition"),
                     ColumnParser::PaddingValue => bail!("incomplete :padding definition"),
                     ColumnParser::Base => bail!("incomplete :display definition"),
                 }
@@ -950,6 +929,38 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 class: Token::DefPermutation { from, to, signs },
                 src,
                 lc,
+            })
+        },
+        "definterleaved" => {
+            let name_ast = tokens
+                .next()
+                .with_context(|| anyhow!("missing column name in definterleaved"))??;
+            let Ok(name) = name_ast.as_symbol().map(String::from) else {
+                bail!("expected column name in definterleaved, found {}", name_ast.src);
+            };
+            let params_ast = tokens
+                .next()
+                .with_context(|| anyhow!("definterleaved: missing columns parameters"))??;
+            let kind = Kind::Interleaved(
+                params_ast.as_list()?.to_vec(),
+                None
+            );
+            Ok(AstNode {
+                class: Token::DefColumns(vec![
+                    AstNode {
+                        class: Token::DefColumn {
+                            name,
+                            t: Type::Column(Magma::Integer), // maybe deduce it from the parameters?
+                            kind,
+                            padding_value: None,
+                            base: Base::Hex // maybe deduce it from the parameters?
+                        },
+                        src: src.clone(),
+                        lc,
+                    }
+                ]),
+                lc,
+                src,
             })
         }
         x => unimplemented!("{:?}", x),
