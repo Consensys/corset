@@ -25,28 +25,23 @@ public record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace) {
   public static final BigInteger {{ this.name }} = new BigInteger("{{ this.value }}");
   {{/each}}
 
-  @JsonPropertyOrder({
-  {{#each columns}}
-    "{{ this.corset_name }}",
-  {{/each}}
-  })
   @SuppressWarnings("unused")
   private record Trace(
-  {{#each columns}}
-    @JsonProperty("{{ this.corset_name }}") List<{{ this.tupe }}> {{ this.corset_name }}{{#unless @last}},{{/unless}}
+  {{#each registers}}
+    @JsonProperty("{{ this.corset_name }}") List<{{ this.tupe }}> {{ this.java_name }}{{#unless @last}},{{/unless}}
   {{/each}}
   ) {}
 
   public static class Builder {
-  {{#each columns}}
+  {{#each registers}}
     private final List<{{ this.tupe }}> {{ this.java_name }} = new ArrayList<>();
   {{/each}}
 
     private Builder() {}
 
   {{#each columns}}
-    public Builder {{ this.appender_name }}(final {{ this.tupe }} b) {
-      {{ this.java_name }}.add(b);
+    public Builder {{ this.appender }}(final {{ this.tupe }} b) {
+      {{ this.register }}.add(b);
       return this;
     }
 
@@ -54,7 +49,7 @@ public record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace) {
     public {{ module_prefix }}Trace build() {
       return new {{ module_prefix }}Trace(
         new Trace(
-        {{#each columns}}
+        {{#each registers}}
           {{ this.java_name }}{{#unless @last}},{{/unless}}{{#if @last}}){{/if}}
         {{/each}}
         );

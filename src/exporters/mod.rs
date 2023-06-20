@@ -15,6 +15,15 @@ mod wizardiop;
 #[cfg(feature = "exporters")]
 pub use wizardiop::WizardIOP;
 
+use crate::column::Register;
+
+fn reg_to_string(r: &Register, i: usize) -> String {
+    r.handle
+        .as_ref()
+        .map(|h| h.mangled_name())
+        .unwrap_or_else(|| format!("r{}", i))
+}
+
 #[cfg(feature = "exporters")]
 fn gofmt(filename: &str) {
     info!("Running gofmt on {}... ", filename);

@@ -5,7 +5,7 @@ use itertools::Itertools;
 use serde::Serialize;
 use std::io::Write;
 
-use crate::{column::Register, compiler::*};
+use crate::compiler::*;
 
 #[derive(Serialize)]
 struct GoConstant {
@@ -25,13 +25,6 @@ struct TemplateData {
     registers: Vec<String>,
 }
 
-fn reg_to_string(r: &Register, i: usize) -> String {
-    r.handle
-        .as_ref()
-        .map(|h| h.mangled_name())
-        .unwrap_or_else(|| format!("r{}", i))
-}
-
 pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Result<()> {
     const TEMPLATE: &str = include_str!("zkgeth.go");
     let columns = cs
@@ -40,7 +33,7 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
         .filter_map(|c| {
             if matches!(c.kind, Kind::Atomic) {
                 let r = c.register.unwrap();
-                let register = reg_to_string(&cs.columns.registers[r], r);
+                let register = super::reg_to_string(&cs.columns.registers[r], r);
                 Some(GoColumn {
                     corset_name: register,
                     go_name: c.handle.mangled_name(),
@@ -57,7 +50,7 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
         .registers
         .iter()
         .enumerate()
-        .map(|(i, r)| reg_to_string(r, i))
+        .map(|(i, r)| super::reg_to_string(r, i))
         .collect::<Vec<_>>();
 
     let constants = cs

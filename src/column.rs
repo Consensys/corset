@@ -17,11 +17,12 @@ use std::collections::{HashMap, HashSet};
 pub type RegisterID = usize;
 pub type ColumnID = usize;
 
-#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Register {
+    pub handle: Option<Handle>,
+    pub magma: Magma,
     value: Option<Vec<Fr>>,
     spilling: Option<isize>,
-    pub handle: Option<Handle>,
 }
 
 impl Register {
@@ -134,7 +135,7 @@ pub struct Column {
     pub padding_value: Option<(i64, Fr)>,
     pub used: bool,
     pub kind: Kind<()>,
-    pub t: Type,
+    pub t: Type, // TODO: replace with magma
     pub intrinsic_size_factor: Option<usize>,
     pub base: Base,
     pub handle: Handle,
@@ -292,10 +293,12 @@ impl ColumnSet {
         self._cols.iter()
     }
 
-    pub fn new_register(&mut self, handle: Handle) -> RegisterID {
+    pub fn new_register(&mut self, handle: Handle, magma: Magma) -> RegisterID {
         self.registers.push(Register {
             handle: Some(handle),
-            ..Default::default()
+            magma,
+            value: None,
+            spilling: None,
         });
         self.registers.len() - 1
     }
@@ -334,7 +337,7 @@ impl ColumnSet {
     }
 
     pub fn insert_column_and_register(&mut self, mut column: Column) -> Result<ColumnRef> {
-        column.register = Some(self.new_register(column.handle.clone()));
+        column.register = Some(self.new_register(column.handle.clone(), column.t.magma()));
         self.insert_column(column)
     }
 
