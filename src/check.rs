@@ -156,9 +156,18 @@ fn fail(
     settings: DebugSettings,
 ) -> Result<()> {
     let handles = if settings.full_trace {
+        let module = &cs
+            .handle(
+                expr.dependencies()
+                    .iter()
+                    .next()
+                    .expect("un-handled column"),
+            )
+            .module;
         cs.columns
             .all()
             .into_iter()
+            .filter(|h| &cs.handle(h).module == module)
             .sorted_by_key(|h| cs.handle(h).name.clone())
             .collect::<Vec<_>>()
     } else {
