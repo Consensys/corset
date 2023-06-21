@@ -75,6 +75,44 @@ impl Type {
             Type::Column(x) | Type::Scalar(x) | Type::Any(x) => matches!(x, Magma::Boolean),
         }
     }
+
+    pub fn can_cast_to(&self, other: Type) -> bool {
+        match (self, other) {
+            (Type::Void, Type::Void) => true,
+            (Type::Void, _) => false,
+
+            (Type::Scalar(_), Type::Void) => false,
+            (Type::Scalar(x), Type::Scalar(y))
+            | (Type::Scalar(x), Type::Column(y))
+            | (Type::Scalar(x), Type::Any(y)) => x.can_cast_to(y),
+            (Type::Scalar(_), Type::ArrayColumn(_)) | (Type::Scalar(_), Type::List(_)) => false,
+
+            (Type::Column(x), Type::Any(y)) | (Type::Column(x), Type::Column(y)) => {
+                x.can_cast_to(y)
+            }
+            (Type::Column(_), Type::Void)
+            | (Type::Column(_), Type::Scalar(_))
+            | (Type::Column(_), Type::ArrayColumn(_))
+            | (Type::Column(_), Type::List(_)) => false,
+
+            (Type::Any(x), Type::Any(y)) => x.can_cast_to(y),
+            (Type::Any(_), Type::Void)
+            | (Type::Any(_), Type::Scalar(_))
+            | (Type::Any(_), Type::Column(_))
+            | (Type::Any(_), Type::ArrayColumn(_))
+            | (Type::Any(_), Type::List(_)) => false,
+
+            (Type::ArrayColumn(x), Type::ArrayColumn(y)) => x.can_cast_to(y),
+            (Type::ArrayColumn(_), _) => false,
+
+            (Type::List(x), Type::List(y)) => x.can_cast_to(y),
+            (Type::List(_), Type::Void)
+            | (Type::List(_), Type::Scalar(_))
+            | (Type::List(_), Type::Column(_))
+            | (Type::List(_), Type::Any(_))
+            | (Type::List(_), Type::ArrayColumn(_)) => false,
+        }
+    }
 }
 impl std::cmp::PartialOrd for Type {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -133,8 +171,8 @@ impl std::cmp::Ord for Type {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum Magma {
     None,
-    Loobean,
     Boolean,
+    Loobean,
     /// 4-bits
     Nibble,
     /// 8-bits
@@ -143,6 +181,50 @@ pub enum Magma {
     Integer,
     /// Anything
     Any,
+}
+impl Magma {
+    // the dominant instantiable magma
+    const SUPREMUM: Self = Magma::Integer;
+
+    fn can_cast_to(&self, other: Magma) -> bool {
+        match (self, other) {
+            (Magma::None, Magma::None) => true,
+            (Magma::None, _) => false,
+            (Magma::Boolean, Magma::None) => false,
+            (Magma::Boolean, _) => true,
+
+            (Magma::Loobean, Magma::None) => false,
+            (Magma::Loobean, Magma::Boolean) => false,
+            (Magma::Loobean, Magma::Loobean) => true,
+            (Magma::Loobean, Magma::Nibble) => false,
+            (Magma::Loobean, Magma::Byte) => false,
+            (Magma::Loobean, Magma::Integer) => false,
+            (Magma::Loobean, Magma::Any) => true,
+
+            (Magma::Nibble, Magma::None)
+            | (Magma::Nibble, Magma::Boolean)
+            | (Magma::Nibble, Magma::Loobean) => false,
+            (Magma::Nibble, Magma::Nibble)
+            | (Magma::Nibble, Magma::Byte)
+            | (Magma::Nibble, Magma::Integer) => true,
+
+            (Magma::Byte, Magma::None)
+            | (Magma::Byte, Magma::Boolean)
+            | (Magma::Byte, Magma::Loobean)
+            | (Magma::Byte, Magma::Nibble) => false,
+            (Magma::Byte, Magma::Byte) | (Magma::Byte, Magma::Integer) => true,
+
+            (Magma::Integer, Magma::None)
+            | (Magma::Integer, Magma::Boolean)
+            | (Magma::Integer, Magma::Loobean)
+            | (Magma::Integer, Magma::Nibble)
+            | (Magma::Integer, Magma::Byte) => false,
+            (Magma::Integer, Magma::Integer) | (Magma::Integer, Magma::Any) => true,
+
+            (Magma::Any, _) => false,
+            (_, Magma::Any) => true,
+        }
+    }
 }
 impl std::convert::TryFrom<&str> for Magma {
     type Error = anyhow::Error;
@@ -215,10 +297,6 @@ impl std::fmt::Display for Magma {
         }
     }
 }
-impl Magma {
-    // the dominant instantiable magma
-    const SUPREMUM: Self = Magma::Integer;
-}
 
 pub fn cyclic_compatible_with(expected: &[&[Type]], found: &[Type]) -> bool {
     for (es, f) in expected.iter().cycle().zip(found.iter()) {
@@ -235,7 +313,7 @@ pub fn compatible_with(expected: &[Type], found: &[Type]) -> bool {
     }
 
     for (e, f) in expected.iter().zip(found.iter()) {
-        if f > e {
+        if !f.can_cast_to(*e) {
             return false;
         }
     }
