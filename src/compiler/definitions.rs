@@ -18,7 +18,6 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
         | Token::Keyword(_)
         | Token::List(_)
         | Token::Range(_)
-        | Token::Type(_)
         | Token::DefPlookup { .. }
         | Token::DefInrange(..) => Ok(()),
 

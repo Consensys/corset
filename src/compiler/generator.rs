@@ -1240,7 +1240,7 @@ fn apply(
 
 pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<Option<Node>> {
     match &e.class {
-        Token::Keyword(_) | Token::Type(_) | Token::Range(_) => Ok(None),
+        Token::Keyword(_) | Token::Range(_) => Ok(None),
         Token::Value(x) => Ok(Some(
             Node::from(Expression::Const(x.clone(), Fr::from_str(&x.to_string()))).with_type(
                 if *x >= Zero::zero() && *x <= One::one() {
@@ -1255,9 +1255,6 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                 .with_context(|| make_ast_error(e))?,
         )),
         Token::List(args) => {
-            fn make_debug_info(n: &AstNode) -> String {
-                n.to_string()
-            }
             if args.is_empty() {
                 Ok(Some(Expression::List(vec![]).into()))
             } else if let Token::Symbol(verb) = &args[0].class {
@@ -1268,7 +1265,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                 let r = apply(&func, &args[1..], ctx, settings);
                 match func.class {
                     FunctionClass::UserDefined(_) => {
-                        r.map(|o| o.map(|n| n.with_debug(make_debug_info(e))))
+                        r.map(|o| o.map(|n| n.with_debug(e.debug_info())))
                     }
                     _ => r,
                 }

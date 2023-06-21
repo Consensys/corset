@@ -69,6 +69,10 @@ impl AstNode {
             bail!("expected list, found `{:?}`", self)
         }
     }
+    /// A formatting function optimizing for debug informations
+    pub fn debug_info(&self) -> Option<String> {
+        self.class.debug_info()
+    }
 }
 impl Debug for AstNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -133,8 +137,6 @@ pub enum Token {
     List(Vec<AstNode>),
     /// a range; typically used in discrete constraints declaration and loops
     Range(Vec<isize>),
-    /// the type of the node
-    Type(Type),
 
     /// definition of a module; this will derive a symbol table
     DefModule(String),
@@ -227,6 +229,7 @@ pub enum Token {
     /// this constraint ensures that exp remains lesser than max
     DefInrange(Box<AstNode>, usize),
 }
+const LIST_DISPLAY_THRESHOLD: usize = 4;
 impl Token {
     pub fn depth(&self) -> usize {
         match self {
@@ -238,33 +241,87 @@ impl Token {
             _ => 0,
         }
     }
+
+    pub fn debug_info(&self) -> Option<String> {
+        match self {
+            Token::Value(x) => Some(format!("{}", x)),
+            Token::Symbol(ref name) => Some(format!("{}", name)),
+            Token::Keyword(ref name) => Some(format!("{}", name)),
+            Token::List(ref args) => {
+                if let Some(verb) = args.get(0) {
+                    if let Ok(verb) = verb.as_symbol() {
+                        match verb {
+                            "if-zero" | "if-not-zero" => {
+                                Some(format!("({})", Token::format_list_debug(args, 2)))
+                            }
+                            "if-eq" | "if-eq-else" => {
+                                Some(format!("({})", Token::format_list_debug(args, 3)))
+                            }
+                            _ => Some(format!(
+                                "({})",
+                                Token::format_list_debug(args, LIST_DISPLAY_THRESHOLD)
+                            )),
+                        }
+                    } else {
+                        Some(format!(
+                            "({})",
+                            Token::format_list_debug(args, LIST_DISPLAY_THRESHOLD)
+                        ))
+                    }
+                } else {
+                    Some(format!(
+                        "({})",
+                        Token::format_list_debug(args, LIST_DISPLAY_THRESHOLD)
+                    ))
+                }
+            }
+            Token::Range(ref args) => Some(format!("{:?}", args)),
+            _ => None,
+        }
+    }
+
+    fn format_list(cs: &[AstNode], list_cut: usize) -> String {
+        if cs.len() <= list_cut {
+            cs.iter()
+                .map(|c| format!("{:?}", c))
+                .collect::<Vec<_>>()
+                .join(" ")
+        } else {
+            cs.iter()
+                .take(list_cut)
+                .map(|c| format!("{:?}", c))
+                .collect::<Vec<_>>()
+                .join(" ")
+                + " [...]"
+        }
+    }
+
+    fn format_list_debug(cs: &[AstNode], list_cut: usize) -> String {
+        if cs.len() <= list_cut {
+            cs.iter()
+                .filter_map(|c| c.debug_info())
+                .collect::<Vec<_>>()
+                .join(" ")
+        } else {
+            cs.iter()
+                .take(list_cut)
+                .filter_map(|c| c.debug_info())
+                .collect::<Vec<_>>()
+                .join(" ")
+                + " [...]"
+        }
+    }
 }
-const LIST_DISPLAY_THRESHOLD: usize = 4;
 impl Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fn format_list(cs: &[AstNode]) -> String {
-            if cs.len() <= LIST_DISPLAY_THRESHOLD {
-                cs.iter()
-                    .map(|c| format!("{:?}", c))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            } else {
-                cs.iter()
-                    .take(LIST_DISPLAY_THRESHOLD)
-                    .map(|c| format!("{:?}", c))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    + " [...]"
-            }
-        }
-
         match self {
             Token::Value(x) => write!(f, "{}", x),
             Token::Symbol(ref name) => write!(f, "{}", name),
             Token::Keyword(ref name) => write!(f, "{}", name),
-            Token::List(ref args) => write!(f, "({})", format_list(args)),
+            Token::List(ref args) => {
+                write!(f, "({})", Token::format_list(args, LIST_DISPLAY_THRESHOLD))
+            }
             Token::Range(ref args) => write!(f, "{:?}", args),
-            Token::Type(t) => write!(f, "{:?}", t),
 
             Token::DefModule(name) => write!(f, "MODULE {}", name),
             Token::DefConsts(v) => {
@@ -1060,15 +1117,6 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             ),
             lc,
             src,
-        }),
-        Rule::typing => Ok(AstNode {
-            class: Token::Type(match pair.as_str() {
-                "NATURAL" | "BYTE" => Type::Column(Magma::Integer),
-                "BOOLEAN" => Type::Column(Magma::Boolean),
-                _ => unreachable!(),
-            }),
-            src,
-            lc,
         }),
         Rule::keyword => Ok(AstNode {
             class: Token::Keyword(pair.as_str().to_owned()),

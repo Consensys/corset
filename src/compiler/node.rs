@@ -175,8 +175,13 @@ impl From<Expression> for Node {
 impl Node {
     pub fn from_expr(e: Expression) -> Node {
         Node {
+            /// the expresssion contained within the node
             _e: e,
+            /// if set, the type of the node; it wil be computed on the fly
+            /// otherwise
             _t: None,
+            /// if set, a string containing the original code of the node for
+            /// debugging purposes
             dbg: None,
         }
     }
@@ -207,11 +212,8 @@ impl Node {
             ..self
         }
     }
-    pub fn with_debug(self, dbg: String) -> Self {
-        Node {
-            dbg: Some(dbg),
-            ..self
-        }
+    pub fn with_debug(self, dbg: Option<String>) -> Self {
+        Node { dbg, ..self }
     }
     #[builder(entry = "column", exit = "build", visibility = "pub")]
     pub fn new_column(
