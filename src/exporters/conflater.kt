@@ -24,7 +24,8 @@ val MODULES = listOf(
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class {{ this.klass_name }}(
   {{ #each this.columns }}
-  @get:JsonProperty("{{ this.json_name }}") val {{ this.safe_name }}: MutableList<String> = arrayListOf(),
+  @get:JsonProperty("{{ this.json_name }}")
+  val {{ this.safe_name }}: MutableList<String> = arrayListOf(),
   {{ /each }}
 )
 {{ /each }}
