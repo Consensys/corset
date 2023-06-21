@@ -945,11 +945,6 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 params_ast.as_list()?.to_vec(),
                 None
             );
-            
-            // if tokens is empty
-            if !tokens.next().is_none() {
-                bail!("definterleaved: too many parameters (example of a correct syntax: `(definterleaved C (A B ..))`)");
-            }
             Ok(AstNode {
                 class: Token::DefColumns(vec![
                     AstNode {
