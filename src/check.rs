@@ -174,7 +174,7 @@ fn fail(
         expr.dependencies()
             .iter()
             .cloned()
-            // .sorted_by_cached_key(Handle::to_string)
+            .sorted_by_key(|h| cs.handle(h).name.clone())
             .collect::<Vec<_>>()
     };
 
