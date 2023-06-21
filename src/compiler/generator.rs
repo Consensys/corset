@@ -1278,28 +1278,38 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                 })?;
                 Ok(None)
             }
-            Kind::Interleaved(froms, _) => {
-                // Create the interleaving
-                let from_handles = froms
-                    .iter()
-                    .map(|f| match reduce(f, ctx, settings)?.unwrap().e() {
-                        Expression::Column { handle: h, .. } => Ok(h.to_owned()),
-                        x => Err(anyhow!("expected column, found {:?}", x)),
-                    })
-                    .collect::<Result<Vec<_>>>()
-                    .with_context(|| anyhow!("while defining {}", name))?;
-
-                ctx.edit_symbol(name, &|x| {
-                    if let Expression::Column { kind, .. } = x {
-                        *kind = Kind::Interleaved(vec![], Some(from_handles.to_vec()))
-                    } else {
-                        unreachable!()
-                    }
-                })?;
-                Ok(None)
-            }
+            Kind::Interleaved(..) => unreachable!(),
             _ => Ok(None),
         },
+        Token::DefInterleaving {
+            target,
+            sources,
+            base,
+        } => {
+            let module_name = ctx.module();
+
+            let from_handles = sources
+                .iter()
+                .map(|f| match reduce(f, ctx, settings)?.unwrap().e() {
+                    Expression::Column { handle: h, .. } => Ok(h.to_owned()),
+                    x => Err(anyhow!("expected column, found {:?}", x)),
+                })
+                .collect::<Result<Vec<_>>>()
+                .with_context(|| anyhow!("while defining {}", target))?;
+
+            let symbol = Node::column()
+                .handle(Handle::maybe_with_perspective(
+                    // TODO unsure about this
+                    module_name,
+                    target,
+                    ctx.perspective(),
+                ))
+                .kind(Kind::Interleaved(vec![], Some(from_handles)))
+                .base(base.clone())
+                .build();
+            ctx.insert_symbol(target, symbol)?;
+            Ok(None)
+        }
         Token::DefColumns(_)
         | Token::DefPerspective { .. }
         | Token::DefConstraint { .. }
@@ -1499,6 +1509,10 @@ fn reduce_toplevel(
                 to: tos,
                 signs: signs.clone(),
             }))
+        }
+        Token::DefInterleaving { .. } => {
+            reduce(e, ctx, settings)?;
+            Ok(None)
         }
         _ => unreachable!("{:?}", e),
     }
