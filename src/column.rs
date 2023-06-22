@@ -93,7 +93,7 @@ impl Register {
             if wrap {
                 let new_i = self.value.as_ref().map(Vec::len).unwrap() as isize + i;
                 if new_i < 0 || new_i >= self.padded_len().unwrap() as isize {
-                    panic!("abnormal wrapping value")
+                    panic!("abnormal wrapping value {} for {:?}", new_i, self.handle)
                 }
                 self.value
                     .as_ref()

@@ -389,7 +389,10 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
             debug!("empty plookup found; skipping");
             return Ok(());
         }
-        (false, true) => bail!("parents are emypy, but not children"),
+        (false, true) => bail!(
+            "parents ({}) are empty, but not children",
+            parents.iter().map(|p| p.to_string()).join(", ")
+        ),
         (false, false) => {}
     }
 
