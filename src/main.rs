@@ -2,9 +2,12 @@
 #[macro_use]
 #[cfg(feature = "parser")]
 extern crate pest_derive;
+use compiler::{Ast, ConstraintSet};
+use either::Either;
 use is_terminal::IsTerminal;
 use log::*;
-use std::{io::Write, path::Path};
+use owo_colors::OwoColorize;
+use std::{io::Write, path::Path, todo};
 
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
@@ -252,6 +255,15 @@ enum Commands {
         )]
         skip: Vec<String>,
     },
+    /// Format the given source in an idiomatic way
+    Format {
+        #[arg(
+            short = 'o',
+            long = "out",
+            help = "if set, write the formatted source to this file"
+        )]
+        outfile: Option<String>,
+    },
     /// Given a set of constraints, indefinitely check the traces from an SQL table
     #[cfg(feature = "postgres")]
     CheckLoop {
@@ -295,6 +307,52 @@ enum Commands {
     },
 }
 
+struct Inputs {
+    no_stdlib: bool,
+    debug: bool,
+    source: Either<(String, String), String>,
+}
+impl Inputs {
+    fn from_sources(debug: bool, no_stdlib: bool) -> Inputs {
+        Inputs {
+            no_stdlib,
+            debug,
+            sources: if no_stdlib {
+                vec![]
+            } else {
+                vec![("stdlib".to_string(), include_str!("stdlib.lisp").to_owned())]
+            },
+        }
+    }
+    fn from_bin(filename: String) -> Inputs {}
+
+    fn add_source(&mut self, src: &str) -> Result<()> {
+        if std::path::Path::new(src).is_file() {
+            self.sources.push((
+                src.to_string(),
+                std::fs::read_to_string(src)
+                    .with_context(|| anyhow!("reading {}", src.yellow().bold()))?,
+            ));
+        } else {
+            self.sources
+                .push(("Immediate expression".to_string(), src.into()));
+        }
+        Ok(())
+    }
+
+    fn to_ast(&self) -> Result<Vec<Ast>> {
+        todo!()
+    }
+
+    fn to_constraint_set(&self) -> Result<ConstraintSet> {
+        compiler::make(
+            &self.sources,
+            &compiler::CompileSettings { debug: self.debug },
+        )
+        .map(|r| r.1)
+    }
+}
+
 #[cfg(feature = "cli")]
 fn main() -> Result<()> {
     use owo_colors::OwoColorize;
@@ -330,24 +388,7 @@ fn main() -> Result<()> {
         #[cfg(feature = "parser")]
         {
             info!("Parsing Corset source files...");
-            let mut inputs = vec![];
-            if !args.no_stdlib {
-                inputs.push(("stdlib", include_str!("stdlib.lisp").to_owned()));
-            }
-            for f in args.source.iter() {
-                if std::path::Path::new(&f).is_file() {
-                    inputs.push((
-                        f.as_str(),
-                        std::fs::read_to_string(f).with_context(|| anyhow!("reading `{}`", f))?,
-                    ));
-                } else {
-                    inputs.push(("Immediate expression", f.into()));
-                }
-            }
-            compiler::make(
-                inputs.as_slice(),
-                &compiler::CompileSettings { debug: args.debug },
-            )?
+            let mut inputs = Inputs::new(args.no_stdlib, args.debug);
         }
 
         #[cfg(not(feature = "parser"))]
@@ -600,6 +641,9 @@ fn main() -> Result<()> {
                 only.as_ref(),
                 &skip,
             )?;
+        }
+        Commands::Format { outfile } => {
+            dbg!(ast);
         }
         Commands::Compile { outfile, pretty } => {
             std::fs::File::create(&outfile)

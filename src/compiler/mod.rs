@@ -54,8 +54,8 @@ fn maybe_bail<R>(errs: Vec<Result<R>>) -> Result<Vec<R>> {
 }
 
 #[cfg(feature = "parser")]
-pub fn make<S: AsRef<str>>(
-    sources: &[(&str, S)],
+pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
+    sources: &[(S1, S2)],
     settings: &CompileSettings,
 ) -> Result<(Vec<Ast>, ConstraintSet)> {
     use num_bigint::BigInt;
@@ -74,14 +74,14 @@ pub fn make<S: AsRef<str>>(
         sources
             .iter()
             .map(|(name, content)| {
-                info!("Parsing {}", name.bright_white().bold());
+                info!("Parsing {}", name.as_ref().bright_white().bold());
                 parser::parse(content.as_ref())
-                    .with_context(|| anyhow!("parsing `{}`", name))
+                    .with_context(|| anyhow!("parsing `{}`", name.as_ref()))
                     .and_then(|ast| {
                         let r = definitions::pass(&ast, ctx.clone())
-                            .with_context(|| anyhow!("parsing definitions in `{}`", name));
+                            .with_context(|| anyhow!("parsing definitions in `{}`", name.as_ref()));
                         if r.is_ok() {
-                            asts.push((name, ast));
+                            asts.push((name.as_ref(), ast));
                         }
                         r
                     })
