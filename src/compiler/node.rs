@@ -543,7 +543,7 @@ impl Node {
             };
         }
 
-        let mut tty = Tty::new();
+        let mut tty = Tty::new().with_guides();
         let faulty = f(self).unwrap_or_default();
         _debug(self, &mut tty, f, &faulty, unclutter, dim, false, true, src);
         tty.page_feed()

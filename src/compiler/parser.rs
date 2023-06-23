@@ -233,11 +233,7 @@ const LIST_DISPLAY_THRESHOLD: usize = 4;
 impl Token {
     pub fn depth(&self) -> usize {
         match self {
-            Token::List(xs) => {
-                let func = xs[0].as_symbol().unwrap();
-                (if func == "begin" { 0 } else { 1 })
-                    + xs.iter().map(|x| x.depth()).max().unwrap_or(0)
-            }
+            Token::List(xs) => 1 + xs.iter().map(|x| x.depth()).max().unwrap_or(0),
             _ => 0,
         }
     }

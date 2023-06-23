@@ -10,9 +10,18 @@ use std::collections::HashMap;
 pub use common::*;
 pub use generator::{Constraint, ConstraintSet, EvalSettings};
 pub use node::{ColumnRef, Expression, Node};
+use num_bigint::BigInt;
+use owo_colors::OwoColorize;
 pub use parser::{Ast, AstNode, Kind, Token};
 pub use tables::ComputationTable;
 pub use types::*;
+
+use crate::{
+    column::Column,
+    compiler::tables::{Scope, Symbol},
+    errors::CompileError,
+    transformer,
+};
 
 pub mod codetyper;
 mod common;
@@ -54,19 +63,24 @@ fn maybe_bail<R>(errs: Vec<Result<R>>) -> Result<Vec<R>> {
 }
 
 #[cfg(feature = "parser")]
+pub fn parse_ast<S1: AsRef<str>, S2: AsRef<str>>(sources: &[(S1, S2)]) -> Result<Vec<Ast>> {
+    maybe_bail(
+        sources
+            .iter()
+            .map(|(name, content)| {
+                info!("Parsing {}", name.as_ref().bright_white().bold());
+                parser::parse(content.as_ref())
+                    .with_context(|| anyhow!("parsing `{}`", name.as_ref()))
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
+#[cfg(feature = "parser")]
 pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
     sources: &[(S1, S2)],
     settings: &CompileSettings,
 ) -> Result<(Vec<Ast>, ConstraintSet)> {
-    use num_bigint::BigInt;
-    use owo_colors::OwoColorize;
-
-    use crate::{
-        column::Column,
-        compiler::tables::{Scope, Symbol},
-        errors::CompileError,
-    };
-
     let mut asts: Vec<(&str, Ast)> = vec![];
     let mut ctx = Scope::new();
 
@@ -188,6 +202,7 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
         })
         .collect::<HashMap<_, _>>();
 
-    let cs = ConstraintSet::new(columns, constraints, constants, computations, perspectives)?;
+    let mut cs = ConstraintSet::new(columns, constraints, constants, computations, perspectives)?;
+    transformer::precompute(&mut cs);
     Ok((asts.into_iter().map(|x| x.1).collect(), cs))
 }
