@@ -150,11 +150,11 @@ pub fn make<S: AsRef<str>>(
                                     exp: *e.clone(),
                                 },
                             )?,
-                            Kind::Interleaved(_, froms) => computations.insert(
+                            Kind::Interleaved { froms: sources, .. } => computations.insert(
                                 &id,
                                 Computation::Interleaved {
                                     target: id.clone(),
-                                    froms: froms.as_ref().unwrap().to_owned(),
+                                    froms: sources.clone(),
                                 },
                             )?,
                         }

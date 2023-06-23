@@ -258,7 +258,7 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
         // Interleaved columns should appear after their sources
         .sorted_by_cached_key(|c| {
             (
-                if !matches!(c.1.kind, Kind::Interleaved(..)) {
+                if !matches!(c.1.kind, Kind::Interleaved { .. }) {
                     0
                 } else {
                     1
@@ -267,7 +267,7 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
             )
         })
     {
-        match column.kind {
+        match &column.kind {
             Kind::Atomic | Kind::Composite(_) | Kind::Phantom => {
                 if column.used {
                     let size_multiplier = cs.length_multiplier(&h);
@@ -283,13 +283,11 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
                     )
                 }
             }
-            Kind::Interleaved(_, ref froms) => {
+            Kind::Interleaved { froms: sources } => {
                 r += &format!(
                     "{} := zkevm.Interleave({})\n",
                     reg_mangle(cs, &h).unwrap(),
-                    froms
-                        .as_ref()
-                        .unwrap()
+                    sources
                         .iter()
                         .map(|c| reg_mangle(cs, c).unwrap())
                         .collect::<Vec<_>>()
