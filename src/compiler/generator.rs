@@ -1240,7 +1240,7 @@ fn apply(
 
 pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<Option<Node>> {
     match &e.class {
-        Token::Keyword(_) | Token::Range(_) => Ok(None),
+        Token::Comment(_) | Token::Keyword(_) | Token::Range(_) => Ok(None),
         Token::Value(x) => Ok(Some(
             Node::from(Expression::Const(x.clone(), Fr::from_str(&x.to_string()))).with_type(
                 if *x >= Zero::zero() && *x <= One::one() {

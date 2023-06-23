@@ -1,5 +1,5 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
-COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* }
+COMMENT = { ";" ~ (!NEWLINE ~ ANY)* }
 
 
 corset = { SOI ~ (definition)* ~ EOI }

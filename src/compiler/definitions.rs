@@ -13,7 +13,8 @@ use crate::structs::Handle;
 
 fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
     match &e.class {
-        Token::Value(_)
+        Token::Comment(_)
+        | Token::Value(_)
         | Token::Symbol(_)
         | Token::Keyword(_)
         | Token::List(_)

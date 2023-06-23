@@ -1,3 +1,6 @@
+use std::format;
+use std::todo;
+
 use itertools::Itertools;
 
 use crate::compiler::codetyper::Tty;
@@ -31,14 +34,54 @@ fn base_to_kw(b: Base) -> String {
     .into()
 }
 
+fn format_defunction(
+    def: &str,
+    name: &str,
+    args: &[String],
+    in_types: &[Type],
+    out_type: &Option<Type>,
+    body: &AstNode,
+    nowarn: bool,
+    tty: &mut Tty,
+) {
+    let fmt_name = if nowarn || out_type.is_some() {
+        [
+            Some(name.clone()),
+            out_type.map(|t| magma_to_kw(t.magma())).as_deref(),
+            if nowarn { Some(":nowarn") } else { None },
+        ]
+        .into_iter()
+        .filter(|x| x.is_some())
+        .map(|x| x.unwrap())
+        .join(" ")
+    } else {
+        name.to_string()
+    };
+
+    let fmt_args = args
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            if matches!(in_types[i], Type::Any(Magma::Any)) {
+                name.clone()
+            } else {
+                format!("({} {})", name, magma_to_kw(in_types[i].magma()))
+            }
+        })
+        .join(" ");
+
+    tty.write(format!("(defpurefun ({fmt_name} {fmt_args})"));
+}
+
 impl Ast {
     pub fn format(&self) -> String {
-        self.exprs.iter().map(AstNode::format).join("\n")
+        self.exprs.iter().map(AstNode::format).join("")
     }
 }
 impl AstNode {
     fn len(&self) -> usize {
         match &self.class {
+            Token::Comment(_) => 0,
             Token::Value(x) => x.to_string().len(),
             Token::Symbol(s) | Token::Keyword(s) => s.len(),
             Token::List(ns) => ns.iter().map(|n| n.len() + 1).sum::<usize>() + 1,
@@ -116,6 +159,10 @@ impl AstNode {
 
         fn _format(n: &AstNode, tty: &mut Tty) {
             match &n.class {
+                Token::Comment(c) => {
+                    tty.write(format!("{c}"));
+                    tty.cr();
+                }
                 Token::Value(_) => tty.write(&n.src),
                 Token::Symbol(s) => tty.write(s),
                 Token::Keyword(kw) => tty.write(kw),
@@ -250,7 +297,11 @@ impl AstNode {
                     out_type,
                     body,
                     nowarn,
-                } => todo!(),
+                } => {
+                    format_defunction("defun", name, args, in_types, out_type, body, *nowarn, tty);
+                    _format(body, tty);
+                    tty.write(")");
+                }
                 Token::Defpurefun {
                     name,
                     args,
@@ -258,7 +309,28 @@ impl AstNode {
                     out_type,
                     body,
                     nowarn,
-                } => todo!(),
+                } => {
+                    format_defunction(
+                        "defpurefun",
+                        name,
+                        args,
+                        in_types,
+                        out_type,
+                        body,
+                        *nowarn,
+                        tty,
+                    );
+                    if body.depth() > 1 {
+                        tty.shift(2);
+                        tty.cr();
+                    }
+                    _format(body, tty);
+                    if body.depth() > 1 {
+                        tty.unshift();
+                    }
+                    tty.write(")");
+                    tty.cr();
+                }
                 Token::DefAliases(aliases) => {
                     tty.write("(defalias");
                     if aliases.len() > 1 {
@@ -291,6 +363,7 @@ impl AstNode {
                         tty.unshift();
                     }
 
+                    tty.cr();
                     tty.cr();
                 }
                 Token::DefunAlias(source, target) => {
@@ -351,7 +424,7 @@ impl AstNode {
                 } => todo!(),
                 Token::DefInrange(_, _) => todo!(),
 
-                Token::DefAlias(f, r) => unreachable!(),
+                Token::DefAlias(..) => unreachable!(),
             }
         }
 
