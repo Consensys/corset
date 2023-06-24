@@ -13,6 +13,7 @@ use std::{
 };
 
 use crate::compiler::codetyper::Tty;
+use crate::compiler::parser::Domain;
 use crate::pretty::{Base, Pretty, COLORS};
 use crate::structs::Handle;
 
@@ -153,7 +154,7 @@ pub enum Expression {
     },
     ArrayColumn {
         handle: ColumnRef,
-        domain: Vec<usize>,
+        domain: Domain,
         base: Base,
     },
     List(Vec<Node>),
@@ -238,7 +239,7 @@ impl Node {
     #[builder(entry = "array_column", exit = "build", visibility = "pub")]
     fn new_array_column(
         handle: ColumnRef,
-        domain: Vec<usize>,
+        domain: Domain,
         base: Option<Base>,
         t: Option<Magma>,
     ) -> Node {
@@ -312,18 +313,11 @@ impl Node {
                 Expression::Column { handle, .. } => {
                     cs.handle(handle).to_string().color(*c).to_string()
                 }
-                Expression::ArrayColumn {
-                    handle,
-                    domain: range,
-                    ..
-                } => format!(
-                    "{}[{}:{}]",
-                    handle.as_handle().name,
-                    range.first().unwrap(),
-                    range.last().unwrap(),
-                )
-                .color(*c)
-                .to_string(),
+                Expression::ArrayColumn { handle, domain, .. } => {
+                    format!("{}[{}]", handle.as_handle().name, domain)
+                        .color(*c)
+                        .to_string()
+                }
                 Expression::List(ns) => format!("{{{}}}", format_list(ns, depth + 1, cs))
                     .color(*c)
                     .to_string(),
@@ -804,19 +798,15 @@ impl Node {
                 }
                 Intrinsic::Nth => {
                     if let (
-                        Expression::ArrayColumn {
-                            handle: h,
-                            domain: range,
-                            base: _,
-                        },
+                        Expression::ArrayColumn { handle, domain, .. },
                         Expression::Const(idx, _),
                     ) = (&args[0].e(), &args[1].e())
                     {
                         let idx = idx.to_usize().unwrap();
-                        if !range.contains(&idx) {
-                            panic!("trying to access `{}` at index `{}`", h, idx);
+                        if !domain.contains(idx as isize) {
+                            panic!("trying to access {} at index `{}`", handle.pretty(), idx);
                         }
-                        get(&h.as_handle().ith(idx).into(), i, settings.wrap)
+                        get(&handle.as_handle().ith(idx).into(), i, settings.wrap)
                     } else {
                         unreachable!()
                     }
@@ -910,13 +900,7 @@ impl Display for Node {
                 write!(f, "{}", handle)
             }
             Expression::ArrayColumn { handle, domain, .. } => {
-                write!(
-                    f,
-                    "{}[{}:{}]",
-                    handle,
-                    domain.first().unwrap(),
-                    domain.last().unwrap(),
-                )
+                write!(f, "{}[{}]", handle, domain)
             }
             Expression::List(cs) => write!(f, "{{{}}}", format_list(cs)),
             Expression::Funcall { func, args } => {
@@ -941,18 +925,9 @@ impl Debug for Node {
             Expression::Column {
                 handle, fetched, ..
             } => write!(f, "{}{}", if *fetched { "F:" } else { "" }, handle,)?,
-            Expression::ArrayColumn {
-                handle,
-                domain: range,
-                ..
-            } => write!(
-                f,
-                "{}:{:?}[{}:{}]",
-                handle,
-                self.t(),
-                range.first().unwrap(),
-                range.last().unwrap(),
-            )?,
+            Expression::ArrayColumn { handle, domain, .. } => {
+                write!(f, "{}:{:?}[{}]", handle, self.t(), domain)?
+            }
             Expression::List(cs) => write!(f, "'({})", format_list(cs))?,
             Expression::Funcall { func, args } => write!(f, "({:?} {})", func, format_list(args))?,
             Expression::Void => write!(f, "nil")?,

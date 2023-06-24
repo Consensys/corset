@@ -1,8 +1,3 @@
-use std::format;
-use std::todo;
-
-use itertools::Itertools;
-
 use crate::compiler::codetyper::Tty;
 use crate::compiler::Ast;
 use crate::compiler::AstNode;
@@ -10,6 +5,7 @@ use crate::compiler::Magma;
 use crate::compiler::Token;
 use crate::compiler::Type;
 use crate::pretty::Base;
+use itertools::Itertools;
 
 fn magma_to_kw(m: Magma) -> String {
     match m {
@@ -26,10 +22,10 @@ fn magma_to_kw(m: Magma) -> String {
 
 fn base_to_kw(b: Base) -> String {
     match b {
-        Base::Dec => ":base :dec",
-        Base::Hex => ":base :hex",
-        Base::Bin => ":base :bin",
-        Base::Bytes => ":base :bytes",
+        Base::Dec => ":display :dec",
+        Base::Hex => ":display :hex",
+        Base::Bin => ":display :bin",
+        Base::Bytes => ":display :bytes",
     }
     .into()
 }
@@ -40,7 +36,6 @@ fn format_defunction(
     args: &[String],
     in_types: &[Type],
     out_type: &Option<Type>,
-    body: &AstNode,
     nowarn: bool,
     tty: &mut Tty,
 ) {
@@ -70,12 +65,12 @@ fn format_defunction(
         })
         .join(" ");
 
-    tty.write(format!("(defpurefun ({fmt_name} {fmt_args})"));
+    tty.write(format!("({def} ({fmt_name} {fmt_args})"));
 }
 
 impl Ast {
     pub fn format(&self) -> String {
-        self.exprs.iter().map(AstNode::format).join("")
+        self.exprs.iter().map(AstNode::format).join("\n")
     }
 }
 impl AstNode {
@@ -93,61 +88,10 @@ impl AstNode {
                     + 1
             }
             Token::DefModule(m) => 2 + 6 + 1 + m.len(),
-            Token::DefConsts(_) => todo!(),
-            Token::DefColumns(_) => todo!(),
-            Token::DefPerspective {
-                name,
-                trigger,
-                columns,
-            } => todo!(),
-            Token::DefColumn {
-                name,
-                t,
-                kind,
-                padding_value,
-                base,
-            } => todo!(),
-            Token::DefArrayColumn {
-                name,
-                domain,
-                t,
-                base,
-            } => todo!(),
-            Token::Defun {
-                name,
-                args,
-                in_types,
-                out_type,
-                body,
-                nowarn,
-            } => todo!(),
-            Token::Defpurefun {
-                name,
-                args,
-                in_types,
-                out_type,
-                body,
-                nowarn,
-            } => todo!(),
-            Token::DefAliases(_) => todo!(),
-            Token::DefAlias(_, _) => todo!(),
-            Token::DefunAlias(_, _) => todo!(),
-            Token::DefConstraint {
-                name,
-                domain,
-                guard,
-                perspective,
-                body,
-            } => todo!(),
-            Token::DefPermutation { from, to, signs } => todo!(),
-            Token::DefPlookup {
-                name,
-                including,
-                included,
-            } => todo!(),
-            Token::DefInrange(_, _) => todo!(),
+            _ => 0,
         }
     }
+
     pub fn format(&self) -> String {
         fn spacer(tty: &mut Tty, with_newlines: bool) {
             if with_newlines {
@@ -157,15 +101,32 @@ impl AstNode {
             }
         }
 
+        fn maybe_comment(n: &AstNode, tty: &mut Tty) {
+            if let Some(comment) = n.annotation.as_ref() {
+                tty.buffer_end(comment.to_owned());
+            }
+        }
+
         fn _format(n: &AstNode, tty: &mut Tty) {
             match &n.class {
                 Token::Comment(c) => {
-                    tty.write(format!("{c}"));
-                    tty.cr();
+                    for c in c.lines() {
+                        tty.cr();
+                        tty.write(c);
+                    }
                 }
-                Token::Value(_) => tty.write(&n.src),
-                Token::Symbol(s) => tty.write(s),
-                Token::Keyword(kw) => tty.write(kw),
+                Token::Value(_) => {
+                    tty.write(&n.src);
+                    maybe_comment(n, tty);
+                }
+                Token::Symbol(s) => {
+                    tty.write(s);
+                    maybe_comment(n, tty);
+                }
+                Token::Keyword(kw) => {
+                    tty.write(kw);
+                    maybe_comment(n, tty);
+                }
                 Token::List(ns) => {
                     if ns.len() <= 1 {
                         tty.write("(");
@@ -174,16 +135,31 @@ impl AstNode {
                         }
                         tty.write(")");
                     } else {
-                        let merge = (n.depth() < 2 && n.len() + tty.indentation() <= 10000)
-                            || (n.len() < 50);
+                        let merge = ((n.depth() < 2 && n.len() + tty.indentation() <= 10000)
+                            || (n.depth() < 3 && n.len() < 50))
+                            && !ns.iter().any(|n| n.annotation.is_some());
                         if let Some(fname) = ns[0].as_symbol().ok() {
                             tty.write(format!("({fname} "));
+                            maybe_comment(n, tty);
                             tty.shift(fname.len() + 2);
-                            let mut args = ns.iter().skip(1).peekable();
-                            while let Some(a) = args.next() {
-                                _format(a, tty);
-                                if args.peek().is_some() {
-                                    spacer(tty, !merge);
+                            // TODO: burn it with fire
+                            if fname.starts_with("if-eq") {
+                                _format(&ns[1], tty);
+                                tty.write(" ");
+                                let mut args = ns.iter().skip(2).peekable();
+                                while let Some(a) = args.next() {
+                                    _format(a, tty);
+                                    if args.peek().is_some() {
+                                        spacer(tty, !merge);
+                                    }
+                                }
+                            } else {
+                                let mut args = ns.iter().skip(1).peekable();
+                                while let Some(a) = args.next() {
+                                    _format(a, tty);
+                                    if args.peek().is_some() {
+                                        spacer(tty, !merge);
+                                    }
                                 }
                             }
                             tty.unshift();
@@ -217,14 +193,18 @@ impl AstNode {
                         tty.write(" ");
                     }
 
-                    let (name, value): (Vec<&String>, Vec<String>) = constants
+                    let largest = constants
                         .iter()
-                        .map(|(name, value)| (name, value.to_string()))
-                        .unzip();
-                    let largest = name.iter().map(|s| s.len()).max().unwrap_or_default();
-                    let mut constants = name.iter().zip(value.iter()).peekable();
+                        .map(|c| c.0.as_symbol().unwrap().len())
+                        .max()
+                        .unwrap_or_default();
+                    let mut constants = constants.iter().peekable();
                     while let Some((name, value)) = constants.next() {
-                        tty.write(&format!("{:2$} {}", name, value, largest));
+                        tty.write(&format!("{:1$}", name.as_symbol().unwrap(), largest));
+                        maybe_comment(name, tty);
+                        spacer(tty, name.annotation.is_some());
+                        _format(value, tty);
+
                         if constants.peek().is_some() {
                             tty.cr();
                         }
@@ -256,13 +236,33 @@ impl AstNode {
                     name,
                     trigger,
                     columns,
-                } => todo!(),
+                } => {
+                    tty.write(format!("(defperspective {name}"));
+                    tty.shift(2);
+                    tty.cr();
+                    _format(trigger, tty);
+                    tty.cr();
+
+                    tty.write("(");
+                    tty.shift(1);
+                    let mut defcols = columns.iter().peekable();
+                    while let Some(defcol) = defcols.next() {
+                        _format(defcol, tty);
+                        if defcols.peek().is_some() {
+                            tty.cr();
+                        }
+                    }
+                    tty.write(")");
+                    tty.write(")");
+                    tty.unshift();
+                    tty.cr();
+                }
                 Token::DefColumn {
                     name,
                     t,
-                    kind,
                     padding_value,
                     base,
+                    ..
                 } => {
                     let with_opts = !matches!(t, Type::Column(Magma::Integer))
                         || padding_value.is_some()
@@ -289,7 +289,30 @@ impl AstNode {
                     domain,
                     t,
                     base,
-                } => todo!(),
+                } => {
+                    tty.write("(");
+                    tty.write(name);
+                    if !matches!(t, Type::ArrayColumn(Magma::Integer)) {
+                        tty.write(&format!(" {}", magma_to_kw(t.magma())));
+                    }
+                    tty.write(&match domain {
+                        crate::compiler::Domain::Range(start, stop) => {
+                            if *start == 1 {
+                                format!("[{}]", stop)
+                            } else {
+                                format!("[{}:{}]", start, stop)
+                            }
+                        }
+                        crate::compiler::Domain::SteppedRange(start, step, stop) => {
+                            format!("[{}:{}:{}]", start, stop, step)
+                        }
+                        crate::compiler::Domain::Set(_) => unreachable!(),
+                    });
+                    if !matches!(base, Base::Dec) {
+                        tty.write(&format!(" {}", base_to_kw(*base)));
+                    }
+                    tty.write(")");
+                }
                 Token::Defun {
                     name,
                     args,
@@ -298,9 +321,17 @@ impl AstNode {
                     body,
                     nowarn,
                 } => {
-                    format_defunction("defun", name, args, in_types, out_type, body, *nowarn, tty);
+                    format_defunction("defun", name, args, in_types, out_type, *nowarn, tty);
+                    if body.depth() > 1 {
+                        tty.shift(2);
+                        tty.cr();
+                    }
                     _format(body, tty);
+                    if body.depth() > 1 {
+                        tty.unshift();
+                    }
                     tty.write(")");
+                    tty.cr();
                 }
                 Token::Defpurefun {
                     name,
@@ -310,16 +341,7 @@ impl AstNode {
                     body,
                     nowarn,
                 } => {
-                    format_defunction(
-                        "defpurefun",
-                        name,
-                        args,
-                        in_types,
-                        out_type,
-                        body,
-                        *nowarn,
-                        tty,
-                    );
+                    format_defunction("defpurefun", name, args, in_types, out_type, *nowarn, tty);
                     if body.depth() > 1 {
                         tty.shift(2);
                         tty.cr();
@@ -398,16 +420,21 @@ impl AstNode {
                     ]
                     .into_iter()
                     .filter(|x| x.is_some())
-                    .map(|x| x.unwrap())
+                    .map(|x| x.unwrap().replace('\n', " "))
                     .join(" ");
 
                     tty.write(&format!("(defconstraint {name} ({opts})"));
+                    if let Some(comment) = n.annotation.as_ref() {
+                        tty.buffer_end(comment.to_owned());
+                    }
+
                     if body.depth() > 0 {
                         tty.shift(2);
                         tty.cr();
                     }
 
                     _format(body, tty);
+
                     tty.write(&format!(")"));
 
                     if body.depth() > 0 {
@@ -416,19 +443,71 @@ impl AstNode {
                     }
                     tty.cr();
                 }
-                Token::DefPermutation { from, to, signs } => todo!(),
+                Token::DefPermutation { from, to, signs } => {
+                    tty.write("(defpermutation");
+                    tty.shift(2);
+                    tty.cr();
+
+                    tty.write(&format!("({})", to.join(" ")));
+                    tty.cr();
+
+                    tty.write(&format!(
+                        "({})",
+                        from.iter()
+                            .zip(signs.iter())
+                            .map(|(col, sign)| if let Some(sign) = sign {
+                                format!("({} {})", if *sign { "↓" } else { "↑" }, col)
+                            } else {
+                                col.to_string()
+                            })
+                            .join(" ")
+                    ));
+
+                    tty.write(")");
+                    tty.unshift();
+                    tty.cr();
+                }
                 Token::DefPlookup {
                     name,
                     including,
                     included,
-                } => todo!(),
-                Token::DefInrange(_, _) => todo!(),
+                } => {
+                    tty.write(&format!("(defplookup {name}"));
+                    tty.shift(2);
+                    tty.cr();
+
+                    tty.write("(");
+                    tty.shift(2);
+                    for i in including {
+                        _format(i, tty);
+                        tty.cr();
+                    }
+                    tty.unshift();
+                    tty.cr();
+                    tty.write(")");
+
+                    tty.write("(");
+                    tty.shift(2);
+                    for i in included {
+                        _format(i, tty);
+                        tty.cr();
+                    }
+
+                    tty.unshift();
+                    tty.write(")");
+                    tty.write(")");
+                }
+                Token::DefInrange(what, limit) => {
+                    tty.write("(definrange ");
+                    _format(what, tty);
+                    tty.write(&format!(" {})", limit));
+                }
 
                 Token::DefAlias(..) => unreachable!(),
             }
         }
 
-        let mut tty = Tty::new();
+        let mut tty = Tty::new().align_annotations();
         _format(self, &mut tty);
         tty.page_feed()
     }

@@ -7,7 +7,7 @@ use either::Either;
 use is_terminal::IsTerminal;
 use log::*;
 use owo_colors::OwoColorize;
-use std::{io::Write, path::Path, todo};
+use std::{io::Write, path::Path};
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{Parser, Subcommand};
@@ -258,12 +258,8 @@ enum Commands {
     },
     /// Format the given source in an idiomatic way
     Format {
-        #[arg(
-            short = 'o',
-            long = "out",
-            help = "if set, write the formatted source to this file"
-        )]
-        outfile: Option<String>,
+        #[arg(short = 'i', long = "inplace", help = "format the given file in-place")]
+        inplace: bool,
     },
     /// Given a set of constraints, indefinitely check the traces from an SQL table
     #[cfg(feature = "postgres")]
@@ -690,7 +686,7 @@ fn main() -> Result<()> {
                 &skip,
             )?;
         }
-        Commands::Format { outfile } => {
+        Commands::Format { inplace } => {
             builder.no_stdlib = true;
             let asts = builder.to_ast()?;
             for ast in asts.iter() {

@@ -16,6 +16,8 @@ fn compile_time_constants(e: &AstNode, ctx: &mut Scope, settings: &CompileSettin
         Token::DefConsts(cs) => {
             for (name, exp) in cs.iter() {
                 let value = reduce(exp, ctx, settings)?.unwrap();
+                let name = name.as_symbol().unwrap();
+
                 ctx.insert_constant(
                     name,
                     value.pure_eval().with_context(|| make_ast_error(exp))?,

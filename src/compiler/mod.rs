@@ -12,7 +12,7 @@ pub use generator::{Constraint, ConstraintSet, EvalSettings};
 pub use node::{ColumnRef, Expression, Node};
 use num_bigint::BigInt;
 use owo_colors::OwoColorize;
-pub use parser::{Ast, AstNode, Kind, Token};
+pub use parser::{Ast, AstNode, Domain, Kind, Token};
 pub use tables::ComputationTable;
 pub use types::*;
 

@@ -45,7 +45,7 @@ fn uniquify(n: String) -> String {
 pub enum Constraint {
     Vanishes {
         handle: Handle,
-        domain: Option<Vec<isize>>,
+        domain: Option<Domain>,
         expr: Box<Node>,
     },
     Plookup {
@@ -973,12 +973,12 @@ fn apply_form(
             {
                 let mut l = vec![];
                 let mut t = Type::INFIMUM;
-                for i in is {
+                for i in is.iter() {
                     let mut for_ctx = ctx.derive(&uniquify(format!("{}-for-{}", ctx.name(), i)))?;
 
                     for_ctx.insert_symbol(
                         i_name,
-                        Expression::Const(BigInt::from(*i), Fr::from_str(&i.to_string())).into(),
+                        Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
                     )?;
 
                     if let Some(r) = reduce(&body.clone(), &mut for_ctx, settings)? {
@@ -991,7 +991,10 @@ fn apply_form(
 
                 Ok(Some(Node::from(Expression::List(l)).with_type(t)))
             } else {
-                unreachable!()
+                bail!(
+                    "incorrect arguments to for loop; expected (for VAR RANGE BODY); got {:?}",
+                    args
+                )
             }
         }
         Form::Debug => {
@@ -1169,10 +1172,10 @@ fn apply_intrinsic(
                 match array.e() {
                     Expression::ArrayColumn {
                         handle,
-                        domain: range,
+                        domain,
                         base,
                     } => {
-                        if range.contains(&i) {
+                        if domain.contains(i as isize) {
                             Ok(Some(
                                 Node::column()
                                     .handle(handle.as_handle().ith(i))
@@ -1467,11 +1470,6 @@ fn reduce_toplevel(
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
             bail!("Unexpected top-level form: {:?}", e)
         }
-        Token::Defun { .. }
-        | Token::Defpurefun { .. }
-        | Token::DefAliases(_)
-        | Token::DefunAlias(..)
-        | Token::DefConsts(..) => Ok(None),
         Token::DefPermutation { from, to, signs } => {
             // We look up the columns involved in the permutation just to ensure that they
             // are marked as "used" in the symbol table
@@ -1507,9 +1505,15 @@ fn reduce_toplevel(
                 handle: Handle::new(ctx.module(), names::Generator::default().next().unwrap()),
                 from: froms,
                 to: tos,
-                signs: signs.clone(),
+                signs: signs.iter().map(|s| s.unwrap_or(true)).collect(),
             }))
         }
+        Token::Defun { .. }
+        | Token::Defpurefun { .. }
+        | Token::DefAliases(_)
+        | Token::DefunAlias(..)
+        | Token::DefConsts(..)
+        | Token::Comment(_) => Ok(None),
         _ => unreachable!("{:?}", e),
     }
 }

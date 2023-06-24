@@ -2,11 +2,11 @@ use crate::{errors, pretty::Base};
 use anyhow::{anyhow, bail, Context, Result};
 use itertools::Itertools;
 use num_bigint::BigInt;
+use pest::iterators::Pairs;
 #[cfg(feature = "parser")]
 use pest::{iterators::Pair, Parser};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::{fmt, format};
 
 use super::{ColumnRef, Magma, Type};
 
@@ -50,7 +50,7 @@ impl AstNode {
             bail!("expected usize, found `{:?}`", self)
         }
     }
-    pub fn as_range(&self) -> Result<&[isize]> {
+    pub fn as_range(&self) -> Result<&Domain> {
         if let Token::Range(r) = &self.class {
             Ok(r)
         } else {
@@ -77,12 +77,12 @@ impl AstNode {
     }
 }
 impl Debug for AstNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Debug::fmt(&self.class, f)
     }
 }
 impl std::fmt::Display for AstNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Debug::fmt(&self.class, f)
     }
 }
@@ -119,10 +119,55 @@ pub enum Symbol {
     Path(Vec<String>),
 }
 impl std::fmt::Display for Symbol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Symbol::Local(s) => write!(f, "{}", &s),
             Symbol::Path(ss) => write!(f, "{}", ss.join(":")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Domain {
+    Range(isize, isize),
+    SteppedRange(isize, isize, isize),
+    Set(Vec<isize>),
+}
+impl Domain {
+    pub fn iter(&self) -> Box<dyn Iterator<Item = isize> + '_> {
+        match self {
+            Domain::Range(start, stop) => Box::new(*start..=*stop),
+            Domain::SteppedRange(start, step, stop) => {
+                Box::new((*start..=*stop).step_by((*step).try_into().unwrap()))
+            }
+            Domain::Set(is) => Box::new(is.iter().cloned()),
+        }
+    }
+
+    pub fn contains(&self, x: isize) -> bool {
+        match self {
+            Domain::Range(start, stop) | Domain::SteppedRange(start, _, stop) => {
+                x >= *start && x <= *stop
+            }
+            Domain::Set(is) => is.contains(&x),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Domain::Range(start, stop) | Domain::SteppedRange(start, _, stop) => {
+                (start - stop).try_into().unwrap()
+            }
+            Domain::Set(is) => is.len(),
+        }
+    }
+}
+impl std::fmt::Display for Domain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Domain::Range(start, stop) => write!(f, "{}:{}", start, stop),
+            Domain::SteppedRange(start, step, stop) => write!(f, "{}:{}:{}", start, step, stop),
+            Domain::Set(is) => write!(f, "{:?}", is),
         }
     }
 }
@@ -140,12 +185,12 @@ pub enum Token {
     /// a list of nodes
     List(Vec<AstNode>),
     /// a range; typically used in discrete constraints declaration and loops
-    Range(Vec<isize>),
+    Range(Domain),
 
     /// definition of a module; this will derive a symbol table
     DefModule(String),
     /// a list of constant definition: (name, value)
-    DefConsts(Vec<(String, Box<AstNode>)>),
+    DefConsts(Vec<(Box<AstNode>, Box<AstNode>)>),
     /// a list of columns declaration, normally only DefColumn
     DefColumns(Vec<AstNode>),
     /// a list of columns declaration, normally only DefColumn, only enabled when trigger is non-zero
@@ -170,7 +215,7 @@ pub enum Token {
     /// defines an array
     DefArrayColumn {
         name: String,
-        domain: Vec<usize>,
+        domain: Domain,
         t: Type,
         /// which numeric base should be used to display column values; this is a purely aesthetic setting
         base: Base,
@@ -209,7 +254,7 @@ pub enum Token {
         /// the given name of the constraint -- TODO enforce uniqueness
         name: String,
         /// if the domain of the constraint is `None`, it is supposed to hold everywhere
-        domain: Option<Vec<isize>>,
+        domain: Option<Domain>,
         /// an expression that enables the constraint only when it is non zero
         guard: Option<Box<AstNode>>,
         /// if the constraint is set in a perspective, it is automatically
@@ -222,7 +267,7 @@ pub enum Token {
     DefPermutation {
         from: Vec<String>,
         to: Vec<String>,
-        signs: Vec<bool>,
+        signs: Vec<Option<bool>>,
     },
     /// declaration of a plookup constraint between two sets of columns
     DefPlookup {
@@ -313,9 +358,9 @@ impl Token {
     }
 }
 impl Debug for Token {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Token::Comment(_) => Ok(()),
+            Token::Comment(s) => write!(f, "REM:{}", s),
             Token::Value(x) => write!(f, "{}", x),
             Token::Symbol(ref name) => write!(f, "{}", name),
             Token::Keyword(ref name) => write!(f, "{}", name),
@@ -389,6 +434,8 @@ fn parse_defconstraint<I: Iterator<Item = AstNode>>(
     lc: (usize, usize),
     src: String,
 ) -> Result<AstNode> {
+    let mut annotations = String::new();
+
     enum GuardParser {
         Begin,
         Guard,
@@ -398,21 +445,22 @@ fn parse_defconstraint<I: Iterator<Item = AstNode>>(
 
     let name = tokens
         .next()
-        .with_context(|| anyhow!("missing constraint name"))?
-        .as_symbol()?
-        .to_owned();
+        .with_context(|| anyhow!("missing constraint name"))?;
+    name.annotation.as_ref().map(|s| annotations.push_str(s));
+    let name = name.as_symbol()?.to_owned();
 
     let (domain, guard, perspective) = {
         let guards = tokens
             .next()
-            .with_context(|| anyhow!("missing guards in constraint definitions"))?
-            .as_list()?
-            .to_vec();
+            .with_context(|| anyhow!("missing guards in constraint definitions"))?;
+        guards.annotation.as_ref().map(|s| annotations.push_str(s));
+
         let mut status = GuardParser::Begin;
         let mut domain = None;
         let mut guard = None;
         let mut perspective = None;
-        for x in guards.iter() {
+        for x in guards.as_list()?.iter() {
+            x.annotation.as_ref().map(|s| annotations.push_str(s));
             match status {
                 GuardParser::Begin => match x.class {
                     Token::Keyword(ref kw) if kw == ":guard" => status = GuardParser::Guard,
@@ -483,7 +531,11 @@ fn parse_defconstraint<I: Iterator<Item = AstNode>>(
         },
         src,
         lc,
-        annotation: None,
+        annotation: if annotations.len() > 0 {
+            Some(annotations)
+        } else {
+            None
+        },
     })
 }
 
@@ -639,7 +691,8 @@ fn parse_defcolumns<I: Iterator<Item = AstNode>>(
                             };
                         }
                     }
-                    _ => unreachable!(),
+                    Token::Comment(_) => return Ok(c),
+                    _ => unreachable!("{c}"),
                 };
                 // Ensure that we are in a clean state
                 match state {
@@ -652,10 +705,7 @@ fn parse_defcolumns<I: Iterator<Item = AstNode>>(
                                 Token::DefArrayColumn {
                                     name,
                                     t: Type::ArrayColumn(t.unwrap_or(Magma::Integer)),
-                                    domain: range
-                                        .iter()
-                                        .map(|&x| x.try_into().map_err(|e| anyhow!("{:?}", e)))
-                                        .collect::<Result<Vec<_>>>()?,
+                                    domain: range,
                                     base,
                                 }
                             } else {
@@ -689,44 +739,91 @@ fn parse_defcolumns<I: Iterator<Item = AstNode>>(
     })
 }
 
-// pub fn rec_attach_comments(n: &mut AstNode) {
-//     match n.class {}
-// }
-
-fn attach_comments(tokens: Vec<AstNode>) -> Vec<AstNode> {
-    let mut r = Vec::new();
-    let mut nodes = tokens.into_iter().peekable();
-
-    while let Some(mut node) = nodes.next() {
-        while let Some(AstNode {
-            class: Token::Comment(c),
-            ..
-        }) = nodes.peek()
-        {
-            node.annotation = node
-                .annotation
-                .map(|a| format!("{a} {c}"))
-                .or(Some(c.clone()));
-            let _ = nodes.next();
-        }
-        r.push(node)
+struct Commenter<'i> {
+    pairs: Pairs<'i, Rule>,
+    source: &'i str,
+}
+impl<'i> Commenter<'i> {
+    fn new(source: &'i str, pairs: Pairs<'i, Rule>) -> Self {
+        Self { source, pairs }
     }
-    r
+}
+
+impl<'i> std::iter::Iterator for Commenter<'i> {
+    type Item = Result<AstNode>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(pair) = self.pairs.next() {
+            match pair.as_rule() {
+                Rule::EOI => return None,
+                // Free-standing are aggregated into blocks
+                Rule::COMMENT => {
+                    let mut acc = pair.as_str().to_string();
+                    'look_for_comment: while let Some(next) = self.pairs.peek() {
+                        if let Rule::COMMENT = next.as_rule() {
+                            acc.push('\n');
+                            acc.push_str(next.as_str());
+                            let _ = self.pairs.next();
+                        } else {
+                            break 'look_for_comment;
+                        }
+                    }
+                    Some(Ok(AstNode {
+                        class: Token::Comment(acc),
+                        src: Default::default(),
+                        lc: (0, 0),
+                        annotation: None,
+                    }))
+                }
+                // Inline comments are attached the node they follow
+                _ => {
+                    let span = pair.as_span();
+                    let mut node = rec_parse(self.source, pair);
+                    if let Ok(node) = node.as_mut() {
+                        'look_for_comment: while let Some(x) = self.pairs.peek() {
+                            if let Rule::COMMENT = x.as_rule() {
+                                let comment = x.as_str();
+                                let start = span.end();
+                                let end = x.as_span().start();
+                                if !self
+                                    .source
+                                    .chars()
+                                    .skip(start)
+                                    .take(end - start)
+                                    .any(|c| c == '\n')
+                                {
+                                    if let Some(a) = node.annotation.as_mut() {
+                                        a.push_str(comment);
+                                    } else {
+                                        node.annotation = Some(comment.to_owned());
+                                    }
+                                    let _ = self.pairs.next();
+                                } else {
+                                    break 'look_for_comment;
+                                }
+                            } else {
+                                break 'look_for_comment;
+                            }
+                        }
+                    }
+                    Some(node)
+                }
+            }
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(feature = "parser")]
-fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
+fn parse_definition(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
     use owo_colors::OwoColorize;
 
     let lc = pair.as_span().start_pos().line_col();
     let src = pair.as_str().to_owned();
 
-    let mut tokens = attach_comments(
-        pair.into_inner()
-            .map(rec_parse)
-            .collect::<Result<Vec<_>>>()?,
-    )
-    .into_iter();
+    let tokens = Commenter::new(source, pair.into_inner()).collect::<Result<Vec<_>>>()?;
+    let mut tokens = tokens.into_iter();
 
     match tokens.next().unwrap().as_symbol()? {
         "module" => {
@@ -750,16 +847,11 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                     .chunks(2)
                     .into_iter()
                     .map(|mut chunk| {
-                        let name = chunk
-                            .next()
-                            .ok_or_else(|| anyhow!("adsf"))?
-                            .as_symbol()
-                            .with_context(|| anyhow!("invalid constant name"))?
-                            .to_owned();
+                        let name = chunk.next().ok_or_else(|| anyhow!("adsf"))?.to_owned();
                         let value = chunk
                             .next()
                             .ok_or_else(|| anyhow!("expected value for {}", name))?;
-                        Ok((name, Box::new(value)))
+                        Ok((Box::new(name), Box::new(value)))
                     })
                     .collect::<Result<Vec<_>>>()?,
             ),
@@ -1025,7 +1117,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                             )
                         }
 
-                        signs.push(sign);
+                        signs.push(Some(sign));
                         from.push(col);
                     }
                     _ => {
@@ -1037,7 +1129,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             if signs.is_empty() {
                 bail!("no sorting criterion found")
             }
-            signs.resize(from.len(), true); // ensure that signs & froms are the same size
+            signs.resize(from.len(), None); // ensure that signs & froms are the same size
 
             Ok(AstNode {
                 class: Token::DefPermutation { from, to, signs },
@@ -1051,24 +1143,19 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
 }
 
 #[cfg(feature = "parser")]
-fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
+fn rec_parse(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
     use num_traits::{FromPrimitive, Num};
 
-    let lc = pair.as_span().start_pos().line_col();
+    let lc = pair.line_col();
     let src = pair.as_str().to_owned();
 
     match pair.as_rule() {
-        Rule::expr => rec_parse(pair.into_inner().next().unwrap()),
+        Rule::expr => Commenter::new(source, pair.into_inner()).next().unwrap(),
         Rule::definition => {
-            parse_definition(pair).with_context(|| errors::parser::make_src_error(&src, lc))
+            parse_definition(source, pair).with_context(|| errors::parser::make_src_error(&src, lc))
         }
         Rule::sexpr => {
-            let args = pair
-                .into_inner()
-                .map(rec_parse)
-                .collect::<Result<Vec<_>>>()?
-                .into_iter()
-                .collect::<Vec<_>>();
+            let args = Commenter::new(source, pair.into_inner()).collect::<Result<Vec<_>>>()?;
             Ok(AstNode {
                 class: Token::List(args),
                 lc,
@@ -1108,7 +1195,8 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         Rule::forloop => {
-            let mut pairs = pair.into_inner();
+            let mut pairs = Commenter::new(source, pair.into_inner());
+            // FIXME: do it in generator
             let for_token = AstNode {
                 class: Token::Symbol("for".into()),
                 lc,
@@ -1119,9 +1207,9 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             Ok(AstNode {
                 class: Token::List(vec![
                     for_token,
-                    rec_parse(pairs.next().unwrap())?,
-                    rec_parse(pairs.next().unwrap())?,
-                    rec_parse(pairs.next().unwrap())?,
+                    pairs.next().unwrap()?,
+                    pairs.next().unwrap()?,
+                    pairs.next().unwrap()?,
                 ]),
                 lc,
                 src,
@@ -1129,7 +1217,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         Rule::interval => {
-            let mut pairs = pair.into_inner();
+            let mut pairs = pair.into_inner(); // TODO: here
             let x1 = pairs
                 .next()
                 .map(|x| x.as_str())
@@ -1143,11 +1231,9 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
                 .map(|x| x.as_str())
                 .and_then(|x| x.parse::<isize>().ok());
             let range = match (x1, x2, x3) {
-                (Some(start), None, None) => (1..=start).collect(),
-                (Some(start), Some(stop), None) => (start..=stop).collect(),
-                (Some(start), Some(stop), Some(step)) => {
-                    (start..=stop).step_by(step.try_into()?).collect()
-                }
+                (Some(length), None, None) => Domain::Range(1, length),
+                (Some(start), Some(stop), None) => Domain::Range(start, stop),
+                (Some(start), Some(stop), Some(step)) => Domain::SteppedRange(start, step, stop),
                 x => unimplemented!("{:?}", x),
             };
             Ok(AstNode {
@@ -1158,11 +1244,11 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         Rule::immediate_range => Ok(AstNode {
-            class: Token::Range(
+            class: Token::Range(Domain::Set(
                 pair.into_inner()
                     .map(|x| x.as_str().parse::<isize>().unwrap())
                     .collect(),
-            ),
+            )),
             lc,
             src,
             annotation: None,
@@ -1180,9 +1266,10 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
                 src: src.clone(),
                 annotation: None,
             };
+            // TODO: not here
             let args = pair
                 .into_inner()
-                .map(rec_parse)
+                .map(|r| rec_parse(source, r))
                 .collect::<Result<Vec<_>>>()?;
             Ok(AstNode {
                 class: Token::List(vec![nth_token, args[0].clone(), args[1].clone()]),
@@ -1192,7 +1279,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         Rule::COMMENT => Ok(AstNode {
-            class: Token::Comment(src.trim().to_string()), //.trim_start_matches(';').trim().to_string()),
+            class: Token::Comment(src.trim().to_string()),
             src,
             lc,
             annotation: None,
@@ -1209,10 +1296,8 @@ pub fn parse(source: &str) -> Result<Ast> {
 
     for pair in CorsetParser::parse(Rule::corset, source)? {
         if pair.as_rule() == Rule::corset {
-            for constraint in pair.into_inner() {
-                if constraint.as_rule() != Rule::EOI {
-                    ast.exprs.push(rec_parse(constraint)?);
-                }
+            for constraint in Commenter::new(source, pair.into_inner()) {
+                ast.exprs.push(constraint?);
             }
         }
     }

@@ -3,19 +3,25 @@ use owo_colors::{colored::Color, OwoColorize};
 
 pub struct Tty {
     with_guides: bool,
+    align_annotations: bool,
 
     depths: Vec<usize>,
-    o: Vec<String>,
-    end_line: Option<String>,
+    o: Vec<(String, Option<String>)>,
 }
 
 impl Tty {
     pub fn new() -> Self {
         Self {
             with_guides: false,
+            align_annotations: false,
             depths: vec![0],
-            o: vec![String::new()],
-            end_line: None,
+            o: vec![(String::new(), None)],
+        }
+    }
+    pub fn align_annotations(mut self) -> Self {
+        Tty {
+            align_annotations: true,
+            ..self
         }
     }
     pub fn with_guides(self) -> Self {
@@ -25,7 +31,11 @@ impl Tty {
         }
     }
     pub fn write<S: AsRef<str>>(&mut self, l: S) {
-        self.o.last_mut().unwrap().push_str(l.as_ref());
+        let l = l.as_ref();
+        if l.contains('\n') {
+            panic!("newlines found in `{}`", l);
+        }
+        self.o.last_mut().unwrap().0.push_str(l);
     }
     pub fn shift(&mut self, d: usize) {
         self.depths.push(d);
@@ -37,13 +47,13 @@ impl Tty {
         self.depths.pop();
     }
     pub fn buffer_end(&mut self, s: String) {
-        self.end_line = Some(s);
+        if let Some(end) = self.o.last_mut().and_then(|l| l.1.as_mut()) {
+            end.push_str(&s)
+        } else {
+            self.o.last_mut().unwrap().1 = Some(s)
+        }
     }
     pub fn cr(&mut self) {
-        if let Some(ending) = self.end_line.as_ref() {
-            self.o.last_mut().unwrap().push_str(ending);
-            self.end_line = None;
-        }
         let indent = if self.with_guides {
             " ".to_string() // Account for the skipped first '|'
             + &self
@@ -56,10 +66,54 @@ impl Tty {
         } else {
             " ".repeat(self.indentation())
         };
-        self.o.push(indent);
+        self.o.push((indent, None));
     }
-    pub fn page_feed(&self) -> String {
-        self.o.join("\n")
+    pub fn page_feed(&mut self) -> String {
+        let r = if !self.align_annotations {
+            self.o
+                .iter()
+                .map(|(l, a)| {
+                    format!(
+                        "{}{}",
+                        l,
+                        a.as_ref().map(|s| s.as_str()).unwrap_or_default()
+                    )
+                })
+                .join("\n")
+        } else {
+            let max_len = if self.o.len() > 1 {
+                self.o
+                    .iter()
+                    .filter(|l| l.1.is_some())
+                    .map(|l| l.0.len())
+                    .max()
+                    .unwrap_or_default()
+                    + 1
+            } else {
+                0
+            };
+
+            self.o
+                .iter()
+                .map(|(l, a)| {
+                    if l.is_empty() {
+                        String::new()
+                    } else {
+                        format!(
+                            "{:w$}{}",
+                            l,
+                            a.as_ref().map(|s| s.as_str()).unwrap_or_default(),
+                            w = max_len
+                        )
+                    }
+                })
+                .join("\n")
+        };
+
+        self.depths = vec![0];
+        self.o = vec![Default::default()];
+
+        r
     }
     pub fn depth(&self) -> usize {
         self.depths.len()

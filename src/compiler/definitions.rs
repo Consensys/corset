@@ -75,8 +75,8 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
         } => {
             let handle = Handle::maybe_with_perspective(ctx.module(), col, ctx.perspective());
             // those are inserted for symbol lookups
-            for i in range {
-                let ith_handle = handle.ith(*i);
+            for i in range.iter() {
+                let ith_handle = handle.ith(i as usize);
                 ctx.insert_used_symbol(
                     &ith_handle.name,
                     Node::column()
@@ -93,7 +93,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                 col,
                 Node::array_column()
                     .handle(handle)
-                    .domain(range.to_owned())
+                    .domain(range.clone())
                     .base(*base)
                     .t(t.magma())
                     .build(),
@@ -101,9 +101,12 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             Ok(())
         }
         Token::DefConsts(cs) => {
-            // The actual value will be filled later on by the compile-time pass
             for c in cs.iter() {
-                ctx.insert_constant(&c.0, BigInt::from_i8(0).unwrap(), false)?;
+                let name =
+                    c.0.as_symbol()
+                        .with_context(|| anyhow!("expected constant name, found `{}`", &c.0))?;
+                // The actual value will be filled later on by the compile-time pass
+                ctx.insert_constant(name, BigInt::from_i8(0).unwrap(), false)?;
             }
             Ok(())
         }
@@ -149,7 +152,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                 Computation::Sorted {
                     froms: _froms,
                     tos: _tos.clone(),
-                    signs: signs.clone(),
+                    signs: signs.iter().map(|s| s.unwrap_or(true)).collect(),
                 },
             )?;
             Ok(())

@@ -114,18 +114,11 @@ impl Pretty for Node {
             match s.e() {
                 Expression::Const(x, _) => format!("{}", x).color(*c).to_string(),
                 Expression::Column { handle, .. } => handle.to_string().color(*c).to_string(),
-                Expression::ArrayColumn {
-                    handle,
-                    domain: range,
-                    ..
-                } => format!(
-                    "{}[{}:{}]",
-                    handle.as_handle().name,
-                    range.first().unwrap(),
-                    range.last().unwrap(),
-                )
-                .color(*c)
-                .to_string(),
+                Expression::ArrayColumn { handle, domain, .. } => {
+                    format!("{}[{}]", handle.as_handle().name, domain)
+                        .color(*c)
+                        .to_string()
+                }
                 Expression::List(cs) => format!("{{{}}}", format_list(cs, depth + 1))
                     .color(*c)
                     .to_string(),

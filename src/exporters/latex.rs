@@ -237,7 +237,7 @@ fn render_node(n: &AstNode, state: State) -> Result<String> {
         Token::DefConsts(cs) => {
             let body = cs
                 .iter()
-                .map(|c| format!("\\text{{{}}} \\triangleq {:?}", sanitize(&c.0), c.1))
+                .map(|c| format!("\\text{{{}}} \\triangleq {:?}", sanitize(&c.0.as_symbol().unwrap()), c.1))
                 .collect::<Vec<_>>()
                 .join("\\\\\n");
 
@@ -264,16 +264,7 @@ fn render_node(n: &AstNode, state: State) -> Result<String> {
             if domain.is_none() {
                 "".to_owned()
             } else {
-                format!("({})",
-                        domain
-                        .as_ref()
-                        .map(|d| d
-                             .iter()
-                             .map(|x| x.to_string())
-                             .collect::<Vec<_>>()
-                             .join(", "))
-                        .unwrap_or_else(|| "".into())
-                )
+                format!("({:?})", domain)
             },
             render_node(body, state.in_maths(false))?,
         )),
@@ -359,7 +350,7 @@ fn consts(ast: &Ast) -> Vec<LatexConst> {
     fn _consts(n: &AstNode, consts: &mut Vec<LatexConst>) {
         if let Token::DefConsts(cs) = &n.class {
             for (name, exp) in cs.iter() {
-                consts.push((name.to_owned(), *exp.to_owned()))
+                consts.push((name.as_symbol().unwrap().to_owned(), *exp.to_owned()))
             }
         } else {
             unreachable!()
