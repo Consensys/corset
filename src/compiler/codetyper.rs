@@ -19,16 +19,12 @@ impl Tty {
         }
     }
     pub fn align_annotations(mut self) -> Self {
-        Tty {
-            align_annotations: true,
-            ..self
-        }
+        self.align_annotations = true;
+        self
     }
-    pub fn with_guides(self) -> Self {
-        Tty {
-            with_guides: true,
-            ..self
-        }
+    pub fn with_guides(mut self) -> Self {
+        self.with_guides = true;
+        self
     }
     pub fn write<S: AsRef<str>>(&mut self, l: S) {
         let l = l.as_ref();

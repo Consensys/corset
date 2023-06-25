@@ -290,8 +290,7 @@ impl Token {
     pub fn debug_info(&self) -> Option<String> {
         match self {
             Token::Value(x) => Some(format!("{}", x)),
-            Token::Symbol(ref name) => Some(format!("{}", name)),
-            Token::Keyword(ref name) => Some(format!("{}", name)),
+            Token::Symbol(ref name) | Token::Keyword(ref name) => Some(name.to_string()),
             Token::List(ref args) => {
                 if let Some(verb) = args.get(0) {
                     if let Ok(verb) = verb.as_symbol() {
@@ -446,21 +445,27 @@ fn parse_defconstraint<I: Iterator<Item = AstNode>>(
     let name = tokens
         .next()
         .with_context(|| anyhow!("missing constraint name"))?;
-    name.annotation.as_ref().map(|s| annotations.push_str(s));
+    if let Some(s) = name.annotation.as_ref() {
+        annotations.push_str(s)
+    }
     let name = name.as_symbol()?.to_owned();
 
     let (domain, guard, perspective) = {
         let guards = tokens
             .next()
             .with_context(|| anyhow!("missing guards in constraint definitions"))?;
-        guards.annotation.as_ref().map(|s| annotations.push_str(s));
+        if let Some(s) = guards.annotation.as_ref() {
+            annotations.push_str(s)
+        }
 
         let mut status = GuardParser::Begin;
         let mut domain = None;
         let mut guard = None;
         let mut perspective = None;
         for x in guards.as_list()?.iter() {
-            x.annotation.as_ref().map(|s| annotations.push_str(s));
+            if let Some(s) = x.annotation.as_ref() {
+                annotations.push_str(s)
+            }
             match status {
                 GuardParser::Begin => match x.class {
                     Token::Keyword(ref kw) if kw == ":guard" => status = GuardParser::Guard,
@@ -531,7 +536,7 @@ fn parse_defconstraint<I: Iterator<Item = AstNode>>(
         },
         src,
         lc,
-        annotation: if annotations.len() > 0 {
+        annotation: if !annotations.is_empty() {
             Some(annotations)
         } else {
             None
@@ -755,7 +760,7 @@ impl<'i> std::iter::Iterator for Commenter<'i> {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(pair) = self.pairs.next() {
             match pair.as_rule() {
-                Rule::EOI => return None,
+                Rule::EOI => None,
                 // Free-standing are aggregated into blocks
                 Rule::COMMENT => {
                     let mut acc = pair.as_str().to_string();
@@ -847,7 +852,7 @@ fn parse_definition(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
                     .chunks(2)
                     .into_iter()
                     .map(|mut chunk| {
-                        let name = chunk.next().ok_or_else(|| anyhow!("adsf"))?.to_owned();
+                        let name = chunk.next().ok_or_else(|| anyhow!("adsf"))?;
                         let value = chunk
                             .next()
                             .ok_or_else(|| anyhow!("expected value for {}", name))?;
@@ -904,13 +909,13 @@ fn parse_definition(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
                 }
             }
 
-            let mut decl = tokens
+            let decl = tokens
                 .next()
                 .ok_or_else(|| anyhow!("expected function declaration"))?
                 .as_list()
                 .with_context(|| anyhow!("invalid function declaration"))?
-                .to_vec()
-                .into_iter();
+                .to_vec();
+            let mut decl = decl.into_iter();
 
             let (name, out_type, nowarn) = parse_typed_symbols(
                 decl.next()

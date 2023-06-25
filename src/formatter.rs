@@ -41,13 +41,12 @@ fn format_defunction(
 ) {
     let fmt_name = if nowarn || out_type.is_some() {
         [
-            Some(name.clone()),
+            Some(name),
             out_type.map(|t| magma_to_kw(t.magma())).as_deref(),
             if nowarn { Some(":nowarn") } else { None },
         ]
         .into_iter()
-        .filter(|x| x.is_some())
-        .map(|x| x.unwrap())
+        .flatten()
         .join(" ")
     } else {
         name.to_string()
@@ -138,7 +137,7 @@ impl AstNode {
                         let merge = ((n.depth() < 2 && n.len() + tty.indentation() <= 10000)
                             || (n.depth() < 3 && n.len() < 50))
                             && !ns.iter().any(|n| n.annotation.is_some());
-                        if let Some(fname) = ns[0].as_symbol().ok() {
+                        if let Ok(fname) = ns[0].as_symbol() {
                             tty.write(format!("({fname} "));
                             maybe_comment(n, tty);
                             tty.shift(fname.len() + 2);
@@ -165,7 +164,7 @@ impl AstNode {
                             tty.unshift();
                             tty.write(")");
                         } else {
-                            tty.write(format!("("));
+                            tty.write("(");
                             tty.shift(1);
                             let mut args = ns.iter().peekable();
                             while let Some(a) = args.next() {
@@ -419,8 +418,7 @@ impl AstNode {
                         },
                     ]
                     .into_iter()
-                    .filter(|x| x.is_some())
-                    .map(|x| x.unwrap().replace('\n', " "))
+                    .filter_map(|x| x.map(|x| x.split_whitespace().join(" ")))
                     .join(" ");
 
                     tty.write(&format!("(defconstraint {name} ({opts})"));
@@ -435,7 +433,7 @@ impl AstNode {
 
                     _format(body, tty);
 
-                    tty.write(&format!(")"));
+                    tty.write(")");
 
                     if body.depth() > 0 {
                         tty.cr();

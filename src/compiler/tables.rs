@@ -705,7 +705,7 @@ impl Scope {
                 if let Some(Function { ref mut class, .. }) = data_mut!(self).funcs.get_mut(name) {
                     return match class {
                         FunctionClass::UserDefined(ref mut defined) => defined
-                            .add_specialization(&new_specialization)
+                            .add_specialization(new_specialization)
                             .with_context(|| anyhow!("while defining {}", name.yellow())),
                         _ => {
                             bail!(symbols::Error::FunctionAlreadyExists(

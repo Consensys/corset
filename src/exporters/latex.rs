@@ -237,7 +237,7 @@ fn render_node(n: &AstNode, state: State) -> Result<String> {
         Token::DefConsts(cs) => {
             let body = cs
                 .iter()
-                .map(|c| format!("\\text{{{}}} \\triangleq {:?}", sanitize(&c.0.as_symbol().unwrap()), c.1))
+                .map(|c| format!("\\text{{{}}} \\triangleq {:?}", sanitize(c.0.as_symbol().unwrap()), c.1))
                 .collect::<Vec<_>>()
                 .join("\\\\\n");
 

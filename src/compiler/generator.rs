@@ -164,14 +164,14 @@ impl Defined {
 
     pub(crate) fn get_specialization(&self, args_t: &[Type]) -> Result<&Specialization> {
         for s in self.specializations.iter() {
-            if crate::compiler::compatible_with(&s.in_types, &args_t) {
+            if crate::compiler::compatible_with(&s.in_types, args_t) {
                 return Ok(s);
             }
         }
         error!("available specializations:");
         for s in self.specializations.iter() {
             let (expected_str, found_str) =
-                errors::compiler::type_comparison_message(&s.in_types, &args_t);
+                errors::compiler::type_comparison_message(&s.in_types, args_t);
             error!(
                 "expected {} mismatches with found {}",
                 expected_str, found_str
