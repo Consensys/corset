@@ -1161,11 +1161,12 @@ fn rec_parse(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
         }
         Rule::sexpr => {
             let args = Commenter::new(source, pair.into_inner()).collect::<Result<Vec<_>>>()?;
+            let annotation = args.get(0).and_then(|a| a.annotation.clone());
             Ok(AstNode {
                 class: Token::List(args),
                 lc,
                 src,
-                annotation: None,
+                annotation,
             })
         }
         Rule::symbol | Rule::definition_kw => Ok(AstNode {

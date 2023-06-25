@@ -140,7 +140,12 @@ impl AstNode {
                         if let Ok(fname) = ns[0].as_symbol() {
                             tty.write(format!("({fname} "));
                             maybe_comment(n, tty);
-                            tty.shift(fname.len() + 2);
+                            if n.annotation.is_some() {
+                                tty.shift(2);
+                                tty.cr();
+                            } else {
+                                tty.shift(fname.len() + 2);
+                            }
                             // TODO: burn it with fire
                             if fname.starts_with("if-eq") {
                                 _format(&ns[1], tty);
