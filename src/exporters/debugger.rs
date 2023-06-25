@@ -121,7 +121,7 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
         },
         Expression::Const(x, _) => tty.write(x.to_string()),
         Expression::Column { handle, .. } => {
-            let color = handle.to_string().chars().fold(0, |ax, c| ax + c as usize) % 255 + 1;
+            let color = handle.to_string().chars().fold(19, |ax, c| ax + c as usize) % 230;
             tty.write(
                 handle
                     .to_string()
