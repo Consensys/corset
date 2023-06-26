@@ -10,14 +10,13 @@
  * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
-package net.consensys.zktracer.module.{{ module }};
+package net.consensys.linea.zktracer.module.{{ module }};
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
-import net.consensys.zktracer.bytes.UnsignedByte;
+import net.consensys.linea.zktracer.bytes.UnsignedByte;
 
 @SuppressWarnings("unused")
 public record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace) {

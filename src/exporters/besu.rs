@@ -1,6 +1,9 @@
 use std::io::Write;
 
-use crate::compiler::{ConstraintSet, Kind, Magma};
+use crate::{
+    compiler::{ConstraintSet, Kind, Magma},
+    structs::Handle,
+};
 use anyhow::*;
 use convert_case::{Case, Casing};
 use handlebars::Handlebars;
@@ -53,6 +56,17 @@ fn magmat_to_java_type(m: Magma) -> String {
     .to_string()
 }
 
+fn handle_to_appender(h: &Handle) -> String {
+    format!(
+        "append{}{}",
+        h.perspective
+            .as_ref()
+            .unwrap_or(&String::new())
+            .to_case(Case::Pascal),
+        h.name.to_case(Case::Pascal)
+    )
+}
+
 pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Result<()> {
     let registers = cs
         .columns
@@ -83,7 +97,7 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
                     corset_name: c.handle.name.to_string(),
                     java_name: c.handle.name.to_case(Case::Camel),
                     tupe: magmat_to_java_type(c.t.magma()).into(),
-                    appender: format!("append{}", c.handle.name.to_case(Case::Pascal)),
+                    appender: handle_to_appender(&c.handle),
                     register,
                 })
             } else {
