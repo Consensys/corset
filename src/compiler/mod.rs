@@ -63,7 +63,9 @@ fn maybe_bail<R>(errs: Vec<Result<R>>) -> Result<Vec<R>> {
 }
 
 #[cfg(feature = "parser")]
-pub fn parse_ast<S1: AsRef<str>, S2: AsRef<str>>(sources: &[(S1, S2)]) -> Result<Vec<Ast>> {
+pub fn parse_ast<S1: AsRef<str>, S2: AsRef<str>>(
+    sources: &[(S1, S2)],
+) -> Result<Vec<(String, Ast)>> {
     maybe_bail(
         sources
             .iter()
@@ -71,6 +73,7 @@ pub fn parse_ast<S1: AsRef<str>, S2: AsRef<str>>(sources: &[(S1, S2)]) -> Result
                 info!("Parsing {}", name.as_ref().bright_white().bold());
                 parser::parse(content.as_ref())
                     .with_context(|| anyhow!("parsing `{}`", name.as_ref()))
+                    .map(|ast| (name.as_ref().to_string(), ast))
             })
             .collect::<Vec<_>>(),
     )

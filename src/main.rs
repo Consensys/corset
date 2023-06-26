@@ -258,7 +258,11 @@ enum Commands {
     },
     /// Format the given source in an idiomatic way
     Format {
-        #[arg(short = 'i', long = "inplace", help = "format the given file in-place")]
+        #[arg(
+            short = 'i',
+            long = "in-place",
+            help = "format the given file in-place"
+        )]
         inplace: bool,
     },
     /// Given a set of constraints, indefinitely check the traces from an SQL table
@@ -360,7 +364,7 @@ impl ConstraintSetBuilder {
         sources
     }
 
-    fn to_ast(&self) -> Result<Vec<Ast>> {
+    fn to_ast(&self) -> Result<Vec<(String, Ast)>> {
         match self.source.as_ref() {
             Either::Left(sources) => compiler::parse_ast(&self.prepare_sources(sources)),
             Either::Right(_) => bail!("unable to retrieve AST from compiled CponstraintSet"),
@@ -381,6 +385,8 @@ impl ConstraintSetBuilder {
 
 #[cfg(feature = "cli")]
 fn main() -> Result<()> {
+    use std::fs::File;
+
     let args = Args::parse();
     buche::new()
         .verbosity(args.verbose.log_level_filter())
@@ -472,7 +478,15 @@ fn main() -> Result<()> {
         Commands::Latex {
             constraints_filename,
         } => {
-            exporters::latex::render(&builder.to_ast()?, constraints_filename)?;
+            exporters::latex::render(
+                builder
+                    .to_ast()?
+                    .into_iter()
+                    .map(|x| x.1)
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+                constraints_filename,
+            )?;
         }
         Commands::Compute {
             tracefile,
@@ -687,8 +701,13 @@ fn main() -> Result<()> {
         Commands::Format { inplace } => {
             builder.no_stdlib = true;
             let asts = builder.to_ast()?;
-            for ast in asts.iter() {
-                println!("{}", ast.format());
+            for (filename, ast) in asts.iter() {
+                let formatted = ast.format();
+                if inplace {
+                    File::create(filename)?.write_all(formatted.as_bytes())?;
+                } else {
+                    println!("{}", formatted);
+                }
             }
         }
         Commands::Compile { outfile, pretty } => {
