@@ -168,6 +168,14 @@ fn global_scope() {
 fn definterleave() {
     must_run(
         "definterleave ok",
-        "(defcolumns A B (C :array [1:4])) (definterleaved D (A [C 2] B ))",
+        "(defcolumns A B (C :array [1:4])) (definterleaved (D :display :hex) (A [C 2] B ))",
+    );
+    must_fail(
+        "cannot specify type in :definterleaved",
+        "(defcolumns A (B :byte) (C :array [1:4])) (definterleaved (D :byte) (A [C 2] B ))",
+    );
+    must_fail(
+        "already exists in :definterleaved",
+        "(defcolumns A (B :byte) (C :array [1:4])) (definterleaved A (A [C 2] B ))",
     );
 }
