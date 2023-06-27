@@ -559,7 +559,7 @@ struct ColumnAttributes {
 
 /// Example: in `defcolumns(A, (B :boolean), (C :display :hex :byte))`,
 /// this function should be called on ['A'], ['B', ':boolean'], ['C', ':display', ':hex', ':byte']
-fn extract_column_attributes(tokens: Vec<AstNode>) -> Result<ColumnAttributes> {
+fn extract_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
     enum ColumnParser {
         Begin,
         Array,
@@ -567,12 +567,21 @@ fn extract_column_attributes(tokens: Vec<AstNode>) -> Result<ColumnAttributes> {
         PaddingValue,
         Base,
     }
-
     let mut attributes = ColumnAttributes::default();
-
     let mut state = ColumnParser::Begin;
 
-    let mut tokens = tokens.iter();
+    let tokens = if source.is_symbol() {
+        // a column defined by its name, without any particular attribute
+        vec![source]
+    } else if let Token::List(l) = source.class {
+        l
+    } else {
+        unreachable!()
+    };
+
+    let mut tokens = tokens.into_iter();
+    
+
     let name_token = tokens
         .next()
         .ok_or_else(|| anyhow!("expected column name, found empty list"))?;
@@ -705,16 +714,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
     let columns = tokens
         .map(|c| {
             c.and_then(|c| {
-                let tokens = if c.is_symbol() {
-                    // a column defined by its name, without any particular attribute
-                    vec![c.clone()]
-                } else if let Token::List(l) = c.class {
-                    l
-                } else {
-                    unreachable!()
-                };
-
-                let column_attributes = extract_column_attributes(tokens)?;
+                let column_attributes = extract_column_attributes(c.clone())?;
 
                 let base = column_attributes.base.get().cloned().unwrap_or(Base::Hex);
                 Ok(AstNode {
@@ -1076,11 +1076,15 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         "definterleaved" => {
-            let mut tokens = tokens.collect::<Result<Vec<_>>>()?;
+            let target_attributes = extract_column_attributes(
+                tokens
+                    .next()
+                    .with_context(|| anyhow!("missing source column"))??,
+            )?;
 
             let froms = tokens
-                .pop()
-                .with_context(|| anyhow!("missing source columns"))?
+                .next()
+                .with_context(|| anyhow!("missing source columns"))??
                 .as_list()?
                 .iter()
                 .map(|from| {
@@ -1091,8 +1095,6 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                     }
                 })
                 .collect::<Result<Vec<_>>>()?;
-
-            let target_attributes = extract_column_attributes(tokens)?;
 
             for (attribute, exists) in [
                 ("type", target_attributes.t.get().is_some()),
