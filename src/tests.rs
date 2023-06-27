@@ -195,3 +195,11 @@ fn defpermutation() {
         "(defcolumns A (B :byte ) C (D :array [0:4])) (defpermutation (X Y (Z :display :hex)) ((- A) [D 2] (- C)))",
     );
 }
+
+#[test]
+fn base_declaration() {
+    must_fail(
+        "cannot redefine base",
+        "(defcolumns (A :display :hex :display :dec))",
+    );
+}
