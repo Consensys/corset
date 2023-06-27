@@ -1056,13 +1056,15 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                                 bail!("too many arguments in source column {}", from_w_sign.src)
                             }
                             from.push(list[1].clone());
-                        } else {
-                            ordering_ongoing = false;
+                            continue;
                         }
                     }
                 }
+                // there is no sign
+                ordering_ongoing = false;
+                from.push(from_w_sign.clone());
             }
-
+            dbg!(&from);
             if signs.is_empty() {
                 bail!("no sorting criterion found")
             }
