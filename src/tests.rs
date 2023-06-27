@@ -179,3 +179,19 @@ fn definterleave() {
         "(defcolumns A (B :byte) (C :array [1:4])) (definterleaved A (A [C 2] B ))",
     );
 }
+
+#[test]
+fn defpermutation() {
+    must_run(
+        "defpermutation ok",
+        "(defcolumns A (B :byte ) C (D :array [0:4])) (defpermutation (X (Y :display :hex)) ((+ A) (- [D 2])))",
+    );
+    must_fail(
+        "defpermutation: cardinality mismatch",
+        "(defcolumns A (B :byte ) C (D :array [0:4])) (defpermutation (X F (Y :display :hex)) ((+ A) (- [D 2])))",
+    );
+    must_fail(
+        "found sorting column after non-sorting column",
+        "(defcolumns A (B :byte ) C (D :array [0:4])) (defpermutation (X Y (Z :display :hex)) ((- A) [D 2] (- C)))",
+    );
+}
