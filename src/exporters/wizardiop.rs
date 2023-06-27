@@ -8,7 +8,7 @@ use std::{collections::HashSet, io::Write};
 use anyhow::*;
 use convert_case::{Case, Casing};
 
-use crate::{compiler::*, pretty::Pretty, structs::Handle};
+use crate::{column::Computation, compiler::*, pretty::Pretty, structs::Handle};
 
 // const SIZE: usize = 4_194_304;
 
@@ -258,8 +258,7 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
         // Interleaved columns should appear after their sources
         .sorted_by_cached_key(|c| {
             (
-                if todo!() {
-                    // if !matches!(c.1.kind, Kind::Interleaved { .. }) {
+                if cs.computations.get(c.0.as_id()).map(|c| c.is_interleaved()) != Some(true) {
                     0
                 } else {
                     1
@@ -283,19 +282,19 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
                         }
                     )
                 }
-            } // Kind::Interleaved { froms: sources } => {
-              //     r += &format!(
-              //         "{} := zkevm.Interleave({})\n",
-              //         reg_mangle(cs, &h).unwrap(),
-              //         sources
-              //             .iter()
-              //             .map(|c| reg_mangle(cs, c).unwrap())
-              //             .collect::<Vec<_>>()
-              //             .join(", ")
-              //     );
-              // }
+            }
         }
-        todo!("cf just above")
+        if let Some(Computation::Interleaved { froms, .. }) = cs.computations.get(h.as_id()) {
+            r += &format!(
+                "{} := zkevm.Interleave({})\n",
+                reg_mangle(cs, &h).unwrap(),
+                froms
+                    .iter()
+                    .map(|c| reg_mangle(cs, c).unwrap())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
     }
 
     r

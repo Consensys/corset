@@ -481,4 +481,8 @@ impl Computation {
                 .join(", "),
         }
     }
+
+    pub fn is_interleaved(&self) -> bool {
+        matches!(self, Computation::Interleaved { .. })
+    }
 }
