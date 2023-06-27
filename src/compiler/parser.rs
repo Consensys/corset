@@ -237,7 +237,7 @@ pub enum Token {
         signs: Vec<bool>,
     },
     DefInterleaving {
-        /// new column, which will be filled by interleaving of the source columns
+        /// new column, which will be filled by the interleaving of the source columns
         target: DisplayableColumn,
         /// the source columns to be interleaved
         froms: Vec<AstNode>, // either Token::Symbol or Token::IndexedSymbol
@@ -783,8 +783,6 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
 
 #[cfg(feature = "parser")]
 fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
-    use anyhow::Ok;
-
     let lc = pair.as_span().start_pos().line_col();
     let src = pair.as_str().to_owned();
 

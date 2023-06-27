@@ -1224,7 +1224,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                     .flatten()
                     .map(|b| b.to_usize())
                     .flatten()
-                    .ok_or_else(|| anyhow!("{:?} is not a valid indice", index))?;
+                    .ok_or_else(|| anyhow!("{:?} is not a valid index", index))?;
                 let array = ctx.resolve_handle(handle.as_handle())?;
                 match array.e() {
                     Expression::ArrayColumn {
@@ -1288,10 +1288,12 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
             _ => Ok(None),
         },
         Token::DefInterleaving { target, froms } => {
-            let target_handle = match ctx.resolve_symbol(&target.name)?.e() {
-                Expression::Column { handle, .. } => handle.clone(),
-                _ => unreachable!(),
-            };
+            let target_handle =
+                if let Expression::Column { handle, .. } = ctx.resolve_symbol(&target.name)?.e() {
+                    handle.to_owned()
+                } else {
+                    unreachable!()
+                };
 
             let mut from_handles = Vec::new();
             for from in froms {
@@ -1300,7 +1302,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                         if let Expression::Column { handle, .. } = ctx.resolve_symbol(name)?.e() {
                             from_handles.push(handle.clone());
                         } else {
-                            bail!("{name} is not a column");
+                            bail!("{} is not a column", name.white().bold());
                         }
                     }
                     Token::IndexedSymbol { name, index } => {
@@ -1312,7 +1314,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                                 .flatten()
                                 .map(|b| b.to_usize())
                                 .flatten()
-                                .ok_or_else(|| anyhow!("{:?} is not a valid indice", index))?;
+                                .ok_or_else(|| anyhow!("{:?} is not a valid index", index))?;
 
                             if !domain.contains(&index_usize) {
                                 bail!("Index {} is not in domain {:?}", index_usize, domain);
