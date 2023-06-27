@@ -94,7 +94,9 @@ pub enum Kind<T> {
     /// a composite column is similar to a phantom column, but the expression
     /// computing it is known
     Composite(Box<T>),
-    Interleaved(Vec<T>, Option<Vec<ColumnRef>>),
+    Interleaved {
+        froms: Vec<ColumnRef>,
+    },
 }
 impl<T> Kind<T> {
     pub fn to_nil(&self) -> Kind<()> {
@@ -102,7 +104,7 @@ impl<T> Kind<T> {
             Kind::Atomic => Kind::Atomic,
             Kind::Phantom => Kind::Phantom,
             Kind::Composite(_) => Kind::Composite(Box::new(())),
-            Kind::Interleaved(_, xs) => Kind::Interleaved(vec![], xs.clone()),
+            Kind::Interleaved { .. } => Kind::Interleaved { froms: Vec::new() }, // TODO check that it works
         }
     }
 }
@@ -123,6 +125,12 @@ impl std::fmt::Display for Symbol {
             Symbol::Path(ss) => write!(f, "{}", ss.join(":")),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum ColumnArg {
+    Normal { name: String },
+    WithIndex { name: String, index: usize },
 }
 
 #[derive(Clone)]
@@ -226,7 +234,7 @@ pub enum Token {
         /// which numeric base should be used to display column values; this is a purely aesthetic setting
         base: Base,
         /// the source columns to be interleaved
-        sources: Vec<AstNode>,
+        froms: Vec<ColumnArg>,
     },
     /// declaration of a plookup constraint between two sets of columns
     DefPlookup {
@@ -387,7 +395,11 @@ impl Debug for Token {
                 trigger,
                 columns,
             } => write!(f, "SET {}/{:?} {:?}", name, trigger, columns),
-            Token::DefInterleaving { target, sources, .. } => {
+            Token::DefInterleaving {
+                target,
+                froms: sources,
+                ..
+            } => {
                 write!(f, "Interleaving {} by {:?}", target, sources)
             }
         }
@@ -590,7 +602,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                                         t = Some(kw.as_str().try_into()?);
                                                     }
                                                     ColumnParser::Begin
-                                                }                                            
+                                                }
                                             // not really used for now.
                                             ":comp" => ColumnParser::Computation,
                                             // e.g. (A :array {1 3 5}) or (A :array [5])
@@ -679,6 +691,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
 
 #[cfg(feature = "parser")]
 fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
+    use anyhow::Ok;
     use owo_colors::OwoColorize;
 
     let lc = pair.as_span().start_pos().line_col();
@@ -994,7 +1007,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 src,
                 lc,
             })
-        },
+        }
         "definterleaved" => {
             let target = tokens
                 .next()
@@ -1002,10 +1015,8 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 .as_symbol()
                 .map(String::from)?;
 
-            let mut next = tokens.next();
-            
             let mut base = Base::Dec;
-            // TODO
+            // TODO base
             // if next.as_ref().map(|n| {
             //         Some(n.as_ref().ok()?.as_symbol().ok()?.to_string())
             //     }).flatten() == Some(":display".to_owned()) {
@@ -1025,17 +1036,48 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             //     next = tokens.next();
             // }
 
-            let sources = next
+            // let sources = next
+            //     .with_context(|| anyhow!("missing source columns"))??
+            //     .as_list()?
+            //     .to_vec();
+
+            let froms = tokens
+                .next()
                 .with_context(|| anyhow!("missing source columns"))??
                 .as_list()?
-                .to_vec();
-            
+                .iter()
+                .map(|from| {
+                    if let std::result::Result::Ok(list) = from.as_list() {
+                        if list.len() != 3
+                            || list[0].as_symbol().is_ok() && list[0].as_symbol().unwrap() != "nth"
+                            || list[1].as_symbol().is_err()
+                            || list[2].as_u64().is_err()
+                        {
+                            bail!("Malformed column argument: {}", from)
+                        }
+                        let name = list[1].as_symbol().unwrap().to_owned();
+                        let index = list[2].as_u64().unwrap() as usize;
+                        Ok(ColumnArg::WithIndex { name, index })
+                    } else {
+                        let name = from
+                            .as_symbol()
+                            .with_context(|| anyhow!("expected column name, found {}", from))?
+                            .to_owned();
+                        Ok(ColumnArg::Normal { name })
+                    }
+                })
+                .collect::<Result<Vec<_>>>()?;
+
             if !tokens.next().is_none() {
                 bail!("too many parameters");
             }
 
             Ok(AstNode {
-                class: Token::DefInterleaving { target, sources, base },
+                class: Token::DefInterleaving {
+                    target,
+                    froms,
+                    base,
+                },
                 src,
                 lc,
             })

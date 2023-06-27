@@ -58,14 +58,59 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     Kind::Phantom => Kind::Phantom,
                     // The actual expression is computed by the generator
                     Kind::Composite(_) => Kind::Phantom,
-                    Kind::Interleaved(..) => unreachable!(),
+                    Kind::Interleaved { .. } => unreachable!(),
                 })
                 .and_padding_value(*padding_value)
                 .t(t.magma())
                 .build();
             ctx.insert_symbol(col, symbol)
         }
-        Token::DefInterleaving { .. } => Ok(()),
+        Token::DefInterleaving {
+            target,
+            froms: args,
+            base,
+        } => {
+            let module_name = ctx.module();
+
+            let mut sources = Vec::new();
+            for arg in args {
+                match arg {
+                    ColumnArg::Normal { name } => {
+                        if let Expression::Column { handle, .. } = ctx.resolve_symbol(name)?.e() {
+                            sources.push(handle.clone());
+                        } else {
+                            bail!("{name} is not a column");
+                        };
+                    }
+                    ColumnArg::WithIndex { name, index } => {
+                        if let Expression::ArrayColumn { handle, domain, .. } =
+                            ctx.resolve_symbol(name)?.e()
+                        {
+                            if !domain.contains(index) {
+                                bail!("Index {} is not in domain {:?}", index, domain);
+                            }
+                            sources.push(ColumnRef::from_handle(
+                                handle.as_handle().ith(*index as usize),
+                            ));
+                        } else {
+                            bail!("{name} is not an array column");
+                        };
+                    }
+                }
+            }
+
+            let symbol = Node::column()
+                .handle(Handle::maybe_with_perspective(
+                    // TODO unsure about this
+                    module_name,
+                    target,
+                    ctx.perspective(),
+                ))
+                .kind(Kind::Interleaved { froms: sources })
+                .base(base.clone())
+                .build();
+            ctx.insert_symbol(target, symbol)
+        }
         Token::DefArrayColumn {
             name: col,
             domain: range,
