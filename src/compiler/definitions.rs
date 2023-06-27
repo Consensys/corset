@@ -5,10 +5,8 @@ use num_traits::FromPrimitive;
 
 use super::generator::{Defined, Function, FunctionClass, Specialization};
 use super::tables::Scope;
-use super::{ColumnRef, Expression, Node};
-use crate::column::Computation;
+use super::{Magma, Node};
 use crate::compiler::parser::*;
-use crate::pretty::Base;
 use crate::structs::Handle;
 
 fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
@@ -65,23 +63,19 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                 .build();
             ctx.insert_symbol(col, symbol)
         }
-        Token::DefInterleaving {
-            target,
-            froms: _,
-            base,
-        } => {
+        Token::DefInterleaving { target, froms: _ } => {
             let node = Node::column()
                 .handle(Handle::maybe_with_perspective(
                     // TODO unsure about this
                     ctx.module(),
-                    target,
+                    target.name.clone(),
                     ctx.perspective(),
                 ))
                 .kind(Kind::Phantom)
-                .base(base.clone())
+                .base(target.base.clone())
                 .build();
 
-            ctx.insert_symbol(target, node)
+            ctx.insert_symbol(&target.name, node)
         }
         Token::DefArrayColumn {
             name: col,
@@ -126,7 +120,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
         Token::DefPermutation {
             from: froms,
             to: tos,
-            signs,
+            signs: _,
         } => {
             if tos.len() != froms.len() {
                 bail!(
@@ -136,38 +130,18 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                 );
             }
 
-            let mut _froms = Vec::<ColumnRef>::new();
-            let mut _tos = Vec::<ColumnRef>::new();
-            for (to, from) in tos.iter().zip(froms.iter()) {
-                let to_handle = Handle::new(ctx.module(), to);
-                let from_actual = ctx.resolve_symbol(from)?;
-
-                if let Expression::Column { handle, .. } = from_actual.e() {
-                    ctx.insert_symbol(
-                        to,
-                        Node::column()
-                            .handle(to_handle.clone())
-                            .kind(Kind::Phantom)
-                            .t(from_actual.t().magma())
-                            .base(Base::Hex)
-                            .build(),
-                    )
-                    .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
-                    _froms.push(handle.clone());
-                    _tos.push(to_handle.into());
-                } else {
-                    unreachable!()
-                };
+            for to in tos {
+                ctx.insert_symbol(
+                    &to.name,
+                    Node::column()
+                        .handle(Handle::new(ctx.module(), to.name.clone()))
+                        .kind(Kind::Phantom)
+                        .t(Magma::Integer) // TODO previously we took the type of the corresponding 'from' column, is that a problem?
+                        .base(to.base.clone())
+                        .build(),
+                )
+                .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
             }
-
-            ctx.insert_many_computations(
-                &_tos,
-                Computation::Sorted {
-                    froms: _froms,
-                    tos: _tos.clone(),
-                    signs: signs.clone(),
-                },
-            )?;
             Ok(())
         }
         Token::DefAliases(aliases) => aliases

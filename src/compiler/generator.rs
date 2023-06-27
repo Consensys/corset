@@ -1287,12 +1287,8 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
             }
             _ => Ok(None),
         },
-        Token::DefInterleaving {
-            target,
-            base: _,
-            froms,
-        } => {
-            let target_handle = match ctx.resolve_symbol(target)?.e() {
+        Token::DefInterleaving { target, froms } => {
+            let target_handle = match ctx.resolve_symbol(&target.name)?.e() {
                 Expression::Column { handle, .. } => handle.clone(),
                 _ => unreachable!(),
             };
@@ -1502,36 +1498,43 @@ fn reduce_toplevel(
         | Token::DefunAlias(..)
         | Token::DefConsts(..) => Ok(None),
         Token::DefPermutation { from, to, signs } => {
-            // We look up the columns involved in the permutation just to ensure that they
-            // are marked as "used" in the symbol table
             let froms = from
                 .iter()
                 .map(|from| {
-                    if let Expression::Column { handle, .. } = ctx
-                        .resolve_symbol(from)
-                        .with_context(|| "while defining permutation")?
-                        .e()
-                    {
-                        Ok(handle.to_owned())
-                    } else {
-                        unreachable!()
+                    if let Some(n) = reduce(from, ctx, settings)? {
+                        if let Expression::Column { handle, .. } = n.e() {
+                            return Ok(handle.clone());
+                        }
                     }
+                    bail!("`{}` is not a column", from)
                 })
                 .collect::<Result<Vec<_>>>()?;
+
+            // TODO is this needed?
             to.iter()
-                .map(|f| ctx.resolve_symbol(f))
+                .map(|f| ctx.resolve_symbol(&f.name))
                 .collect::<Result<Vec<_>, errors::symbols::Error>>()
                 .with_context(|| anyhow!("while defining permutation"))?;
 
             let tos = to
                 .iter()
                 .enumerate()
-                .map(|(i, f)| {
-                    Handle::new(ctx.module(), f)
+                .map(|(i, t)| {
+                    Handle::new(ctx.module(), t.name.clone())
                         .and_with_perspective(froms[i].as_handle().perspective.clone())
                         .into()
                 })
                 .collect::<Vec<ColumnRef>>();
+
+            ctx.insert_many_computations(
+                &tos,
+                Computation::Sorted {
+                    froms: froms.clone(),
+                    tos: tos.clone(),
+                    signs: signs.clone(),
+                },
+            )?;
+
             Ok(Some(Constraint::Permutation {
                 handle: Handle::new(ctx.module(), names::Generator::default().next().unwrap()),
                 from: froms,

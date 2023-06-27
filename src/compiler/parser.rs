@@ -1016,11 +1016,6 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         "defpermutation" => {
-            enum SignParser {
-                Running,
-                Done,
-            }
-
             let to = tokens
                 .next()
                 .with_context(|| anyhow!("missing target columns"))??
@@ -1050,7 +1045,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                             None
                         };
                         if let Some(sign) = sign {
-                            if ordering_ongoing {
+                            if !ordering_ongoing {
                                 bail!(
                                     "found sorting column {} after non-sorting column",
                                     from_w_sign.src
