@@ -79,10 +79,14 @@ pub fn validate(t: Type, x: Fr) -> Result<Fr> {
 
 /// Remove all symbols in a symbol which are invalid in Go identifiers
 pub fn purify(s: &str) -> String {
-    s.replace(['(', ')', '{', '}', '[', ']', '<', '>', ':', '%', '.'], "_")
-        .replace('-', "sub")
-        .replace('*', "mul")
-        .replace('+', "add")
-        .replace('/', "div")
-        .replace(|c: char| !c.is_ascii(), "_")
+    s.replace(
+        ['(', ')', '{', '}', '[', ']', '<', '>', ':', '%', '.', '_'],
+        "_",
+    )
+    .replace('-', "sub")
+    .replace('*', "mul")
+    .replace('+', "add")
+    .replace('/', "div")
+    .replace('^', "pow")
+    .replace(|c: char| !c.is_ascii(), "_")
 }
