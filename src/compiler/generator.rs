@@ -1317,7 +1317,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                                 .ok_or_else(|| anyhow!("{:?} is not a valid index", index))?;
 
                             if !domain.contains(&index_usize) {
-                                bail!("Index {} is not in domain {:?}", index_usize, domain);
+                                bail!("index {} is not in domain {:?}", index_usize, domain);
                             }
                             from_handles
                                 .push(ColumnRef::from_handle(handle.as_handle().ith(index_usize)));
@@ -1492,7 +1492,7 @@ fn reduce_toplevel(
             Ok(None)
         }
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
-            bail!("Unexpected top-level form: {:?}", e)
+            bail!("unexpected top-level form: {:?}", e)
         }
         Token::Defun { .. }
         | Token::Defpurefun { .. }

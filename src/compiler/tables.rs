@@ -671,7 +671,7 @@ impl Scope {
         if data_mut!(self).constraints.insert(name.to_owned()) {
             Ok(())
         } else {
-            bail!("Constraint `{}` already defined", name)
+            bail!("constraint `{}` already defined", name)
         }
     }
 
