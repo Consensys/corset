@@ -220,6 +220,14 @@ pub enum Token {
         to: Vec<String>,
         signs: Vec<bool>,
     },
+    DefInterleaving {
+        /// name of the new column, which will be filled by interleaving of the source columns
+        target: String,
+        /// which numeric base should be used to display column values; this is a purely aesthetic setting
+        base: Base,
+        /// the source columns to be interleaved
+        sources: Vec<AstNode>,
+    },
     /// declaration of a plookup constraint between two sets of columns
     DefPlookup {
         name: String,
@@ -379,6 +387,9 @@ impl Debug for Token {
                 trigger,
                 columns,
             } => write!(f, "SET {}/{:?} {:?}", name, trigger, columns),
+            Token::DefInterleaving { target, sources, .. } => {
+                write!(f, "Interleaving {} by {:?}", target, sources)
+            }
         }
     }
 }
@@ -530,7 +541,6 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
         Begin,
         Array,
         Computation,
-        Interleaved,
         PaddingValue,
         Base,
     }
@@ -541,7 +551,6 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
             c.and_then(|c| {
                 let name;
                 let mut t = None;
-                let mut kind = Kind::Atomic;
                 let mut range = None;
                 let mut padding_value = None;
                 let mut base = Base::Dec;
@@ -581,9 +590,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                                         t = Some(kw.as_str().try_into()?);
                                                     }
                                                     ColumnParser::Begin
-                                                }
-                                            // e.g. (A ... :interleaved (X Y Z) ...)
-                                            ":interleaved" => ColumnParser::Interleaved,
+                                                }                                            
                                             // not really used for now.
                                             ":comp" => ColumnParser::Computation,
                                             // e.g. (A :array {1 3 5}) or (A :array [5])
@@ -610,18 +617,6 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                     ColumnParser::Begin
                                 }
                                 ColumnParser::Computation => todo!(),
-                                // :interleaved expects a list of column to interleave into the one
-                                // being defined
-                                ColumnParser::Interleaved => {
-                                    if !matches!(kind, Kind::Atomic) {
-                                        bail!("column {} can not be interleaved; is already {:?}", name, kind)
-                                    }
-                                    kind = Kind::Interleaved(
-                                        x.as_list()?.to_vec(),
-                                        None
-                                    );
-                                    ColumnParser::Begin
-                                }
                                 ColumnParser::PaddingValue => {
                                     padding_value = Some(x.as_i64()?);
                                     ColumnParser::Begin
@@ -644,9 +639,6 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                     ColumnParser::Begin =>
                         Ok(AstNode {
                             class: if let Some(range) = range {
-                                if !matches!(kind, Kind::Atomic){
-                                    bail!("array columns must be atomic")
-                                }
                                 Token::DefArrayColumn {
                                     name,
                                     t: Type::ArrayColumn(t.unwrap_or(Magma::Integer)),
@@ -660,7 +652,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                 Token::DefColumn {
                                     name,
                                     t: Type::Column(t.unwrap_or(Magma::Integer)),
-                                    kind,
+                                    kind: Kind::Atomic,
                                     padding_value,
                                     base
                                 }
@@ -670,7 +662,6 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                         }),
                     ColumnParser::Array => bail!("incomplete :array definition"),
                     ColumnParser::Computation => bail!("incomplate :comp definition"),
-                    ColumnParser::Interleaved => bail!("incomplete :interleaved definition"),
                     ColumnParser::PaddingValue => bail!("incomplete :padding definition"),
                     ColumnParser::Base => bail!("incomplete :display definition"),
                 }
@@ -1000,6 +991,51 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
 
             Ok(AstNode {
                 class: Token::DefPermutation { from, to, signs },
+                src,
+                lc,
+            })
+        },
+        "definterleaved" => {
+            let target = tokens
+                .next()
+                .with_context(|| anyhow!("missing target column"))??
+                .as_symbol()
+                .map(String::from)?;
+
+            let mut next = tokens.next();
+            
+            let mut base = Base::Dec;
+            // TODO
+            // if next.as_ref().map(|n| {
+            //         Some(n.as_ref().ok()?.as_symbol().ok()?.to_string())
+            //     }).flatten() == Some(":display".to_owned()) {
+            //     let x = tokens
+            //         .next()
+            //         .with_context(|| anyhow!("missing display base"))??;
+            //     base = if let Token::Keyword(ref kw) = x.class {
+            //         match kw.to_lowercase().as_str() {
+            //             ":bin" => Base::Bin,
+            //             ":dec" => Base::Dec,
+            //             ":hex" => Base::Hex,
+            //             _ => bail!(":display expects one of :hex, :dec, :bin; found {}", kw)
+            //         }
+            //     } else {
+            //         bail!(":display expects one of :hex, :dec, :bin; found {}", x)
+            //     };
+            //     next = tokens.next();
+            // }
+
+            let sources = next
+                .with_context(|| anyhow!("missing source columns"))??
+                .as_list()?
+                .to_vec();
+            
+            if !tokens.next().is_none() {
+                bail!("too many parameters");
+            }
+
+            Ok(AstNode {
+                class: Token::DefInterleaving { target, sources, base },
                 src,
                 lc,
             })

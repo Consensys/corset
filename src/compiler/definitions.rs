@@ -58,14 +58,14 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     Kind::Phantom => Kind::Phantom,
                     // The actual expression is computed by the generator
                     Kind::Composite(_) => Kind::Phantom,
-                    // The interleaving is later on set by the generator TODO: move me @emile
-                    Kind::Interleaved(_, _) => Kind::Phantom,
+                    Kind::Interleaved(..) => unreachable!(),
                 })
                 .and_padding_value(*padding_value)
                 .t(t.magma())
                 .build();
             ctx.insert_symbol(col, symbol)
         }
+        Token::DefInterleaving { .. } => Ok(()),
         Token::DefArrayColumn {
             name: col,
             domain: range,
