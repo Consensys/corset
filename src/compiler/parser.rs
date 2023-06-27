@@ -232,8 +232,8 @@ pub enum Token {
     },
     /// declaration of a permutation constraint between two sets of columns
     DefPermutation {
-        from: Vec<String>,
-        to: Vec<String>,
+        from: Vec<AstNode>,
+        to: Vec<DisplayableColumn>,
         signs: Vec<bool>,
     },
     DefInterleaving {
@@ -563,6 +563,26 @@ struct ColumnAttributes {
     base: OnceCell<Base>,
 }
 
+impl std::convert::TryInto<DisplayableColumn> for ColumnAttributes {
+    type Error = anyhow::Error;
+
+    fn try_into(self) -> std::result::Result<DisplayableColumn, Self::Error> {
+        for (attribute, exists) in [
+            ("type", self.t.get().is_some()),
+            ("range", self.range.get().is_some()),
+            ("padding value", self.padding_value.get().is_some()),
+        ] {
+            if exists {
+                bail!("cannot specify {} to {}", attribute, self.name)
+            }
+        }
+        Ok(DisplayableColumn {
+            name: self.name,
+            base: self.base.get().cloned().unwrap_or(Base::Dec),
+        })
+    }
+}
+
 /// Example: in `defcolumns(A, (B :boolean), (C :display :hex :byte))`,
 /// this function should be called on ['A'], ['B', ':boolean'], ['C', ':display', ':hex', ':byte']
 fn extract_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
@@ -764,7 +784,6 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
 #[cfg(feature = "parser")]
 fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
     use anyhow::Ok;
-    use owo_colors::OwoColorize;
 
     let lc = pair.as_span().start_pos().line_col();
     let src = pair.as_str().to_owned();
@@ -1004,67 +1023,49 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
 
             let to = tokens
                 .next()
-                .with_context(|| anyhow!("missing source columns"))??
-                .as_list()?
-                .iter()
-                .map(|t| t.as_symbol().map(|x| x.to_owned()))
-                .collect::<Result<Vec<_>>>()?;
-            let mut sign_state = SignParser::Running;
-            let mut signs = Vec::new();
-            let mut from = Vec::new();
-            for c in tokens
-                .next()
                 .with_context(|| anyhow!("missing target columns"))??
                 .as_list()?
                 .iter()
-            {
-                match c.class {
-                    Token::Symbol(ref x) => {
-                        sign_state = SignParser::Done;
-                        from.push(x.to_owned());
-                    }
-                    Token::List(ref xs) => {
-                        let mut xs = xs.iter();
-                        let sign = xs
-                            .next()
-                            .with_context(|| anyhow!("missing sorting criterion"))?;
-                        let sign = sign
-                            .as_symbol()
-                            .with_context(|| {
-                                anyhow!("expected + or -, found {}", sign.src.bold().white())
-                            })
-                            .and_then(|x| {
-                                if x == "+" || x == "↓" {
-                                    Ok(true)
-                                } else if x == "-" || x == "↑" {
-                                    Ok(false)
-                                } else {
-                                    Err(anyhow!(
-                                        "expected + or -, found {}",
-                                        sign.src.bold().white()
-                                    ))
-                                }
-                            })?;
+                .map(|t| extract_column_attributes(t.clone()))
+                .flatten()
+                .map(|attributes| attributes.try_into())
+                .collect::<Result<Vec<DisplayableColumn>>>()?;
 
-                        let col = xs
-                            .next()
-                            .with_context(|| anyhow!("missing column to sort"))?;
-                        let col = col
-                            .as_symbol()
-                            .with_context(|| anyhow!("expected column to sort, found {}", col.src))?
-                            .to_string();
-                        if matches!(sign_state, SignParser::Done) {
-                            bail!(
-                                "found sorting column {} after non-sorting column",
-                                col.white().bold()
-                            )
+            let mut from = Vec::new();
+            let mut signs = Vec::new();
+            let mut ordering_ongoing = true;
+            let froms_with_sign = tokens
+                .next()
+                .with_context(|| anyhow!("missing source columns"))??
+                .as_list()?
+                .to_vec();
+            for from_w_sign in froms_with_sign {
+                if let Result::Ok(list) = from_w_sign.as_list() {
+                    if let Some(s) = list.get(0).map(|a| a.as_symbol().ok()).flatten() {
+                        let sign = if s == "+" || s == "↓" {
+                            Some(true)
+                        } else if s == "-" || s == "↑" {
+                            Some(false)
+                        } else {
+                            None
+                        };
+                        if let Some(sign) = sign {
+                            if ordering_ongoing {
+                                bail!(
+                                    "found sorting column {} after non-sorting column",
+                                    from_w_sign.src
+                                )
+                            }
+                            signs.push(sign);
+                            if list.len() == 1 {
+                                bail!("missing column after {}", s)
+                            } else if list.len() > 2 {
+                                bail!("too many arguments in source column {}", from_w_sign.src)
+                            }
+                            from.push(list[1].clone());
+                        } else {
+                            ordering_ongoing = false;
                         }
-
-                        signs.push(sign);
-                        from.push(col);
-                    }
-                    _ => {
-                        bail!("expected COLUMN or (SIGN COLUMN), found {}", c)
                     }
                 }
             }
@@ -1081,11 +1082,12 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         "definterleaved" => {
-            let target_attributes = extract_column_attributes(
+            let target = extract_column_attributes(
                 tokens
                     .next()
                     .with_context(|| anyhow!("missing source column"))??,
-            )?;
+            )?
+            .try_into()?;
 
             let froms = tokens
                 .next()
@@ -1101,27 +1103,8 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 })
                 .collect::<Result<Vec<_>>>()?;
 
-            for (attribute, exists) in [
-                ("type", target_attributes.t.get().is_some()),
-                ("range", target_attributes.range.get().is_some()),
-                (
-                    "padding value",
-                    target_attributes.padding_value.get().is_some(),
-                ),
-            ] {
-                if exists {
-                    bail!("cannot specify {} in :definterleaved", attribute)
-                }
-            }
-
             Ok(AstNode {
-                class: Token::DefInterleaving {
-                    target: DisplayableColumn {
-                        name: target_attributes.name,
-                        base: target_attributes.base.get().cloned().unwrap_or(Base::Dec),
-                    },
-                    froms,
-                },
+                class: Token::DefInterleaving { target, froms },
                 src,
                 lc,
             })
