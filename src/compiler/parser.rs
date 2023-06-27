@@ -2,13 +2,14 @@ use crate::{errors, pretty::Base};
 use anyhow::{anyhow, bail, Context, Result};
 use itertools::Itertools;
 use num_bigint::BigInt;
+use once_cell::unsync::OnceCell;
 #[cfg(feature = "parser")]
 use pest::{iterators::Pair, Parser};
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::fmt::Debug;
+use std::{fmt, vec};
 
-use super::{ColumnRef, Magma, Type};
+use super::{Magma, Type};
 
 #[cfg(feature = "parser")]
 #[derive(Parser)]
@@ -72,6 +73,10 @@ impl AstNode {
     /// A formatting function optimizing for debug informations
     pub fn debug_info(&self) -> Option<String> {
         self.class.debug_info()
+    }
+    
+    pub fn is_symbol(&self) -> bool {
+        matches!(self.class, Token::Symbol(_))
     }
 }
 impl Debug for AstNode {
@@ -543,11 +548,18 @@ fn parse_defperspective<I: Iterator<Item = Result<AstNode>>>(mut tokens: I) -> R
     }
 }
 
-fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
-    tokens: I,
-    lc: (usize, usize),
-    src: String,
-) -> Result<AstNode> {
+#[derive(Default, Clone, Debug)]
+struct ColumnAttributes {
+    name: String,
+    t: OnceCell<Magma>,
+    range: OnceCell<Vec<isize>>,
+    padding_value: OnceCell<i64>,
+    base: OnceCell<Base>,
+}
+
+/// Example: in `defcolumns(A, (B :boolean), (C :display :hex :byte))`,
+/// this function should be called on ['A'], ['B', ':boolean'], ['C', ':display', ':hex', ':byte']
+fn extract_column_attributes(tokens: Vec<AstNode>) -> Result<ColumnAttributes> {
     enum ColumnParser {
         Begin,
         Array,
@@ -556,126 +568,182 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
         Base,
     }
 
+    let mut attributes = ColumnAttributes::default();
+
+    let mut state = ColumnParser::Begin;
+
+    let mut tokens = tokens.iter();
+    let name_token = tokens
+        .next()
+        .ok_or_else(|| anyhow!("expected column name, found empty list"))?;
+    // The first element of the llist *has* to be the name of the column
+    if let Token::Symbol(ref _name) = name_token.class {
+        attributes.name = _name.to_owned();
+    } else {
+        bail!("expected column name, found `{:?}`", name_token)
+    }
+    // Then can come all the attributes, in no particular order.
+    for x in tokens {
+        state = match state {
+            ColumnParser::Begin => match x.class {
+                Token::Keyword(ref kw) => {
+                    // e.g. (A ... :integer ...)
+                    match kw.to_lowercase().as_str() {
+                        ":boolean" | ":bool" | ":nibble" | ":byte" | ":integer" | ":natural" => {
+                            if attributes.t.get().is_some() {
+                                bail!(
+                                    "trying to redefine column {} of type {:?} as {}",
+                                    attributes.name,
+                                    attributes.t.get().unwrap(),
+                                    kw
+                                )
+                            } else {
+                                attributes.t.set(kw.as_str().try_into()?).unwrap();
+                            }
+                            ColumnParser::Begin
+                        }
+                        // not really used for now.
+                        ":comp" => ColumnParser::Computation,
+                        // e.g. (A :array {1 3 5}) or (A :array [5])
+                        ":array" => ColumnParser::Array,
+                        // a specific padding value, e.g. (NOT :padding 255)
+                        ":padding" => ColumnParser::PaddingValue,
+                        // how to display the column values in debug
+                        ":display" => ColumnParser::Base,
+                        _ => {
+                            bail!("unexpected keyword found: {}", kw)
+                        }
+                    }
+                }
+                // A range alone treated as if it were preceded by :array
+                Token::Range(ref _range) => {
+                    if attributes.range.get().is_some() {
+                        bail!(
+                            "trying to redefine column {} of type {:?} as {:?}",
+                            attributes.name,
+                            attributes.range.get().unwrap(),
+                            _range
+                        )
+                    } else {
+                        attributes.range.set(_range.to_owned()).unwrap();
+                    }
+                    ColumnParser::Begin
+                }
+                _ => bail!("expected keyword, found `{:?}`", x),
+            },
+            // :array expects a range defining the domain of the column array
+            ColumnParser::Array => {
+                if attributes.range.get().is_some() {
+                    bail!(
+                        "trying to redefine column {} of type {:?} as {:?}",
+                        attributes.name,
+                        attributes.range.get().unwrap(),
+                        x.as_range()?
+                    )
+                } else {
+                    attributes.range.set(x.as_range()?.to_owned()).unwrap();
+                }
+                ColumnParser::Begin
+            }
+            ColumnParser::Computation => todo!(),
+            ColumnParser::PaddingValue => {
+                if attributes.padding_value.get().is_some() {
+                    bail!(
+                        "trying to redefine column {} of type {} as {:?}",
+                        attributes.name,
+                        attributes.padding_value.get().unwrap(),
+                        x.as_i64()?
+                    )
+                } else {
+                    attributes.padding_value.set(x.as_i64()?).unwrap();
+                }
+                ColumnParser::Begin
+            }
+            ColumnParser::Base => {
+                if attributes.base.get().is_some() {
+                    bail!(
+                        "trying to redefine column {} of type {:?} as {:?}",
+                        attributes.name,
+                        attributes.base.get().unwrap(),
+                        x
+                    )
+                } else {
+                    let base = if let Token::Keyword(ref kw) = x.class {
+                        match kw.to_lowercase().as_str() {
+                            // TODO use Base::try_from once merge is done with main
+                            ":bin" => Base::Bin,
+                            ":dec" => Base::Dec,
+                            ":hex" => Base::Hex,
+                            _ => bail!(":display expects one of :hex, :dec, :bin; found {}", kw),
+                        }
+                    } else {
+                        bail!(":display expects one of :hex, :dec, :bin; found {}", x)
+                    };
+                    attributes.base.set(base).unwrap();
+                }
+                ColumnParser::Begin
+            }
+        };
+    }
+    // Ensure that we are in a clean state
+    match state {
+        ColumnParser::Begin => (),
+        ColumnParser::Array => bail!("incomplete :array definition"),
+        ColumnParser::Computation => bail!("incomplate :comp definition"),
+        ColumnParser::PaddingValue => bail!("incomplete :padding definition"),
+        ColumnParser::Base => bail!("incomplete :display definition"),
+    }
+    Ok(attributes)
+}
+
+fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
+    tokens: I,
+    lc: (usize, usize),
+    src: String,
+) -> Result<AstNode> {
     // A columns definition is a list of column definition
     let columns = tokens
         .map(|c| {
             c.and_then(|c| {
-                let name;
-                let mut t = None;
-                let mut range = None;
-                let mut padding_value = None;
-                let mut base = Base::Dec;
-
-                let mut state = ColumnParser::Begin;
-                // A column is either defined by...
-                match c.class {
-                    // ...a name, in which case the column is an atomic fr column...
-                    Token::Symbol(_name) => name = _name,
-                    // ...or a list, specifying attributes for this column.
-                    Token::List(xs) => {
-                        let mut xs = xs.iter();
-                        let name_token = xs
-                            .next()
-                            .ok_or_else(|| anyhow!("expected column name, found empty list"))?;
-                        // The first element of the llist *has* to be the name of the column
-                        if let Token::Symbol(ref _name) = name_token.class {
-                            name = _name.to_owned();
-                        } else {
-                            bail!("expected column name, found `{:?}`", name_token)
-                        }
-                        // Then can come all the attributes, in no particular order.
-                        for x in xs {
-                            state = match state {
-                                ColumnParser::Begin => match x.class {
-                                    Token::Keyword(ref kw) => {
-                                        // e.g. (A ... :integer ...)
-                                        match kw.to_lowercase().as_str() {
-                                            ":boolean" | ":bool" | ":nibble" | ":byte"
-                                                | ":integer" | ":natural" => {
-                                                    if t.is_some() {
-                                                        bail!(
-                                                            "trying to redefine column {} of type {:?} as {}",
-                                                            name, t.unwrap(), kw
-                                                        )
-                                                    } else {
-                                                        t = Some(kw.as_str().try_into()?);
-                                                    }
-                                                    ColumnParser::Begin
-                                                }
-                                            // not really used for now.
-                                            ":comp" => ColumnParser::Computation,
-                                            // e.g. (A :array {1 3 5}) or (A :array [5])
-                                            ":array" => ColumnParser::Array,
-                                            // a specific padding value, e.g. (NOT :padding 255)
-                                            ":padding" => ColumnParser::PaddingValue,
-                                            // how to display the column values in debug
-                                            ":display" => ColumnParser::Base,
-                                            _ => {
-                                                bail!("unexpected keyword found: {}", kw)
-                                            }
-                                        }
-                                    }
-                                    // A range alone treated as if it were preceded by :array
-                                    Token::Range(ref _range) => {
-                                        range = Some(_range.to_owned());
-                                        ColumnParser::Begin
-                                    },
-                                    _ => bail!("expected keyword, found `{:?}`", x),
-                                },
-                                // :array expects a range defining the domain of the column array
-                                ColumnParser::Array => {
-                                    range = Some(x.as_range()?.to_owned());
-                                    ColumnParser::Begin
-                                }
-                                ColumnParser::Computation => todo!(),
-                                ColumnParser::PaddingValue => {
-                                    padding_value = Some(x.as_i64()?);
-                                    ColumnParser::Begin
-                                },
-                                ColumnParser::Base => {
-                                    base = if let Token::Keyword(ref kw) = x.class {
-                                        kw.as_str().try_into()?
-                                    } else {
-                                        bail!("missing argument to :display")
-                                    };
-                                    ColumnParser::Begin
-                                },
-                            };
-                        }
-                    }
-                    _ => unreachable!(),
+                let tokens = if c.is_symbol() {
+                    // a column defined by its name, without any particular attribute
+                    vec![c.clone()]
+                } else if let Token::List(l) = c.class {
+                    l
+                } else {
+                    unreachable!()
                 };
-                // Ensure that we are in a clean state
-                match state {
-                    ColumnParser::Begin =>
-                        Ok(AstNode {
-                            class: if let Some(range) = range {
-                                Token::DefArrayColumn {
-                                    name,
-                                    t: Type::ArrayColumn(t.unwrap_or(Magma::Integer)),
-                                    domain: range
-                                        .iter()
-                                        .map(|&x| x.try_into().map_err(|e| anyhow!("{:?}", e)))
-                                        .collect::<Result<Vec<_>>>()?,
-                                    base,
-                                }
-                            } else {
-                                Token::DefColumn {
-                                    name,
-                                    t: Type::Column(t.unwrap_or(Magma::Integer)),
-                                    kind: Kind::Atomic,
-                                    padding_value,
-                                    base
-                                }
-                            },
-                            lc: c.lc,
-                            src: c.src.clone(),
-                        }),
-                    ColumnParser::Array => bail!("incomplete :array definition"),
-                    ColumnParser::Computation => bail!("incomplate :comp definition"),
-                    ColumnParser::PaddingValue => bail!("incomplete :padding definition"),
-                    ColumnParser::Base => bail!("incomplete :display definition"),
-                }
+
+                let column_attributes = extract_column_attributes(tokens)?;
+
+                let base = column_attributes.base.get().cloned().unwrap_or(Base::Hex);
+                Ok(AstNode {
+                    class: if let Some(range) = column_attributes.range.get() {
+                        Token::DefArrayColumn {
+                            name: column_attributes.name,
+                            t: Type::ArrayColumn(
+                                column_attributes.t.get().cloned().unwrap_or(Magma::Integer),
+                            ),
+                            domain: range
+                                .iter()
+                                .map(|&x| x.try_into().map_err(|e| anyhow!("{:?}", e)))
+                                .collect::<Result<Vec<_>>>()?,
+                            base,
+                        }
+                    } else {
+                        Token::DefColumn {
+                            name: column_attributes.name,
+                            t: Type::Column(
+                                column_attributes.t.get().cloned().unwrap_or(Magma::Integer),
+                            ),
+                            kind: Kind::Atomic,
+                            padding_value: column_attributes.padding_value.get().cloned(),
+                            base,
+                        }
+                    },
+                    lc: c.lc,
+                    src: c.src.clone(),
+                })
             })
         })
         .collect::<Result<Vec<_>>>()
@@ -1008,41 +1076,11 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         "definterleaved" => {
-            let target = tokens
-                .next()
-                .with_context(|| anyhow!("missing target column"))??
-                .as_symbol()
-                .map(String::from)?;
-
-            let mut base = Base::Dec;
-            // TODO base
-            // if next.as_ref().map(|n| {
-            //         Some(n.as_ref().ok()?.as_symbol().ok()?.to_string())
-            //     }).flatten() == Some(":display".to_owned()) {
-            //     let x = tokens
-            //         .next()
-            //         .with_context(|| anyhow!("missing display base"))??;
-            //     base = if let Token::Keyword(ref kw) = x.class {
-            //         match kw.to_lowercase().as_str() {
-            //             ":bin" => Base::Bin,
-            //             ":dec" => Base::Dec,
-            //             ":hex" => Base::Hex,
-            //             _ => bail!(":display expects one of :hex, :dec, :bin; found {}", kw)
-            //         }
-            //     } else {
-            //         bail!(":display expects one of :hex, :dec, :bin; found {}", x)
-            //     };
-            //     next = tokens.next();
-            // }
-
-            // let sources = next
-            //     .with_context(|| anyhow!("missing source columns"))??
-            //     .as_list()?
-            //     .to_vec();
+            let mut tokens = tokens.collect::<Result<Vec<_>>>()?;
 
             let froms = tokens
-                .next()
-                .with_context(|| anyhow!("missing source columns"))??
+                .pop()
+                .with_context(|| anyhow!("missing source columns"))?
                 .as_list()?
                 .iter()
                 .map(|from| {
@@ -1054,15 +1092,26 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 })
                 .collect::<Result<Vec<_>>>()?;
 
-            if tokens.next().is_some() {
-                bail!("too many parameters");
+            let target_attributes = extract_column_attributes(tokens)?;
+
+            for (attribute, exists) in [
+                ("type", target_attributes.t.get().is_some()),
+                ("range", target_attributes.range.get().is_some()),
+                (
+                    "padding value",
+                    target_attributes.padding_value.get().is_some(),
+                ),
+            ] {
+                if exists {
+                    bail!("cannot specify {} in :definterleaved", attribute)
+                }
             }
 
             Ok(AstNode {
                 class: Token::DefInterleaving {
-                    target,
+                    target: target_attributes.name,
                     froms,
-                    base,
+                    base: target_attributes.base.get().cloned().unwrap_or(Base::Dec),
                 },
                 src,
                 lc,
