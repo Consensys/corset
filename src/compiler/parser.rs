@@ -128,6 +128,14 @@ impl std::fmt::Display for Symbol {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct DisplayableColumn {
+    /// name of the column
+    pub name: String,
+    /// which numeric base should be used to display column values; this is a purely aesthetic setting
+    pub base: Base,
+}
+
 #[derive(Clone)]
 pub enum Token {
     /// an immediate value; can be “arbitrarily” large
@@ -229,10 +237,8 @@ pub enum Token {
         signs: Vec<bool>,
     },
     DefInterleaving {
-        /// name of the new column, which will be filled by interleaving of the source columns
-        target: String,
-        /// which numeric base should be used to display column values; this is a purely aesthetic setting
-        base: Base,
+        /// new column, which will be filled by interleaving of the source columns
+        target: DisplayableColumn,
         /// the source columns to be interleaved
         froms: Vec<AstNode>, // either Token::Symbol or Token::IndexedSymbol
     },
@@ -404,7 +410,7 @@ impl Debug for Token {
                 froms: sources,
                 ..
             } => {
-                write!(f, "Interleaving {} by {:?}", target, sources)
+                write!(f, "Interleaving {} by {:?}", target.name, sources)
             }
         }
     }
@@ -580,7 +586,6 @@ fn extract_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
     };
 
     let mut tokens = tokens.into_iter();
-    
 
     let name_token = tokens
         .next()
@@ -1111,9 +1116,11 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
 
             Ok(AstNode {
                 class: Token::DefInterleaving {
-                    target: target_attributes.name,
+                    target: DisplayableColumn {
+                        name: target_attributes.name,
+                        base: target_attributes.base.get().cloned().unwrap_or(Base::Dec),
+                    },
                     froms,
-                    base: target_attributes.base.get().cloned().unwrap_or(Base::Dec),
                 },
                 src,
                 lc,
