@@ -127,18 +127,14 @@ impl std::fmt::Display for Symbol {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum ColumnArg {
-    Normal { name: String },
-    WithIndex { name: String, index: usize },
-}
-
 #[derive(Clone)]
 pub enum Token {
     /// an immediate value; can be “arbitrarily” large
     Value(BigInt),
     /// a symbol referencing another element of the tree
     Symbol(String),
+    /// obtained by the syntax `[symbol index]` in the lisp
+    IndexedSymbol{ name: String, index: Box<AstNode> },
     /// a keyword (typically a def*) that will be interpreted later on
     Keyword(String),
     /// a list of nodes
@@ -234,7 +230,7 @@ pub enum Token {
         /// which numeric base should be used to display column values; this is a purely aesthetic setting
         base: Base,
         /// the source columns to be interleaved
-        froms: Vec<ColumnArg>,
+        froms: Vec<AstNode>, // either Token::Symbol or Token::IndexedSymbol
     },
     /// declaration of a plookup constraint between two sets of columns
     DefPlookup {
@@ -333,6 +329,7 @@ impl Debug for Token {
         match self {
             Token::Value(x) => write!(f, "{}", x),
             Token::Symbol(ref name) => write!(f, "{}", name),
+            Token::IndexedSymbol { ref name, ref index } => write!(f, "[{} {}]", name, index ),
             Token::Keyword(ref name) => write!(f, "{}", name),
             Token::List(ref args) => {
                 write!(f, "({})", Token::format_list(args, LIST_DISPLAY_THRESHOLD))
@@ -1047,28 +1044,15 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 .as_list()?
                 .iter()
                 .map(|from| {
-                    if let std::result::Result::Ok(list) = from.as_list() {
-                        if list.len() != 3
-                            || list[0].as_symbol().is_ok() && list[0].as_symbol().unwrap() != "nth"
-                            || list[1].as_symbol().is_err()
-                            || list[2].as_u64().is_err()
-                        {
-                            bail!("Malformed column argument: {}", from)
-                        }
-                        let name = list[1].as_symbol().unwrap().to_owned();
-                        let index = list[2].as_u64().unwrap() as usize;
-                        Ok(ColumnArg::WithIndex { name, index })
+                    if matches!(from.class, Token::Symbol(..) | Token::IndexedSymbol { .. }) {
+                        Ok(from.to_owned())
                     } else {
-                        let name = from
-                            .as_symbol()
-                            .with_context(|| anyhow!("expected column name, found {}", from))?
-                            .to_owned();
-                        Ok(ColumnArg::Normal { name })
+                        bail!("expected column, found {}", from)
                     }
                 })
                 .collect::<Result<Vec<_>>>()?;
 
-            if !tokens.next().is_none() {
+            if tokens.next().is_some() {
                 bail!("too many parameters");
             }
 
@@ -1202,19 +1186,16 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             lc,
         }),
         Rule::nth => {
-            let nth_token = AstNode {
-                class: Token::Symbol("nth".into()),
-                lc,
-                src: src.clone(),
-            };
-            let args = pair
+            let mut args = pair
                 .into_inner()
                 .map(rec_parse)
                 .collect::<Result<Vec<_>>>()?;
+            let name = args[0].as_symbol().unwrap().to_owned();
+            let index = Box::new(args.remove(1));
             Ok(AstNode {
-                class: Token::List(vec![nth_token, args[0].clone(), args[1].clone()]),
+                class: Token::IndexedSymbol { name, index },
                 lc,
-                src,
+                src: src.clone(),
             })
         }
         x => {

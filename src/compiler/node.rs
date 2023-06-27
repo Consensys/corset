@@ -802,26 +802,6 @@ impl Node {
                         x.and_then(|x| x.inverse()).or_else(|| Some(Fr::zero()))
                     }
                 }
-                Intrinsic::Nth => {
-                    if let (
-                        Expression::ArrayColumn {
-                            handle: h,
-                            domain: range,
-                            base: _,
-                        },
-                        Expression::Const(idx, _),
-                    ) = (&args[0].e(), &args[1].e())
-                    {
-                        let idx = idx.to_usize().unwrap();
-                        if !range.contains(&idx) {
-                            panic!("trying to access `{}` at index `{}`", h, idx);
-                        }
-                        get(&h.as_handle().ith(idx).into(), i, settings.wrap)
-                    } else {
-                        unreachable!()
-                    }
-                }
-                // this is handled in Expression::List
                 Intrinsic::Begin => unreachable!(),
                 Intrinsic::IfZero => {
                     if args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {

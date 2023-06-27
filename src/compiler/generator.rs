@@ -206,7 +206,6 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Begin => Arity::AtLeast(1),
             Intrinsic::IfZero => Arity::Between(2, 3),
             Intrinsic::IfNotZero => Arity::Between(2, 3),
-            Intrinsic::Nth => Arity::Dyadic,
         }
     }
     fn validate_types(&self, args: &[Node]) -> Result<()> {
@@ -228,10 +227,6 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
             Intrinsic::Inv => &[&[Type::Column(Magma::Any)]],
             Intrinsic::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
-            Intrinsic::Nth => &[
-                &[Type::ArrayColumn(Magma::Any)],
-                &[Type::Scalar(Magma::Any)],
-            ],
             Intrinsic::IfZero | Intrinsic::IfNotZero => &[
                 &[
                     Type::Scalar(Magma::Any),
@@ -1134,7 +1129,6 @@ fn apply_builtin(
 fn apply_intrinsic(
     b: &Intrinsic,
     traversed_args: Vec<Node>,
-    ctx: &mut Scope,
     _settings: &CompileSettings,
 ) -> Result<Option<Node>> {
     b.validate_args(&traversed_args)?;
@@ -1160,37 +1154,6 @@ fn apply_intrinsic(
 
         b @ (Intrinsic::IfZero | Intrinsic::IfNotZero) => Ok(Some(b.call(&traversed_args)?)),
 
-        Intrinsic::Nth => {
-            if let Expression::ArrayColumn { handle, .. } = &traversed_args[0].e() {
-                let i = traversed_args[1].pure_eval()?.to_usize().ok_or_else(|| {
-                    anyhow!("{:?} is not a valid indice", traversed_args[1].pure_eval())
-                })?;
-                let array = ctx.resolve_handle(handle.as_handle())?;
-                match array.e() {
-                    Expression::ArrayColumn {
-                        handle,
-                        domain: range,
-                        base,
-                    } => {
-                        if range.contains(&i) {
-                            Ok(Some(
-                                Node::column()
-                                    .handle(handle.as_handle().ith(i))
-                                    .kind(Kind::Atomic)
-                                    .base(*base)
-                                    .t(array.t().magma())
-                                    .build(),
-                            ))
-                        } else {
-                            bail!("tried to access `{:?}` at index {}", array, i)
-                        }
-                    }
-                    _ => unimplemented!(),
-                }
-            } else {
-                unreachable!()
-            }
-        }
         b @ (Intrinsic::Add
         | Intrinsic::Sub
         | Intrinsic::Mul
@@ -1209,7 +1172,7 @@ fn apply_function(
 ) -> Result<Option<Node>> {
     match &f.class {
         FunctionClass::UserDefined(d) => apply_defined(d, &f.handle, args, ctx, settings),
-        FunctionClass::Intrinsic(i) => apply_intrinsic(i, args, ctx, settings),
+        FunctionClass::Intrinsic(i) => apply_intrinsic(i, args, settings),
         FunctionClass::Builtin(b) => apply_builtin(b, args, ctx, settings),
         _ => unreachable!(),
     }
@@ -1254,6 +1217,42 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
             ctx.resolve_symbol(name)
                 .with_context(|| make_ast_error(e))?,
         )),
+        Token::IndexedSymbol { name, index } => {
+            if let Expression::ArrayColumn { handle, .. } = ctx.resolve_symbol(name)?.e() {
+                let i = reduce(index, ctx, settings)?
+                    .map(|n| n.pure_eval().ok())
+                    .flatten()
+                    .map(|b| b.to_usize())
+                    .flatten()
+                    .ok_or_else(|| {
+                        anyhow!("{:?} is not a valid indice", index)
+                    })?;
+                let array = ctx.resolve_handle(handle.as_handle())?;
+                match array.e() {
+                    Expression::ArrayColumn {
+                        handle,
+                        domain: range,
+                        base,
+                    } => {
+                        if range.contains(&i) {
+                            Ok(Some(
+                                Node::column()
+                                    .handle(handle.as_handle().ith(i))
+                                    .kind(Kind::Atomic)
+                                    .base(*base)
+                                    .t(array.t().magma())
+                                    .build(),
+                            ))
+                        } else {
+                            bail!("tried to access `{:?}` at index {}", array, i)
+                        }
+                    }
+                    _ => unimplemented!(),
+                }
+            } else {
+                unreachable!()
+            }
+        }
         Token::List(args) => {
             if args.is_empty() {
                 Ok(Some(Expression::List(vec![]).into()))

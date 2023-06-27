@@ -61,10 +61,6 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "neg"),
             class: FunctionClass::Intrinsic(Intrinsic::Neg)
         },
-        "nth" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "nth"),
-            class: FunctionClass::Intrinsic(Intrinsic::Nth),
-        },
         "shift" => Function{
             handle: Handle::new(super::MAIN_MODULE, "shift"),
             class: FunctionClass::Intrinsic(Intrinsic::Shift),

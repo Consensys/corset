@@ -21,6 +21,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
         | Token::DefPlookup { .. }
         | Token::DefInrange(..) => Ok(()),
 
+        Token::IndexedSymbol { name: _, index } => reduce(index, ctx),
         Token::DefConstraint { name, .. } => ctx.insert_constraint(name),
         Token::DefModule(name) => {
             *ctx = ctx.switch_to_module(name)?.public(true);
@@ -74,28 +75,32 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
 
             let mut sources = Vec::new();
             for arg in args {
-                match arg {
-                    ColumnArg::Normal { name } => {
+                match &arg.class {
+                    Token::Symbol(name) => {
                         if let Expression::Column { handle, .. } = ctx.resolve_symbol(name)?.e() {
                             sources.push(handle.clone());
                         } else {
                             bail!("{name} is not a column");
-                        };
+                        }
                     }
-                    ColumnArg::WithIndex { name, index } => {
+                    Token::IndexedSymbol { name, index } => {
                         if let Expression::ArrayColumn { handle, domain, .. } =
                             ctx.resolve_symbol(name)?.e()
                         {
-                            if !domain.contains(index) {
-                                bail!("Index {} is not in domain {:?}", index, domain);
+                            // TODO HERE
+                            let i: usize = todo!("transform {index} (AstNode) in usize");
+
+                            if !domain.contains(&i) {
+                                bail!("Index {} is not in domain {:?}", i, domain);
                             }
                             sources.push(ColumnRef::from_handle(
-                                handle.as_handle().ith(*index as usize),
+                                handle.as_handle().ith(i),
                             ));
                         } else {
                             bail!("{name} is not an array column");
                         };
                     }
+                    _ => unreachable!()
                 }
             }
 
