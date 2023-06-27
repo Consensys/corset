@@ -1224,9 +1224,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                     .flatten()
                     .map(|b| b.to_usize())
                     .flatten()
-                    .ok_or_else(|| {
-                        anyhow!("{:?} is not a valid indice", index)
-                    })?;
+                    .ok_or_else(|| anyhow!("{:?} is not a valid indice", index))?;
                 let array = ctx.resolve_handle(handle.as_handle())?;
                 match array.e() {
                     Expression::ArrayColumn {
@@ -1289,6 +1287,58 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
             }
             _ => Ok(None),
         },
+        Token::DefInterleaving {
+            target,
+            base: _,
+            froms,
+        } => {
+            let target_handle = match ctx.resolve_symbol(target)?.e() {
+                Expression::Column { handle, .. } => handle.clone(),
+                _ => unreachable!(),
+            };
+
+            let mut from_handles = Vec::new();
+            for from in froms {
+                match &from.class {
+                    Token::Symbol(name) => {
+                        if let Expression::Column { handle, .. } = ctx.resolve_symbol(name)?.e() {
+                            from_handles.push(handle.clone());
+                        } else {
+                            bail!("{name} is not a column");
+                        }
+                    }
+                    Token::IndexedSymbol { name, index } => {
+                        if let Expression::ArrayColumn { handle, domain, .. } =
+                            ctx.resolve_symbol(name)?.e()
+                        {
+                            let index_usize = reduce(index, ctx, settings)?
+                                .map(|n| n.pure_eval().ok())
+                                .flatten()
+                                .map(|b| b.to_usize())
+                                .flatten()
+                                .ok_or_else(|| anyhow!("{:?} is not a valid indice", index))?;
+
+                            if !domain.contains(&index_usize) {
+                                bail!("Index {} is not in domain {:?}", index_usize, domain);
+                            }
+                            from_handles
+                                .push(ColumnRef::from_handle(handle.as_handle().ith(index_usize)));
+                        } else {
+                            bail!("{name} is not an array column");
+                        };
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            ctx.insert_computation(
+                &target_handle,
+                Computation::Interleaved {
+                    target: target_handle.clone(),
+                    froms: from_handles.clone(),
+                },
+            )?;
+            Ok(None)
+        }
         Token::DefColumns(_)
         | Token::DefPerspective { .. }
         | Token::DefConstraint { .. }
@@ -1302,8 +1352,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
         | Token::Defpurefun { .. }
         | Token::DefPermutation { .. }
         | Token::DefPlookup { .. }
-        | Token::DefInrange(..)
-        | Token::DefInterleaving { .. } => Ok(None),
+        | Token::DefInrange(..) => Ok(None),
     }
     .with_context(|| make_ast_error(e))
 }

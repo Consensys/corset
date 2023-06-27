@@ -124,9 +124,6 @@ impl ComputationTable {
 
     /// Insert the computation defining `target`. Will fail if `target` is already defined by an existing computation.
     pub fn insert(&mut self, target: &ColumnRef, computation: Computation) -> Result<()> {
-        if !target.is_id() {
-            panic!("computations must be inserted by ID")
-        }
         if self.dependencies.contains_key(target) {
             panic!("`{}` already present as a computation target", target);
         }
@@ -415,6 +412,14 @@ impl Scope {
             .metadata_mut()
             .computations
             .insert_many(targets, computation)
+    }
+
+    pub fn insert_computation(&self, target: &ColumnRef, computation: Computation) -> Result<()> {
+        self.tree
+            .borrow_mut()
+            .metadata_mut()
+            .computations
+            .insert(target, computation)
     }
 
     fn at(&self, id: usize) -> Scope {

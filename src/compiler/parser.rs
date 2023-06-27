@@ -94,9 +94,6 @@ pub enum Kind<T> {
     /// a composite column is similar to a phantom column, but the expression
     /// computing it is known
     Composite(Box<T>),
-    Interleaved {
-        froms: Vec<ColumnRef>,
-    },
 }
 impl<T> Kind<T> {
     pub fn to_nil(&self) -> Kind<()> {
@@ -104,7 +101,6 @@ impl<T> Kind<T> {
             Kind::Atomic => Kind::Atomic,
             Kind::Phantom => Kind::Phantom,
             Kind::Composite(_) => Kind::Composite(Box::new(())),
-            Kind::Interleaved { .. } => Kind::Interleaved { froms: Vec::new() }, // TODO check that it works
         }
     }
 }
@@ -134,7 +130,10 @@ pub enum Token {
     /// a symbol referencing another element of the tree
     Symbol(String),
     /// obtained by the syntax `[symbol index]` in the lisp
-    IndexedSymbol{ name: String, index: Box<AstNode> },
+    IndexedSymbol {
+        name: String,
+        index: Box<AstNode>,
+    },
     /// a keyword (typically a def*) that will be interpreted later on
     Keyword(String),
     /// a list of nodes
@@ -329,7 +328,10 @@ impl Debug for Token {
         match self {
             Token::Value(x) => write!(f, "{}", x),
             Token::Symbol(ref name) => write!(f, "{}", name),
-            Token::IndexedSymbol { ref name, ref index } => write!(f, "[{} {}]", name, index ),
+            Token::IndexedSymbol {
+                ref name,
+                ref index,
+            } => write!(f, "[{} {}]", name, index),
             Token::Keyword(ref name) => write!(f, "{}", name),
             Token::List(ref args) => {
                 write!(f, "({})", Token::format_list(args, LIST_DISPLAY_THRESHOLD))

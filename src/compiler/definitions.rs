@@ -59,7 +59,6 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     Kind::Phantom => Kind::Phantom,
                     // The actual expression is computed by the generator
                     Kind::Composite(_) => Kind::Phantom,
-                    Kind::Interleaved { .. } => unreachable!(),
                 })
                 .and_padding_value(*padding_value)
                 .t(t.magma())
@@ -68,53 +67,21 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
         }
         Token::DefInterleaving {
             target,
-            froms: args,
+            froms: _,
             base,
         } => {
-            let module_name = ctx.module();
-
-            let mut sources = Vec::new();
-            for arg in args {
-                match &arg.class {
-                    Token::Symbol(name) => {
-                        if let Expression::Column { handle, .. } = ctx.resolve_symbol(name)?.e() {
-                            sources.push(handle.clone());
-                        } else {
-                            bail!("{name} is not a column");
-                        }
-                    }
-                    Token::IndexedSymbol { name, index } => {
-                        if let Expression::ArrayColumn { handle, domain, .. } =
-                            ctx.resolve_symbol(name)?.e()
-                        {
-                            // TODO HERE
-                            let i: usize = todo!("transform {index} (AstNode) in usize");
-
-                            if !domain.contains(&i) {
-                                bail!("Index {} is not in domain {:?}", i, domain);
-                            }
-                            sources.push(ColumnRef::from_handle(
-                                handle.as_handle().ith(i),
-                            ));
-                        } else {
-                            bail!("{name} is not an array column");
-                        };
-                    }
-                    _ => unreachable!()
-                }
-            }
-
-            let symbol = Node::column()
+            let node = Node::column()
                 .handle(Handle::maybe_with_perspective(
                     // TODO unsure about this
-                    module_name,
+                    ctx.module(),
                     target,
                     ctx.perspective(),
                 ))
-                .kind(Kind::Interleaved { froms: sources })
+                .kind(Kind::Phantom)
                 .base(base.clone())
                 .build();
-            ctx.insert_symbol(target, symbol)
+
+            ctx.insert_symbol(target, node)
         }
         Token::DefArrayColumn {
             name: col,

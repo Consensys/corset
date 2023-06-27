@@ -163,3 +163,11 @@ fn global_scope() {
         "(module asdf) (defcolumns a b) (module zxcv) (defcolumns x y) (defconstraint test () (= asdf.a zxcv.x))",
     );
 }
+
+#[test]
+fn definterleave() {
+    must_run(
+        "definterleave ok",
+        "(defcolumns A B (C :array [1:4])) (definterleaved D (A [C 2] B ))",
+    );
+}

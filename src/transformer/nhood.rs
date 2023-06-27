@@ -38,7 +38,7 @@ fn process_nhood(
     let _intrld_aux_xs_id = cs.columns.insert_column_and_register(
         Column::builder()
             .handle(Handle::new(module, format!("INTRLD_AUX_2_{}_HOOD", n)))
-            .kind(Kind::Interleaved { froms: interleaving.to_vec() })
+            .kind(Kind::Phantom)
             .build(),
     )?;
     cs.computations.insert(

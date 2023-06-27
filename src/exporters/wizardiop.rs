@@ -258,7 +258,8 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
         // Interleaved columns should appear after their sources
         .sorted_by_cached_key(|c| {
             (
-                if !matches!(c.1.kind, Kind::Interleaved { .. }) {
+                if todo!() {
+                    // if !matches!(c.1.kind, Kind::Interleaved { .. }) {
                     0
                 } else {
                     1
@@ -282,19 +283,19 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
                         }
                     )
                 }
-            }
-            Kind::Interleaved { froms: sources } => {
-                r += &format!(
-                    "{} := zkevm.Interleave({})\n",
-                    reg_mangle(cs, &h).unwrap(),
-                    sources
-                        .iter()
-                        .map(|c| reg_mangle(cs, c).unwrap())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
-            }
+            } // Kind::Interleaved { froms: sources } => {
+              //     r += &format!(
+              //         "{} := zkevm.Interleave({})\n",
+              //         reg_mangle(cs, &h).unwrap(),
+              //         sources
+              //             .iter()
+              //             .map(|c| reg_mangle(cs, c).unwrap())
+              //             .collect::<Vec<_>>()
+              //             .join(", ")
+              //     );
+              // }
         }
+        todo!("cf just above")
     }
 
     r
