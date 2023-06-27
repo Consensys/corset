@@ -206,7 +206,6 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Begin => Arity::AtLeast(1),
             Intrinsic::IfZero => Arity::Between(2, 3),
             Intrinsic::IfNotZero => Arity::Between(2, 3),
-            Intrinsic::Nth => Arity::Dyadic,
         }
     }
     fn validate_types(&self, args: &[Node]) -> Result<()> {
@@ -228,10 +227,6 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
             Intrinsic::Inv => &[&[Type::Column(Magma::Any)]],
             Intrinsic::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
-            Intrinsic::Nth => &[
-                &[Type::ArrayColumn(Magma::Any)],
-                &[Type::Scalar(Magma::Any)],
-            ],
             Intrinsic::IfZero | Intrinsic::IfNotZero => &[
                 &[
                     Type::Scalar(Magma::Any),
@@ -1134,7 +1129,6 @@ fn apply_builtin(
 fn apply_intrinsic(
     b: &Intrinsic,
     traversed_args: Vec<Node>,
-    ctx: &mut Scope,
     _settings: &CompileSettings,
 ) -> Result<Option<Node>> {
     b.validate_args(&traversed_args)?;
@@ -1160,37 +1154,6 @@ fn apply_intrinsic(
 
         b @ (Intrinsic::IfZero | Intrinsic::IfNotZero) => Ok(Some(b.call(&traversed_args)?)),
 
-        Intrinsic::Nth => {
-            if let Expression::ArrayColumn { handle, .. } = &traversed_args[0].e() {
-                let i = traversed_args[1].pure_eval()?.to_usize().ok_or_else(|| {
-                    anyhow!("{:?} is not a valid indice", traversed_args[1].pure_eval())
-                })?;
-                let array = ctx.resolve_handle(handle.as_handle())?;
-                match array.e() {
-                    Expression::ArrayColumn {
-                        handle,
-                        domain: range,
-                        base,
-                    } => {
-                        if range.contains(&i) {
-                            Ok(Some(
-                                Node::column()
-                                    .handle(handle.as_handle().ith(i))
-                                    .kind(Kind::Atomic)
-                                    .base(*base)
-                                    .t(array.t().magma())
-                                    .build(),
-                            ))
-                        } else {
-                            bail!("tried to access `{:?}` at index {}", array, i)
-                        }
-                    }
-                    _ => unimplemented!(),
-                }
-            } else {
-                unreachable!()
-            }
-        }
         b @ (Intrinsic::Add
         | Intrinsic::Sub
         | Intrinsic::Mul
@@ -1209,7 +1172,7 @@ fn apply_function(
 ) -> Result<Option<Node>> {
     match &f.class {
         FunctionClass::UserDefined(d) => apply_defined(d, &f.handle, args, ctx, settings),
-        FunctionClass::Intrinsic(i) => apply_intrinsic(i, args, ctx, settings),
+        FunctionClass::Intrinsic(i) => apply_intrinsic(i, args, settings),
         FunctionClass::Builtin(b) => apply_builtin(b, args, ctx, settings),
         _ => unreachable!(),
     }
@@ -1254,6 +1217,40 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
             ctx.resolve_symbol(name)
                 .with_context(|| make_ast_error(e))?,
         )),
+        Token::IndexedSymbol { name, index } => {
+            if let Expression::ArrayColumn { handle, .. } = ctx.resolve_symbol(name)?.e() {
+                let i = reduce(index, ctx, settings)?
+                    .map(|n| n.pure_eval().ok())
+                    .flatten()
+                    .map(|b| b.to_usize())
+                    .flatten()
+                    .ok_or_else(|| anyhow!("{:?} is not a valid index", index))?;
+                let array = ctx.resolve_handle(handle.as_handle())?;
+                match array.e() {
+                    Expression::ArrayColumn {
+                        handle,
+                        domain,
+                        base,
+                    } => {
+                        if domain.contains(&i) {
+                            Ok(Some(
+                                Node::column()
+                                    .handle(handle.as_handle().ith(i))
+                                    .kind(Kind::Atomic)
+                                    .base(*base)
+                                    .t(array.t().magma())
+                                    .build(),
+                            ))
+                        } else {
+                            bail!("tried to access `{}` at index {}", array.pretty(), i)
+                        }
+                    }
+                    _ => unimplemented!(),
+                }
+            } else {
+                unreachable!()
+            }
+        }
         Token::List(args) => {
             if args.is_empty() {
                 Ok(Some(Expression::List(vec![]).into()))
@@ -1288,28 +1285,60 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                 })?;
                 Ok(None)
             }
-            Kind::Interleaved(froms, _) => {
-                // Create the interleaving
-                let from_handles = froms
-                    .iter()
-                    .map(|f| match reduce(f, ctx, settings)?.unwrap().e() {
-                        Expression::Column { handle: h, .. } => Ok(h.to_owned()),
-                        x => Err(anyhow!("expected column, found {:?}", x)),
-                    })
-                    .collect::<Result<Vec<_>>>()
-                    .with_context(|| anyhow!("while defining {}", name))?;
-
-                ctx.edit_symbol(name, &|x| {
-                    if let Expression::Column { kind, .. } = x {
-                        *kind = Kind::Interleaved(vec![], Some(from_handles.to_vec()))
-                    } else {
-                        unreachable!()
-                    }
-                })?;
-                Ok(None)
-            }
             _ => Ok(None),
         },
+        Token::DefInterleaving { target, froms } => {
+            let target_handle =
+                if let Expression::Column { handle, .. } = ctx.resolve_symbol(&target.name)?.e() {
+                    handle.to_owned()
+                } else {
+                    unreachable!()
+                };
+
+            let mut from_handles = Vec::new();
+            for from in froms {
+                match &from.class {
+                    Token::Symbol(name) => {
+                        if let Expression::Column { handle, .. } = ctx.resolve_symbol(name)?.e() {
+                            from_handles.push(handle.clone());
+                        } else {
+                            bail!("{} is not a column", name.white().bold());
+                        }
+                    }
+                    Token::IndexedSymbol { name, index } => {
+                        if let Expression::ArrayColumn { handle, domain, .. } =
+                            ctx.resolve_symbol(name)?.e()
+                        {
+                            let index_usize = reduce(index, ctx, settings)?
+                                .map(|n| n.pure_eval().ok())
+                                .flatten()
+                                .map(|b| b.to_usize())
+                                .flatten()
+                                .ok_or_else(|| {
+                                    anyhow!("{:?} is not a valid index", index.white().bold())
+                                })?;
+
+                            if !domain.contains(&index_usize) {
+                                bail!("index {} is not in domain {:?}", index_usize, domain);
+                            }
+                            from_handles
+                                .push(ColumnRef::from_handle(handle.as_handle().ith(index_usize)));
+                        } else {
+                            bail!("{} is not an array column", name.white().bold());
+                        };
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            ctx.insert_computation(
+                &target_handle,
+                Computation::Interleaved {
+                    target: target_handle.clone(),
+                    froms: from_handles.clone(),
+                },
+            )?;
+            Ok(None)
+        }
         Token::DefColumns(_)
         | Token::DefPerspective { .. }
         | Token::DefConstraint { .. }
@@ -1465,7 +1494,7 @@ fn reduce_toplevel(
             Ok(None)
         }
         Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
-            bail!("Unexpected top-level form: {:?}", e)
+            bail!("unexpected top-level form: {:?}", e)
         }
         Token::Defun { .. }
         | Token::Defpurefun { .. }
@@ -1473,42 +1502,53 @@ fn reduce_toplevel(
         | Token::DefunAlias(..)
         | Token::DefConsts(..) => Ok(None),
         Token::DefPermutation { from, to, signs } => {
-            // We look up the columns involved in the permutation just to ensure that they
-            // are marked as "used" in the symbol table
             let froms = from
                 .iter()
                 .map(|from| {
-                    if let Expression::Column { handle, .. } = ctx
-                        .resolve_symbol(from)
-                        .with_context(|| "while defining permutation")?
-                        .e()
-                    {
-                        Ok(handle.to_owned())
-                    } else {
-                        unreachable!()
+                    if let Some(n) = reduce(from, ctx, settings)? {
+                        if let Expression::Column { handle, .. } = n.e() {
+                            return Ok(handle.clone());
+                        }
                     }
+                    bail!("`{}` is not a column", from.white().bold())
                 })
                 .collect::<Result<Vec<_>>>()?;
+
+            // TODO is this needed?
             to.iter()
-                .map(|f| ctx.resolve_symbol(f))
+                .map(|f| ctx.resolve_symbol(&f.name))
                 .collect::<Result<Vec<_>, errors::symbols::Error>>()
                 .with_context(|| anyhow!("while defining permutation"))?;
 
             let tos = to
                 .iter()
                 .enumerate()
-                .map(|(i, f)| {
-                    Handle::new(ctx.module(), f)
+                .map(|(i, t)| {
+                    Handle::new(ctx.module(), &t.name)
                         .and_with_perspective(froms[i].as_handle().perspective.clone())
                         .into()
                 })
                 .collect::<Vec<ColumnRef>>();
+
+            ctx.insert_many_computations(
+                &tos,
+                Computation::Sorted {
+                    froms: froms.clone(),
+                    tos: tos.clone(),
+                    signs: signs.clone(),
+                },
+            )?;
+
             Ok(Some(Constraint::Permutation {
                 handle: Handle::new(ctx.module(), names::Generator::default().next().unwrap()),
                 from: froms,
                 to: tos,
                 signs: signs.clone(),
             }))
+        }
+        Token::DefInterleaving { .. } => {
+            reduce(e, ctx, settings)?;
+            Ok(None)
         }
         _ => unreachable!("{:?}", e),
     }

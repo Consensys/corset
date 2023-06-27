@@ -61,10 +61,6 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "neg"),
             class: FunctionClass::Intrinsic(Intrinsic::Neg)
         },
-        "nth" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "nth"),
-            class: FunctionClass::Intrinsic(Intrinsic::Nth),
-        },
         "shift" => Function{
             handle: Handle::new(super::MAIN_MODULE, "shift"),
             class: FunctionClass::Intrinsic(Intrinsic::Shift),
@@ -128,9 +124,6 @@ impl ComputationTable {
 
     /// Insert the computation defining `target`. Will fail if `target` is already defined by an existing computation.
     pub fn insert(&mut self, target: &ColumnRef, computation: Computation) -> Result<()> {
-        if !target.is_id() {
-            panic!("computations must be inserted by ID")
-        }
         if self.dependencies.contains_key(target) {
             panic!("`{}` already present as a computation target", target);
         }
@@ -421,6 +414,14 @@ impl Scope {
             .insert_many(targets, computation)
     }
 
+    pub fn insert_computation(&self, target: &ColumnRef, computation: Computation) -> Result<()> {
+        self.tree
+            .borrow_mut()
+            .metadata_mut()
+            .computations
+            .insert(target, computation)
+    }
+
     fn at(&self, id: usize) -> Scope {
         Scope {
             tree: self.tree.clone(),
@@ -670,7 +671,7 @@ impl Scope {
         if data_mut!(self).constraints.insert(name.to_owned()) {
             Ok(())
         } else {
-            bail!("Constraint `{}` already defined", name)
+            bail!("constraint `{}` already defined", name)
         }
     }
 

@@ -46,7 +46,6 @@ pub enum Intrinsic {
     Neg,
     Inv,
 
-    Nth,
     Begin,
 
     IfZero,
@@ -82,7 +81,6 @@ impl Intrinsic {
                 argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
             }
             Intrinsic::Begin => Type::List(max_type(argtype).magma()),
-            Intrinsic::Nth => Type::Column(argtype[0].magma()),
             Intrinsic::Shift => argtype[0],
         }
     }
@@ -100,7 +98,6 @@ impl std::fmt::Display for Intrinsic {
                 Intrinsic::Shift => "shift",
                 Intrinsic::Neg => "-",
                 Intrinsic::Inv => "inv",
-                Intrinsic::Nth => "nth",
                 Intrinsic::Begin => "begin",
                 Intrinsic::IfZero => "if-zero",
                 Intrinsic::IfNotZero => "if-not-zero",

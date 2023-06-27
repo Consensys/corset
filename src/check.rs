@@ -571,7 +571,7 @@ pub fn check(
         Ok(())
     } else {
         bail!(
-            "Constraints failed: {}",
+            "constraints failed: {}",
             failed
                 .into_iter()
                 .map(|x| x.to_string().bold().red().to_string())

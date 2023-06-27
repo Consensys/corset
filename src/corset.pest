@@ -5,7 +5,7 @@ COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* }
 corset = { SOI ~ (definition)* ~ EOI }
 
 definition = { "(" ~ definition_kw ~ (sexpr | expr)* ~ ")"}
-definition_kw = { "module" | "defconstraint" | "defunalias" | "defun" | "defpurefun" | "defconst" | "defalias" | "defplookup" | "defpermutation" | "definrange" | "defperspective" | "defcolumns" }
+definition_kw = { "module" | "defconstraint" | "defunalias" | "defun" | "defpurefun" | "defconst" | "defalias" | "defplookup" | "defpermutation" | "definrange" | "defperspective" | "defcolumns" | "definterleaved"}
 
 sexpr = { "(" ~ (expr | keyword | range)* ~ ")" }
 expr = { integer | symbol | sexpr | form | nth }

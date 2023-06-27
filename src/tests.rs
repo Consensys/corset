@@ -74,14 +74,14 @@ fn array_ok() {
 (defalias qq D)
 
 (defcolumns
-  (EXAMPLE1 :ARRAY[2])       ;; EXAMPLE1 is defined over {1, 2}
-  (EXAMPLE2 :ARRAY[4:7])     ;; EXAMPLE2 is defined over {4, 5, 6, 7}
-  (EXAMPLE3 :ARRAY[2:10:2])  ;; EXAMPLE3 is defined over {2, 4, 6, 8, 10}
-  (EXAMPLE4 :ARRAY{1 6 8}))  ;; EXAMPLE4 is defined over {1, 6, 8}
+(EXAMPLE1 :ARRAY[2])       ;; EXAMPLE1 is defined over {1, 2}
+(EXAMPLE2 :ARRAY[4:7])     ;; EXAMPLE2 is defined over {4, 5, 6, 7}
+(EXAMPLE3 :ARRAY[2:10:2])  ;; EXAMPLE3 is defined over {2, 4, 6, 8, 10}
+(EXAMPLE4 :ARRAY{1 6 8}))  ;; EXAMPLE4 is defined over {1, 6, 8}
 
-(defconstraint asdf () (eq! (nth B 3) (nth C 8)))
-(defconstraint fdsa () (eq! A (nth D 28)))
-(defconstraint fdsa2 () (eq! A (nth qq 28)))
+(defconstraint asdf () (eq! [B 3] [C 8]))
+(defconstraint fdsa () (eq! A [D 28]))
+(defconstraint fdsa2 () (eq! A [qq 28]))
 ",
     );
 }
@@ -161,5 +161,45 @@ fn global_scope() {
     must_fail(
         "local scope ok",
         "(module asdf) (defcolumns a b) (module zxcv) (defcolumns x y) (defconstraint test () (= asdf.a zxcv.x))",
+    );
+}
+
+#[test]
+fn definterleave() {
+    must_run(
+        "definterleave ok",
+        "(defcolumns A B (C :array [1:4])) (definterleaved (D :display :hex) (A [C 2] B ))",
+    );
+    must_fail(
+        "cannot specify type in :definterleaved",
+        "(defcolumns A (B :byte) (C :array [1:4])) (definterleaved (D :byte) (A [C 2] B ))",
+    );
+    must_fail(
+        "already exists in :definterleaved",
+        "(defcolumns A (B :byte) (C :array [1:4])) (definterleaved A (A [C 2] B ))",
+    );
+}
+
+#[test]
+fn defpermutation() {
+    must_run(
+        "defpermutation ok",
+        "(defcolumns A (B :byte ) C (D :array [0:4])) (defpermutation (X (Y :display :hex)) ((+ A) (- [D 2])))",
+    );
+    must_fail(
+        "defpermutation: cardinality mismatch",
+        "(defcolumns A (B :byte ) C (D :array [0:4])) (defpermutation (X F (Y :display :hex)) ((+ A) (- [D 2])))",
+    );
+    must_fail(
+        "found sorting column after non-sorting column",
+        "(defcolumns A (B :byte ) C (D :array [0:4])) (defpermutation (X Y (Z :display :hex)) ((- A) [D 2] (- C)))",
+    );
+}
+
+#[test]
+fn base_declaration() {
+    must_fail(
+        "cannot redefine base",
+        "(defcolumns (A :display :hex :display :dec))",
     );
 }

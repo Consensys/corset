@@ -91,7 +91,6 @@ pub fn make<S: AsRef<str>>(
 
     let mut columns: ColumnSet = Default::default();
     let mut constants: HashMap<Handle, BigInt> = Default::default();
-    let mut computations = ctx.computations();
 
     for (name, ast) in asts.iter_mut() {
         info!(
@@ -115,6 +114,8 @@ pub fn make<S: AsRef<str>>(
     // Sort by decreasing complexity for more efficient multi-threaded computation
     .sorted_by_cached_key(|x| -(x.size() as isize))
     .collect::<Vec<_>>();
+
+    let mut computations = ctx.computations();
 
     ctx.visit_mut::<()>(&mut |handle, symbol| {
         match symbol {
@@ -148,13 +149,6 @@ pub fn make<S: AsRef<str>>(
                                 Computation::Composite {
                                     target: id.clone(),
                                     exp: *e.clone(),
-                                },
-                            )?,
-                            Kind::Interleaved(_, froms) => computations.insert(
-                                &id,
-                                Computation::Interleaved {
-                                    target: id.clone(),
-                                    froms: froms.as_ref().unwrap().to_owned(),
                                 },
                             )?,
                         }

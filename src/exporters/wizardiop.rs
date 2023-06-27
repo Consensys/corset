@@ -8,7 +8,7 @@ use std::{collections::HashSet, io::Write};
 use anyhow::*;
 use convert_case::{Case, Casing};
 
-use crate::{compiler::*, pretty::Pretty, structs::Handle};
+use crate::{column::Computation, compiler::*, pretty::Pretty, structs::Handle};
 
 // const SIZE: usize = 4_194_304;
 
@@ -258,7 +258,7 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
         // Interleaved columns should appear after their sources
         .sorted_by_cached_key(|c| {
             (
-                if !matches!(c.1.kind, Kind::Interleaved(..)) {
+                if cs.computations.get(c.0.as_id()).map(|c| c.is_interleaved()) != Some(true) {
                     0
                 } else {
                     1
@@ -267,7 +267,7 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
             )
         })
     {
-        match column.kind {
+        match &column.kind {
             Kind::Atomic | Kind::Composite(_) | Kind::Phantom => {
                 if column.used {
                     let size_multiplier = cs.length_multiplier(&h);
@@ -283,19 +283,17 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
                     )
                 }
             }
-            Kind::Interleaved(_, ref froms) => {
-                r += &format!(
-                    "{} := zkevm.Interleave({})\n",
-                    reg_mangle(cs, &h).unwrap(),
-                    froms
-                        .as_ref()
-                        .unwrap()
-                        .iter()
-                        .map(|c| reg_mangle(cs, c).unwrap())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
-            }
+        }
+        if let Some(Computation::Interleaved { froms, .. }) = cs.computations.get(h.as_id()) {
+            r += &format!(
+                "{} := zkevm.Interleave({})\n",
+                reg_mangle(cs, &h).unwrap(),
+                froms
+                    .iter()
+                    .map(|c| reg_mangle(cs, c).unwrap())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
     }
 
