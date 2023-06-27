@@ -1242,7 +1242,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                                     .build(),
                             ))
                         } else {
-                            bail!("tried to access `{:?}` at index {}", array, i)
+                            bail!("tried to access `{}` at index {}", array.pretty(), i)
                         }
                     }
                     _ => unimplemented!(),
@@ -1314,7 +1314,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                                 .flatten()
                                 .map(|b| b.to_usize())
                                 .flatten()
-                                .ok_or_else(|| anyhow!("{:?} is not a valid index", index))?;
+                                .ok_or_else(|| anyhow!("{:?} is not a valid index", index.white().bold()))?;
 
                             if !domain.contains(&index_usize) {
                                 bail!("index {} is not in domain {:?}", index_usize, domain);
@@ -1322,7 +1322,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                             from_handles
                                 .push(ColumnRef::from_handle(handle.as_handle().ith(index_usize)));
                         } else {
-                            bail!("{name} is not an array column");
+                            bail!("{} is not an array column", name.white().bold());
                         };
                     }
                     _ => unreachable!(),
@@ -1508,7 +1508,7 @@ fn reduce_toplevel(
                             return Ok(handle.clone());
                         }
                     }
-                    bail!("`{}` is not a column", from)
+                    bail!("`{}` is not a column", from.white().bold())
                 })
                 .collect::<Result<Vec<_>>>()?;
 
