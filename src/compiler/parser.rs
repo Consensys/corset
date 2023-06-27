@@ -1064,7 +1064,6 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 ordering_ongoing = false;
                 from.push(from_w_sign.clone());
             }
-            dbg!(&from);
             if signs.is_empty() {
                 bail!("no sorting criterion found")
             }
