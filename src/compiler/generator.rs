@@ -1229,10 +1229,10 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                 match array.e() {
                     Expression::ArrayColumn {
                         handle,
-                        domain: range,
+                        domain,
                         base,
                     } => {
-                        if range.contains(&i) {
+                        if domain.contains(&i) {
                             Ok(Some(
                                 Node::column()
                                     .handle(handle.as_handle().ith(i))
@@ -1314,7 +1314,9 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                                 .flatten()
                                 .map(|b| b.to_usize())
                                 .flatten()
-                                .ok_or_else(|| anyhow!("{:?} is not a valid index", index.white().bold()))?;
+                                .ok_or_else(|| {
+                                    anyhow!("{:?} is not a valid index", index.white().bold())
+                                })?;
 
                             if !domain.contains(&index_usize) {
                                 bail!("index {} is not in domain {:?}", index_usize, domain);
@@ -1522,7 +1524,7 @@ fn reduce_toplevel(
                 .iter()
                 .enumerate()
                 .map(|(i, t)| {
-                    Handle::new(ctx.module(), t.name.clone())
+                    Handle::new(ctx.module(), &t.name)
                         .and_with_perspective(froms[i].as_handle().perspective.clone())
                         .into()
                 })

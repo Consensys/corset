@@ -585,7 +585,7 @@ impl std::convert::TryInto<DisplayableColumn> for ColumnAttributes {
 
 /// Example: in `defcolumns(A, (B :boolean), (C :display :hex :byte))`,
 /// this function should be called on ['A'], ['B', ':boolean'], ['C', ':display', ':hex', ':byte']
-fn extract_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
+fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
     enum ColumnParser {
         Begin,
         Array,
@@ -596,16 +596,14 @@ fn extract_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
     let mut attributes = ColumnAttributes::default();
     let mut state = ColumnParser::Begin;
 
-    let tokens = if source.is_symbol() {
+    let mut tokens = if source.is_symbol() {
         // a column defined by its name, without any particular attribute
-        vec![source]
+        vec![source].into_iter()
     } else if let Token::List(l) = source.class {
-        l
+        l.into_iter()
     } else {
         unreachable!()
     };
-
-    let mut tokens = tokens.into_iter();
 
     let name_token = tokens
         .next()
@@ -624,16 +622,15 @@ fn extract_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
                     // e.g. (A ... :integer ...)
                     match kw.to_lowercase().as_str() {
                         ":boolean" | ":bool" | ":nibble" | ":byte" | ":integer" | ":natural" => {
-                            if attributes.t.get().is_some() {
-                                bail!(
+                            attributes.t.set(kw.as_str().try_into()?).map_err(|_| {
+                                anyhow!(
                                     "trying to redefine column {} of type {:?} as {}",
                                     attributes.name,
                                     attributes.t.get().unwrap(),
                                     kw
                                 )
-                            } else {
-                                attributes.t.set(kw.as_str().try_into()?).unwrap();
-                            }
+                            })?;
+
                             ColumnParser::Begin
                         }
                         // not really used for now.
@@ -651,64 +648,59 @@ fn extract_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
                 }
                 // A range alone treated as if it were preceded by :array
                 Token::Range(ref _range) => {
-                    if attributes.range.get().is_some() {
-                        bail!(
+                    attributes.range.set(_range.to_owned()).map_err(|_| {
+                        anyhow!(
                             "trying to redefine column {} of type {:?} as {:?}",
                             attributes.name,
                             attributes.range.get().unwrap(),
                             _range
                         )
-                    } else {
-                        attributes.range.set(_range.to_owned()).unwrap();
-                    }
+                    })?;
                     ColumnParser::Begin
                 }
                 _ => bail!("expected keyword, found `{:?}`", x),
             },
             // :array expects a range defining the domain of the column array
             ColumnParser::Array => {
-                if attributes.range.get().is_some() {
-                    bail!(
-                        "trying to redefine column {} of type {:?} as {:?}",
-                        attributes.name,
-                        attributes.range.get().unwrap(),
-                        x.as_range()?
-                    )
-                } else {
-                    attributes.range.set(x.as_range()?.to_owned()).unwrap();
-                }
+                attributes
+                    .range
+                    .set(x.as_range()?.to_owned())
+                    .map_err(|_| {
+                        anyhow!(
+                            "trying to redefine column {} of type {:?} as {:?}",
+                            attributes.name,
+                            attributes.range.get().unwrap(),
+                            x.as_range().unwrap()
+                        )
+                    })?;
                 ColumnParser::Begin
             }
             ColumnParser::Computation => todo!(),
             ColumnParser::PaddingValue => {
-                if attributes.padding_value.get().is_some() {
-                    bail!(
+                attributes.padding_value.set(x.as_i64()?).map_err(|_| {
+                    anyhow!(
                         "trying to redefine column {} of type {} as {:?}",
                         attributes.name,
                         attributes.padding_value.get().unwrap(),
-                        x.as_i64()?
+                        x.as_i64().unwrap()
                     )
-                } else {
-                    attributes.padding_value.set(x.as_i64()?).unwrap();
-                }
+                })?;
                 ColumnParser::Begin
             }
             ColumnParser::Base => {
-                if attributes.base.get().is_some() {
-                    bail!(
+                let base = if let Token::Keyword(ref kw) = x.class {
+                    kw.as_str().try_into()?
+                } else {
+                    bail!(":display expects one of :hex, :dec, :bin; found {}", x)
+                };
+                attributes.base.set(base).map_err(|_| {
+                    anyhow!(
                         "trying to redefine column {} of type {:?} as {:?}",
                         attributes.name,
                         attributes.base.get().unwrap(),
                         x
                     )
-                } else {
-                    let base = if let Token::Keyword(ref kw) = x.class {
-                        kw.as_str().try_into()?
-                    } else {
-                        bail!(":display expects one of :hex, :dec, :bin; found {}", x)
-                    };
-                    attributes.base.set(base).unwrap();
-                }
+                })?;
                 ColumnParser::Begin
             }
         };
@@ -733,7 +725,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
     let columns = tokens
         .map(|c| {
             c.and_then(|c| {
-                let column_attributes = extract_column_attributes(c.clone())?;
+                let column_attributes = parse_column_attributes(c.clone())?;
 
                 let base = column_attributes.base.get().cloned().unwrap_or(Base::Hex);
                 Ok(AstNode {
@@ -1013,7 +1005,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 .with_context(|| anyhow!("missing target columns"))??
                 .as_list()?
                 .iter()
-                .map(|t| extract_column_attributes(t.clone()))
+                .map(|t| parse_column_attributes(t.clone()))
                 .flatten()
                 .map(|attributes| attributes.try_into())
                 .collect::<Result<Vec<DisplayableColumn>>>()?;
@@ -1070,7 +1062,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             })
         }
         "definterleaved" => {
-            let target = extract_column_attributes(
+            let target = parse_column_attributes(
                 tokens
                     .next()
                     .with_context(|| anyhow!("missing source column"))??,
@@ -1226,7 +1218,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
             Ok(AstNode {
                 class: Token::IndexedSymbol { name, index },
                 lc,
-                src: src.clone(),
+                src,
             })
         }
         x => {

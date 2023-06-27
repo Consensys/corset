@@ -120,7 +120,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
         Token::DefPermutation {
             from: froms,
             to: tos,
-            signs: _,
+            ..
         } => {
             if tos.len() != froms.len() {
                 bail!(
@@ -140,7 +140,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                         .base(to.base.clone())
                         .build(),
                 )
-                .unwrap_or_else(|e| warn!("while defining permutation: {}", e));
+                .with_context(|| anyhow!("while defining permutation: {}", e))?;
             }
             Ok(())
         }
