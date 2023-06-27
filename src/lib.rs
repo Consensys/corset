@@ -516,18 +516,23 @@ pub extern "C" fn trace_column_by_id(trace: *const Trace, i: u32) -> ColumnData 
     let r = Trace::from_ptr(trace);
     let i = i as usize;
     assert!(i < r.columns.len());
-    let col = if let Some(c) = r.columns.get(i) {
-        c
+    if let Some(col) = r.columns.get(i) {
+        if col.values.is_empty() {
+            // A non-allocated Vec return an elt-aligned pointer, here 0x8
+            // typically. However, Go twists his panties in a bunch if it merely
+            // sees an invalid pointer on the stack. Therefore, we have to
+            // return a null pointer instead of an empty vec in this case.
+            Default::default()
+        } else {
+            ColumnData {
+                padding_value: col.padding_value,
+                values: col.values.as_ptr(),
+                values_len: col.values.len() as u64,
+            }
+        }
     } else {
-        let r = ColumnData::default();
         set_errno(CorsetError::ColumnIdNotFound.into());
-        return r;
-    };
-
-    ColumnData {
-        padding_value: col.padding_value,
-        values: col.values.as_ptr(),
-        values_len: col.values.len() as u64,
+        ColumnData::default()
     }
 }
 
