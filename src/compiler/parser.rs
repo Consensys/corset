@@ -74,7 +74,7 @@ impl AstNode {
     pub fn debug_info(&self) -> Option<String> {
         self.class.debug_info()
     }
-    
+
     pub fn is_symbol(&self) -> bool {
         matches!(self.class, Token::Symbol(_))
     }
@@ -703,13 +703,7 @@ fn extract_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
                     )
                 } else {
                     let base = if let Token::Keyword(ref kw) = x.class {
-                        match kw.to_lowercase().as_str() {
-                            // TODO use Base::try_from once merge is done with main
-                            ":bin" => Base::Bin,
-                            ":dec" => Base::Dec,
-                            ":hex" => Base::Hex,
-                            _ => bail!(":display expects one of :hex, :dec, :bin; found {}", kw),
-                        }
+                        kw.as_str().try_into()?
                     } else {
                         bail!(":display expects one of :hex, :dec, :bin; found {}", x)
                     };
