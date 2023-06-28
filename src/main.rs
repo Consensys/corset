@@ -382,12 +382,7 @@ fn main() -> Result<()> {
             transformer::sorts(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
 
-            let mut wiop_exporter = exporters::WizardIOP {
-                out_filename,
-                package,
-                sizes: Default::default(),
-            };
-            wiop_exporter.render(&constraints)?;
+            exporters::wizardiop::render(&constraints, &out_filename, &package)?;
         }
         #[cfg(all(feature = "parser", feature = "exporters"))]
         Commands::Latex {

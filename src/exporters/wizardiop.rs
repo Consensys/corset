@@ -1,14 +1,18 @@
+use handlebars::Handlebars;
 use itertools::Itertools;
 use log::*;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use pairing_ce::{bn256::Fr, ff::PrimeField};
-use std::{collections::HashSet, io::Write};
+use serde::Serialize;
+use std::{collections::HashSet, io::Write, unreachable};
 
 use anyhow::*;
 use convert_case::{Case, Casing};
 
 use crate::{column::Computation, compiler::*, pretty::Pretty, structs::Handle};
+
+const TEMPLATE: &str = include_str!("wizardiop.go");
 
 // const SIZE: usize = 4_194_304;
 
@@ -152,7 +156,7 @@ fn render_funcall(cs: &ConstraintSet, func: &Intrinsic, args: &[Node]) -> String
     }
 }
 
-fn render_constraints(cs: &ConstraintSet) -> String {
+fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
     cs.constraints
         .iter()
         .sorted_by_key(|c| c.name())
@@ -205,11 +209,10 @@ fn render_constraints(cs: &ConstraintSet) -> String {
             ),
         })
         .collect::<Vec<String>>()
-        .join("\n")
 }
 
 fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {
-    let r = format!("SIZE_{}", h.mangled_module());
+    let r = format!("sizes.{}", h.mangled_module().to_case(Case::ScreamingSnake));
     sizes.insert(r.clone());
     r
 }
@@ -250,54 +253,68 @@ fn reg(cs: &ConstraintSet, c: &Handle) -> Result<Handle> {
         .unwrap_or_else(|| Handle::new(&c.module, reg_id.to_string())))
 }
 
-fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> String {
-    let mut r = String::new();
-    for (h, column) in cs
-        .columns
-        .iter()
-        // Interleaved columns should appear after their sources
-        .sorted_by_cached_key(|c| {
-            (
-                if cs.computations.get(c.0.as_id()).map(|c| c.is_interleaved()) != Some(true) {
-                    0
-                } else {
-                    1
-                },
-                c.1.handle.mangle(),
-            )
-        })
-    {
-        match &column.kind {
-            Kind::Atomic | Kind::Composite(_) | Kind::Phantom => {
-                if column.used {
-                    let size_multiplier = cs.length_multiplier(&h);
-                    r += &format!(
-                        "{} := build.RegisterCommit(\"{}\", {})\n",
-                        reg_mangle(cs, &h).unwrap(),
-                        reg(cs, &column.handle).unwrap(),
-                        if size_multiplier == 1 {
-                            make_size(&column.handle, sizes)
-                        } else {
-                            format!("{} * {}", size_multiplier, make_size(&column.handle, sizes))
-                        }
-                    )
-                }
-            }
-        }
-        if let Some(Computation::Interleaved { froms, .. }) = cs.computations.get(h.as_id()) {
-            r += &format!(
-                "{} := zkevm.Interleave({})\n",
-                reg_mangle(cs, &h).unwrap(),
-                froms
-                    .iter()
-                    .map(|c| reg_mangle(cs, c).unwrap())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-    }
+#[derive(Serialize)]
+struct WiopColumn {
+    go_id: String,
+    json_register: String,
+    size: String,
+}
+#[derive(Serialize)]
+struct WiopInterleaved {
+    go_id: String,
+    interleaving: String,
+}
 
-    r
+fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> Vec<WiopColumn> {
+    cs.columns
+        .iter()
+        .filter(|c| cs.computations.get(c.0.as_id()).map(|c| c.is_interleaved()) != Some(true))
+        .sorted_by_cached_key(|c| c.1.handle.mangle())
+        .filter_map(|(h, column)| {
+            if column.used {
+                let size_multiplier = cs.length_multiplier(&h);
+                Some(WiopColumn {
+                    go_id: reg_mangle(cs, &h).unwrap(),
+                    json_register: reg(cs, &column.handle).unwrap().to_string(),
+                    size: if size_multiplier == 1 {
+                        make_size(&column.handle, sizes)
+                    } else {
+                        format!("{} * {}", size_multiplier, make_size(&column.handle, sizes))
+                    },
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn render_interleaved(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> Vec<WiopInterleaved> {
+    cs.columns
+        .iter()
+        .filter(|c| cs.computations.get(c.0.as_id()).map(|c| c.is_interleaved()) == Some(true))
+        .sorted_by_cached_key(|c| c.1.handle.mangle())
+        .filter_map(|(h, column)| {
+            if column.used {
+                Some(WiopInterleaved {
+                    go_id: reg_mangle(cs, &h).unwrap(),
+                    interleaving: if let Some(Computation::Interleaved { froms, .. }) =
+                        cs.computations.get(h.as_id())
+                    {
+                        froms
+                            .iter()
+                            .map(|c| reg_mangle(cs, c).unwrap())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    } else {
+                        unreachable!()
+                    },
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 fn render_constraint(
@@ -334,58 +351,36 @@ fn render_constraint(
     }
 }
 
-pub struct WizardIOP {
-    pub out_filename: Option<String>,
-    pub package: String,
-
-    pub sizes: HashSet<String>,
-}
-
-impl WizardIOP {
-    pub fn render(&mut self, cs: &ConstraintSet) -> Result<()> {
-        let columns = render_columns(cs, &mut self.sizes);
-        let constraints = render_constraints(cs);
-
-        let r = format!(
-            r#"
-package {}
-
-
-import (
-    "github.com/consensys/accelerated-crypto-monorepo/symbolic"
-    "github.com/consensys/accelerated-crypto-monorepo/zkevm"
-)
-
-// const (
-// SIZE = []
-// []
-// )
-
-func ZkEVMDefine(build *zkevm.Builder) {{
-//
-// Columns declarations
-//
-{}
-
-
-//
-// Constraints declarations
-//
-{}
-}}
-"#,
-            &self.package, columns, constraints,
-        );
-
-        if let Some(filename) = self.out_filename.as_ref() {
-            std::fs::File::create(filename)
-                .with_context(|| format!("while creating `{}`", filename))?
-                .write_all(r.as_bytes())
-                .with_context(|| format!("while writing to `{}`", filename))?;
-            super::gofmt(filename);
-        } else {
-            println!("{}", r);
-        }
-        Ok(())
+pub fn render(cs: &ConstraintSet, out_filename: &Option<String>, package: &str) -> Result<()> {
+    #[derive(Serialize)]
+    struct TemplateData {
+        columns: Vec<WiopColumn>,
+        interleaved: Vec<WiopInterleaved>,
+        constraints: Vec<String>,
     }
+    let mut sizes: HashSet<String> = HashSet::new();
+
+    let mut hb = Handlebars::new();
+    hb.set_dev_mode(true);
+    hb.set_strict_mode(true);
+
+    let r = hb.render_template(
+        TEMPLATE,
+        &TemplateData {
+            columns: render_columns(cs, &mut sizes),
+            interleaved: render_interleaved(cs, &mut sizes),
+            constraints: render_constraints(cs),
+        },
+    )?;
+
+    if let Some(filename) = out_filename.as_ref() {
+        std::fs::File::create(filename)
+            .with_context(|| format!("while creating `{}`", filename))?
+            .write_all(r.as_bytes())
+            .with_context(|| format!("while writing to `{}`", filename))?;
+        super::gofmt(filename);
+    } else {
+        println!("{}", r);
+    }
+    Ok(())
 }

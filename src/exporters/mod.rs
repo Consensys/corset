@@ -10,10 +10,7 @@ pub mod go;
 #[cfg(all(feature = "parser", feature = "exporters"))]
 pub mod latex;
 #[cfg(feature = "exporters")]
-mod wizardiop;
-
-#[cfg(feature = "exporters")]
-pub use wizardiop::WizardIOP;
+pub mod wizardiop;
 
 use crate::column::Register;
 
