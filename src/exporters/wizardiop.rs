@@ -268,7 +268,12 @@ struct WiopInterleaved {
 fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> Vec<WiopColumn> {
     cs.columns
         .iter()
-        .filter(|c| cs.computations.get(c.0.as_id()).map(|c| c.is_interleaved()) != Some(true))
+        .filter(|c| {
+            cs.computations
+                .computation_for(&c.0)
+                .map(|c| c.is_interleaved())
+                != Some(true)
+        })
         .sorted_by_cached_key(|c| c.1.handle.mangle())
         .filter_map(|(h, column)| {
             if column.used {
@@ -292,14 +297,19 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> Vec<WiopCo
 fn render_interleaved(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> Vec<WiopInterleaved> {
     cs.columns
         .iter()
-        .filter(|c| cs.computations.get(c.0.as_id()).map(|c| c.is_interleaved()) == Some(true))
-        .sorted_by_cached_key(|c| c.1.handle.mangle())
+        .filter(|col| {
+            cs.computations
+                .computation_for(&col.0)
+                .map(|comp| comp.is_interleaved())
+                == Some(true)
+        })
+        .sorted_by_cached_key(|col| col.1.handle.mangle())
         .filter_map(|(h, column)| {
             if column.used {
                 Some(WiopInterleaved {
                     go_id: reg_mangle(cs, &h).unwrap(),
                     interleaving: if let Some(Computation::Interleaved { froms, .. }) =
-                        cs.computations.get(h.as_id())
+                        cs.computations.computation_for(&h)
                     {
                         froms
                             .iter()
