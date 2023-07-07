@@ -11,14 +11,14 @@ const (
 )
 
 
-const (
+var (
 	{{#each columns}}
-	{{this.go_name}} column.ColumnID = "{{this.corset_name}}"
+	{{this.go_name}} column.ColumnID = column.ColumnID{ Id: {{this.reg_id}}, Str: "{{this.reg_name}}" }
 	{{/each}}
 )
 
 var AllRegisters = column.ColumnList{
 	{{#each registers}}
-	"{{this}}",
+	{{this.1}},
 	{{/each}}
 }

@@ -5,12 +5,12 @@ pub mod besu;
 #[cfg(feature = "conflater")]
 pub mod conflater;
 pub(crate) mod debugger;
-#[cfg(feature = "exporters")]
-pub mod go;
 #[cfg(all(feature = "parser", feature = "exporters"))]
 pub mod latex;
 #[cfg(feature = "exporters")]
 pub mod wizardiop;
+#[cfg(feature = "exporters")]
+pub mod zkgeth;
 
 use crate::column::Register;
 

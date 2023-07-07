@@ -14,7 +14,8 @@ struct GoConstant {
 }
 #[derive(Serialize)]
 struct GoColumn {
-    corset_name: String,
+    reg_name: String,
+    reg_id: usize,
     go_name: String,
 }
 #[derive(Serialize)]
@@ -22,7 +23,7 @@ struct TemplateData {
     module: String,
     columns: Vec<GoColumn>,
     constants: Vec<GoConstant>,
-    registers: Vec<String>,
+    registers: Vec<(usize, String)>,
 }
 
 pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Result<()> {
@@ -35,14 +36,15 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
                 let r = c.register.unwrap();
                 let register = super::reg_to_string(&cs.columns.registers[r], r);
                 Some(GoColumn {
-                    corset_name: register,
+                    reg_name: register,
+                    reg_id: r,
                     go_name: c.handle.mangled_name(),
                 })
             } else {
                 None
             }
         })
-        .sorted_by(|a, b| a.corset_name.cmp(&b.corset_name))
+        .sorted_by(|a, b| a.reg_name.cmp(&b.reg_name))
         .collect::<Vec<_>>();
 
     let registers = cs
@@ -50,7 +52,7 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
         .registers
         .iter()
         .enumerate()
-        .map(|(i, r)| super::reg_to_string(r, i))
+        .map(|(i, r)| (i, super::reg_to_string(r, i)))
         .collect::<Vec<_>>();
 
     let constants = cs

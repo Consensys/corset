@@ -360,7 +360,7 @@ fn main() -> Result<()> {
     match args.command {
         #[cfg(feature = "exporters")]
         Commands::Go { package, filename } => {
-            exporters::go::render(&constraints, &package, filename.as_ref())?;
+            exporters::zkgeth::render(&constraints, &package, filename.as_ref())?;
         }
         #[cfg(feature = "exporters")]
         Commands::Besu { package, filename } => {
