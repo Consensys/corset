@@ -83,7 +83,7 @@ pub fn purify(s: &str) -> String {
         ['(', ')', '{', '}', '[', ']', '<', '>', ':', '%', '.', '_'],
         "_",
     )
-    .replace('-', "_")
+    .replace('-', "sub")
     .replace('*', "mul")
     .replace('+', "add")
     .replace('/', "div")
