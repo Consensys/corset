@@ -375,7 +375,7 @@ fn main() -> Result<()> {
             out_filename,
             package,
         } => {
-            // transformer::validate_nhood(&mut constraints)?;
+            transformer::validate_nhood(&mut constraints)?;
             transformer::lower_shifts(&mut constraints);
             transformer::expand_ifs(&mut constraints);
             transformer::expand_constraints(&mut constraints)?;
