@@ -16,7 +16,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
-import net.consensys.linea.zktracer.bytes.UnsignedByte;
 
 @SuppressWarnings("unused")
 public record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace) {

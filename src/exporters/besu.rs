@@ -43,7 +43,7 @@ struct TemplateData {
     constants: Vec<BesuConstant>,
 }
 
-fn magmat_to_java_type(m: Magma) -> String {
+fn magma_to_java_type(m: Magma) -> String {
     match m {
         Magma::None => unreachable!(),
         Magma::Boolean => "Boolean",
@@ -79,7 +79,7 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
             BesuRegister {
                 corset_name,
                 java_name,
-                tupe: magmat_to_java_type(r.magma),
+                tupe: magma_to_java_type(r.magma),
             }
         })
         .sorted_by_key(|f| f.java_name.clone())
@@ -96,7 +96,7 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
                 Some(BesuColumn {
                     corset_name: c.handle.name.to_string(),
                     java_name: c.handle.name.to_case(Case::Camel),
-                    tupe: magmat_to_java_type(c.t.magma()).into(),
+                    tupe: magma_to_java_type(c.t.magma()).into(),
                     appender: handle_to_appender(&c.handle),
                     register,
                 })
@@ -111,9 +111,10 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
         .constants
         .iter()
         .map(|c| BesuConstant {
-            name: c.0.name.to_owned(),
+            name: crate::utils::purify(&c.0.name),
             value: c.1.to_string(),
         })
+        .sorted_by_cached_key(|c| c.name.to_owned())
         .collect::<Vec<_>>();
 
     let r = Handlebars::new().render_template(
