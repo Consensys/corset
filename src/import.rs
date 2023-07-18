@@ -109,6 +109,10 @@ fn parse_column(xs: &[Value], t: Type) -> Result<Vec<Fr>> {
             _ => bail!("expected numeric value, found `{}`", x),
         })
         .collect::<Result<Vec<_>>>()?;
+
+    if crate::utils::maybe_warn(t, &r).is_err() {
+        error!("Column of boolean found, but not annotated as :bool");
+    };
     r.extend(xs);
     Ok(r)
 }
@@ -138,6 +142,9 @@ fn parse_column(xs: &[Value], t: Type) -> Result<Vec<Fr>> {
         })
         .collect::<Result<Vec<_>>>()?;
     r.extend(xs);
+    if crate::utils::maybe_warn(t, &r).is_err() {
+        error!("Column of boolean found, but not annotated as :bool");
+    };
     Ok(r)
 }
 

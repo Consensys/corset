@@ -1,4 +1,5 @@
 use anyhow::*;
+use num_traits::One;
 use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},
@@ -45,6 +46,16 @@ pub fn connect_to_db(
 lazy_static::lazy_static! {
     static ref F_15: Fr = Fr::from_str("15").unwrap();
     static ref F_255: Fr = Fr::from_str("255").unwrap();
+}
+
+pub fn maybe_warn(t: Type, xs: &[Fr]) -> Result<()> {
+    if t.magma() != Magma::Boolean {
+        if xs.iter().all(|x| x.is_zero() || *x == Fr::one()) {
+            bail!("")
+        }
+    }
+
+    Ok(())
 }
 
 pub fn validate(t: Type, x: Fr) -> Result<Fr> {
