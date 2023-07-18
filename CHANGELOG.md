@@ -2,6 +2,112 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.0.0] - 2023-07-18
+
+### Bug Fixes
+
+- Extend permutation signs; do not fail parsing on empty modules
+- Issue #11
+- Inverse constraint generation
+- Mark used arrays as used
+- Re-enable SIMD
+- Handles/ID confusion in lib
+- JSON export in conflated traces
+- Cbindgen update
+- When loading columns, pad both at top and bottom
+- Booleans are stable by inversion
+- Dynamically type user-defined function calls when possible
+- All column expression must be typed
+- Tests
+- Correctly compute padding for double-past spilling
+- Use local rayon thread pools in the FFI
+- Missing argument on x86/AVX2 build
+- Do not crash on Void constraints
+- Only takes own constraints into account when computing spilling
+- If applicable, pad imported columns with their defined value
+- Typing of `eq!`
+- Embed handle information when available
+- Hash computation for `ColumnRef`
+- "namespace-ize" perspective columns in zkGeth export
+- Tests
+- Concurrent borrow
+- Update zkBesu exporter to reigsters
+- Do not print *all* columns in debug
+- Discern casting and operation result typing
+- Always sort handles while debugging
+- Don't output too long lines in the conflater
+- Better error messages
+- Besu export
+- Erroneous symbols in WizardIOP
+- Cgo antics
+- Mixup between computations ID & columns ID
+- Revert to old serialization
+- Enable sorts in wizard
+- Expand string purification
+
+### Features
+
+- Add cross-perspective references
+- Better error message on columns loading
+- Implement binary column representations
+- Improve debugging outputs
+- Add optional typing to user-defined functions
+- Implement loobeans
+- The debugger can now display types
+- Add debug information on mismatching columns length
+- Show as many compile error as possible at once
+- Implement the new perspective behavior
+- Colorize debugger output
+- Add function overloading
+- Condense debugging output
+- Add the `--debug-src` flag
+- Allow for a debug-oriented representation of the AstNodes
+- Warn on potentially mistyped columns
+
+### Miscellaneous Tasks
+
+- N-hood columns do not need to be viewed as binary
+- Update the Kotlin template
+- Clippy
+
+### Performance
+
+- Optimize self-inverts of booleans as identity
+- Pre-compute i64->Fr user-set padding values
+
+### Refactor
+
+- Use a product type for handles for clearer output
+- Colored -> owo_colors
+- Not & Eq are builtin rather than intrinsics
+- `Node` members are now private
+- Homogeneize stdlib function names
+- Stdlib renaming
+- Homogeneize column create API
+- Drop the `--allow-dups` flag
+- Implement `SelfInv` in Corset
+- Replace `:interleaved` by `definterleaved` ([#14](https://github.com/orhun/git-cliff/issues/14))
+- Implement the new sizes system in WizardIOP exporter
+- Go -> zkGeth
+
+### Build
+
+- Hide parser & exporters behind feature flags
+- Simplify AVX feature gate
+
+### Ffi
+
+- Add an error to string converter
+
+### Hack
+
+- Temporary revert to old size scheme
+- Disable target-cpu
+
+### Reverse
+
+- No CPU-specific code
+
 ## [8.0.0-rc] - 2023-05-25
 
 ### Bug Fixes
@@ -83,6 +189,7 @@ All notable changes to this project will be documented in this file.
 - Prettier debugger
 - Clippy
 - Update dependencies
+- Release corset version 8.0.0-rc
 
 ### Performance
 
