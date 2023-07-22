@@ -66,7 +66,7 @@ impl AstNode {
     }
     pub fn as_list(&self) -> Result<&[AstNode]> {
         if let Token::List(xs) = &self.class {
-            Ok(xs)
+            Ok(xs.into())
         } else {
             bail!("expected list, found `{:?}`", self)
         }
@@ -173,6 +173,53 @@ impl std::fmt::Display for Domain {
 }
 
 #[derive(Clone)]
+pub struct AstNodes(Vec<AstNode>);
+impl AstNodes {
+    pub fn iter(&self) -> impl Iterator<Item = &AstNode> {
+        self.0
+            .iter()
+            .filter(|n| !matches!(n.class, Token::Comment(_)))
+    }
+
+    pub fn as_slice(&self) -> &[AstNode] {
+        self.0.as_slice()
+    }
+
+    pub fn iter_with_comments(&self) -> impl Iterator<Item = &AstNode> {
+        self.0.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.iter().count()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn get(&self, i: usize) -> Option<&AstNode> {
+        self.iter().nth(i)
+    }
+}
+impl std::ops::Index<usize> for AstNodes {
+    type Output = AstNode;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+impl<'a> From<&'a AstNodes> for &'a [AstNode] {
+    fn from(value: &'a AstNodes) -> Self {
+        value.0.as_slice()
+    }
+}
+impl From<Vec<AstNode>> for AstNodes {
+    fn from(value: Vec<AstNode>) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Clone)]
 pub enum Token {
     /// a comment in the original source file
     Comment(String),
@@ -183,22 +230,18 @@ pub enum Token {
     /// a keyword (typically a def*) that will be interpreted later on
     Keyword(String),
     /// a list of nodes
-    List(Vec<AstNode>),
+    List(AstNodes),
     /// a range; typically used in discrete constraints declaration and loops
     Range(Domain),
 
     /// definition of a module; this will derive a symbol table
     DefModule(String),
-    /// a list of constant definition: (name, value)
-    DefConsts(Vec<(Box<AstNode>, Box<AstNode>)>),
-    /// a list of columns declaration, normally only DefColumn
-    DefColumns(Vec<AstNode>),
-    /// a list of columns declaration, normally only DefColumn, only enabled when trigger is non-zero
-    DefPerspective {
-        name: String,
-        trigger: Box<AstNode>,
-        columns: Vec<AstNode>,
-    },
+    /// a list of constant definition, normally only DefConst or Comments
+    DefConsts(AstNodes),
+    /// defines a constant
+    DefConst(String, BigInt),
+    /// a list of columns declaration, normally only DefColumn or Comments
+    DefColumns(AstNodes),
     /// defines an atomic column
     DefColumn {
         /// name of the column; unique in its module
@@ -220,6 +263,13 @@ pub enum Token {
         /// which numeric base should be used to display column values; this is a purely aesthetic setting
         base: Base,
     },
+    /// a list of columns declaration, normally only DefColumn, only enabled when trigger is non-zero
+    DefPerspective {
+        name: String,
+        trigger: Box<AstNode>,
+        columns: AstNodes,
+    },
+
     /// definition of a function
     Defun {
         /// name of the function; must be unique in its module
@@ -244,7 +294,7 @@ pub enum Token {
         nowarn: bool,
     },
     /// a list of aliases declaration, normally only DefAlias -- FIXME: should probably be removed
-    DefAliases(Vec<AstNode>),
+    DefAliases(AstNodes),
     DefAlias(String, String),
     /// Declaration of a function alias -- FIXME: should probably be removed
     DefunAlias(String, String),
@@ -272,8 +322,8 @@ pub enum Token {
     /// declaration of a plookup constraint between two sets of columns
     DefPlookup {
         name: String,
-        including: Vec<AstNode>,
-        included: Vec<AstNode>,
+        including: AstNodes,
+        included: AstNodes,
     },
     /// this constraint ensures that exp remains lesser than max
     DefInrange(Box<AstNode>, usize),
@@ -296,26 +346,26 @@ impl Token {
                     if let Ok(verb) = verb.as_symbol() {
                         match verb {
                             "if-zero" | "if-not-zero" => {
-                                Some(format!("({})", Token::format_list_debug(args, 2)))
+                                Some(format!("({})", Token::format_list_debug(args.into(), 2)))
                             }
                             "if-eq" | "if-eq-else" => {
-                                Some(format!("({})", Token::format_list_debug(args, 3)))
+                                Some(format!("({})", Token::format_list_debug(args.into(), 3)))
                             }
                             _ => Some(format!(
                                 "({})",
-                                Token::format_list_debug(args, LIST_DISPLAY_THRESHOLD)
+                                Token::format_list_debug(args.into(), LIST_DISPLAY_THRESHOLD)
                             )),
                         }
                     } else {
                         Some(format!(
                             "({})",
-                            Token::format_list_debug(args, LIST_DISPLAY_THRESHOLD)
+                            Token::format_list_debug(args.into(), LIST_DISPLAY_THRESHOLD)
                         ))
                     }
                 } else {
                     Some(format!(
                         "({})",
-                        Token::format_list_debug(args, LIST_DISPLAY_THRESHOLD)
+                        Token::format_list_debug(args.into(), LIST_DISPLAY_THRESHOLD)
                     ))
                 }
             }
@@ -364,22 +414,23 @@ impl Debug for Token {
             Token::Symbol(ref name) => write!(f, "{}", name),
             Token::Keyword(ref name) => write!(f, "{}", name),
             Token::List(ref args) => {
-                write!(f, "({})", Token::format_list(args, LIST_DISPLAY_THRESHOLD))
+                write!(
+                    f,
+                    "({})",
+                    Token::format_list(args.into(), LIST_DISPLAY_THRESHOLD)
+                )
             }
             Token::Range(ref args) => write!(f, "{:?}", args),
 
             Token::DefModule(name) => write!(f, "MODULE {}", name),
-            Token::DefConsts(v) => {
-                write!(
-                    f,
-                    "{}",
-                    v.iter().fold(String::new(), |mut ax, c| {
-                        ax.push_str(&format!("{}:CONST({:?})", c.0, c.1));
-                        ax
-                    })
-                )
+            Token::DefConsts(cs) => {
+                for c in cs.iter() {
+                    write!(f, "{}", c)?;
+                }
+                Ok(())
             }
-            Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
+            Token::DefConst(s, v) => write!(f, "{}:CONST({:?})", s, v),
+            Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols.as_slice()),
             Token::DefColumn { name, t, kind, .. } => {
                 write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind)
             }
@@ -409,7 +460,7 @@ impl Debug for Token {
             } => {
                 write!(f, "{}:({:?}) -> {:?}", name, args, body)
             }
-            Token::DefAliases(cols) => write!(f, "ALIASES {:?}", cols),
+            Token::DefAliases(cols) => write!(f, "ALIASES {:?}", cols.as_slice()),
             Token::DefAlias(from, to) => write!(f, "{} -> {}", from, to),
             Token::DefunAlias(from, to) => write!(f, "{} -> {}", from, to),
             Token::DefPlookup {
@@ -417,13 +468,19 @@ impl Debug for Token {
                 including,
                 included,
             } => {
-                write!(f, "{}: {:?} ⊂ {:?}", name, including, included)
+                write!(
+                    f,
+                    "{}: {:?} ⊂ {:?}",
+                    name,
+                    including.as_slice(),
+                    included.as_slice()
+                )
             }
             Token::DefPerspective {
                 name,
                 trigger,
                 columns,
-            } => write!(f, "SET {}/{:?} {:?}", name, trigger, columns),
+            } => write!(f, "SET {}/{:?} {:?}", name, trigger, columns.as_slice()),
         }
     }
 }
@@ -737,7 +794,7 @@ fn parse_defcolumns<I: Iterator<Item = AstNode>>(
         .with_context(|| errors::parser::make_src_error(&src, lc))?;
 
     Ok(AstNode {
-        class: Token::DefColumns(columns),
+        class: Token::DefColumns(columns.into()),
         lc,
         src,
         annotation: None,
@@ -848,17 +905,18 @@ fn parse_definition(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
         "defperspective" => parse_defperspective(tokens),
         "defconst" => Ok(AstNode {
             class: Token::DefConsts(
-                tokens
-                    .chunks(2)
-                    .into_iter()
-                    .map(|mut chunk| {
-                        let name = chunk.next().ok_or_else(|| anyhow!("adsf"))?;
-                        let value = chunk
-                            .next()
-                            .ok_or_else(|| anyhow!("expected value for {}", name))?;
-                        Ok((Box::new(name), Box::new(value)))
-                    })
-                    .collect::<Result<Vec<_>>>()?,
+                tokens.collect::<Vec<_>>().into(),
+                // tokens
+                //     .chunks(2)
+                //     .into_iter()
+                //     .map(|mut chunk| {
+                //         let name = chunk.next().ok_or_else(|| anyhow!("adsf"))?;
+                //         let value = chunk
+                //             .next()
+                //             .ok_or_else(|| anyhow!("expected value for {}", name))?;
+                //         Ok((Box::new(name), Box::new(value)))
+                //     })
+                //     .collect::<Result<Vec<_>>>()?,
             ),
             lc,
             src,
@@ -984,7 +1042,7 @@ fn parse_definition(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
             }
 
             Ok(AstNode {
-                class: Token::DefAliases(defs),
+                class: Token::DefAliases(defs.into()),
                 src,
                 lc,
                 annotation: None,
@@ -1050,8 +1108,8 @@ fn parse_definition(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
             Ok(AstNode {
                 class: Token::DefPlookup {
                     name,
-                    including,
-                    included,
+                    including: including.into(),
+                    included: included.into(),
                 },
                 src,
                 lc,
@@ -1163,7 +1221,7 @@ fn rec_parse(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
             let args = Commenter::new(source, pair.into_inner()).collect::<Result<Vec<_>>>()?;
             let annotation = args.get(0).and_then(|a| a.annotation.clone());
             Ok(AstNode {
-                class: Token::List(args),
+                class: Token::List(args.into()),
                 lc,
                 src,
                 annotation,
@@ -1211,12 +1269,15 @@ fn rec_parse(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
             };
 
             Ok(AstNode {
-                class: Token::List(vec![
-                    for_token,
-                    pairs.next().unwrap()?,
-                    pairs.next().unwrap()?,
-                    pairs.next().unwrap()?,
-                ]),
+                class: Token::List(
+                    vec![
+                        for_token,
+                        pairs.next().unwrap()?,
+                        pairs.next().unwrap()?,
+                        pairs.next().unwrap()?,
+                    ]
+                    .into(),
+                ),
                 lc,
                 src,
                 annotation: None,
@@ -1278,7 +1339,7 @@ fn rec_parse(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
                 .map(|r| rec_parse(source, r))
                 .collect::<Result<Vec<_>>>()?;
             Ok(AstNode {
-                class: Token::List(vec![nth_token, args[0].clone(), args[1].clone()]),
+                class: Token::List(vec![nth_token, args[0].clone(), args[1].clone()].into()),
                 lc,
                 src,
                 annotation: None,

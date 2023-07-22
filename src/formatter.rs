@@ -109,9 +109,12 @@ impl AstNode {
         fn _format(n: &AstNode, tty: &mut Tty) {
             match &n.class {
                 Token::Comment(c) => {
-                    for c in c.lines() {
-                        tty.cr();
+                    let mut lines = c.lines().peekable();
+                    while let Some(c) = lines.next() {
                         tty.write(c);
+                        if lines.peek().is_some() {
+                            tty.cr();
+                        }
                     }
                 }
                 Token::Value(_) => {
@@ -225,7 +228,7 @@ impl AstNode {
                     tty.write("(defcolumns");
                     tty.shift(2);
                     tty.cr();
-                    let mut defcols = cols.iter().peekable();
+                    let mut defcols = cols.iter_with_comments().peekable();
                     while let Some(defcol) = defcols.next() {
                         _format(defcol, tty);
                         if defcols.peek().is_some() {
@@ -249,7 +252,7 @@ impl AstNode {
 
                     tty.write("(");
                     tty.shift(1);
-                    let mut defcols = columns.iter().peekable();
+                    let mut defcols = columns.iter_with_comments().peekable();
                     while let Some(defcol) = defcols.next() {
                         _format(defcol, tty);
                         if defcols.peek().is_some() {
@@ -366,20 +369,24 @@ impl AstNode {
                         tty.write(" ");
                     }
 
-                    let (sources, targets): (Vec<&String>, Vec<&String>) = aliases
+                    let largest = aliases
                         .iter()
                         .map(|defalias| {
-                            let Token::DefAlias(source, target) = &defalias.class else {
+                            let Token::DefAlias(source, _) = &defalias.class else {
                             unreachable!()
                         };
-                            (source, target)
+                            source.len()
                         })
-                        .unzip();
-                    let largest = sources.iter().map(|s| s.len()).max().unwrap_or_default();
-                    let mut aliases = sources.iter().zip(targets.iter()).peekable();
-                    while let Some((source, target)) = aliases.next() {
-                        tty.write(&format!("{:2$} {}", source, target, largest));
-                        if aliases.peek().is_some() {
+                        .max()
+                        .unwrap_or(0);
+                    let mut aliases_i = aliases.iter_with_comments().peekable();
+                    while let Some(current) = aliases_i.next() {
+                        if let Token::DefAlias(source, target) = &current.class {
+                            tty.write(&format!("{:2$} {}", source, target, largest));
+                        } else {
+                            _format(current, tty);
+                        }
+                        if aliases_i.peek().is_some() {
                             tty.cr();
                         }
                     }
@@ -481,7 +488,7 @@ impl AstNode {
 
                     tty.write("(");
                     tty.shift(2);
-                    for i in including {
+                    for i in including.iter_with_comments() {
                         _format(i, tty);
                         tty.cr();
                     }
@@ -491,7 +498,7 @@ impl AstNode {
 
                     tty.write("(");
                     tty.shift(2);
-                    for i in included {
+                    for i in included.iter_with_comments() {
                         _format(i, tty);
                         tty.cr();
                     }

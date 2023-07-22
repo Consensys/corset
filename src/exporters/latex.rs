@@ -268,7 +268,7 @@ fn render_node(n: &AstNode, state: State) -> Result<String> {
             },
             render_node(body, state.in_maths(false))?,
         )),
-        Token::List(args) => render_form(args, state),
+        Token::List(args) => render_form(args.into(), state),
         _ => Ok(String::new()),
     }
 }
@@ -367,7 +367,7 @@ fn columns(ast: &Ast) -> Vec<LatexColumn> {
     fn _columns(n: &AstNode, cols: &mut Vec<LatexColumn>) {
         match &n.class {
             Token::List(ns) | Token::DefAliases(ns) | Token::DefColumns(ns) => {
-                for n in ns {
+                for n in ns.iter() {
                     _columns(n, cols);
                 }
             }

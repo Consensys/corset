@@ -1265,7 +1265,12 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                     .resolve_function(verb)
                     .with_context(|| make_ast_error(e))?;
 
-                let r = apply(&func, &args[1..], ctx, settings);
+                let r = apply(
+                    &func,
+                    args.iter().cloned().skip(1).collect::<Vec<_>>().as_slice(),
+                    ctx,
+                    settings,
+                );
                 match func.class {
                     FunctionClass::UserDefined(_) => {
                         r.map(|o| o.map(|n| n.with_debug(e.debug_info())))
@@ -1433,7 +1438,7 @@ fn reduce_toplevel(
             }))
         }
         Token::DefColumns(columns) => {
-            for c in columns {
+            for c in columns.iter() {
                 reduce(c, ctx, settings)?;
             }
             Ok(None)
@@ -1458,7 +1463,7 @@ fn reduce_toplevel(
 
             // Insert all columns in this new perspective
             let mut new_ctx = ctx.jump_in(&format!("in-{name}"))?;
-            for c in columns {
+            for c in columns.iter() {
                 reduce(c, &mut new_ctx, settings)?;
             }
             Ok(None)
