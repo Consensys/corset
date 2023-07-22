@@ -212,6 +212,12 @@ enum Commands {
         )]
         expand_all: bool,
         #[arg(
+            short = 'm',
+            long = "modules",
+            help = "show modules and their properties"
+        )]
+        show_modules: bool,
+        #[arg(
             short = 'C',
             long = "columns",
             help = "show columns and their properties"
@@ -549,6 +555,7 @@ fn main() -> Result<()> {
         Commands::Debug {
             expand,
             expand_all,
+            show_modules,
             show_columns,
             show_constraints,
             show_computations,
@@ -586,6 +593,7 @@ fn main() -> Result<()> {
             exporters::debugger::debug(
                 &constraints,
                 exporters::debugger::DebugSettings {
+                    modules: show_modules,
                     constraints: show_constraints,
                     columns: show_columns,
                     types: show_types,

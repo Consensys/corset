@@ -202,6 +202,13 @@ fn render_constraints(
     }
 }
 
+fn render_modules(cs: &ConstraintSet) {
+    println!("\n{}", "=== Modules ===".bold().yellow());
+    for (module, spilling) in cs.columns.spilling.iter().sorted_by_key(|s| s.0) {
+        println!("{}: spilling {}", module, spilling);
+    }
+}
+
 fn render_columns(cs: &ConstraintSet) {
     println!("\n{}", "=== Columns ===".bold().yellow());
     for (r, col) in cs.columns.iter().sorted_by_key(|c| c.1.register) {
@@ -287,6 +294,7 @@ fn render_perspectives(cs: &ConstraintSet) {
 }
 
 pub(crate) struct DebugSettings {
+    pub modules: bool,
     pub constraints: bool,
     pub columns: bool,
     pub computations: bool,
@@ -300,6 +308,9 @@ pub(crate) fn debug(
     only: Option<&Vec<String>>,
     skip: &[String],
 ) -> Result<()> {
+    if settings.modules {
+        render_modules(cs);
+    }
     if settings.constraints {
         render_constraints(cs, only, skip, settings.types);
     }
