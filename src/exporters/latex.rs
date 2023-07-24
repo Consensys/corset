@@ -237,7 +237,9 @@ fn render_node(n: &AstNode, state: State) -> Result<String> {
         Token::DefConsts(cs) => {
             let body = cs
                 .iter()
-                .map(|c| format!("\\text{{{}}} \\triangleq {:?}", sanitize(c.0.as_symbol().unwrap()), c.1))
+                .map(|c| {
+                    let c = c.as_constant().unwrap();
+                    format!("\\text{{{}}} \\triangleq {:?}", sanitize(&c.0), c.1)})
                 .collect::<Vec<_>>()
                 .join("\\\\\n");
 
@@ -349,8 +351,9 @@ fn constraints(ast: &Ast) -> Vec<LatexConstraint> {
 fn consts(ast: &Ast) -> Vec<LatexConst> {
     fn _consts(n: &AstNode, consts: &mut Vec<LatexConst>) {
         if let Token::DefConsts(cs) = &n.class {
-            for (name, exp) in cs.iter() {
-                consts.push((name.as_symbol().unwrap().to_owned(), *exp.to_owned()))
+            for c in cs.iter() {
+                let (name, exp) = c.as_constant().unwrap();
+                consts.push((name, exp.to_owned()))
             }
         } else {
             unreachable!()

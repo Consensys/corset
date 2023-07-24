@@ -1319,6 +1319,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
             _ => Ok(None),
         },
         Token::DefColumns(_)
+        | Token::DefConst(..)
         | Token::DefPerspective { .. }
         | Token::DefConstraint { .. }
         | Token::DefArrayColumn { .. }

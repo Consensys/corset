@@ -64,7 +64,10 @@ fn format_defunction(
         })
         .join(" ");
 
-    tty.write(format!("({def} ({fmt_name} {fmt_args})"));
+    tty.write(format!(
+        "({def} ({fmt_name}{}{fmt_args})",
+        if fmt_args.is_empty() { "" } else { " " }
+    ));
 }
 
 impl Ast {
@@ -153,7 +156,7 @@ impl AstNode {
                             if fname.starts_with("if-eq") {
                                 _format(&ns[1], tty);
                                 tty.write(" ");
-                                let mut args = ns.iter().skip(2).peekable();
+                                let mut args = ns.iter_with_comments().skip(2).peekable();
                                 while let Some(a) = args.next() {
                                     _format(a, tty);
                                     if args.peek().is_some() {
@@ -161,7 +164,7 @@ impl AstNode {
                                     }
                                 }
                             } else {
-                                let mut args = ns.iter().skip(1).peekable();
+                                let mut args = ns.iter_with_comments().skip(1).peekable();
                                 while let Some(a) = args.next() {
                                     _format(a, tty);
                                     if args.peek().is_some() {
@@ -202,17 +205,29 @@ impl AstNode {
 
                     let largest = constants
                         .iter()
-                        .map(|c| c.0.as_symbol().unwrap().len())
+                        .filter_map(|c| {
+                            if let Token::DefConst(name, _) = &c.class {
+                                Some(name.as_symbol().unwrap().len())
+                            } else {
+                                None
+                            }
+                        })
                         .max()
                         .unwrap_or_default();
-                    let mut constants = constants.iter().peekable();
-                    while let Some((name, value)) = constants.next() {
-                        tty.write(&format!("{:1$}", name.as_symbol().unwrap(), largest));
-                        maybe_comment(name, tty);
-                        spacer(tty, name.annotation.is_some());
-                        _format(value, tty);
+                    let mut content = constants.iter().peekable();
+                    while let Some(token) = content.next() {
+                        match &token.class {
+                            Token::DefConst(name, value) => {
+                                tty.write(&format!("{:1$}", name, largest));
+                                maybe_comment(token, tty);
+                                spacer(tty, name.annotation.is_some());
+                                _format(&value, tty);
+                            }
+                            Token::Comment(_) => _format(token, tty),
+                            _ => unreachable!(),
+                        };
 
-                        if constants.peek().is_some() {
+                        if content.peek().is_some() {
                             tty.cr();
                         }
                     }
@@ -224,6 +239,7 @@ impl AstNode {
 
                     tty.cr();
                 }
+                Token::DefConst(..) => unreachable!(),
                 Token::DefColumns(cols) => {
                     tty.write("(defcolumns");
                     tty.shift(2);
@@ -235,31 +251,6 @@ impl AstNode {
                             tty.cr();
                         }
                     }
-                    tty.write(")");
-                    tty.unshift();
-                    tty.cr();
-                }
-                Token::DefPerspective {
-                    name,
-                    trigger,
-                    columns,
-                } => {
-                    tty.write(format!("(defperspective {name}"));
-                    tty.shift(2);
-                    tty.cr();
-                    _format(trigger, tty);
-                    tty.cr();
-
-                    tty.write("(");
-                    tty.shift(1);
-                    let mut defcols = columns.iter_with_comments().peekable();
-                    while let Some(defcol) = defcols.next() {
-                        _format(defcol, tty);
-                        if defcols.peek().is_some() {
-                            tty.cr();
-                        }
-                    }
-                    tty.write(")");
                     tty.write(")");
                     tty.unshift();
                     tty.cr();
@@ -319,6 +310,31 @@ impl AstNode {
                         tty.write(&format!(" {}", base_to_kw(*base)));
                     }
                     tty.write(")");
+                }
+                Token::DefPerspective {
+                    name,
+                    trigger,
+                    columns,
+                } => {
+                    tty.write(format!("(defperspective {name}"));
+                    tty.shift(2);
+                    tty.cr();
+                    _format(trigger, tty);
+                    tty.cr();
+
+                    tty.write("(");
+                    tty.shift(1);
+                    let mut defcols = columns.iter_with_comments().peekable();
+                    while let Some(defcol) = defcols.next() {
+                        _format(defcol, tty);
+                        if defcols.peek().is_some() {
+                            tty.cr();
+                        }
+                    }
+                    tty.write(")");
+                    tty.write(")");
+                    tty.unshift();
+                    tty.cr();
                 }
                 Token::Defun {
                     name,
@@ -434,9 +450,6 @@ impl AstNode {
                     .join(" ");
 
                     tty.write(&format!("(defconstraint {name} ({opts})"));
-                    if let Some(comment) = n.annotation.as_ref() {
-                        tty.buffer_end(comment.to_owned());
-                    }
 
                     if body.depth() > 0 {
                         tty.shift(2);
@@ -446,6 +459,10 @@ impl AstNode {
                     _format(body, tty);
 
                     tty.write(")");
+
+                    if let Some(comment) = n.annotation.as_ref() {
+                        tty.buffer_end(comment.to_owned());
+                    }
 
                     if body.depth() > 0 {
                         tty.cr();

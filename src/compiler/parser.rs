@@ -1,6 +1,5 @@
 use crate::{errors, pretty::Base};
 use anyhow::{anyhow, bail, Context, Result};
-use itertools::Itertools;
 use num_bigint::BigInt;
 use pest::iterators::Pairs;
 #[cfg(feature = "parser")]
@@ -69,6 +68,13 @@ impl AstNode {
             Ok(xs.into())
         } else {
             bail!("expected list, found `{:?}`", self)
+        }
+    }
+    pub fn as_constant(&self) -> Result<(String, AstNode)> {
+        if let Token::DefConst(name, exp) = &self.class {
+            Ok((name.as_symbol()?.to_string(), *exp.to_owned()))
+        } else {
+            bail!("expected constant, found `{:?}`", self)
         }
     }
     /// A formatting function optimizing for debug informations
@@ -239,7 +245,7 @@ pub enum Token {
     /// a list of constant definition, normally only DefConst or Comments
     DefConsts(AstNodes),
     /// defines a constant
-    DefConst(String, BigInt),
+    DefConst(Box<AstNode>, Box<AstNode>),
     /// a list of columns declaration, normally only DefColumn or Comments
     DefColumns(AstNodes),
     /// defines an atomic column
@@ -638,6 +644,54 @@ fn parse_defperspective<I: Iterator<Item = AstNode>>(mut tokens: I) -> Result<As
     }
 }
 
+fn parse_defconsts<I: Iterator<Item = AstNode>>(
+    tokens: I,
+    lc: (usize, usize),
+    src: String,
+) -> Result<AstNode> {
+    enum ConstParser {
+        Symbol,
+        Value(AstNode),
+    }
+    let mut state = ConstParser::Symbol;
+    let mut content = vec![];
+
+    for t in tokens {
+        match state {
+            ConstParser::Symbol => match &t.class {
+                Token::Comment(_) => content.push(t),
+                Token::Symbol(_) => {
+                    state = ConstParser::Value(t.clone());
+                }
+                _ => bail!("expected SYMBOL, found {t}"),
+            },
+            ConstParser::Value(ref name) => match &t.class {
+                Token::Comment(_) => content.push(t),
+                Token::Value(_) | Token::List(_) => {
+                    content.push(AstNode {
+                        class: Token::DefConst(Box::new(name.to_owned()), Box::new(t.clone())),
+                        src: t.src,
+                        lc: t.lc,
+                        annotation: None,
+                    });
+                    state = ConstParser::Symbol
+                }
+                _ => bail!("expected VALUE, found {t}"),
+            },
+        }
+    }
+
+    match state {
+        ConstParser::Value(_) => bail!("missing value"),
+        ConstParser::Symbol => Ok(AstNode {
+            class: Token::DefConsts(content.into()),
+            lc,
+            src,
+            annotation: None,
+        }),
+    }
+}
+
 fn parse_defcolumns<I: Iterator<Item = AstNode>>(
     tokens: I,
     lc: (usize, usize),
@@ -845,6 +899,8 @@ impl<'i> std::iter::Iterator for Commenter<'i> {
                         'look_for_comment: while let Some(x) = self.pairs.peek() {
                             if let Rule::COMMENT = x.as_rule() {
                                 let comment = x.as_str();
+
+                                dbg!(comment);
                                 let start = span.end();
                                 let end = x.as_span().start();
                                 if !self
@@ -903,25 +959,7 @@ fn parse_definition(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
         }
         "defcolumns" => parse_defcolumns(tokens, lc, src),
         "defperspective" => parse_defperspective(tokens),
-        "defconst" => Ok(AstNode {
-            class: Token::DefConsts(
-                tokens.collect::<Vec<_>>().into(),
-                // tokens
-                //     .chunks(2)
-                //     .into_iter()
-                //     .map(|mut chunk| {
-                //         let name = chunk.next().ok_or_else(|| anyhow!("adsf"))?;
-                //         let value = chunk
-                //             .next()
-                //             .ok_or_else(|| anyhow!("expected value for {}", name))?;
-                //         Ok((Box::new(name), Box::new(value)))
-                //     })
-                //     .collect::<Result<Vec<_>>>()?,
-            ),
-            lc,
-            src,
-            annotation: None,
-        }),
+        "defconst" => parse_defconsts(tokens, lc, src),
         kw @ ("defun" | "defpurefun") => {
             fn parse_typed_symbols(l: AstNode) -> Result<(String, Option<Type>, bool)> {
                 // TODO: revamp type parsing to add column/scalar/any

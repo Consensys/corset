@@ -100,15 +100,12 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             )?;
             Ok(())
         }
-        Token::DefConsts(cs) => {
-            for c in cs.iter() {
-                let name =
-                    c.0.as_symbol()
-                        .with_context(|| anyhow!("expected constant name, found `{}`", &c.0))?;
-                // The actual value will be filled later on by the compile-time pass
-                ctx.insert_constant(name, BigInt::from_i8(0).unwrap(), false)?;
-            }
-            Ok(())
+        Token::DefConsts(consts) => consts
+            .iter()
+            .fold(Ok(()), |ax, cst| ax.and(reduce(cst, ctx))),
+        Token::DefConst(name, _) => {
+            // The actual value will be filled later on by the compile-time pass
+            ctx.insert_constant(name.as_symbol()?, BigInt::from_i8(0).unwrap(), false)
         }
         Token::DefPermutation {
             from: froms,
