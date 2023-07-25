@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::{
     column::{Column, Computation},
-    compiler::{ColumnRef, Constraint, ConstraintSet, Intrinsic, Kind, Magma, Node, Type},
+    compiler::{ColumnRef, Constraint, ConstraintSet, Intrinsic, Kind, Magma, Node},
     pretty::Base,
     structs::Handle,
 };
@@ -118,8 +118,8 @@ pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
 
     for (h, c) in cs.columns.iter() {
         // only atomic columns (i.e. filled from traces) are of interest here
-        if let (Type::Column(magma), Kind::Atomic) = (c.t, &c.kind) {
-            match magma {
+        if c.kind == Kind::Atomic {
+            match c.t {
                 Magma::Nibble => nibble_columns
                     .entry(c.handle.module.to_owned())
                     .or_default()

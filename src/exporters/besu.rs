@@ -96,7 +96,7 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
                 Some(BesuColumn {
                     corset_name: c.handle.name.to_string(),
                     java_name: c.handle.name.to_case(Case::Camel),
-                    tupe: magma_to_java_type(c.t.magma()).into(),
+                    tupe: magma_to_java_type(c.t).into(),
                     appender: handle_to_appender(&c.handle),
                     register,
                 })

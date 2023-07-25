@@ -1,5 +1,5 @@
 use crate::{
-    compiler::{ColumnRef, Kind, Magma, Node, Type},
+    compiler::{ColumnRef, Kind, Magma, Node},
     errors,
     pretty::{Base, Pretty},
     structs::Handle,
@@ -135,7 +135,7 @@ pub struct Column {
     pub padding_value: Option<(i64, Fr)>,
     pub used: bool,
     pub kind: Kind<()>,
-    pub t: Type, // TODO: replace with magma
+    pub t: Magma,
     pub intrinsic_size_factor: Option<usize>,
     pub base: Base,
     pub handle: Handle,
@@ -159,7 +159,7 @@ impl Column {
             padding_value: padding_value.map(|x| (x, Fr::from_str(&x.to_string()).unwrap())),
             used: used.unwrap_or(true),
             kind,
-            t: Type::Column(t.unwrap_or(Magma::Integer)),
+            t: t.unwrap_or(Magma::Integer),
             intrinsic_size_factor,
             base: base.unwrap_or(Base::Dec),
             computed: false,
@@ -337,7 +337,7 @@ impl ColumnSet {
     }
 
     pub fn insert_column_and_register(&mut self, mut column: Column) -> Result<ColumnRef> {
-        column.register = Some(self.new_register(column.handle.clone(), column.t.magma()));
+        column.register = Some(self.new_register(column.handle.clone(), column.t));
         self.insert_column(column)
     }
 

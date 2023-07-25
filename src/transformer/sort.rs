@@ -174,7 +174,7 @@ fn create_sort_constraint(
             Node::from_const(1)
         };
 
-        let sorted_t = cs.columns.get_col(&sorted[i])?.t.magma();
+        let sorted_t = cs.columns.get_col(&sorted[i])?.t;
         cs.constraints.push(Constraint::Vanishes {
             handle: Handle::new(&module, format!("{at}-0")),
             domain: None,
@@ -259,7 +259,7 @@ fn create_sort_constraint(
                     Intrinsic::Add.call(
                         (0..signs.len())
                             .map(|l| {
-                                let sorted_l_t = cs.columns.get_col(&sorted[l])?.t.magma();
+                                let sorted_l_t = cs.columns.get_col(&sorted[l])?.t;
                                 let tgt_diff = Intrinsic::Sub.call(&[
                                     Node::phantom_column(&sorted[l], sorted_l_t),
                                     Intrinsic::Shift.call(&[
