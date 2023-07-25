@@ -1,4 +1,4 @@
-use super::compiler::ColumnRef;
+use super::compiler::{ColumnRef, Magma};
 use anyhow::*;
 use cached::Cached;
 use flate2::bufread::GzDecoder;
@@ -9,13 +9,12 @@ use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},
 };
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
+use serde_json::Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
 use simd_json::BorrowedValue as Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
 use std::io::Read;
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
-use {crate::compiler::Magma, serde_json::Value};
-
 use std::{
     fs::File,
     io::{BufReader, Seek},
