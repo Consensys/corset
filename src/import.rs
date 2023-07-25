@@ -9,24 +9,19 @@ use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},
 };
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
-use serde_json::Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
 use simd_json::BorrowedValue as Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
 use std::io::Read;
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
+use {crate::compiler::Magma, serde_json::Value};
 
 use std::{
     fs::File,
     io::{BufReader, Seek},
 };
 
-use crate::{
-    column::Column,
-    compiler::{ConstraintSet, Type},
-    pretty::Pretty,
-    structs::Handle,
-};
+use crate::{column::Column, compiler::ConstraintSet, pretty::Pretty, structs::Handle};
 
 #[time("info", "Parsing trace from JSON file with SIMD")]
 pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
@@ -91,7 +86,7 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
 }
 
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
-fn parse_column(xs: &[Value], t: Type) -> Result<Vec<Fr>> {
+fn parse_column(xs: &[Value], t: Magma) -> Result<Vec<Fr>> {
     let mut cache_num = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut cache_str = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut r = vec![Fr::zero()];

@@ -1,5 +1,4 @@
 use anyhow::*;
-use num_traits::One;
 use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},
@@ -9,10 +8,7 @@ use postgres::Client;
 #[cfg(feature = "postgres")]
 use std::io::Read;
 
-use crate::{
-    compiler::{Magma, Type},
-    errors::RuntimeError,
-};
+use crate::{compiler::Magma, errors::RuntimeError};
 
 pub fn is_file_empty(f: &str) -> Result<bool> {
     std::fs::metadata(f)
@@ -48,8 +44,8 @@ lazy_static::lazy_static! {
     static ref F_255: Fr = Fr::from_str("255").unwrap();
 }
 
-pub fn maybe_warn(t: Type, xs: &[Fr]) -> Result<()> {
-    if t.magma() != Magma::Boolean {
+pub fn maybe_warn(t: Magma, xs: &[Fr]) -> Result<()> {
+    if t != Magma::Boolean {
         if xs.iter().all(|x| x.is_zero() || *x == Fr::one()) {
             bail!("")
         }
@@ -58,8 +54,8 @@ pub fn maybe_warn(t: Type, xs: &[Fr]) -> Result<()> {
     Ok(())
 }
 
-pub fn validate(t: Type, x: Fr) -> Result<Fr> {
-    match t.magma() {
+pub fn validate(t: Magma, x: Fr) -> Result<Fr> {
+    match t {
         Magma::None => unreachable!(),
         Magma::Boolean => {
             if x.is_zero() || x == Fr::one() {

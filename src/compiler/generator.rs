@@ -306,7 +306,7 @@ impl ConstraintSet {
                 match &col.handle.perspective {
                     Some(name) => {
                         let module = col.handle.module.to_string();
-                        let magma = col.t.magma();
+                        let magma = col.t;
                         pool.perspectives
                             .entry(module)
                             .or_default()
@@ -329,7 +329,7 @@ impl ConstraintSet {
         for c in pool.root {
             let reg = self.columns.new_register(
                 self.handle(&c).to_owned(),
-                self.columns.get_col(&c).unwrap().t.magma(),
+                self.columns.get_col(&c).unwrap().t,
             );
             self.columns.assign_register(&c, reg).unwrap();
         }
@@ -384,7 +384,7 @@ impl ConstraintSet {
                     Computation::Interleaved { target, .. }
                     | Computation::CyclicFrom { target, .. } => {
                         let col = self.columns.get_col(&target).unwrap();
-                        let reg = self.columns.new_register(col.handle.clone(), col.t.magma());
+                        let reg = self.columns.new_register(col.handle.clone(), col.t);
                         self.columns.assign_register(&target, reg).unwrap();
                     }
                     Computation::Sorted { froms, tos, .. } => {
@@ -394,7 +394,7 @@ impl ConstraintSet {
                                 .entry(self.columns.get_col(f).unwrap().register.unwrap())
                                 .or_insert_with(|| {
                                     let col = self.columns.get_col(t).unwrap();
-                                    self.columns.new_register(col.handle.clone(), col.t.magma())
+                                    self.columns.new_register(col.handle.clone(), col.t)
                                 });
                             self.columns.assign_register(t, *reg).unwrap();
                         }
@@ -412,7 +412,7 @@ impl ConstraintSet {
                             .chain(delta_bytes.iter())
                         {
                             let col = self.columns.get_col(r).unwrap();
-                            let reg = self.columns.new_register(col.handle.clone(), col.t.magma());
+                            let reg = self.columns.new_register(col.handle.clone(), col.t);
                             self.columns.assign_register(r, reg).unwrap();
                         }
                     }
