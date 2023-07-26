@@ -636,10 +636,6 @@ impl ConstraintSet {
         self.columns.spilling.get(module).cloned()
     }
 
-    pub fn spilling(&self, module: &str) -> Option<isize> {
-        self.columns.spilling.get(module).cloned()
-    }
-
     fn compute_spilling(&mut self, m: &str) -> isize {
         self.computations
             .iter()
@@ -1383,14 +1379,18 @@ fn reduce_toplevel(
             } else {
                 body
             };
-            // Check that no constraint crosses perspective boundaries
             let body = if let Some(perspective) = perspective {
                 let persp_guard = ctx
                     .tree
                     .borrow()
                     .metadata()
                     .get_perspective_trigger(&module, perspective)?;
-                Intrinsic::Mul.call(&[persp_guard, body])?
+                // Perspectives are just multiplicative coefficients, and are
+                // controlled exceptions to the usual loobean typing rules
+                let body_type = body.t();
+                Intrinsic::Mul
+                    .call(&[persp_guard, body])?
+                    .with_type(body_type)
             } else {
                 body
             };
