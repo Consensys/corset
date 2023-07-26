@@ -1,6 +1,7 @@
-use std::io::Write;
+use std::{format, io::Write};
 
 use crate::{
+    column::Register,
     compiler::{ConstraintSet, Kind, Magma},
     structs::Handle,
 };
@@ -22,12 +23,14 @@ struct BesuColumn {
     tupe: String,
     appender: String,
     register: String,
+    reg_id: usize,
 }
 #[derive(Serialize)]
 struct BesuRegister {
     corset_name: String,
     java_name: String,
     tupe: String,
+    id: usize,
 }
 #[derive(Serialize)]
 struct BesuConstant {
@@ -58,13 +61,17 @@ fn magma_to_java_type(m: Magma) -> String {
 
 fn handle_to_appender(h: &Handle) -> String {
     format!(
-        "append{}{}",
+        "{}{}",
         h.perspective
             .as_ref()
             .unwrap_or(&String::new())
             .to_case(Case::Pascal),
-        h.name.to_case(Case::Pascal)
+        h.name.to_case(Case::Camel)
     )
+}
+
+fn reg_to_java(r: &Register, i: usize) -> String {
+    format!("_{}", reg_to_string(r, i).to_case(Case::Camel))
 }
 
 pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Result<()> {
@@ -75,11 +82,12 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
         .enumerate()
         .map(|(i, r)| {
             let corset_name = reg_to_string(r, i);
-            let java_name = corset_name.to_case(Case::Camel);
+            let java_name = reg_to_java(r, i);
             BesuRegister {
                 corset_name,
                 java_name,
                 tupe: magma_to_java_type(r.magma),
+                id: i,
             }
         })
         .sorted_by_key(|f| f.java_name.clone())
@@ -91,14 +99,14 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
         .filter_map(|c| {
             if matches!(c.kind, Kind::Atomic) {
                 let r = c.register.unwrap();
-                let register =
-                    super::reg_to_string(&cs.columns.registers[r], r).to_case(Case::Camel);
+                let register = reg_to_java(&cs.columns.registers[r], r);
                 Some(BesuColumn {
                     corset_name: c.handle.name.to_string(),
                     java_name: c.handle.name.to_case(Case::Camel),
                     tupe: magma_to_java_type(c.t).into(),
                     appender: handle_to_appender(&c.handle),
                     register,
+                    reg_id: r,
                 })
             } else {
                 None

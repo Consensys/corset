@@ -14,10 +14,13 @@
  */
 
 package net.consensys.linea.zktracer.module.{{ module }};
+import net.consensys.linea.zktracer.bytes.UnsignedByte;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.lang.IllegalStateException;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.List;
 
 @SuppressWarnings("unused")
@@ -34,19 +37,35 @@ public record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace) {
   ) {}
 
   public static class Builder {
-  {{#each registers}}
+    {{#each registers}}
     private final List<{{ this.tupe }}> {{ this.java_name }} = new ArrayList<>();
-  {{/each}}
+    {{/each}}
 
-    private Builder() {}
+    private final BitSet filled = new BitSet();
 
-  {{#each columns}}
+    public Builder() {}
+
+    {{#each columns}}
     public Builder {{ this.appender }}(final {{ this.tupe }} b) {
+      if (this.filled.get({{ this.reg_id }})) {
+        throw new IllegalStateException("Can not append to {{ this.java_name }} before committing previous row");
+      } else {
+        this.filled.set({{ this.reg_id }});
+      }
       {{ this.register }}.add(b);
       return this;
     }
+    {{/each}}
 
-  {{/each}}
+    public void commit() {
+      {{#each registers}}
+      if (!this.filled.get({{ this.id }})) {
+        throw new IllegalStateException("Can not commit row without setting value for {{ this.corset_name }}");
+      }
+      {{/each}}
+      this.filled.clear();
+    }
+
     public {{ module_prefix }}Trace build() {
       return new {{ module_prefix }}Trace(
         new Trace(
