@@ -1102,7 +1102,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
 
     match pair.as_rule() {
         Rule::expr => rec_parse(pair.into_inner().next().unwrap()),
-        Rule::definition => {
+        Rule::toplevel => {
             parse_definition(pair).with_context(|| errors::parser::make_src_error(&src, lc))
         }
         Rule::sexpr => {
@@ -1143,25 +1143,6 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
 
             Ok(AstNode {
                 class: Token::Value(value.unwrap() * sign),
-                lc,
-                src,
-            })
-        }
-        Rule::forloop => {
-            let mut pairs = pair.into_inner();
-            let for_token = AstNode {
-                class: Token::Symbol("for".into()),
-                lc,
-                src: src.chars().take(3).collect::<String>(),
-            };
-
-            Ok(AstNode {
-                class: Token::List(vec![
-                    for_token,
-                    rec_parse(pairs.next().unwrap())?,
-                    rec_parse(pairs.next().unwrap())?,
-                    rec_parse(pairs.next().unwrap())?,
-                ]),
                 lc,
                 src,
             })

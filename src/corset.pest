@@ -2,23 +2,18 @@ WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* }
 
 
-corset = { SOI ~ (definition)* ~ EOI }
+corset = { SOI ~ toplevel* ~ EOI }
 
-definition = { "(" ~ definition_kw ~ (sexpr | expr)* ~ ")"}
 definition_kw = { "module" | "defconstraint" | "defunalias" | "defun" | "defpurefun" | "defconst" | "defalias" | "defplookup" | "defpermutation" | "definrange" | "defperspective" | "defcolumns" | "definterleaved"}
-
+toplevel = { "(" ~ definition_kw ~ (sexpr | expr)* ~ ")"}
 sexpr = { "(" ~ (expr | keyword | range)* ~ ")" }
-expr = { integer | symbol | sexpr | form | nth }
-
-form = _{ forloop }
-
-forloop = { "(" ~ "for" ~ symbol ~ range ~ expr ~ ")" }
+expr = { integer | symbol | sexpr | nth }
 
 nth = { "[" ~ symbol ~ expr ~ "]" }
+
 range = _{ immediate_range | interval }
 immediate_range = { "{" ~ integer+ ~ "}" }
-interval = { "[" ~ natural ~ (":" ~ natural ~ (":" ~ natural)?)? ~ "]" }
-typing = @{ "NATURAL" | "BOOLEAN" | "BYTE" | "NIBBLE" }
+interval = { "[" ~ ((natural ~ (":" ~ natural ~ (":" ~ natural)?)?) | expr) ~ "]" }
 
 integer = @{ "-"? ~ natural }
 natural = @{ "0x" ~ ASCII_HEX_DIGIT+ | "0b" ~ ASCII_BIN_DIGIT+ | ASCII_DIGIT+ }
