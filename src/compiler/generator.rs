@@ -334,7 +334,7 @@ impl ConstraintSet {
             self.columns.assign_register(&c, reg).unwrap();
         }
 
-        // subset columns are grouped together if they are of the same type
+        // perspective columns are grouped together if they are of the same type
         for (module, sizes) in pool.perspectives.iter() {
             for (size, magmas) in sizes.iter() {
                 for (magma, sets) in magmas.iter() {
@@ -365,14 +365,16 @@ impl ConstraintSet {
             }
         }
 
-        // finally, computed columns registers are allocated depending on their type
-        let mut jobs: ComputationDag = Default::default();
-        for c in self.computations.iter() {
-            jobs.insert_computation(c)
-        }
+        // Finally, computed columns registers are allocated depending on their
+        // type.
 
-        let todos = jobs.job_slices();
-        for slice in todos {
+        // columns involved in computations must get their register assigned
+        // following their dependency tree, as register IDs are required to list
+        // computation sources
+        let dependent_columns = ComputationDag::from_computations(self.computations.iter());
+
+        // let todos = jobs.job_slices();
+        for slice in dependent_columns.job_slices() {
             for c in slice
                 .iter()
                 .filter_map(|h| self.computations.computation_idx_for(h))
@@ -423,13 +425,8 @@ impl ConstraintSet {
     }
 
     fn fill_perspectives(&mut self) -> Result<()> {
-        let mut jobs: ComputationDag = Default::default();
-        for c in self.computations.iter() {
-            jobs.insert_computation(c)
-        }
-
-        let todos = jobs.job_slices();
-        for slice in todos {
+        let dependent_computations = ComputationDag::from_computations(self.computations.iter());
+        for slice in dependent_computations.job_slices() {
             trace!("Processing computation slice {:?}", slice);
             for i in slice
                 .iter()

@@ -9,6 +9,14 @@ pub(crate) struct ComputationDag {
 }
 
 impl ComputationDag {
+    pub fn from_computations<'a, I: Iterator<Item = &'a Computation>>(comps: I) -> ComputationDag {
+        let mut r = ComputationDag::default();
+        for c in comps {
+            r.insert_computation(c);
+        }
+        r
+    }
+
     pub fn depends(&mut self, n1: &ColumnRef, n2: &ColumnRef) {
         self.nodes.insert(n1.to_owned());
         self.nodes.insert(n2.to_owned());

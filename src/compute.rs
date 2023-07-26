@@ -20,15 +20,13 @@ use crate::{
 
 #[time("info", "Computing expanded columns")]
 fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
-    let mut jobs: ComputationDag = Default::default();
-    for c in cs.computations.iter() {
-        jobs.insert_computation(c)
-    }
-
-    let todos = jobs.job_slices();
-    for slice in todos {
-        trace!("Processing computation slice {:?}", slice);
-        let comps = slice
+    // Computations are split in sequentially dependent sets, where each set as
+    // to be completely computed before the next one is started, but all
+    // computations within a set can be processed in parallel
+    let jobs = ComputationDag::from_computations(cs.computations.iter());
+    for processing_slice in jobs.job_slices() {
+        trace!("Processing computation slice {:?}", processing_slice);
+        let comps = processing_slice
             .iter()
             .filter_map(|h| cs.computations.computation_idx_for(h))
             .collect::<HashSet<_>>()
