@@ -20,10 +20,17 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Singular;
 import net.consensys.linea.zktracer.bytes.UnsignedByte;
+import net.consensys.linea.zktracer.module.RowValidator;
 
 @Builder
 record Trace(
 {{#each registers}}
-    @Singular @JsonProperty("{{ this.corset_name }}") List<{{ this.tupe }}> {{ this.java_name }}Args{{#unless @last}},{{/unless}}
+    @Singular("{{ this.java_name }}") @JsonProperty("{{ this.corset_name }}") List<{{ this.tupe }}> {{ this.java_name }}{{#unless @last}},{{/unless}}
 {{/each}}
-) {}
+) {
+  static class TraceBuilder {
+    public void validateRow(int rowIndex) {
+      RowValidator.validate(Trace.class, this.build(), rowIndex);
+    }
+  }
+}
