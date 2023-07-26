@@ -112,7 +112,7 @@ fn parse_column(xs: &[Value], t: Magma) -> Result<Vec<Fr>> {
 }
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
-fn parse_column(xs: &[Value], t: Type) -> Result<Vec<Fr>> {
+fn parse_column(xs: &[Value], t: Magma) -> Result<Vec<Fr>> {
     let mut cache = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut r = vec![Fr::zero()];
     let xs = xs
