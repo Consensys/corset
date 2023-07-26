@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.0.1] - 2023-07-26
+
+### Bug Fixes
+
+- Columns have a magma, not a type
+- Add SPDX field in zkBesu template file ([#19](https://github.com/orhun/git-cliff/issues/19))
+- Perspective guard should not alter constraint type ([#21](https://github.com/orhun/git-cliff/issues/21))
+- AVX-specific argument type ([#17](https://github.com/orhun/git-cliff/issues/17))
+
+### Features
+
+- Add a flag to the debugger to display modules infos
+
+### Miscellaneous Tasks
+
+- Prune old code
+
+### Refactor
+
+- Add syntactic sugar for job-DAG creation
+
 ## [8.0.0] - 2023-07-18
 
 ### Bug Fixes
@@ -69,6 +90,7 @@ All notable changes to this project will be documented in this file.
 - N-hood columns do not need to be viewed as binary
 - Update the Kotlin template
 - Clippy
+- Release corset version 8.0.0
 
 ### Performance
 
