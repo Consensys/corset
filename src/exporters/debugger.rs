@@ -168,7 +168,7 @@ fn render_constraints(
                 } => {
                     let mut tty = Tty::new();
                     pretty_expr(expr, None, &mut tty, show_types);
-                    println!("\n{}", handle.pretty());
+                    println!("\n- {}:", handle.pretty());
                     println!("{}", tty.page_feed());
                 }
                 Constraint::Plookup {

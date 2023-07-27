@@ -1167,7 +1167,7 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
                 (Some(start), Some(stop), Some(step)) => {
                     (start..=stop).step_by(step.try_into()?).collect()
                 }
-                x => unimplemented!("{:?}", x),
+                x => unimplemented!("{} -> {:?}", src, x),
             };
             Ok(AstNode {
                 class: Token::Range(range),

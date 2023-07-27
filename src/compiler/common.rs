@@ -205,13 +205,11 @@ impl FuncVerifier<AstNode> for Form {
     fn validate_types(&self, args: &[AstNode]) -> Result<()> {
         match self {
             Form::For => {
-                if matches!(args[0].class, Token::Symbol(_))
-                    && matches!(args[1].class, Token::Range(_))
-                {
+                if matches!(args[0].class, Token::Symbol(_)) {
                     Ok(())
                 } else {
                     bail!(
-                        "`{:?}` expects [SYMBOL RANGE EXPR] but received {:?}",
+                        "`{:?}` expects [SYMBOL ITERABLE EXPR] but received {:?}",
                         self,
                         args
                     )

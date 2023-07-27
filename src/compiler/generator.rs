@@ -17,7 +17,6 @@ use std::fmt::Debug;
 use std::io::Write;
 
 use std::sync::atomic::AtomicUsize;
-use std::{unimplemented, unreachable};
 
 use super::node::ColumnRef;
 use super::tables::{ComputationTable, Scope};
@@ -956,9 +955,25 @@ fn apply_form(
 
     match f {
         Form::For => {
-            if let (Token::Symbol(i_name), Token::Range(is), body) =
-                (&args[0].class, &args[1].class, &args[2])
-            {
+            if let (Token::Symbol(i_name), range, body) = (&args[0].class, &args[1], &args[2]) {
+                let is = match &range.class {
+                    // a for can iterate over an explicit range...
+                    Token::Range(is) => is.to_owned(),
+                    // ...or over [1..<compile-time evaluable value>]
+                    _ => {
+                        if let Some(range_exp) = reduce(&range, ctx, settings)? {
+                            if let Expression::ArrayColumn { domain, .. } = range_exp.e() {
+                                domain.iter().map(|&i| i as isize).collect::<Vec<_>>()
+                            } else {
+                                let k = range_exp.pure_eval()?.to_isize().unwrap();
+                                (1..=k).collect::<Vec<_>>()
+                            }
+                        } else {
+                            bail!("unable to iterate over {}", &range)
+                        }
+                    }
+                };
+
                 let mut l = vec![];
                 let mut t = Type::INFIMUM;
                 for i in is {
@@ -966,7 +981,7 @@ fn apply_form(
 
                     for_ctx.insert_symbol(
                         i_name,
-                        Expression::Const(BigInt::from(*i), Fr::from_str(&i.to_string())).into(),
+                        Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
                     )?;
 
                     if let Some(r) = reduce(&body.clone(), &mut for_ctx, settings)? {
@@ -1246,7 +1261,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                                     .build(),
                             ))
                         } else {
-                            bail!("tried to access `{}` at index {}", array.pretty(), i)
+                            bail!("tried to access {} at index {}", array.pretty().bold(), i)
                         }
                     }
                     _ => unimplemented!(),
