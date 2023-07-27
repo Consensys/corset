@@ -345,6 +345,304 @@ impl Node {
         rec_pretty(self, 0, cs)
     }
 
+    /// Compute the number of operations required to execute to fully compute the [`Expression`]
+    pub fn size(&self) -> usize {
+        match self.e() {
+            Expression::Funcall { args, .. } => 1 + args.iter().map(Node::size).sum::<usize>(),
+            Expression::Const(..) => 0,
+            Expression::Column { .. } => 1,
+            Expression::ArrayColumn { .. } => 0,
+            Expression::List(xs) => xs.iter().map(Node::size).sum::<usize>(),
+            Expression::Void => 0,
+        }
+    }
+
+    /// Compute the depth of the tree representing [`Expression`]
+    pub fn depth(&self) -> usize {
+        match self.e() {
+            Expression::Funcall { args, .. } => {
+                1 + args.iter().map(Node::depth).max().unwrap_or_default()
+            }
+            Expression::List(xs) => 1 + xs.iter().map(Node::depth).max().unwrap_or_default(),
+            Expression::Const(..)
+            | Expression::Column { .. }
+            | Expression::ArrayColumn { .. }
+            | Expression::Void => 0,
+        }
+    }
+
+    /// Compute the maximum past (negative) shift coefficient in the AST rooted at `self`
+    pub fn past_spill(&self) -> isize {
+        fn _past_span(e: &Expression, ax: isize) -> isize {
+            match e {
+                Expression::Funcall { func, args } => {
+                    let mut mine = ax;
+                    if let Intrinsic::Shift = func {
+                        let arg_big = args[1]
+                            .pure_eval()
+                            .unwrap_or_else(|_| panic!("{}", args[1].to_string().as_str()));
+                        let arg = arg_big
+                            .to_isize()
+                            .unwrap_or_else(|| panic!("{}", arg_big.to_string().as_str()));
+                        mine = mine.min(mine + arg);
+                    }
+                    args.iter().map(|e| _past_span(e.e(), mine)).min().unwrap()
+                }
+                Expression::List(es) => es.iter().map(|e| _past_span(e.e(), ax)).min().unwrap(),
+                _ => ax,
+            }
+        }
+
+        _past_span(self.e(), 0).min(0)
+    }
+
+    /// Compute the maximum future (positive) shift coefficient in the AST rooted at `self`
+    pub fn future_spill(&self) -> isize {
+        fn _future_span(e: &Expression, ax: isize) -> isize {
+            match e {
+                Expression::Funcall { func, args } => {
+                    let mut mine = ax;
+                    if let Intrinsic::Shift = func {
+                        let arg_big = args[1]
+                            .pure_eval()
+                            .unwrap_or_else(|_| panic!("{}", args[1].to_string().as_str()));
+                        let arg = arg_big
+                            .to_isize()
+                            .unwrap_or_else(|| panic!("{}", arg_big.to_string().as_str()));
+                        mine = mine.max(mine + arg);
+                    }
+                    args.iter()
+                        .map(|e| _future_span(e.e(), mine))
+                        .max()
+                        .unwrap()
+                }
+                Expression::List(es) => es.iter().map(|e| _future_span(e.e(), ax)).max().unwrap(),
+                _ => ax,
+            }
+        }
+
+        _future_span(self.e(), 0).max(0)
+    }
+
+    // TODO: replace with a generic map()
+    pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut ColumnRef)) {
+        match self.e_mut() {
+            Expression::Funcall { args, .. } => {
+                args.iter_mut().for_each(|e| e.add_id_to_handles(set_id))
+            }
+
+            Expression::Column { handle, .. } => set_id(handle),
+            Expression::List(xs) => xs.iter_mut().for_each(|x| x.add_id_to_handles(set_id)),
+
+            Expression::ArrayColumn { .. } | Expression::Const(_, _) | Expression::Void => {}
+        }
+    }
+
+    /// Return all the leaves of the AST rooted at this `Node`
+    pub fn leaves(&self) -> Vec<Node> {
+        fn _flatten(e: &Node, ax: &mut Vec<Node>) {
+            match e.e() {
+                Expression::Funcall { args, .. } => {
+                    for a in args {
+                        _flatten(a, ax);
+                    }
+                }
+                Expression::Const(..) => ax.push(e.clone()),
+                Expression::Column { .. } => ax.push(e.clone()),
+                Expression::ArrayColumn { .. } => {}
+                Expression::List(args) => {
+                    for a in args {
+                        _flatten(a, ax);
+                    }
+                }
+                Expression::Void => (),
+            }
+        }
+
+        let mut r = vec![];
+        _flatten(self, &mut r);
+        r
+    }
+
+    /// Return all the columns appearing in the AST rooted at this `Node`
+    pub fn dependencies(&self) -> HashSet<ColumnRef> {
+        self.leaves()
+            .into_iter()
+            .filter_map(|e| match e.e() {
+                Expression::Column { handle, .. } => Some(handle.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Try to evalaute a Node from compile-time information, return an `Err` otherwise
+    pub fn pure_eval(&self) -> Result<BigInt> {
+        match self.e() {
+            Expression::Funcall { func, args } => match func {
+                Intrinsic::Add => {
+                    let args = args
+                        .iter()
+                        .map(|x| x.pure_eval())
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok(args.iter().fold(BigInt::zero(), |ax, x| ax + x))
+                }
+                Intrinsic::Sub => {
+                    let args = args
+                        .iter()
+                        .map(|x| x.pure_eval())
+                        .collect::<Result<Vec<_>>>()?;
+                    let mut ax = args[0].to_owned();
+                    for x in args[1..].iter() {
+                        ax -= x
+                    }
+                    Ok(ax)
+                }
+                Intrinsic::Mul => {
+                    let args = args
+                        .iter()
+                        .map(|x| x.pure_eval())
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok(args.iter().fold(BigInt::one(), |ax, x| ax * x))
+                }
+                Intrinsic::Neg => Ok(-args[0].pure_eval()?),
+                Intrinsic::Exp => {
+                    let args = args
+                        .iter()
+                        .map(|x| x.pure_eval())
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok(args[0].pow(args[1].to_u32().ok_or_else(|| {
+                        anyhow!("exponent {} is not an u32", args[1].to_string())
+                    })?))
+                }
+                x => bail!("{} is not known at compile-time", x.to_string().red()),
+            },
+            Expression::Const(v, _) => Ok(v.to_owned()),
+            _ => bail!("{} is not known at compile-time", self.to_string().red()),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn eval_trace(
+        &self,
+        i: isize,
+        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
+        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        settings: &EvalSettings,
+    ) -> (Option<Fr>, HashMap<String, Option<Fr>>) {
+        let mut trace = HashMap::new();
+        let r = self.eval_fold(i, get, cache, settings, &mut |n, v| {
+            if !matches!(n.e(), Expression::List(_) | Expression::Const(..)) {
+                trace.insert(n.to_string(), *v);
+            }
+        });
+        (r, trace)
+    }
+
+    pub fn eval(
+        &self,
+        i: isize,
+        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
+        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        settings: &EvalSettings,
+    ) -> Option<Fr> {
+        self.eval_fold(i, get, cache, settings, &mut |_, _| {})
+    }
+
+    pub fn eval_fold(
+        &self,
+        i: isize,
+        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
+        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        settings: &EvalSettings,
+        f: &mut dyn FnMut(&Node, &Option<Fr>),
+    ) -> Option<Fr> {
+        let r = match self.e() {
+            Expression::Funcall { func, args } => match func {
+                Intrinsic::Add => {
+                    let mut ax = Fr::zero();
+                    for arg in args.iter() {
+                        ax.add_assign(&arg.eval_fold(i, get, cache, settings, f)?)
+                    }
+                    Some(ax)
+                }
+                Intrinsic::Sub => {
+                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
+                    for arg in args.iter().skip(1) {
+                        ax.sub_assign(&arg.eval_fold(i, get, cache, settings, f)?)
+                    }
+                    Some(ax)
+                }
+                Intrinsic::Mul => {
+                    let mut ax = Fr::one();
+                    for arg in args.iter() {
+                        ax.mul_assign(&arg.eval_fold(i, get, cache, settings, f)?)
+                    }
+                    Some(ax)
+                }
+                Intrinsic::Exp => {
+                    let mut ax = Fr::one();
+                    let mantissa = args[0].eval_fold(i, get, cache, settings, f)?;
+                    let exp = args[1].pure_eval().unwrap().to_usize().unwrap();
+                    for _ in 0..exp {
+                        ax.mul_assign(&mantissa);
+                    }
+                    Some(ax)
+                }
+                Intrinsic::Shift => {
+                    let shift = args[1].pure_eval().unwrap().to_isize().unwrap();
+                    args[0].eval_fold(i + shift, get, cache, &EvalSettings { wrap: false }, f)
+                }
+                Intrinsic::Neg => args[0].eval_fold(i, get, cache, settings, f).map(|mut x| {
+                    x.negate();
+                    x
+                }),
+                Intrinsic::Inv => {
+                    let x = args[0].eval_fold(i, get, cache, settings, f);
+                    if let Some(ref mut rcache) = cache {
+                        x.map(|x| {
+                            rcache
+                                .cache_get_or_set_with(x, || x.inverse().unwrap_or_else(Fr::zero))
+                                .to_owned()
+                        })
+                    } else {
+                        x.and_then(|x| x.inverse()).or_else(|| Some(Fr::zero()))
+                    }
+                }
+                Intrinsic::Begin => unreachable!(),
+                Intrinsic::IfZero => {
+                    if args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
+                        args[1].eval_fold(i, get, cache, settings, f)
+                    } else {
+                        args.get(2)
+                            .map(|x| x.eval_fold(i, get, cache, settings, f))
+                            .unwrap_or_else(|| Some(Fr::zero()))
+                    }
+                }
+                Intrinsic::IfNotZero => {
+                    if !args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
+                        args[1].eval_fold(i, get, cache, settings, f)
+                    } else {
+                        args.get(2)
+                            .map(|x| x.eval_fold(i, get, cache, settings, f))
+                            .unwrap_or_else(|| Some(Fr::zero()))
+                    }
+                }
+            },
+            Expression::Const(v, x) => {
+                Some(x.unwrap_or_else(|| panic!("{} is not an Fr element.", v)))
+            }
+            Expression::Column { handle, .. } => get(handle, i, settings.wrap),
+            Expression::List(xs) => xs
+                .iter()
+                .filter_map(|x| x.eval_fold(i, get, cache, settings, f))
+                .find(|x| !x.is_zero())
+                .or_else(|| Some(Fr::zero())),
+            _ => unreachable!("{:?}", self),
+        };
+        f(self, &r);
+        r
+    }
+
     pub fn debug(
         &self,
         f: &dyn Fn(&Node) -> Option<Fr>,
@@ -547,319 +845,6 @@ impl Node {
         let faulty = f(self).unwrap_or_default();
         _debug(self, &mut tty, f, &faulty, unclutter, dim, false, true, src);
         tty.page_feed()
-    }
-
-    /// Compute the number of operations to execute to fully compute the [`Expression`]
-    pub fn size(&self) -> usize {
-        match self.e() {
-            Expression::Funcall { args, .. } => 1 + args.iter().map(Node::size).sum::<usize>(),
-            Expression::Const(..) => 0,
-            Expression::Column { .. } => 1,
-            Expression::ArrayColumn { .. } => 0,
-            Expression::List(xs) => xs.iter().map(Node::size).sum::<usize>(),
-            Expression::Void => 0,
-        }
-    }
-
-    /// Compute the depth of the tree representing [`Expression`]
-    pub fn depth(&self) -> usize {
-        match self.e() {
-            Expression::Funcall { args, .. } => {
-                1 + args.iter().map(Node::depth).max().unwrap_or_default()
-            }
-            Expression::List(xs) => 1 + xs.iter().map(Node::depth).max().unwrap_or_default(),
-            Expression::Const(..)
-            | Expression::Column { .. }
-            | Expression::ArrayColumn { .. }
-            | Expression::Void => 0,
-        }
-    }
-
-    /// Compute the maximum future-shifting in the node
-    pub fn past_spill(&self) -> isize {
-        fn _past_span(e: &Expression, ax: isize) -> isize {
-            match e {
-                Expression::Funcall { func, args } => {
-                    let mut mine = ax;
-                    if let Intrinsic::Shift = func {
-                        let arg_big = args[1]
-                            .pure_eval()
-                            .unwrap_or_else(|_| panic!("{}", args[1].to_string().as_str()));
-                        let arg = arg_big
-                            .to_isize()
-                            .unwrap_or_else(|| panic!("{}", arg_big.to_string().as_str()));
-                        mine = mine.min(mine + arg);
-                    }
-                    args.iter().map(|e| _past_span(e.e(), mine)).min().unwrap()
-                }
-                Expression::List(es) => es.iter().map(|e| _past_span(e.e(), ax)).min().unwrap(),
-                _ => ax,
-            }
-        }
-
-        _past_span(self.e(), 0).min(0)
-    }
-
-    /// Compute the maximum future-shifting in the node
-    pub fn future_spill(&self) -> isize {
-        fn _future_span(e: &Expression, ax: isize) -> isize {
-            match e {
-                Expression::Funcall { func, args } => {
-                    let mut mine = ax;
-                    if let Intrinsic::Shift = func {
-                        let arg_big = args[1]
-                            .pure_eval()
-                            .unwrap_or_else(|_| panic!("{}", args[1].to_string().as_str()));
-                        let arg = arg_big
-                            .to_isize()
-                            .unwrap_or_else(|| panic!("{}", arg_big.to_string().as_str()));
-                        mine = mine.max(mine + arg);
-                    }
-                    args.iter()
-                        .map(|e| _future_span(e.e(), mine))
-                        .max()
-                        .unwrap()
-                }
-                Expression::List(es) => es.iter().map(|e| _future_span(e.e(), ax)).max().unwrap(),
-                _ => ax,
-            }
-        }
-
-        _future_span(self.e(), 0).max(0)
-    }
-
-    pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut ColumnRef)) {
-        match self.e_mut() {
-            Expression::Funcall { args, .. } => {
-                args.iter_mut().for_each(|e| e.add_id_to_handles(set_id))
-            }
-
-            Expression::Column { handle, .. } => set_id(handle),
-            Expression::List(xs) => xs.iter_mut().for_each(|x| x.add_id_to_handles(set_id)),
-
-            Expression::ArrayColumn { .. } | Expression::Const(_, _) | Expression::Void => {}
-        }
-    }
-
-    pub fn dependencies(&self) -> HashSet<ColumnRef> {
-        self.leaves()
-            .into_iter()
-            .filter_map(|e| match e.e() {
-                Expression::Column { handle, .. } => Some(handle.clone()),
-                _ => None,
-            })
-            .collect()
-    }
-
-    pub fn core_dependencies(&self) -> HashSet<ColumnRef> {
-        self.leaves()
-            .into_iter()
-            .filter_map(|e| match e.e() {
-                Expression::Column {
-                    handle, fetched, ..
-                } => {
-                    if *fetched {
-                        None
-                    } else {
-                        Some(handle.clone())
-                    }
-                }
-                _ => None,
-            })
-            .collect()
-    }
-
-    /// Evaluate a compile-time known value
-    pub fn pure_eval(&self) -> Result<BigInt> {
-        match self.e() {
-            Expression::Funcall { func, args } => match func {
-                Intrinsic::Add => {
-                    let args = args
-                        .iter()
-                        .map(|x| x.pure_eval())
-                        .collect::<Result<Vec<_>>>()?;
-                    Ok(args.iter().fold(BigInt::zero(), |ax, x| ax + x))
-                }
-                Intrinsic::Sub => {
-                    let args = args
-                        .iter()
-                        .map(|x| x.pure_eval())
-                        .collect::<Result<Vec<_>>>()?;
-                    let mut ax = args[0].to_owned();
-                    for x in args[1..].iter() {
-                        ax -= x
-                    }
-                    Ok(ax)
-                }
-                Intrinsic::Mul => {
-                    let args = args
-                        .iter()
-                        .map(|x| x.pure_eval())
-                        .collect::<Result<Vec<_>>>()?;
-                    Ok(args.iter().fold(BigInt::one(), |ax, x| ax * x))
-                }
-                Intrinsic::Neg => Ok(-args[0].pure_eval()?),
-                Intrinsic::Exp => {
-                    let args = args
-                        .iter()
-                        .map(|x| x.pure_eval())
-                        .collect::<Result<Vec<_>>>()?;
-                    Ok(args[0].pow(args[1].to_u32().ok_or_else(|| {
-                        anyhow!("exponent {} is not an u32", args[1].to_string())
-                    })?))
-                }
-                x => bail!("{} is not known at compile-time", x.to_string().red()),
-            },
-            Expression::Const(v, _) => Ok(v.to_owned()),
-            _ => bail!("{} is not known at compile-time", self.to_string().red()),
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn eval_trace(
-        &self,
-        i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
-        settings: &EvalSettings,
-    ) -> (Option<Fr>, HashMap<String, Option<Fr>>) {
-        let mut trace = HashMap::new();
-        let r = self.eval_fold(i, get, cache, settings, &mut |n, v| {
-            if !matches!(n.e(), Expression::List(_) | Expression::Const(..)) {
-                trace.insert(n.to_string(), *v);
-            }
-        });
-        (r, trace)
-    }
-
-    pub fn eval(
-        &self,
-        i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
-        settings: &EvalSettings,
-    ) -> Option<Fr> {
-        self.eval_fold(i, get, cache, settings, &mut |_, _| {})
-    }
-
-    pub fn eval_fold(
-        &self,
-        i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
-        settings: &EvalSettings,
-        f: &mut dyn FnMut(&Node, &Option<Fr>),
-    ) -> Option<Fr> {
-        let r = match self.e() {
-            Expression::Funcall { func, args } => match func {
-                Intrinsic::Add => {
-                    let mut ax = Fr::zero();
-                    for arg in args.iter() {
-                        ax.add_assign(&arg.eval_fold(i, get, cache, settings, f)?)
-                    }
-                    Some(ax)
-                }
-                Intrinsic::Sub => {
-                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
-                    for arg in args.iter().skip(1) {
-                        ax.sub_assign(&arg.eval_fold(i, get, cache, settings, f)?)
-                    }
-                    Some(ax)
-                }
-                Intrinsic::Mul => {
-                    let mut ax = Fr::one();
-                    for arg in args.iter() {
-                        ax.mul_assign(&arg.eval_fold(i, get, cache, settings, f)?)
-                    }
-                    Some(ax)
-                }
-                Intrinsic::Exp => {
-                    let mut ax = Fr::one();
-                    let mantissa = args[0].eval_fold(i, get, cache, settings, f)?;
-                    let exp = args[1].pure_eval().unwrap().to_usize().unwrap();
-                    for _ in 0..exp {
-                        ax.mul_assign(&mantissa);
-                    }
-                    Some(ax)
-                }
-                Intrinsic::Shift => {
-                    let shift = args[1].pure_eval().unwrap().to_isize().unwrap();
-                    args[0].eval_fold(i + shift, get, cache, &EvalSettings { wrap: false }, f)
-                }
-                Intrinsic::Neg => args[0].eval_fold(i, get, cache, settings, f).map(|mut x| {
-                    x.negate();
-                    x
-                }),
-                Intrinsic::Inv => {
-                    let x = args[0].eval_fold(i, get, cache, settings, f);
-                    if let Some(ref mut rcache) = cache {
-                        x.map(|x| {
-                            rcache
-                                .cache_get_or_set_with(x, || x.inverse().unwrap_or_else(Fr::zero))
-                                .to_owned()
-                        })
-                    } else {
-                        x.and_then(|x| x.inverse()).or_else(|| Some(Fr::zero()))
-                    }
-                }
-                Intrinsic::Begin => unreachable!(),
-                Intrinsic::IfZero => {
-                    if args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
-                        args[1].eval_fold(i, get, cache, settings, f)
-                    } else {
-                        args.get(2)
-                            .map(|x| x.eval_fold(i, get, cache, settings, f))
-                            .unwrap_or_else(|| Some(Fr::zero()))
-                    }
-                }
-                Intrinsic::IfNotZero => {
-                    if !args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
-                        args[1].eval_fold(i, get, cache, settings, f)
-                    } else {
-                        args.get(2)
-                            .map(|x| x.eval_fold(i, get, cache, settings, f))
-                            .unwrap_or_else(|| Some(Fr::zero()))
-                    }
-                }
-            },
-            Expression::Const(v, x) => {
-                Some(x.unwrap_or_else(|| panic!("{} is not an Fr element.", v)))
-            }
-            Expression::Column { handle, .. } => get(handle, i, settings.wrap),
-            Expression::List(xs) => xs
-                .iter()
-                .filter_map(|x| x.eval_fold(i, get, cache, settings, f))
-                .find(|x| !x.is_zero())
-                .or_else(|| Some(Fr::zero())),
-            _ => unreachable!("{:?}", self),
-        };
-        f(self, &r);
-        r
-    }
-
-    pub fn leaves(&self) -> Vec<Node> {
-        fn _flatten(e: &Node, ax: &mut Vec<Node>) {
-            match e.e() {
-                Expression::Funcall { args, .. } => {
-                    for a in args {
-                        _flatten(a, ax);
-                    }
-                }
-                Expression::Const(..) => ax.push(e.clone()),
-                Expression::Column { .. } => ax.push(e.clone()),
-                Expression::ArrayColumn { .. } => {}
-                Expression::List(args) => {
-                    for a in args {
-                        _flatten(a, ax);
-                    }
-                }
-                Expression::Void => (),
-            }
-        }
-
-        let mut r = vec![];
-        _flatten(self, &mut r);
-        r
     }
 
     pub fn flat_map<T>(&self, f: &dyn Fn(&Node) -> T) -> Vec<T> {
