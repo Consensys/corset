@@ -1,4 +1,6 @@
+use std::fs::File;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use crate::{
     compiler::{ConstraintSet, Kind, Magma},
@@ -8,12 +10,12 @@ use anyhow::*;
 use convert_case::{Case, Casing};
 use handlebars::Handlebars;
 use itertools::Itertools;
-use owo_colors::OwoColorize;
 use serde::Serialize;
 
 use super::reg_to_string;
 
-const TEMPLATE: &str = include_str!("besu.java");
+const TRACE_COLUMNS_TEMPLATE: &str = include_str!("besu_trace_columns.java");
+const TRACE_MODULE_TEMPLATE: &str = include_str!("besu_module_trace.java");
 
 #[derive(Serialize)]
 struct BesuColumn {
@@ -67,7 +69,7 @@ fn handle_to_appender(h: &Handle) -> String {
     )
 }
 
-pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Result<()> {
+pub fn render(cs: &ConstraintSet, package: &str, output_filepath: Option<&String>) -> () {
     let registers = cs
         .columns
         .registers
@@ -117,24 +119,56 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
         .sorted_by_cached_key(|c| c.name.to_owned())
         .collect::<Vec<_>>();
 
-    let r = Handlebars::new().render_template(
-        TEMPLATE,
-        &TemplateData {
-            module: package.to_owned(),
-            module_prefix: package.to_case(Case::Pascal),
-            constants,
-            registers,
-            columns,
-        },
-    )?;
+    let handlebars = Handlebars::new();
 
-    if let Some(filename) = outfile.as_ref() {
-        std::fs::File::create(filename)
-            .with_context(|| format!("while creating {}", filename.white().bold()))?
-            .write_all(r.as_bytes())
-            .with_context(|| format!("while writing to {}", filename.white().bold()))
-    } else {
-        println!("{}", r);
+    let template_data = TemplateData {
+        module: package.to_owned(),
+        module_prefix: package.to_case(Case::Pascal),
+        constants,
+        registers,
+        columns,
+    };
+
+    let trace_module_render = handlebars
+        .render_template(TRACE_MODULE_TEMPLATE, &template_data)
+        .expect("error rendering trace module java template for Besu");
+
+    let trace_columns_render = handlebars
+        .render_template(TRACE_COLUMNS_TEMPLATE, &template_data)
+        .expect("error rendering trace columns java template for Besu");
+
+    match output_filepath {
+        Some(f) => {
+            let trace_module_java_filepath = {
+                let m = format!("{}{}", template_data.module_prefix, "Trace.java");
+                let p = Path::new(f).join(m);
+                p
+            };
+
+            let trace_columns_java_filepath = Path::new(f).join("Trace.java");
+
+            create_file(trace_module_java_filepath, trace_module_render)
+                .expect("error creating trace module java file for Besu");
+
+            create_file(trace_columns_java_filepath, trace_columns_render)
+                .expect("error creating trace columns java file for Besu");
+        }
+        None => {
+            println!(
+                "{}\n=========================================================================\n{}",
+                trace_module_render, trace_columns_render
+            );
+        }
+    }
+
+    pub fn create_file(file_path: PathBuf, contents: String) -> Result<(), Error> {
+        // Create a new file with the provided name
+        let mut file = File::create(file_path)?;
+
+        // Write the provided contents into the file
+        file.write_all(contents.as_bytes())?;
+
+        // Return Ok if everything was successful
         Ok(())
     }
 }

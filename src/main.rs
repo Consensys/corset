@@ -101,7 +101,7 @@ enum Commands {
         package: String,
 
         #[arg(short = 'o', long = "out", help = "where to render the columns")]
-        filename: Option<String>,
+        output_file_path: Option<String>,
     },
     #[cfg(feature = "conflater")]
     /// Export columns in a format usable by the trace conflater
@@ -264,7 +264,7 @@ enum Commands {
         #[arg(long, default_value = "zkevm")]
         database: String,
 
-        #[arg(long = "rm", help = "remove succesully validated blocks")]
+        #[arg(long = "rm", help = "remove successfully validated blocks")]
         remove: bool,
 
         #[arg(long)]
@@ -363,8 +363,11 @@ fn main() -> Result<()> {
             exporters::zkgeth::render(&constraints, &package, filename.as_ref())?;
         }
         #[cfg(feature = "exporters")]
-        Commands::Besu { package, filename } => {
-            exporters::besu::render(&constraints, &package, filename.as_ref())?;
+        Commands::Besu {
+            package,
+            output_file_path: filename,
+        } => {
+            exporters::besu::render(&constraints, &package, filename.as_ref());
         }
         #[cfg(feature = "conflater")]
         Commands::Conflater { filename } => {
