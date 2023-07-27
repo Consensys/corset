@@ -1145,7 +1145,18 @@ fn apply_intrinsic(
             .with_type(super::max_type(&traversed_args_t)),
         )),
 
-        b @ (Intrinsic::IfZero | Intrinsic::IfNotZero) => Ok(Some(b.call(&traversed_args)?)),
+        b @ (Intrinsic::IfZero | Intrinsic::IfNotZero) => {
+            let r = b.call(&traversed_args)?;
+            if traversed_args[0].may_overflow() {
+                let pretty = if let Some(d) = traversed_args[0].dbg() {
+                    d.to_owned()
+                } else {
+                    traversed_args[0].to_string()
+                };
+                error!("condition {} may overflow", pretty.bright_white().bold());
+            }
+            Ok(Some(r))
+        }
 
         b @ (Intrinsic::Add
         | Intrinsic::Sub

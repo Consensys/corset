@@ -303,6 +303,9 @@ impl Node {
             Expression::Void => Type::Void,
         })
     }
+    pub fn dbg(&self) -> Option<&String> {
+        self.dbg.as_ref()
+    }
 
     pub fn pretty_with_handle(&self, cs: &ConstraintSet) -> String {
         fn rec_pretty(s: &Node, depth: usize, cs: &ConstraintSet) -> String {
@@ -354,6 +357,42 @@ impl Node {
             Expression::ArrayColumn { .. } => 0,
             Expression::List(xs) => xs.iter().map(Node::size).sum::<usize>(),
             Expression::Void => 0,
+        }
+    }
+
+    /// Return whether this [`Expression`] is susceptible to overflow withtin the field
+    pub fn may_overflow(&self) -> bool {
+        match self.e() {
+            Expression::Funcall { func, args } => match func {
+                Intrinsic::Add => args.iter().any(|a| !a.t().is_bool()),
+                // TODO: see with Olivier
+                Intrinsic::Sub => false,
+                Intrinsic::Mul => args.iter().any(|a| !a.t().is_bool()),
+                // exponentiation are compile-time computed, hence cannot overflow
+                Intrinsic::Exp => false,
+                Intrinsic::Shift => false,
+                Intrinsic::Neg => false,
+                Intrinsic::Inv => false,
+                Intrinsic::Begin => unreachable!(),
+                Intrinsic::IfZero | Intrinsic::IfNotZero => {
+                    args[1].may_overflow() || args.get(2).map(|a| a.may_overflow()).unwrap_or(false)
+                }
+            },
+            Expression::Const(_, _) => false,
+            Expression::Column {
+                handle,
+                kind,
+                padding_value,
+                base,
+                fetched,
+            } => false,
+            Expression::ArrayColumn {
+                handle,
+                domain,
+                base,
+            } => false,
+            Expression::List(ns) => ns.iter().any(Node::may_overflow),
+            Expression::Void => false,
         }
     }
 
