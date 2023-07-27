@@ -1391,12 +1391,14 @@ fn reduce_toplevel(
         } => {
             let handle = Handle::new(ctx.module(), name);
             let module = ctx.module();
-            if let Some(perspective) = perspective {
-                *ctx = ctx.jump_in(&format!("in-{perspective}"))?;
+            let mut ctx = if let Some(perspective) = perspective {
+                ctx.jump_in(&format!("in-{perspective}"))?
+            } else {
+                ctx.clone()
             };
-            let body = reduce(body, ctx, settings)?.unwrap_or_else(|| Expression::Void.into());
+            let body = reduce(body, &mut ctx, settings)?.unwrap_or_else(|| Expression::Void.into());
             let body = if let Some(guard) = guard {
-                let guard_expr = reduce(guard, ctx, settings)?
+                let guard_expr = reduce(guard, &mut ctx, settings)?
                     .with_context(|| anyhow!("guard `{:?}` is empty", guard))?;
                 Intrinsic::IfNotZero.call(&[guard_expr, body])?
             } else {

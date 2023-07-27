@@ -339,7 +339,7 @@ impl Scope {
             Some(n) => Ok(self.at(n)),
             None => {
                 bail!(
-                    "{} not found in {}",
+                    "scope {} not found in {}",
                     name.bold().red(),
                     self.name().bold().yellow(),
                 )
