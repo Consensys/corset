@@ -25,7 +25,7 @@ use crate::{column::Column, compiler::ConstraintSet, pretty::Pretty, structs::Ha
 #[time("info", "Parsing trace from JSON file with SIMD")]
 pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
     let mut f = File::open(tracefile).with_context(|| format!("while opening `{}`", tracefile))?;
-    let gz = GzDecoder::new(BufReader::new(&f));
+    let mut gz = GzDecoder::new(BufReader::new(&f));
 
     #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
     {
@@ -58,7 +58,7 @@ pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
 
 #[time("info", "Parsing trace from JSON with SIMD")]
 pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
-    let gz = GzDecoder::new(BufReader::new(tracestr));
+    let mut gz = GzDecoder::new(BufReader::new(tracestr));
     #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
     {
         let mut content = Vec::new();

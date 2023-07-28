@@ -132,8 +132,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_filepath: Option<&String
         Some(f) => {
             let trace_module_java_filepath = {
                 let m = format!("{}{}", template_data.module_prefix, "Trace.java");
-                let p = Path::new(f).join(m);
-                p
+                Path::new(f).join(m)
             };
 
             let trace_columns_java_filepath = Path::new(f).join("Trace.java");
