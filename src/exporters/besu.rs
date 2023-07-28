@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::println;
 
 use crate::{
     compiler::{ConstraintSet, Kind, Magma},
@@ -10,6 +11,7 @@ use anyhow::*;
 use convert_case::{Case, Casing};
 use handlebars::Handlebars;
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use serde::Serialize;
 
 use super::reg_to_string;
@@ -68,12 +70,23 @@ fn handle_to_appender(h: &Handle) -> String {
     }
 }
 
+fn fill_file(file_path: PathBuf, contents: String) -> Result<(), Error> {
+    // Create a new file with the provided name
+    let mut file = File::create(file_path)?;
+
+    // Write the provided contents into the file
+    file.write_all(contents.as_bytes())?;
+
+    // Return Ok if everything was successful
+    Ok(())
+}
+
 pub fn render(
     cs: &ConstraintSet,
     package: &str,
-    output_filepath: Option<&String>,
+    output_path: Option<&String>,
     regs: bool,
-) -> () {
+) -> Result<()> {
     let registers = cs
         .columns
         .registers
@@ -149,8 +162,11 @@ pub fn render(
         )
         .expect("error rendering trace columns java template for Besu");
 
-    match output_filepath {
+    match output_path {
         Some(f) => {
+            if !Path::new(f).is_dir() {
+                bail!("{} is not a directory", f.bold().yellow());
+            }
             let trace_module_java_filepath = {
                 let m = format!("{}{}", template_data.module_prefix, "Trace.java");
                 Path::new(f).join(m)
@@ -158,28 +174,17 @@ pub fn render(
 
             let trace_columns_java_filepath = Path::new(f).join("Trace.java");
 
-            create_file(trace_module_java_filepath, trace_module_render)
+            fill_file(trace_module_java_filepath, trace_module_render)
                 .expect("error creating trace module java file for Besu");
 
-            create_file(trace_columns_java_filepath, trace_columns_render)
+            fill_file(trace_columns_java_filepath, trace_columns_render)
                 .expect("error creating trace columns java file for Besu");
         }
         None => {
-            println!(
-                "{}\n=========================================================================\n{}",
-                trace_module_render, trace_columns_render
-            );
+            println!("{trace_module_render}");
+            println!("=========================================================================");
+            println!("{trace_columns_render}");
         }
     }
-
-    pub fn create_file(file_path: PathBuf, contents: String) -> Result<(), Error> {
-        // Create a new file with the provided name
-        let mut file = File::create(file_path)?;
-
-        // Write the provided contents into the file
-        file.write_all(contents.as_bytes())?;
-
-        // Return Ok if everything was successful
-        Ok(())
-    }
+    Ok(())
 }
