@@ -3,7 +3,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::{
-    column::Register,
     compiler::{ConstraintSet, Kind, Magma},
     structs::Handle,
 };
@@ -16,12 +15,14 @@ use serde::Serialize;
 use super::reg_to_string;
 
 const TRACE_COLUMNS_TEMPLATE: &str = include_str!("besu_trace_columns.java");
+const TRACE_COLUMNS_REGS_TEMPLATE: &str = include_str!("besu_trace_columns_with_regs.java");
 const TRACE_MODULE_TEMPLATE: &str = include_str!("besu_module_trace.java");
 
 #[derive(Serialize)]
 struct BesuColumn {
     corset_name: String,
     java_name: String,
+    appender: String,
     tupe: String,
     register: String,
     reg_id: usize,
@@ -60,7 +61,19 @@ fn magma_to_java_type(m: Magma) -> String {
     .to_string()
 }
 
-pub fn render(cs: &ConstraintSet, package: &str, output_filepath: Option<&String>) -> () {
+fn handle_to_appender(h: &Handle) -> String {
+    match h.perspective.as_ref() {
+        None => h.name.to_case(Case::Camel),
+        Some(p) => format!("{}_{}", p.to_case(Case::Camel), h.name.to_case(Case::Camel)),
+    }
+}
+
+pub fn render(
+    cs: &ConstraintSet,
+    package: &str,
+    output_filepath: Option<&String>,
+    regs: bool,
+) -> () {
     let registers = cs
         .columns
         .registers
@@ -89,6 +102,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_filepath: Option<&String
                 Some(BesuColumn {
                     corset_name: c.handle.name.to_string(),
                     java_name: c.handle.name.to_case(Case::Camel),
+                    appender: handle_to_appender(&c.handle),
                     tupe: magma_to_java_type(c.t).into(),
                     register,
                     reg_id: r,
@@ -125,7 +139,14 @@ pub fn render(cs: &ConstraintSet, package: &str, output_filepath: Option<&String
         .expect("error rendering trace module java template for Besu");
 
     let trace_columns_render = handlebars
-        .render_template(TRACE_COLUMNS_TEMPLATE, &template_data)
+        .render_template(
+            if regs {
+                TRACE_COLUMNS_REGS_TEMPLATE
+            } else {
+                TRACE_COLUMNS_TEMPLATE
+            },
+            &template_data,
+        )
         .expect("error rendering trace columns java template for Besu");
 
     match output_filepath {
