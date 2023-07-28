@@ -4,8 +4,8 @@ use crate::{
         forth::{self, Node},
         StdTerminal,
     },
+    structs::Field,
 };
-use pairing_ce::bn256::Fr;
 use ratatui::{
     prelude::Rect,
     style::{Color, Style},
@@ -30,7 +30,7 @@ impl<'a> ScanInput<'a> {
         r
     }
 
-    fn validate(&mut self) -> anyhow::Result<Node> {
+    fn validate<F: Field>(&mut self) -> anyhow::Result<Node<F>> {
         let r = forth::parse(&self.input.lines()[0], &self.module, self.columns);
 
         match &r {
@@ -54,16 +54,16 @@ impl<'a> ScanInput<'a> {
         r
     }
 
-    pub fn run<F: Fn(isize, &ColumnRef) -> Option<Fr>>(
+    pub fn run<F: Field, Func: Fn(isize, &ColumnRef) -> Option<F>>(
         mut self,
         term: &mut StdTerminal,
-        get: &F,
+        get: &Func,
         max: isize,
         target: Rect,
     ) -> Option<(String, Vec<isize>)> {
         self.input.set_cursor_line_style(Style::default());
         loop {
-            let _ = self.validate();
+            let _ = self.validate::<F>();
             let _ = term.draw(|f| {
                 f.render_widget(self.input.widget(), target);
             });

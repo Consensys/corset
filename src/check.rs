@@ -8,16 +8,12 @@ use std::collections::HashSet;
 
 use anyhow::*;
 use log::*;
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 
 use crate::{
     column::ColumnSet,
     compiler::{Constraint, ConstraintSet, Domain, Expression, Node},
     pretty::*,
-    structs::Handle,
+    structs::{Field, Handle},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -108,9 +104,9 @@ impl DebugSettings {
     }
 }
 
-fn columns_len(
-    expr: &Node,
-    columns: &ColumnSet,
+fn columns_len<F: Field>(
+    expr: &Node<Expression<F>, F>,
+    columns: &ColumnSet<F>,
     name: &Handle,
     with_padding: bool,
 ) -> Result<Option<usize>> {
@@ -172,9 +168,9 @@ fn columns_len(
 /// * `i`        - The evaluation point; may be negative
 /// * `wrap`     - If set, negative indices wrap; otherwise they go into the padding
 /// * `settings` - The global debugging settings
-fn fail(
-    cs: &ConstraintSet,
-    expr: &Node,
+fn fail<F: Field>(
+    cs: &ConstraintSet<F>,
+    expr: &Node<Expression<F>, F>,
     i: isize,
     wrap: bool,
     settings: DebugSettings,
@@ -274,13 +270,13 @@ fn fail(
     )
 }
 
-fn check_constraint_at(
-    cs: &ConstraintSet,
-    expr: &Node,
+fn check_constraint_at<F: Field>(
+    cs: &ConstraintSet<F>,
+    expr: &Node<Expression<F>, F>,
     i: isize,
     wrap: bool,
     fail_on_oob: bool,
-    cache: &mut Option<SizedCache<Fr, Fr>>,
+    cache: &mut Option<SizedCache<F, F>>,
     settings: DebugSettings,
 ) -> Result<()> {
     let r = expr.eval(
@@ -299,7 +295,12 @@ fn check_constraint_at(
     Ok(())
 }
 
-fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Fr) -> Result<()> {
+fn check_inrange<F: Field>(
+    name: &Handle,
+    expr: &Node<Expression<F>, F>,
+    columns: &ColumnSet<F>,
+    max: &F,
+) -> Result<()> {
     let l = columns_len(expr, columns, name, false)?;
     if let Some(l) = l {
         for i in 0..l as isize {
@@ -326,9 +327,9 @@ fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Fr) -> R
     }
 }
 
-fn check_constraint(
-    cs: &ConstraintSet,
-    expr: &Node,
+fn check_constraint<F: Field>(
+    cs: &ConstraintSet<F>,
+    expr: &Node<Expression<F>, F>,
     domain: &Option<Domain>,
     name: &Handle,
     settings: DebugSettings,
@@ -366,12 +367,16 @@ fn check_constraint(
     }
 }
 
-fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Result<()> {
+fn check_plookup<F: Field>(
+    cs: &ConstraintSet<F>,
+    parents: &[Node<Expression<F>, F>],
+    children: &[Node<Expression<F>, F>],
+) -> Result<()> {
     // Compute the LC \sum_k (k+1) × x_k[i]
-    fn pseudo_rlc(cols: &[Vec<Fr>], i: usize) -> Fr {
-        let mut ax = Fr::zero();
+    fn pseudo_rlc<F: Field>(cols: &[Vec<F>], i: usize) -> F {
+        let mut ax = F::zero();
         for (j, col) in cols.iter().enumerate() {
-            let mut x = Fr::from_str(&(j + 2).to_string()).unwrap();
+            let mut x = F::from_str(&(j + 2).to_string()).unwrap();
             x.mul_assign(&col[i]);
             ax.add_assign(&x);
         }
@@ -379,7 +384,10 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
     }
 
     // Given a list of column expression to PLookup, retrieve the corresponding values
-    fn compute_cols(exps: &[Node], cs: &ConstraintSet) -> Result<Vec<Vec<Fr>>> {
+    fn compute_cols<F: Field>(
+        exps: &[Node<Expression<F>, F>],
+        cs: &ConstraintSet<F>,
+    ) -> Result<Vec<Vec<F>>> {
         let cols = exps
             .iter()
             .map(|e| crate::compute::compute_composite_static(cs, e))
@@ -457,8 +465,8 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
     Ok(())
 }
 
-pub fn check(
-    cs: &ConstraintSet,
+pub fn check<F: Field>(
+    cs: &ConstraintSet<F>,
     only: &Option<Vec<String>>,
     skip: &[String],
     with_bar: bool,

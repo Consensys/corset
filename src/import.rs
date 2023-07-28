@@ -5,10 +5,7 @@ use flate2::bufread::GzDecoder;
 use log::*;
 use logging_timer::time;
 use owo_colors::OwoColorize;
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
+
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
 use serde_json::Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
@@ -24,11 +21,11 @@ use crate::{
     column::{Column, Register},
     compiler::ConstraintSet,
     pretty::Pretty,
-    structs::Handle,
+    structs::{Field, Handle},
 };
 
 #[time("info", "Parsing trace from JSON file with SIMD")]
-pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
+pub fn read_trace<F: Field>(tracefile: &str, cs: &mut ConstraintSet<F>) -> Result<()> {
     let mut f = File::open(tracefile).with_context(|| format!("while opening `{}`", tracefile))?;
 
     #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
@@ -63,7 +60,7 @@ pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
 }
 
 #[time("info", "Parsing trace from JSON with SIMD")]
-pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
+pub fn read_trace_str<F: Field>(tracestr: &[u8], cs: &mut ConstraintSet<F>) -> Result<()> {
     #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
     {
         let mut content = Vec::new();
@@ -92,19 +89,19 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
 }
 
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
-fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
+fn parse_column<F: Field>(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<F>> {
     let mut cache_num = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut cache_str = cached::SizedCache::with_size(200000); // ~1.60MB cache
-    let mut r = vec![Fr::zero()];
+    let mut r = vec![F::zero()];
     let xs = xs
         .iter()
         .map(|x| match x {
             Value::Number(n) => cache_num
-                .cache_get_or_set_with(n, || Fr::from_str(&n.to_string()))
+                .cache_get_or_set_with(n, || F::from_str(&n.to_string()))
                 .with_context(|| format!("while parsing Fr from Number `{:?}`", x))
                 .and_then(|x| crate::utils::validate(t, x)),
             Value::String(s) => cache_str
-                .cache_get_or_set_with(s, || Fr::from_str(s))
+                .cache_get_or_set_with(s, || F::from_str(s))
                 .with_context(|| format!("while parsing Fr from String `{:?}`", x))
                 .and_then(|x| crate::utils::validate(t, x)),
             _ => bail!("expected numeric value, found `{}`", x),
@@ -119,9 +116,9 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
 }
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
-fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
+fn parse_column<F: Field>(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<F>> {
     let mut cache = cached::SizedCache::with_size(200000); // ~1.60MB cache
-    let mut r = vec![Fr::zero()];
+    let mut r = vec![F::zero()];
     let xs = xs
         .iter()
         .map(|x| {
@@ -137,7 +134,7 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
                 _ => bail!("expected numeric value, found `{}`", x),
             };
             cache
-                .cache_get_or_set_with(s.clone(), || Fr::from_str(&s))
+                .cache_get_or_set_with(s.clone(), || F::from_str(&s))
                 .with_context(|| format!("while parsing Fr from `{:?}`", x))
                 .and_then(|x| crate::utils::validate(t, x))
         })
@@ -149,10 +146,10 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
     Ok(r)
 }
 
-pub fn fill_traces(
+pub fn fill_traces<F: Field>(
     v: &Value,
     path: Vec<String>,
-    cs: &mut ConstraintSet,
+    cs: &mut ConstraintSet<F>,
     initiator: &mut Option<&mut String>,
 ) -> Result<()> {
     match v {
@@ -247,7 +244,7 @@ pub fn fill_traces(
                     // no need to trigger a more complex padding system.
                     if xs.len() < module_min_len {
                         xs.reverse();
-                        xs.resize(module_min_len, Fr::zero()); // TODO: register padding values
+                        xs.resize(module_min_len, F::zero()); // TODO: register padding values
                         xs.reverse();
                     }
                     cs.columns

@@ -7,12 +7,11 @@ use compiler::ConstraintSet;
 use errno::{set_errno, Errno};
 use libc::c_char;
 use log::*;
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
+
 use rayon::{prelude::*, ThreadPool};
+use serde::de::DeserializeOwned;
 use std::ffi::{c_uint, CStr, CString};
+use structs::Field;
 
 use crate::{column::Computation, compiler::EvalSettings};
 
@@ -28,7 +27,9 @@ mod structs;
 mod transformer;
 mod utils;
 
-type Corset = ConstraintSet;
+pub type LibArithmetisationField = pairing_ce::bn256::Fr;
+
+type Corset<F> = ConstraintSet<F>;
 
 #[derive(Copy, Clone)]
 #[repr(i32)]
@@ -112,7 +113,7 @@ pub struct Trace {
     ids: Vec<String>,
 }
 impl Trace {
-    fn from_constraints(c: &Corset, convert_to_be: bool) -> Self {
+    fn from_constraints<F: Field>(c: &Corset<F>, convert_to_be: bool) -> Self {
         let mut r = Trace {
             ..Default::default()
         };
@@ -135,17 +136,17 @@ impl Trace {
                                 Computation::Composite { exp, .. } => exp
                                     .eval(
                                         0,
-                                        &mut |_, _, _| Some(Fr::zero()),
+                                        &mut |_, _, _| Some(F::zero()),
                                         &mut None,
                                         &EvalSettings::default(),
                                     )
-                                    .unwrap_or_else(Fr::zero),
-                                Computation::Interleaved { .. } => Fr::zero(),
-                                Computation::Sorted { .. } => Fr::zero(),
-                                Computation::CyclicFrom { .. } => Fr::zero(),
-                                Computation::SortingConstraints { .. } => Fr::zero(),
+                                    .unwrap_or_else(F::zero),
+                                Computation::Interleaved { .. } => F::zero(),
+                                Computation::Sorted { .. } => F::zero(),
+                                Computation::CyclicFrom { .. } => F::zero(),
+                                Computation::SortingConstraints { .. } => F::zero(),
                             })
-                            .unwrap_or_else(Fr::zero)
+                            .unwrap_or_else(F::zero)
                     })
                 };
                 (
@@ -156,7 +157,7 @@ impl Trace {
                             .unwrap_or(&empty_vec)
                             .iter()
                             .map(|x| {
-                                let mut v = x.into_repr().0;
+                                let mut v = x.into_repr();
                                 if convert_to_be {
                                     reverse_fr(&mut v);
                                 }
@@ -164,7 +165,7 @@ impl Trace {
                             })
                             .collect(),
                         padding_value: {
-                            let mut padding = padding.into_repr().0;
+                            let mut padding = padding.into_repr();
                             if convert_to_be {
                                 reverse_fr(&mut padding);
                             }
@@ -245,18 +246,18 @@ fn reverse_fr_x86_64(v: &mut [u64; 4]) {
     }
 }
 
-fn make_corset(mut constraints: ConstraintSet) -> Result<Corset> {
-    transformer::validate_nhood(&mut constraints)?;
-    transformer::lower_shifts(&mut constraints);
-    transformer::expand_ifs(&mut constraints);
-    transformer::expand_constraints(&mut constraints)?;
-    transformer::sorts(&mut constraints)?;
-    transformer::expand_invs(&mut constraints)?;
+fn make_corset<F: Field>(mut constraints: ConstraintSet<F>) -> Result<Corset<F>> {
+    transformer::agnostic::validate_nhood(&mut constraints)?;
+    transformer::agnostic::lower_shifts(&mut constraints);
+    transformer::agnostic::expand_ifs(&mut constraints);
+    transformer::specific::expand_constraints(&mut constraints)?;
+    transformer::agnostic::sorts(&mut constraints)?;
+    transformer::specific::expand_invs(&mut constraints)?;
 
     Ok(constraints)
 }
 
-fn _corset_from_file(zkevmfile: &str) -> Result<Corset> {
+fn _corset_from_file<F: Field + DeserializeOwned>(zkevmfile: &str) -> Result<Corset<F>> {
     info!("Loading `{}`", &zkevmfile);
     let constraints = ron::from_str(
         &std::fs::read_to_string(zkevmfile)
@@ -266,15 +267,15 @@ fn _corset_from_file(zkevmfile: &str) -> Result<Corset> {
     make_corset(constraints)
 }
 
-fn _corset_from_str(zkevmstr: &str) -> Result<Corset> {
+fn _corset_from_str<F: Field + DeserializeOwned>(zkevmstr: &str) -> Result<Corset<F>> {
     let constraints =
         ron::from_str(zkevmstr).with_context(|| anyhow!("while parsing the provided zkEVM"))?;
 
     make_corset(constraints)
 }
 
-fn _compute_trace_from_file(
-    constraints: &mut Corset,
+fn _compute_trace_from_file<F: Field>(
+    constraints: &mut Corset<F>,
     tracefile: &str,
     convert_to_be: bool,
     fail_on_missing: bool,
@@ -284,8 +285,8 @@ fn _compute_trace_from_file(
     Ok(Trace::from_constraints(constraints, convert_to_be))
 }
 
-fn _compute_trace_from_str(
-    constraints: &mut Corset,
+fn _compute_trace_from_str<F: Field>(
+    constraints: &mut Corset<F>,
     tracestr: &str,
     convert_to_be: bool,
     fail_on_missing: bool,
@@ -296,7 +297,9 @@ fn _compute_trace_from_str(
 }
 
 #[no_mangle]
-pub extern "C" fn corset_from_file(zkevmfile: *const c_char) -> *mut Corset {
+pub extern "C" fn corset_from_file(
+    zkevmfile: *const c_char,
+) -> *mut Corset<LibArithmetisationField> {
     let zkevmfile = cstr_to_string(zkevmfile);
     match _corset_from_file(zkevmfile) {
         Result::Ok(constraints) => {
@@ -312,7 +315,9 @@ pub extern "C" fn corset_from_file(zkevmfile: *const c_char) -> *mut Corset {
 }
 
 #[no_mangle]
-pub extern "C" fn corset_from_string(zkevmstr: *const c_char) -> *mut Corset {
+pub extern "C" fn corset_from_string(
+    zkevmstr: *const c_char,
+) -> *mut Corset<LibArithmetisationField> {
     let zkevmstr = cstr_to_string(zkevmstr);
     match _corset_from_str(zkevmstr) {
         Result::Ok(constraints) => {
@@ -327,7 +332,11 @@ pub extern "C" fn corset_from_string(zkevmstr: *const c_char) -> *mut Corset {
     }
 }
 
-fn _trace_check(corset: &mut ConstraintSet, tracefile: &str, fail_on_missing: bool) -> Result<()> {
+fn _trace_check<F: Field>(
+    corset: &mut ConstraintSet<F>,
+    tracefile: &str,
+    fail_on_missing: bool,
+) -> Result<()> {
     compute::compute_trace(tracefile, corset, fail_on_missing)
         .with_context(|| format!("while expanding `{}`", tracefile))?;
 
@@ -352,7 +361,7 @@ fn _trace_check(corset: &mut ConstraintSet, tracefile: &str, fail_on_missing: bo
 
 #[no_mangle]
 pub extern "C" fn trace_check(
-    corset: *mut Corset,
+    corset: *mut Corset<LibArithmetisationField>,
     tracefile: *const c_char,
     threads: c_uint,
     fail_on_missing: bool,
@@ -404,7 +413,7 @@ fn init_rayon(threads: c_uint) -> Result<ThreadPool> {
 
 #[no_mangle]
 pub extern "C" fn trace_compute_from_file(
-    corset: *mut Corset,
+    corset: *mut Corset<LibArithmetisationField>,
     tracefile: *const c_char,
     threads: c_uint,
     convert_to_be: bool,
@@ -435,7 +444,7 @@ pub extern "C" fn trace_compute_from_file(
 
 #[no_mangle]
 pub extern "C" fn trace_compute_from_string(
-    corset: *mut Corset,
+    corset: *mut Corset<LibArithmetisationField>,
     tracestr: *const c_char,
     threads: c_uint,
     convert_to_be: bool,

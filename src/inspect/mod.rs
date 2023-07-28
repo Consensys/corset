@@ -1,7 +1,7 @@
 use crate::{
     compiler::{ColumnRef, ConstraintSet},
     pretty::Pretty,
-    structs::Handle,
+    structs::{Field, Handle},
 };
 use anyhow::{bail, Context, Result};
 use crossterm::{
@@ -10,7 +10,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use itertools::Itertools;
-use pairing_ce::ff::{Field, PrimeField};
 use ratatui::{prelude::*, widgets::*};
 use regex_lite::Regex;
 use std::collections::HashMap;
@@ -43,7 +42,7 @@ struct ModuleView {
     last_scan: String,
 }
 impl ModuleView {
-    fn from_cs(cs: &ConstraintSet, name: &str) -> ModuleView {
+    fn from_cs<F: Field>(cs: &ConstraintSet<F>, name: &str) -> ModuleView {
         let mut max_size = 0;
         let columns: Vec<(ColumnRef, Handle)> = cs
             .columns
@@ -117,7 +116,7 @@ impl ModuleView {
         self.filter(Vec::new());
     }
 
-    fn render(&self, cs: &ConstraintSet, f: &mut Frame, target: Rect) {
+    fn render<F: Field>(&self, cs: &ConstraintSet<F>, f: &mut Frame, target: Rect) {
         let span = 0.max(self.shift)..(self.shift + CONTEXT).min(self.size) + 1;
         // max width for each column; defaults to 3
         let max_column_name_width = self
@@ -154,7 +153,6 @@ impl ModuleView {
                             maxes[k + 1] = maxes[k + 1].max(x_str.len());
                             let bg_color = x
                                 .into_repr()
-                                .0
                                 .iter()
                                 .flat_map(|x| x.to_le_bytes())
                                 .fold(0u8, |ax, bx| ax.wrapping_add(bx));
@@ -221,15 +219,15 @@ impl ModuleView {
     }
 }
 
-struct Inspector<'a> {
-    cs: &'a ConstraintSet,
+struct Inspector<'a, F: Field> {
+    cs: &'a ConstraintSet<F>,
     modules: Vec<ModuleView>,
     current_module: usize,
     minibuffer: Rect,
     message: Span<'a>,
 }
-impl<'a> Inspector<'a> {
-    fn from_cs(cs: &'a ConstraintSet) -> Result<Self> {
+impl<'a, F: Field> Inspector<'a, F> {
+    fn from_cs(cs: &'a ConstraintSet<F>) -> Result<Self> {
         let r = Inspector {
             cs,
             modules: cs
@@ -478,7 +476,7 @@ impl<'a> Inspector<'a> {
     }
 }
 
-pub(crate) fn inspect(cs: &ConstraintSet) -> Result<()> {
+pub(crate) fn inspect<F: Field>(cs: &ConstraintSet<F>) -> Result<()> {
     let mut inspector = Inspector::from_cs(cs)?;
     let mut terminal = setup_terminal()?;
     inspector.run(&mut terminal)?;

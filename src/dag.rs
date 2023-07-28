@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{column::Computation, compiler::ColumnRef};
+use crate::{column::Computation, compiler::ColumnRef, structs::Field};
 
 #[derive(Default, Debug)]
 pub(crate) struct ComputationDag {
@@ -9,7 +9,9 @@ pub(crate) struct ComputationDag {
 }
 
 impl ComputationDag {
-    pub fn from_computations<'a, I: Iterator<Item = &'a Computation>>(comps: I) -> ComputationDag {
+    pub fn from_computations<'a, F: Field, I: Iterator<Item = &'a Computation<F>>>(
+        comps: I,
+    ) -> ComputationDag {
         let mut r = ComputationDag::default();
         for c in comps {
             r.insert_computation(c);
@@ -47,7 +49,7 @@ impl ComputationDag {
             .collect()
     }
 
-    pub fn insert_computation(&mut self, c: &Computation) {
+    pub fn insert_computation<F: Field>(&mut self, c: &Computation<F>) {
         match c {
             Computation::Composite { target, exp } => {
                 for from in exp.dependencies() {

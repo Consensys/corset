@@ -1,6 +1,9 @@
-use crate::compiler::{Constraint, ConstraintSet, Node};
+use crate::{
+    compiler::{Constraint, ConstraintSet, Expression, Node},
+    structs::Field,
+};
 
-fn do_precompute(e: &mut Node) {
+fn do_precompute<F: Field>(e: &mut Node<Expression<F>, F>) {
     if let Result::Ok(value) = e.pure_eval() {
         *e = Node::from_bigint(value)
     } else {
@@ -20,7 +23,7 @@ fn do_precompute(e: &mut Node) {
     }
 }
 
-pub fn precompute(cs: &mut ConstraintSet) {
+pub fn precompute<F: Field>(cs: &mut ConstraintSet<F>) {
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr: e, .. } = c {
             do_precompute(e);

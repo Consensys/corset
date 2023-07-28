@@ -1,11 +1,14 @@
 use anyhow::Result;
 use num_traits::Zero;
 
-use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
+use crate::{
+    compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node},
+    structs::Field,
+    transformer::{flatten_list, wrap},
+};
 
-use super::{flatten_list, wrap};
-
-fn do_expand_ifs(e: &mut Node) -> Result<()> {
+fn do_expand_ifs<F: Field>(e: &mut Node<Expression<F>, F>) -> Result<()> {
+    // TODO mettre ca dans abstract_node_to_node()
     match e.e_mut() {
         Expression::List(es) => {
             for e in es.iter_mut() {
@@ -70,7 +73,7 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                         .flat_map(|(i, exs)| {
                             if let Expression::List(exs) = exs.e() {
                                 exs.iter()
-                                    .map(|ex: &Node| {
+                                    .map(|ex: &Node<Expression<F>, F>| {
                                         ex.flat_map(&|e| {
                                             Intrinsic::Mul
                                                 .call(&[conds[i].clone(), e.clone()])
@@ -98,7 +101,8 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
     Ok(())
 }
 
-fn raise_ifs(mut e: Node) -> Node {
+fn raise_ifs<F: Field>(mut e: Node<Expression<F>, F>) -> Node<Expression<F>, F> {
+    // keep it in transformers because it works on columns
     match e.e_mut() {
         Expression::Funcall { func, ref mut args } => {
             *args = args.iter_mut().map(|a| raise_ifs(a.clone())).collect();
@@ -154,8 +158,7 @@ fn raise_ifs(mut e: Node) -> Node {
                 | Intrinsic::Shift
                 | Intrinsic::Neg
                 | Intrinsic::Inv
-                | Intrinsic::Exp
-                | Intrinsic::Begin => e,
+                | Intrinsic::Exp => e,
             }
         }
         Expression::List(xs) => {
@@ -168,7 +171,7 @@ fn raise_ifs(mut e: Node) -> Node {
     }
 }
 
-pub fn expand_ifs(cs: &mut ConstraintSet) {
+pub fn expand_ifs<F: Field>(cs: &mut ConstraintSet<F>) {
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr, .. } = c {
             *expr = Box::new(raise_ifs(*expr.clone()));

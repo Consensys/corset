@@ -1,13 +1,9 @@
 use owo_colors::{colored::Color, OwoColorize};
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     compiler::{ColumnRef, Expression, Node},
-    structs::Handle,
+    structs::{Field, Handle},
 };
 
 pub mod opcodes;
@@ -22,7 +18,7 @@ pub const COLORS: [Color; 7] = [
     Color::BrightWhite,
 ];
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Base {
     Dec,
     Hex,
@@ -54,9 +50,9 @@ pub trait Pretty {
     fn pretty_with_base(&self, base: Base) -> String;
 }
 
-impl Pretty for Fr {
+impl<F: Field> Pretty for F {
     fn pretty(&self) -> String {
-        let hex = self.into_repr().to_string();
+        let hex = self.hex();
         u64::from_str_radix(&hex[2..], 16)
             .map(|x| x.to_string())
             .unwrap_or(format!("0x0{}", hex[2..].trim_start_matches('0')))
@@ -72,28 +68,20 @@ impl Pretty for Fr {
                     if self.is_zero() {
                         String::from("0")
                     } else {
-                        format!(
-                            "0x{}",
-                            self.into_repr().to_string()[2..].trim_start_matches('0')
-                        )
+                        format!("0x{}", self.hex()[2..].trim_start_matches('0'))
                     }
                 }
                 Base::Bin => format!(
                     "0b{:b}",
-                    u64::from_str_radix(
-                        self.into_repr().to_string()[2..].trim_start_matches('0'),
-                        16
-                    )
-                    .expect("too big to represent as binary"),
+                    u64::from_str_radix(self.hex()[2..].trim_start_matches('0'), 16)
+                        .expect("too big to represent as binary"),
                 ),
                 Base::Bytes => {
                     // ugly, but works
                     if self.is_zero() {
                         String::from("0")
                     } else {
-                        let mut bytes = self.into_repr().to_string()[2..]
-                            .trim_start_matches('0')
-                            .to_string();
+                        let mut bytes = self.hex()[2..].trim_start_matches('0').to_string();
                         if bytes.len() % 2 != 0 {
                             bytes.insert(0, '0');
                         }
@@ -108,20 +96,17 @@ impl Pretty for Fr {
                     }
                 }
                 Base::OpCode => opcodes::to_str(
-                    u8::from_str_radix(
-                        self.into_repr().to_string()[2..].trim_start_matches('0'),
-                        16,
-                    )
-                    .expect("not an opcode"),
+                    u8::from_str_radix(self.to_string()[2..].trim_start_matches('0'), 16)
+                        .expect("not an opcode"),
                 ),
             }
         }
     }
 }
 
-impl Pretty for Node {
+impl<F: Field> Pretty for Node<Expression<F>, F> {
     fn pretty(&self) -> String {
-        fn rec_pretty(s: &Node, depth: usize) -> String {
+        fn rec_pretty<F: Field>(s: &Node<Expression<F>, F>, depth: usize) -> String {
             let c = &COLORS[depth % COLORS.len()];
             match s.e() {
                 Expression::Const(x, _) => format!("{}", x).color(*c).to_string(),
@@ -142,7 +127,7 @@ impl Pretty for Node {
                 Expression::Void => "nil".color(*c).to_string(),
             }
         }
-        fn format_list(cs: &[Node], depth: usize) -> String {
+        fn format_list<F: Field>(cs: &[Node<Expression<F>, F>], depth: usize) -> String {
             cs.iter()
                 .map(|c| rec_pretty(c, depth))
                 .collect::<Vec<_>>()

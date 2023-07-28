@@ -1,9 +1,12 @@
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 
-use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
+use crate::{
+    compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node},
+    structs::Field,
+};
 
-fn do_lower_shifts(e: &mut Node, depth: isize) {
+fn do_lower_shifts<F: Field>(e: &mut Node<Expression<F>, F>, depth: isize) {
     match e.e_mut() {
         Expression::Funcall { func, args } => {
             if matches!(func, Intrinsic::Shift) {
@@ -38,7 +41,7 @@ fn do_lower_shifts(e: &mut Node, depth: isize) {
     }
 }
 
-pub fn lower_shifts(cs: &mut ConstraintSet) {
+pub fn lower_shifts<F: Field>(cs: &mut ConstraintSet<F>) {
     for c in cs.constraints.iter_mut() {
         match c {
             Constraint::Vanishes { expr: e, .. } => {

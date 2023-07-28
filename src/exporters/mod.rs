@@ -12,9 +12,9 @@ pub mod wizardiop;
 #[cfg(feature = "exporters")]
 pub mod zkgeth;
 
-use crate::column::Register;
+use crate::{column::Register, structs::Field};
 
-fn reg_to_string(r: &Register, i: usize) -> String {
+fn reg_to_string<F: Field>(r: &Register<F>, i: usize) -> String {
     r.handle
         .as_ref()
         .map(|h| h.mangled_name())

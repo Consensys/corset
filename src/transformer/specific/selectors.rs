@@ -2,18 +2,17 @@ use crate::{
     column::{Column, ColumnSet, Computation},
     compiler::{ComputationTable, Constraint, ConstraintSet, Expression, Kind, Magma, Node},
     pretty::Base,
-    structs::Handle,
+    structs::{Field, Handle},
+    transformer::{expression_to_name, validate_computation},
 };
 use anyhow::*;
 
-use super::{expression_to_name, validate_computation};
-
-fn do_expand_expr(
-    e: &Node,
-    cols: &mut ColumnSet,
-    comps: &mut ComputationTable,
-    new_cs: &mut Vec<Node>,
-) -> Result<Node> {
+fn do_expand_expr<F: Field>(
+    e: &Node<Expression<F>, F>,
+    cols: &mut ColumnSet<F>,
+    comps: &mut ComputationTable<F>,
+    new_cs: &mut Vec<Node<Expression<F>, F>>,
+) -> Result<Node<Expression<F>, F>> {
     match e.e() {
         Expression::Column { .. } => Ok(e.clone()),
         _ => {
@@ -38,13 +37,13 @@ fn do_expand_expr(
                 .handle(new_handle)
                 .kind(Kind::Phantom)
                 .base(Base::Dec)
-                .t(Magma::Integer)
+                .t(Magma::default())
                 .build())
         }
     }
 }
 
-pub fn expand_constraints(cs: &mut ConstraintSet) -> Result<()> {
+pub fn expand_constraints<F: Field>(cs: &mut ConstraintSet<F>) -> Result<()> {
     let mut new_cs_exps = vec![];
     for c in cs.constraints.iter_mut() {
         match c {

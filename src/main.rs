@@ -8,7 +8,9 @@ use either::Either;
 use is_terminal::IsTerminal;
 use log::*;
 use owo_colors::OwoColorize;
+use serde::de::DeserializeOwned;
 use std::{io::Write, path::Path};
+use structs::Field;
 
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
@@ -337,22 +339,22 @@ enum Commands {
     },
 }
 
-struct ConstraintSetBuilder {
+struct ConstraintSetBuilder<F: Field> {
     debug: bool,
     no_stdlib: bool,
-    source: Either<Vec<(String, String)>, ConstraintSet>,
+    source: Either<Vec<(String, String)>, ConstraintSet<F>>,
 }
-impl ConstraintSetBuilder {
-    fn from_sources(no_stdlib: bool, debug: bool) -> ConstraintSetBuilder {
-        ConstraintSetBuilder {
+impl<F: Field + DeserializeOwned> ConstraintSetBuilder<F> {
+    fn from_sources(no_stdlib: bool, debug: bool) -> Self {
+        Self {
             debug,
             no_stdlib,
             source: Either::Left(Vec::new()),
         }
     }
 
-    fn from_bin(filename: &str) -> Result<ConstraintSetBuilder> {
-        Ok(ConstraintSetBuilder {
+    fn from_bin(filename: &str) -> Result<Self> {
+        Ok(Self {
             debug: false,
             no_stdlib: false,
             source: Either::Right(
@@ -407,7 +409,7 @@ impl ConstraintSetBuilder {
         }
     }
 
-    fn to_constraint_set(&self) -> Result<ConstraintSet> {
+    fn to_constraint_set(&self) -> Result<ConstraintSet<F>> {
         match self.source.as_ref() {
             Either::Left(sources) => compiler::make(
                 &self.prepare_sources(sources),
@@ -421,7 +423,10 @@ impl ConstraintSetBuilder {
 
 #[cfg(feature = "cli")]
 fn main() -> Result<()> {
+    type BinArithmetisationField = pairing_ce::bn256::Fr; // TODO create a config ?
+
     let args = Args::parse();
+
     buche::new()
         .verbosity(args.verbose.log_level_filter())
         .quiet(args.verbose.is_silent())
@@ -448,7 +453,10 @@ fn main() -> Result<()> {
             {
                 bail!("expected Corset source file, found compiled constraint set")
             } else {
-                let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
+                let mut r = ConstraintSetBuilder::<BinArithmetisationField>::from_sources(
+                    args.no_stdlib,
+                    args.debug,
+                );
                 for f in args.source.iter() {
                     r.add_source(f)?;
                 }
@@ -508,12 +516,12 @@ fn main() -> Result<()> {
         #[cfg(feature = "exporters")]
         Commands::WizardIOP { out_filename } => {
             let mut constraints = builder.to_constraint_set()?;
-            // transformer::validate_nhood(&mut constraints)?;
-            transformer::lower_shifts(&mut constraints);
-            transformer::expand_ifs(&mut constraints);
-            transformer::expand_constraints(&mut constraints)?;
-            transformer::sorts(&mut constraints)?;
-            transformer::expand_invs(&mut constraints)?;
+            // transformer::agnostic::validate_nhood(&mut constraints)?;
+            transformer::agnostic::lower_shifts(&mut constraints);
+            transformer::agnostic::expand_ifs(&mut constraints);
+            transformer::specific::expand_constraints(&mut constraints)?;
+            transformer::agnostic::sorts(&mut constraints)?;
+            transformer::specific::expand_invs(&mut constraints)?;
 
             exporters::wizardiop::render(&constraints, &out_filename)?;
         }
@@ -537,12 +545,12 @@ fn main() -> Result<()> {
             fail_on_missing,
         } => {
             let mut constraints = builder.to_constraint_set()?;
-            transformer::validate_nhood(&mut constraints)?;
-            transformer::lower_shifts(&mut constraints);
-            transformer::expand_ifs(&mut constraints);
-            transformer::expand_constraints(&mut constraints)?;
-            transformer::sorts(&mut constraints)?;
-            transformer::expand_invs(&mut constraints)?;
+            transformer::agnostic::validate_nhood(&mut constraints)?;
+            transformer::agnostic::lower_shifts(&mut constraints);
+            transformer::agnostic::expand_ifs(&mut constraints);
+            transformer::specific::expand_constraints(&mut constraints)?;
+            transformer::agnostic::sorts(&mut constraints)?;
+            transformer::specific::expand_invs(&mut constraints)?;
 
             compute::compute_trace(&tracefile, &mut constraints, fail_on_missing)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
@@ -569,15 +577,15 @@ fn main() -> Result<()> {
             skip,
         } => {
             let mut constraints = builder.to_constraint_set()?;
-            transformer::validate_nhood(&mut constraints)
+            transformer::agnostic::validate_nhood(&mut constraints)
                 .with_context(|| anyhow!("while creating nhood constraints"))?;
-            transformer::lower_shifts(&mut constraints);
-            transformer::expand_ifs(&mut constraints);
-            transformer::expand_constraints(&mut constraints)
+            transformer::agnostic::lower_shifts(&mut constraints);
+            transformer::agnostic::expand_ifs(&mut constraints);
+            transformer::specific::expand_constraints(&mut constraints)
                 .with_context(|| anyhow!("while expanding constraints"))?;
-            transformer::sorts(&mut constraints)
+            transformer::agnostic::sorts(&mut constraints)
                 .with_context(|| anyhow!("while creating sorting constraints"))?;
-            transformer::expand_invs(&mut constraints)
+            transformer::specific::expand_invs(&mut constraints)
                 .with_context(|| anyhow!("while expanding inverses"))?;
 
             let mut db = utils::connect_to_db(&user, &password, &host, &database)?;
@@ -659,15 +667,15 @@ fn main() -> Result<()> {
 
             let mut constraints = builder.to_constraint_set()?;
             if expand {
-                transformer::validate_nhood(&mut constraints)
+                transformer::agnostic::validate_nhood(&mut constraints)
                     .with_context(|| anyhow!("while creating nhood constraints"))?;
-                transformer::lower_shifts(&mut constraints);
-                transformer::expand_ifs(&mut constraints);
-                transformer::expand_constraints(&mut constraints)
+                transformer::agnostic::lower_shifts(&mut constraints);
+                transformer::agnostic::expand_ifs(&mut constraints);
+                transformer::specific::expand_constraints(&mut constraints)
                     .with_context(|| anyhow!("while expanding constraints"))?;
-                transformer::sorts(&mut constraints)
+                transformer::agnostic::sorts(&mut constraints)
                     .with_context(|| anyhow!("while creating sorting constraints"))?;
-                transformer::expand_invs(&mut constraints)
+                transformer::specific::expand_invs(&mut constraints)
                     .with_context(|| anyhow!("while expanding inverses"))?;
             }
 
@@ -724,25 +732,25 @@ fn main() -> Result<()> {
         } => {
             let mut constraints = builder.to_constraint_set()?;
             if expand.contains(&"nhood".into()) || expand_all {
-                transformer::validate_nhood(&mut constraints)
+                transformer::agnostic::validate_nhood(&mut constraints)
                     .with_context(|| anyhow!("while creating nhood constraints"))?;
             }
             if expand.contains(&"lower-shifts".into()) || expand_all {
-                transformer::lower_shifts(&mut constraints);
+                transformer::agnostic::lower_shifts(&mut constraints);
             }
             if expand.contains(&"ifs".into()) || expand_all {
-                transformer::expand_ifs(&mut constraints);
+                transformer::agnostic::expand_ifs(&mut constraints);
             }
             if expand.contains(&"constraints".into()) || expand_all {
-                transformer::expand_constraints(&mut constraints)
+                transformer::specific::expand_constraints(&mut constraints)
                     .with_context(|| anyhow!("while expanding constraints"))?;
             }
             if expand.contains(&"permutations".into()) || expand_all {
-                transformer::sorts(&mut constraints)
+                transformer::agnostic::sorts(&mut constraints)
                     .with_context(|| anyhow!("while creating sorting constraints"))?;
             }
             if expand.contains(&"inverses".into()) || expand_all {
-                transformer::expand_invs(&mut constraints)
+                transformer::specific::expand_invs(&mut constraints)
                     .with_context(|| anyhow!("while expanding inverses"))?;
             }
             if !show_columns && !show_constraints {

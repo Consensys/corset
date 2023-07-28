@@ -6,9 +6,9 @@ use super::generator::{Defined, Function, FunctionClass, Specialization};
 use super::tables::Scope;
 use super::{Magma, Node};
 use crate::compiler::parser::*;
-use crate::structs::Handle;
+use crate::structs::{Field, Handle};
 
-fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
+fn reduce<F: Field>(e: &AstNode, ctx: &mut Scope<F>) -> Result<()> {
     match &e.class {
         Token::Value(_)
         | Token::Symbol(_)
@@ -135,7 +135,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     Node::column()
                         .handle(Handle::new(ctx.module(), to.name.clone()))
                         .kind(Kind::Phantom)
-                        .t(Magma::Integer) // TODO previously we took the type of the corresponding 'from' column, is that a problem?
+                        .t(Magma::default()) // TODO take the take of the corresponding 'from' column
                         .base(to.base)
                         .build(),
                 )
@@ -216,7 +216,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
 /// The `Definitions` pass skim through an [`Ast`] and fill the
 /// [`SymbolTableTree`] with all the required elements (columns, functions,
 /// perspectives, constraints, aliases, ...)
-pub fn pass(ast: &Ast, ctx: Scope) -> Result<()> {
+pub fn pass<F: Field>(ast: &Ast, ctx: Scope<F>) -> Result<()> {
     let mut module = ctx;
     for e in ast.exprs.iter() {
         reduce(e, &mut module)?;

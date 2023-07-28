@@ -33,7 +33,7 @@ pub struct AstNode {
 }
 impl AstNode {
     pub fn depth(&self) -> usize {
-        self.class.depth()
+        self.class._depth()
     }
     pub fn as_i64(&self) -> Result<i64> {
         if let Token::Value(r) = &self.class {
@@ -311,7 +311,7 @@ pub enum Token {
 }
 const LIST_DISPLAY_THRESHOLD: usize = 4;
 impl Token {
-    pub fn depth(&self) -> usize {
+    pub fn _depth(&self) -> usize {
         match self {
             Token::List(xs) => {
                 (if xs.len() > 1 { 1 } else { 0 }) + xs.iter().map(|x| x.depth()).max().unwrap_or(0)
@@ -789,7 +789,11 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                         Token::DefArrayColumn {
                             name: column_attributes.name,
                             t: Type::ArrayColumn(
-                                column_attributes.t.get().cloned().unwrap_or(Magma::Integer),
+                                column_attributes
+                                    .t
+                                    .get()
+                                    .cloned()
+                                    .unwrap_or(Magma::default()),
                             ),
                             domain: range.clone(),
                             base,
@@ -798,7 +802,11 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                         Token::DefColumn {
                             name: column_attributes.name,
                             t: Type::Column(
-                                column_attributes.t.get().cloned().unwrap_or(Magma::Integer),
+                                column_attributes
+                                    .t
+                                    .get()
+                                    .cloned()
+                                    .unwrap_or(Magma::default()),
                             ),
                             kind: Kind::Atomic,
                             padding_value: column_attributes.padding_value.get().cloned(),

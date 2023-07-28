@@ -1,11 +1,10 @@
 use super::pretty::Pretty;
 use owo_colors::OwoColorize;
-use pairing_ce::bn256::Fr;
 use thiserror::Error;
 
 use crate::{
     compiler::{Expression, Type},
-    structs::Handle,
+    structs::{Field, Handle},
 };
 
 #[derive(Error, Debug)]
@@ -21,7 +20,7 @@ pub(crate) enum CompileError<'a> {
 }
 
 #[derive(Error, Debug)]
-pub enum RuntimeError<'a> {
+pub enum RuntimeError<'a, F: Field> {
     #[error("{} not found in the given trace", .0.pretty())]
     EmptyColumn(Handle),
 
@@ -29,10 +28,10 @@ pub enum RuntimeError<'a> {
     NotComputed(Handle),
 
     #[error("expected a {} value, found {}", .0.white().bold(), .1.pretty().red())]
-    InvalidValue(&'a str, Fr),
+    InvalidValue(&'a str, F),
 
     #[error("expected an array, found {:?}", .0)]
-    NotAnArray(Expression),
+    NotAnArray(Expression<F>),
 }
 
 pub mod parser {

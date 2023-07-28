@@ -1,15 +1,12 @@
 use crate::{
     compiler::ColumnRef,
     pretty::{self, Pretty},
+    structs::Field,
 };
 use anyhow::*;
 use either::Either;
 use num_bigint::BigInt;
 use num_traits::{FromPrimitive, Num};
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 use std::collections::HashMap;
 
 /// A Combinator operates on boolean expressions
@@ -65,7 +62,7 @@ pub enum Relation {
     Lte,
 }
 impl Relation {
-    fn apply(&self, args: &[Either<Fr, bool>]) -> bool {
+    fn apply<F: Field>(&self, args: &[Either<F, bool>]) -> bool {
         let a1 = args[0].as_ref().left().unwrap();
         let a2 = args[1].as_ref().left().unwrap();
         match self {
@@ -109,7 +106,7 @@ pub enum Function {
     Mul,
 }
 impl Function {
-    fn apply(&self, args: &[Fr]) -> Fr {
+    fn apply<F: Field>(&self, args: &[F]) -> F {
         match self {
             Function::Add => {
                 let mut x = args[0];
@@ -151,26 +148,28 @@ impl std::fmt::Display for Function {
 
 /// Nodes represent the parsed AST, sequentially built from a stack of Tokens.
 #[derive(Clone, Debug)]
-pub enum Node {
-    Combinator(Combinator, Vec<Node>),
-    Comparison(Relation, Vec<Node>),
-    Funcall(Function, Vec<Node>),
+pub enum Node<F: Field> {
+    Combinator(Combinator, Vec<Node<F>>),
+    Comparison(Relation, Vec<Node<F>>),
+    Funcall(Function, Vec<Node<F>>),
     Column(String, ColumnRef),
-    Const(Fr),
+    Const(F),
 }
-impl Node {
+impl<F: Field> Node<F> {
     fn is_bool(&self) -> bool {
         matches!(self, Node::Comparison(..) | Node::Combinator(..))
     }
     fn is_value(&self) -> bool {
         !self.is_bool()
     }
-}
-impl Node {
     /// From a root Node, returns a (potentially empty) list of all the
     /// positions in [[0; size]] such that the columns accessed through get
     /// matches the expression.
-    pub fn scan<F: Fn(isize, &ColumnRef) -> Option<Fr>>(&self, get: &F, max: isize) -> Vec<isize> {
+    pub fn scan<Func: Fn(isize, &ColumnRef) -> Option<F>>(
+        &self,
+        get: &Func,
+        max: isize,
+    ) -> Vec<isize> {
         (0..max)
             .filter(|i| {
                 let r = self.eval(*i, &get);
@@ -189,11 +188,11 @@ impl Node {
     /// The computed value may be either Fr or boolean; depending on whether
     /// they stem from a column or a function call, or from a condition or a
     /// combinator. An Either monad encodes this dichotomy.
-    fn eval<F: Fn(isize, &ColumnRef) -> Option<Fr>>(
+    fn eval<Func: Fn(isize, &ColumnRef) -> Option<F>>(
         &self,
         i: isize,
-        get: &F,
-    ) -> Option<Either<Fr, bool>> {
+        get: &Func,
+    ) -> Option<Either<F, bool>> {
         match self {
             Node::Combinator(c, args) => {
                 let args = args
@@ -221,7 +220,7 @@ impl Node {
         }
     }
 }
-impl std::fmt::Display for Node {
+impl<F: Field> std::fmt::Display for Node<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Node::Combinator(c, args) => match c {
@@ -279,7 +278,7 @@ fn parse_token(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> R
 }
 
 /// Pops & returns an argument of a stack, returns an error is none are available
-fn take_one(stack: &mut Vec<Node>, fname: &str) -> Result<Node> {
+fn take_one<F: Field>(stack: &mut Vec<Node<F>>, fname: &str) -> Result<Node<F>> {
     let r1 = stack
         .pop()
         .ok_or_else(|| anyhow!("{} expects an argument", fname))?;
@@ -287,7 +286,7 @@ fn take_one(stack: &mut Vec<Node>, fname: &str) -> Result<Node> {
 }
 
 /// Pops & returns two arguments of a stack, returns an error is two are not available
-fn take_two(stack: &mut Vec<Node>, fname: &str) -> Result<Vec<Node>> {
+fn take_two<F: Field>(stack: &mut Vec<Node<F>>, fname: &str) -> Result<Vec<Node<F>>> {
     let r2 = stack
         .pop()
         .ok_or_else(|| anyhow!("{} expects two arguments", fname))?;
@@ -298,9 +297,13 @@ fn take_two(stack: &mut Vec<Node>, fname: &str) -> Result<Vec<Node>> {
 }
 
 /// Returns a Node representing the root of the AST parsed from the string representation of a Forth program
-pub fn parse(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> Result<Node> {
+pub fn parse<F: Field>(
+    s: &str,
+    module: &str,
+    columns: &HashMap<String, ColumnRef>,
+) -> Result<Node<F>> {
     let tokens = s.split_whitespace();
-    let mut stack = Vec::new();
+    let mut stack = Vec::<Node<F>>::new();
 
     for token in tokens.map(|t| parse_token(t, module, columns)) {
         match token? {
@@ -366,7 +369,7 @@ pub fn parse(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> Res
                     }
                 });
             }
-            Token::Const(x) => stack.push(Node::Const(Fr::from_str(&x.to_string()).unwrap())),
+            Token::Const(x) => stack.push(Node::Const(F::from_str(&x.to_string()).unwrap())),
             Token::Column(s, c) => stack.push(Node::Column(s, c)),
         }
     }

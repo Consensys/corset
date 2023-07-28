@@ -9,13 +9,14 @@ use std::collections::HashMap;
 
 pub use common::*;
 pub use generator::{Constraint, ConstraintSet, EvalSettings};
-pub use node::{ColumnRef, Expression, Node};
+pub use node::{ColumnRef, Expression, FieldSpecificExpression, Node, RegisterRef};
 use num_bigint::BigInt;
 use owo_colors::OwoColorize;
 pub use parser::{Ast, AstNode, Domain, Kind, Token};
 pub use tables::ComputationTable;
 pub use types::*;
 
+use crate::structs::Field;
 use crate::{
     column::Column,
     compiler::tables::{Scope, Symbol},
@@ -40,7 +41,7 @@ pub struct CompileSettings {
     pub debug: bool,
 }
 
-fn maybe_bail<R>(errs: Vec<Result<R>>) -> Result<Vec<R>> {
+pub fn maybe_bail<R>(errs: Vec<Result<R>>) -> Result<Vec<R>> {
     let mut err_count = 0;
     let mut r = vec![];
 
@@ -98,10 +99,10 @@ pub fn parse_simple_ast<S1: AsRef<str>, S2: AsRef<str>>(
 }
 
 #[cfg(feature = "parser")]
-pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
+pub fn make<F: Field, S1: AsRef<str>, S2: AsRef<str>>(
     sources: &[(S1, S2)],
     settings: &CompileSettings,
-) -> Result<(Vec<Ast>, ConstraintSet)> {
+) -> Result<(Vec<Ast>, ConstraintSet<F>)> {
     let mut asts: Vec<(&str, Ast)> = vec![];
     let mut ctx = Scope::new();
 
@@ -124,7 +125,7 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
             .collect::<Vec<_>>(),
     )?;
 
-    let mut columns: ColumnSet = Default::default();
+    let mut columns: ColumnSet<F> = Default::default();
     let mut constants: HashMap<Handle, BigInt> = Default::default();
 
     for (name, ast) in asts.iter_mut() {
@@ -218,6 +219,6 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
         .collect::<HashMap<_, _>>();
 
     let mut cs = ConstraintSet::new(columns, constraints, constants, computations, perspectives)?;
-    crate::transformer::precompute(&mut cs);
+    crate::transformer::agnostic::precompute(&mut cs);
     Ok((asts.into_iter().map(|x| x.1).collect(), cs))
 }

@@ -5,7 +5,7 @@ use itertools::Itertools;
 use serde::Serialize;
 use std::io::Write;
 
-use crate::compiler::*;
+use crate::{compiler::*, structs::Field};
 
 #[derive(Serialize)]
 struct GoConstant {
@@ -26,7 +26,11 @@ struct TemplateData {
     registers: Vec<(usize, String)>,
 }
 
-pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Result<()> {
+pub fn render<F: Field>(
+    cs: &ConstraintSet<F>,
+    package: &str,
+    outfile: Option<&String>,
+) -> Result<()> {
     const TEMPLATE: &str = include_str!("zkgeth.go");
     let columns = cs
         .columns

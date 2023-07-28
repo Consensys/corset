@@ -2,24 +2,21 @@ use anyhow::{anyhow, bail, Context, Result};
 use log::*;
 use logging_timer::time;
 use owo_colors::OwoColorize;
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 use rayon::prelude::*;
 use std::{cmp::Ordering, collections::HashSet};
 
 use crate::{
     column::Computation,
-    compiler::{ColumnRef, ConstraintSet, EvalSettings, Node},
+    compiler::{ColumnRef, ConstraintSet, EvalSettings, Expression, Node},
     dag::ComputationDag,
     errors::RuntimeError,
     import,
     pretty::Pretty,
+    structs::Field,
 };
 
 #[time("info", "Computing expanded columns")]
-fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
+fn compute_all<F: Field>(cs: &mut ConstraintSet<F>) -> Result<()> {
     // Computations are split in sequentially dependent sets, where each set as
     // to be completely computed before the next one is started, but all
     // computations within a set can be processed in parallel
@@ -57,18 +54,18 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
     Ok(())
 }
 
-fn ensure_is_computed(h: &ColumnRef, cs: &ConstraintSet) -> Result<()> {
+fn ensure_is_computed<F: Field>(h: &ColumnRef, cs: &ConstraintSet<F>) -> Result<()> {
     if !cs.columns.is_computed(h) {
         bail!(err_missing_column(cs.columns.get_col(h).unwrap()))
     }
     Ok(())
 }
 
-fn compute_interleaved(
-    cs: &ConstraintSet,
+fn compute_interleaved<F: Field>(
+    cs: &ConstraintSet<F>,
     froms: &[ColumnRef],
     target: &ColumnRef,
-) -> Result<Vec<ComputedColumn>> {
+) -> Result<Vec<ComputedColumn<F>>> {
     for from in froms.iter() {
         ensure_is_computed(from, cs)?;
     }
@@ -96,12 +93,12 @@ fn compute_interleaved(
     Ok(vec![(target.to_owned(), values, 0)])
 }
 
-fn compute_sorted(
-    cs: &ConstraintSet,
+fn compute_sorted<F: Field>(
+    cs: &ConstraintSet<F>,
     froms: &[ColumnRef],
     tos: &[ColumnRef],
     signs: &[bool],
-) -> Result<Vec<ComputedColumn>> {
+) -> Result<Vec<ComputedColumn<F>>> {
     let spilling = cs.spilling_for(&froms[0]).unwrap();
     for from in froms.iter() {
         ensure_is_computed(from, cs)?;
@@ -131,7 +128,7 @@ fn compute_sorted(
         .iter()
         .enumerate()
         .map(|(k, from)| {
-            let value: Vec<Fr> = vec![Fr::zero(); spilling as usize]
+            let value: Vec<F> = vec![F::zero(); spilling as usize]
                 .into_iter()
                 .chain(sorted_is.iter().map(|i| {
                     *cs.columns
@@ -145,12 +142,12 @@ fn compute_sorted(
         .collect::<Vec<_>>())
 }
 
-fn compute_cyclic(
-    cs: &ConstraintSet,
+fn compute_cyclic<F: Field>(
+    cs: &ConstraintSet<F>,
     froms: &[ColumnRef],
     to: &ColumnRef,
     modulo: usize,
-) -> Result<Vec<ComputedColumn>> {
+) -> Result<Vec<ComputedColumn<F>>> {
     let spilling = cs.spilling_for(&froms[0]).unwrap();
     for from in froms.iter() {
         ensure_is_computed(from, cs)?;
@@ -165,20 +162,20 @@ fn compute_cyclic(
         )
     }
 
-    let value: Vec<Fr> = vec![Fr::zero(); spilling as usize]
+    let value: Vec<F> = vec![F::zero(); spilling as usize]
         .into_iter()
-        .chain((0..len).map(|i| Fr::from_str(&((i % modulo).to_string())).unwrap()))
+        .chain((0..len).map(|i| F::from_str(&((i % modulo).to_string())).unwrap()))
         .collect();
 
     Ok(vec![(to.to_owned(), value, spilling)])
 }
 
-type ComputedColumn = (ColumnRef, Vec<Fr>, isize);
-pub fn compute_composite(
-    cs: &ConstraintSet,
-    exp: &Node,
+type ComputedColumn<F> = (ColumnRef, Vec<F>, isize);
+pub fn compute_composite<F: Field>(
+    cs: &ConstraintSet<F>,
+    exp: &Node<Expression<F>, F>,
     target: &ColumnRef,
-) -> Result<Vec<ComputedColumn>> {
+) -> Result<Vec<ComputedColumn<F>>> {
     let spilling = cs.spilling_for(target).unwrap();
     let cols_in_expr = exp.dependencies();
     for from in &cols_in_expr {
@@ -215,7 +212,7 @@ pub fn compute_composite(
                                     .as_ref()
                                     .map(|x| x.1)
                             })
-                            .unwrap_or_else(Fr::zero),
+                            .unwrap_or_else(F::zero),
                     )
                 },
                 &mut cache,
@@ -231,7 +228,10 @@ pub fn compute_composite(
 }
 
 /// Compared to `compute_composite`, this function directly return the compute values without any other informations
-pub fn compute_composite_static(cs: &ConstraintSet, exp: &Node) -> Result<Vec<Fr>> {
+pub fn compute_composite_static<F: Field>(
+    cs: &ConstraintSet<F>,
+    exp: &Node<Expression<F>, F>,
+) -> Result<Vec<F>> {
     let cols_in_expr = exp.dependencies();
     for c in &cols_in_expr {
         ensure_is_computed(c, cs)?;
@@ -261,14 +261,17 @@ pub fn compute_composite_static(cs: &ConstraintSet, exp: &Node) -> Result<Vec<Fr
                 &mut cache,
                 &EvalSettings { wrap: false },
             )
-            .unwrap_or_else(Fr::zero)
+            .unwrap_or_else(F::zero)
         })
         .collect::<Vec<_>>();
 
     Ok(values)
 }
 
-fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<ComputedColumn>> {
+fn compute_sorting_auxs<F: Field>(
+    cs: &ConstraintSet<F>,
+    comp: &Computation<F>,
+) -> Result<Vec<ComputedColumn<F>>> {
     if let Computation::SortingConstraints {
         ats,
         eq,
@@ -287,13 +290,13 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
         let spilling = cs.spilling_for(&froms[0]).unwrap();
         let len = cs.columns.len(&froms[0]).unwrap();
 
-        let mut at_values = std::iter::repeat_with(|| vec![Fr::zero(); spilling as usize])
+        let mut at_values = std::iter::repeat_with(|| vec![F::zero(); spilling as usize])
             .take(ats.len())
             .collect::<Vec<_>>();
         // in the spilling, all @ == 0; thus Eq = 1
-        let mut eq_values = vec![Fr::one(); spilling as usize];
-        let mut delta_values = vec![Fr::zero(); spilling as usize];
-        let mut delta_bytes_values = std::iter::repeat_with(|| vec![Fr::zero(); spilling as usize])
+        let mut eq_values = vec![F::one(); spilling as usize];
+        let mut delta_values = vec![F::zero(); spilling as usize];
+        let mut delta_bytes_values = std::iter::repeat_with(|| vec![F::zero(); spilling as usize])
             .take(delta_bytes.len())
             .collect::<Vec<_>>();
         for i in 0..len as isize {
@@ -309,23 +312,23 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
 
                 let v = if !eq {
                     if found {
-                        Fr::zero()
+                        F::zero()
                     } else {
                         found = true;
-                        Fr::one()
+                        F::one()
                     }
                 } else {
-                    Fr::zero()
+                    F::zero()
                 };
 
                 at_values[l].push(v);
             }
 
             // Compute Eq
-            eq_values.push(if found { Fr::zero() } else { Fr::one() });
+            eq_values.push(if found { F::zero() } else { F::one() });
 
             // Compute Delta
-            let mut delta = Fr::zero();
+            let mut delta = F::zero();
             if eq_values.last().unwrap().is_zero() {
                 for l in 0..ats.len() {
                     let mut term = *cs.columns.get(&sorted[l], i, false).unwrap();
@@ -337,15 +340,14 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
                     delta.add_assign(&term);
                 }
             }
-            // delta.sub_assign(&Fr::one());
+            // delta.sub_assign(&F::one());
             delta_values.push(delta);
 
             delta
                 .into_repr()
-                .as_ref()
                 .iter()
                 .flat_map(|u| u.to_le_bytes().into_iter())
-                .map(|i| Fr::from_str(&i.to_string()).unwrap())
+                .map(|i| F::from_str(&i.to_string()).unwrap())
                 .enumerate()
                 .take(16)
                 .for_each(|(i, b)| delta_bytes_values[i].push(b));
@@ -373,10 +375,10 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
     }
 }
 
-pub fn apply_computation(
-    cs: &ConstraintSet,
-    computation: &Computation,
-) -> Option<Result<Vec<ComputedColumn>>> {
+pub fn apply_computation<F: Field>(
+    cs: &ConstraintSet<F>,
+    computation: &Computation<F>,
+) -> Option<Result<Vec<ComputedColumn<F>>>> {
     trace!("Computing {}", computation.pretty_target());
     match computation {
         Computation::Composite { target, exp } => {
@@ -422,7 +424,7 @@ pub fn apply_computation(
     }
 }
 
-fn err_missing_column<'a>(c: &crate::column::Column) -> RuntimeError<'a> {
+fn err_missing_column<'a, F: Field>(c: &crate::column::Column<F>) -> RuntimeError<'a, F> {
     if matches!(c.kind, crate::compiler::Kind::Atomic) {
         RuntimeError::EmptyColumn(c.handle.clone())
     } else {
@@ -430,7 +432,7 @@ fn err_missing_column<'a>(c: &crate::column::Column) -> RuntimeError<'a> {
     }
 }
 
-fn prepare(cs: &mut ConstraintSet, fail_on_missing: bool) -> Result<()> {
+fn prepare<F: Field>(cs: &mut ConstraintSet<F>, fail_on_missing: bool) -> Result<()> {
     compute_all(cs).with_context(|| "while computing columns")?;
     for h in cs.columns.all() {
         if !cs.columns.is_computed(&h) {
@@ -446,16 +448,19 @@ fn prepare(cs: &mut ConstraintSet, fail_on_missing: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn compute_trace(tracefile: &str, cs: &mut ConstraintSet, fail_on_missing: bool) -> Result<()> {
+pub fn compute_trace<F: Field>(
+    tracefile: &str,
+    cs: &mut ConstraintSet<F>,
+    fail_on_missing: bool,
+) -> Result<()> {
     import::read_trace(tracefile, cs)?;
     prepare(cs, fail_on_missing)
 }
-
 // This is only used by the lib
 #[allow(dead_code)]
-pub fn compute_trace_str(
+pub fn compute_trace_str<F: Field>(
     trace: &[u8],
-    cs: &mut ConstraintSet,
+    cs: &mut ConstraintSet<F>,
     fail_on_missing: bool,
 ) -> Result<()> {
     import::read_trace_str(trace, cs)?;

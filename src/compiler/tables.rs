@@ -3,15 +3,13 @@ use crate::{
     column::Computation,
     compiler::{generator::FunctionClass, Builtin, Form, Intrinsic},
     errors::symbols,
-    structs::{Handle, PERSPECTIVE_SEPARATOR},
+    structs::{Field, Handle, PERSPECTIVE_SEPARATOR},
 };
 use anyhow::*;
 use itertools::Itertools;
 use log::*;
 use num_bigint::BigInt;
-use num_traits::{One, Zero};
 use owo_colors::OwoColorize;
-use pairing_ce::ff::PrimeField;
 use serde::{Deserialize, Serialize};
 use sorbus::{NodeID, Tree};
 use std::{
@@ -51,6 +49,10 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, Builtin::Len.to_string()),
             class: FunctionClass::Builtin(Builtin::Len),
         },
+        "begin" => Function{
+            handle: Handle::new(super::MAIN_MODULE, "begin"),
+            class: FunctionClass::Builtin(Builtin::Begin)
+        },
 
         // Intrinsics
         "inv" => Function {
@@ -81,10 +83,6 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "-"),
             class: FunctionClass::Intrinsic(Intrinsic::Sub)
         },
-        "begin" => Function{
-            handle: Handle::new(super::MAIN_MODULE, "begin"),
-            class: FunctionClass::Intrinsic(Intrinsic::Begin)
-        },
         "if!" => Function {
             handle: Handle::new(super::MAIN_MODULE, "if!"),
             class: FunctionClass::Intrinsic(Intrinsic::IfZero)
@@ -97,33 +95,34 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct ComputationTable {
+pub struct ComputationTable<F: Field> {
     pub(crate) dependencies: HashMap<ColumnRef, usize>,
-    pub(crate) computations: Vec<Computation>,
+    pub(crate) computations: Vec<Computation<F>>,
 }
-impl ComputationTable {
+
+impl<F: Field> ComputationTable<F> {
     /// Return, if it exists, the computation of ID `id`.
-    pub fn get(&self, id: usize) -> Option<&Computation> {
+    pub fn get(&self, id: usize) -> Option<&Computation<F>> {
         self.computations.get(id)
     }
 
     /// Return, if it exists, the computation of ID `id`.
-    pub fn get_mut(&mut self, id: usize) -> Option<&mut Computation> {
+    pub fn get_mut(&mut self, id: usize) -> Option<&mut Computation<F>> {
         self.computations.get_mut(id)
     }
 
     /// Iterate over all the defined computations.
-    pub fn iter(&'_ self) -> impl Iterator<Item = &'_ Computation> {
+    pub fn iter(&'_ self) -> impl Iterator<Item = &'_ Computation<F>> {
         self.computations.iter()
     }
 
     /// Iterate over mutable references to all the defined computations.
-    pub fn iter_mut(&'_ mut self) -> impl Iterator<Item = &'_ mut Computation> {
+    pub fn iter_mut(&'_ mut self) -> impl Iterator<Item = &'_ mut Computation<F>> {
         self.computations.iter_mut()
     }
 
     /// Insert the computation defining `target`. Will fail if `target` is already defined by an existing computation.
-    pub fn insert(&mut self, target: &ColumnRef, computation: Computation) -> Result<()> {
+    pub fn insert(&mut self, target: &ColumnRef, computation: Computation<F>) -> Result<()> {
         if self.dependencies.contains_key(target) {
             panic!("`{}` already present as a computation target", target);
         }
@@ -134,7 +133,11 @@ impl ComputationTable {
     }
 
     /// Insert a computation defining multiple columns at once (e.g. permutations).
-    pub fn insert_many(&mut self, targets: &[ColumnRef], computation: Computation) -> Result<()> {
+    pub fn insert_many(
+        &mut self,
+        targets: &[ColumnRef],
+        computation: Computation<F>,
+    ) -> Result<()> {
         self.computations.push(computation);
         for target in targets.iter() {
             self.dependencies
@@ -154,7 +157,7 @@ impl ComputationTable {
     }
 
     /// Given a handle, returns, if there is one, the computation defining this column.
-    pub fn computation_for(&self, target: &ColumnRef) -> Option<&Computation> {
+    pub fn computation_for(&self, target: &ColumnRef) -> Option<&Computation<F>> {
         self.dependencies
             .iter()
             .find(|(k, _)| *k == target)
@@ -170,22 +173,22 @@ impl ComputationTable {
     }
 }
 #[derive(Debug, Clone)]
-pub enum Symbol {
+pub enum Symbol<F: Field> {
     Alias(String),
-    Final(Node, bool),
+    Final(Node<Expression<F>, F>, bool),
 }
 
 #[derive(Default)]
-pub struct GlobalData {
-    computations: ComputationTable,
-    pub perspectives: HashMap<String, HashMap<String, Option<Node>>>, // module -> {Perspectives}
+pub struct GlobalData<F: Field> {
+    computations: ComputationTable<F>,
+    pub perspectives: HashMap<String, HashMap<String, Option<Node<Expression<F>, F>>>>, // module -> {Perspectives}
 }
-impl GlobalData {
+impl<F: Field> GlobalData<F> {
     pub fn set_perspective_trigger(
         &mut self,
         module: &str,
         perspective: &str,
-        _trigger: Node,
+        _trigger: Node<Expression<F>, F>,
     ) -> Result<()> {
         let trigger = self
             .perspectives
@@ -203,7 +206,11 @@ impl GlobalData {
         }
     }
 
-    pub fn get_perspective_trigger(&self, module: &str, perspective: &str) -> Result<Node> {
+    pub fn get_perspective_trigger(
+        &self,
+        module: &str,
+        perspective: &str,
+    ) -> Result<Node<Expression<F>, F>> {
         self.perspectives
             .get(module)
             .with_context(|| anyhow!("module {} has no perspectives", module))?
@@ -218,13 +225,13 @@ impl GlobalData {
 /// The nodes are the nested symbol tables, one per context.
 /// The tree also contains a data repository, that is used to store global data
 /// (notably perspectives) as the parsing goes.
-type SymbolTableTree = Tree<SymbolTable, GlobalData>;
+type SymbolTableTree<F> = Tree<SymbolTable<F>, GlobalData<F>>;
 
 /// A Scope is conceptually a pointer to a node in the [`SymbolTableTree`], that
 /// contains most of the methods used to interact with the tree.
-pub struct Scope {
+pub struct Scope<F: Field> {
     /// a shared reference to the global tree
-    pub tree: Rc<RefCell<SymbolTableTree>>,
+    pub tree: Rc<RefCell<SymbolTableTree<F>>>,
     /// the ID of the tree node this [`Scope`] points to
     id: NodeID,
 }
@@ -245,8 +252,8 @@ macro_rules! data_mut {
     };
 }
 
-impl Scope {
-    pub fn new() -> Scope {
+impl<F: Field> Scope<F> {
+    pub fn new() -> Scope<F> {
         let mut tree = Tree::new();
         let root = tree.add_node(
             None,
@@ -273,7 +280,7 @@ impl Scope {
         }
     }
 
-    pub fn derive(&mut self, name: &str) -> Result<Scope> {
+    pub fn derive(&mut self, name: &str) -> Result<Scope<F>> {
         let maybe_child = self.tree.borrow().find_child(self.id, |n| n.name == name);
         match maybe_child {
             Some(_) => {
@@ -304,7 +311,7 @@ impl Scope {
         }
     }
 
-    pub fn switch_to_module(&mut self, name: &str) -> Result<Scope> {
+    pub fn switch_to_module(&mut self, name: &str) -> Result<Scope<F>> {
         let root = self.tree.borrow().root();
         let maybe_child = self.tree.borrow().find_child(root, |n| n.name == name);
         match maybe_child {
@@ -333,7 +340,7 @@ impl Scope {
         }
     }
 
-    pub fn jump_in(&mut self, name: &str) -> Result<Scope> {
+    pub fn jump_in(&mut self, name: &str) -> Result<Scope<F>> {
         let maybe_child = self.tree.borrow().find_child(self.id, |n| n.name == name);
         match maybe_child {
             Some(n) => Ok(self.at(n)),
@@ -398,14 +405,14 @@ impl Scope {
         data!(self).perspective.clone()
     }
 
-    pub fn computations(&self) -> ComputationTable {
+    pub fn computations(&self) -> ComputationTable<F> {
         self.tree.borrow().metadata().computations.clone()
     }
 
     pub fn insert_many_computations(
         &self,
         targets: &[ColumnRef],
-        computation: Computation,
+        computation: Computation<F>,
     ) -> Result<()> {
         self.tree
             .borrow_mut()
@@ -414,7 +421,11 @@ impl Scope {
             .insert_many(targets, computation)
     }
 
-    pub fn insert_computation(&self, target: &ColumnRef, computation: Computation) -> Result<()> {
+    pub fn insert_computation(
+        &self,
+        target: &ColumnRef,
+        computation: Computation<F>,
+    ) -> Result<()> {
         self.tree
             .borrow_mut()
             .metadata_mut()
@@ -422,19 +433,19 @@ impl Scope {
             .insert(target, computation)
     }
 
-    fn at(&self, id: usize) -> Scope {
+    fn at(&self, id: usize) -> Scope<F> {
         Scope {
             tree: self.tree.clone(),
             id,
         }
     }
 
-    fn parent(&self) -> Option<Scope> {
+    fn parent(&self) -> Option<Scope<F>> {
         let parent = self.tree.borrow().parent(self.id);
         parent.map(|p| self.at(p))
     }
 
-    fn children(&self) -> Vec<Scope> {
+    fn children(&self) -> Vec<Scope<F>> {
         self.tree
             .borrow()
             .children(self.id)
@@ -445,7 +456,7 @@ impl Scope {
 
     pub fn visit_mut<T>(
         &mut self,
-        f: &mut dyn FnMut(Handle, &mut Symbol) -> Result<()>,
+        f: &mut dyn FnMut(Handle, &mut Symbol<F>) -> Result<()>,
     ) -> Result<()> {
         if !data!(self).public {
             return Ok(());
@@ -465,7 +476,7 @@ impl Scope {
         Ok(())
     }
 
-    pub fn resolve_symbol(&mut self, name: &str) -> Result<Node, symbols::Error> {
+    pub fn resolve_symbol(&mut self, name: &str) -> Result<Node<Expression<F>, F>, symbols::Error> {
         let module = self.module();
         let global = data!(self).global;
 
@@ -511,12 +522,15 @@ impl Scope {
         }
     }
 
-    fn resolve_symbol_with_path(&mut self, name: &str) -> Result<Node, symbols::Error> {
+    fn resolve_symbol_with_path(
+        &mut self,
+        name: &str,
+    ) -> Result<Node<Expression<F>, F>, symbols::Error> {
         let components = name.split('.').collect::<Vec<_>>();
         self.root()._resolve_symbol_with_path(&components)
     }
 
-    pub fn resolve_handle(&mut self, h: &Handle) -> Result<Node, symbols::Error> {
+    pub fn resolve_handle(&mut self, h: &Handle) -> Result<Node<Expression<F>, F>, symbols::Error> {
         let global = data!(self).global;
         if global {
             self.resolve_symbol(&h.to_string())
@@ -527,12 +541,12 @@ impl Scope {
 
     fn _resolve_symbol(
         n: usize,
-        tree: &mut SymbolTableTree,
+        tree: &mut SymbolTableTree<F>,
         name: &str,
         ax: &mut HashSet<String>,
         absolute_path: bool,
         pure: bool,
-    ) -> Result<Node, symbols::Error> {
+    ) -> Result<Node<Expression<F>, F>, symbols::Error> {
         if ax.contains(name) {
             Err(symbols::Error::CircularDefinition(name.to_string()))
         } else {
@@ -575,10 +589,10 @@ impl Scope {
 
     fn _resolve_symbol_in_perspective(
         n: usize,
-        tree: &mut SymbolTableTree,
+        tree: &mut SymbolTableTree<F>,
         name: &str,
         perspective: &str,
-    ) -> Result<Node, symbols::Error> {
+    ) -> Result<Node<Expression<F>, F>, symbols::Error> {
         match tree.find_child(n, |o| {
             o.perspective
                 .as_ref()
@@ -596,7 +610,10 @@ impl Scope {
         }
     }
 
-    fn _resolve_symbol_with_path(&mut self, path: &[&str]) -> Result<Node, symbols::Error> {
+    fn _resolve_symbol_with_path(
+        &mut self,
+        path: &[&str],
+    ) -> Result<Node<Expression<F>, F>, symbols::Error> {
         if path.len() == 1 {
             self.resolve_symbol(path[0])
         } else {
@@ -614,9 +631,9 @@ impl Scope {
 
     fn _edit_symbol(
         n: usize,
-        tree: &mut SymbolTableTree,
+        tree: &mut SymbolTableTree<F>,
         name: &str,
-        f: &dyn Fn(&mut Expression),
+        f: &dyn Fn(&mut Expression<F>),
         ax: &mut HashSet<String>,
     ) -> Result<()> {
         if ax.contains(name) {
@@ -675,7 +692,7 @@ impl Scope {
         }
     }
 
-    pub fn insert_symbol(&mut self, name: &str, e: Node) -> Result<()> {
+    pub fn insert_symbol(&mut self, name: &str, e: Node<Expression<F>, F>) -> Result<()> {
         if data!(self).symbols.contains_key(name) {
             bail!(symbols::Error::SymbolAlreadyExists(
                 name.to_owned(),
@@ -689,7 +706,7 @@ impl Scope {
         }
     }
 
-    pub fn insert_used_symbol(&mut self, name: &str, e: Node) -> Result<()> {
+    pub fn insert_used_symbol(&mut self, name: &str, e: Node<Expression<F>, F>) -> Result<()> {
         self.insert_symbol(name, e)?;
         let _ = self.resolve_symbol(name).unwrap();
         Ok(())
@@ -768,7 +785,7 @@ impl Scope {
         }
     }
 
-    pub fn edit_symbol(&mut self, name: &str, f: &dyn Fn(&mut Expression)) -> Result<()> {
+    pub fn edit_symbol(&mut self, name: &str, f: &dyn Fn(&mut Expression<F>)) -> Result<()> {
         Self::_edit_symbol(
             self.id,
             &mut self.tree.borrow_mut(),
@@ -783,17 +800,13 @@ impl Scope {
     }
 
     pub fn insert_constant(&mut self, name: &str, value: BigInt, replace: bool) -> Result<()> {
-        let t = if Zero::is_zero(&value) || One::is_one(&value) {
-            Type::Scalar(Magma::Boolean)
-        } else {
-            Type::Scalar(Magma::Integer)
-        };
+        let t = Type::Scalar(Magma::from(&value));
         if data!(self).symbols.contains_key(name) && !replace {
             bail!(symbols::Error::SymbolAlreadyExists(
                 name.to_owned(),
                 data!(self).name.to_owned()
             ))
-        } else if let Some(fr) = pairing_ce::bn256::Fr::from_str(&value.to_string()) {
+        } else if let Some(fr) = F::from_str(&value.to_string()) {
             data_mut!(self).symbols.insert(
                 name.to_owned(),
                 Symbol::Final(
@@ -807,7 +820,7 @@ impl Scope {
         }
     }
 
-    fn root(&self) -> Scope {
+    fn root(&self) -> Scope<F> {
         self.at(self.tree.borrow().root())
     }
 
@@ -824,7 +837,7 @@ impl Scope {
     }
 }
 
-impl std::clone::Clone for Scope {
+impl<F: Field> std::clone::Clone for Scope<F> {
     fn clone(&self) -> Self {
         Scope {
             tree: self.tree.clone(),
@@ -834,7 +847,7 @@ impl std::clone::Clone for Scope {
 }
 
 #[derive(Debug)]
-pub struct SymbolTable {
+pub struct SymbolTable<F: Field> {
     // The name of this table
     pub name: String,
     pub module: String,
@@ -852,5 +865,5 @@ pub struct SymbolTable {
     global: bool,
     constraints: HashSet<String>,
     funcs: HashMap<String, Function>,
-    symbols: HashMap<String, Symbol>,
+    symbols: HashMap<String, Symbol<F>>,
 }

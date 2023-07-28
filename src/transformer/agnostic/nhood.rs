@@ -5,21 +5,21 @@ use crate::{
     column::{Column, Computation},
     compiler::{ColumnRef, Constraint, ConstraintSet, Domain, Intrinsic, Kind, Magma, Node},
     pretty::Base,
-    structs::Handle,
+    structs::{Field, Handle},
 };
 
-fn process_nhood(
+fn process_nhood<F: Field>(
     module: &str,
     handles: &[ColumnRef],
     n: u32,
-    cs: &mut ConstraintSet,
+    cs: &mut ConstraintSet<F>,
 ) -> Result<()> {
     let modulo = 2usize.pow(n);
     let _aux_id = cs.columns.insert_column_and_register(
         Column::builder()
             .handle(Handle::new(module, format!("AUX_2_{}_HOOD", n)))
             .kind(Kind::Phantom)
-            .t(Magma::Integer) // TODO: tighten for GL
+            .t(Magma::default()) // TODO: tighten for GL
             .build(),
     )?;
     cs.computations.insert(
@@ -112,7 +112,7 @@ fn process_nhood(
     Ok(())
 }
 
-pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
+pub fn validate_nhood<F: Field>(cs: &mut ConstraintSet<F>) -> Result<()> {
     let mut nibble_columns = HashMap::<String, Vec<ColumnRef>>::new();
     let mut byte_columns = HashMap::<String, Vec<ColumnRef>>::new();
 

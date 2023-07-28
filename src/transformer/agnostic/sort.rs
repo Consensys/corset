@@ -1,16 +1,15 @@
 use anyhow::{anyhow, bail, Context, Result};
 use num_bigint::BigInt;
-use pairing_ce::ff::PrimeField;
 
 use crate::{
     column::{Column, Computation},
     compiler::{ColumnRef, Constraint, ConstraintSet, Intrinsic, Kind, Magma, Node},
     pretty::{Base, Pretty},
-    structs::Handle,
+    structs::{Field, Handle},
 };
 
-fn create_sort_constraint(
-    cs: &mut ConstraintSet,
+fn create_sort_constraint<F: Field>(
+    cs: &mut ConstraintSet<F>,
     froms: &[ColumnRef],
     sorted: &[ColumnRef],
     signs: &[bool],
@@ -131,7 +130,7 @@ fn create_sort_constraint(
         domain: None,
         expr: Box::new(
             Intrinsic::Sub.call(&[
-                Node::phantom_column(&delta, Magma::Integer),
+                Node::phantom_column(&delta, Magma::default()),
                 Intrinsic::Add.call(
                     &delta_bytes
                         .iter()
@@ -153,7 +152,7 @@ fn create_sort_constraint(
         cs.constraints.push(Constraint::InRange {
             handle: Handle::new(&module, format!("{}-is-byte", cs.handle(delta_byte).name)),
             exp: Node::phantom_column(delta_byte, Magma::Byte),
-            max: pairing_ce::bn256::Fr::from_str("256").unwrap(),
+            max: F::from_str("256").unwrap(),
         })
     }
 
@@ -255,7 +254,7 @@ fn create_sort_constraint(
                 ])?,
                 // Δ = ∑ ε_i × @_i × δSorted_i
                 Intrinsic::Sub.call(&[
-                    Node::phantom_column(&delta, Magma::Integer), // TODO: fixme GL
+                    Node::phantom_column(&delta, Magma::default()), // TODO: fixme GL
                     Intrinsic::Add.call(
                         (0..signs.len())
                             .map(|l| {
@@ -307,7 +306,7 @@ fn create_sort_constraint(
     Ok(())
 }
 
-pub fn sorts(cs: &mut ConstraintSet) -> Result<()> {
+pub fn sorts<F: Field>(cs: &mut ConstraintSet<F>) -> Result<()> {
     for c in cs
         .computations
         .iter()

@@ -1,16 +1,15 @@
-use crate::column::ColumnID;
 use crate::compiler::Domain;
+use crate::{column::ColumnID, structs::Field};
 use anyhow::*;
 use cached::Cached;
 use num_bigint::BigInt;
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use owo_colors::{colored::Color, OwoColorize};
-use pairing_ce::ff::Field;
-use pairing_ce::{bn256::Fr, ff::PrimeField};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
+    marker::PhantomData,
 };
 
 use crate::compiler::codetyper::Tty;
@@ -155,16 +154,51 @@ impl From<ColumnID> for ColumnRef {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub enum Expression {
+#[derive(Clone, Serialize, Debug, Deserialize)]
+pub struct RegisterRef {
+    pub colomn: ColumnRef,
+    pub index: usize,
+}
+
+pub trait ExpressionTrait<F: Field> {
+    fn from_const(value: BigInt) -> Self;
+    // TODO
+}
+
+#[derive(Clone, Serialize, Debug, Deserialize)]
+pub enum FieldSpecificExpression<F: Field> {
     Funcall {
         func: Intrinsic,
-        args: Vec<Node>,
+        args: Vec<Node<FieldSpecificExpression<F>, F>>,
     },
-    Const(BigInt, Option<Fr>),
+    Const(BigInt, Option<F>),
+    Register(RegisterRef),
     Column {
         handle: ColumnRef,
-        kind: Kind<Node>,
+        kind: Kind<Node<Expression<F>, F>>,
+        padding_value: Option<i64>,
+        base: Base,
+        fetched: bool,
+    },
+    // ArrayColumn {
+    //     handle: ColumnRef,
+    //     domain: Vec<usize>,
+    //     base: Base,
+    // },
+    List(Vec<Node<FieldSpecificExpression<F>, F>>),
+    Void,
+}
+
+#[derive(Clone, Serialize, Debug, Deserialize)]
+pub enum Expression<F: Field> {
+    Funcall {
+        func: Intrinsic,
+        args: Vec<Node<Expression<F>, F>>,
+    },
+    Const(BigInt, Option<F>),
+    Column {
+        handle: ColumnRef,
+        kind: Kind<Node<Expression<F>, F>>,
         padding_value: Option<i64>,
         base: Base,
         fetched: bool,
@@ -174,24 +208,124 @@ pub enum Expression {
         domain: Domain,
         base: Base,
     },
-    List(Vec<Node>),
+    List(Vec<Node<Expression<F>, F>>),
     Void,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Node {
-    _e: Expression,
-    _t: Option<Type>,
-    dbg: Option<String>,
+impl<F: Field> ExpressionTrait<F> for Expression<F> {
+    fn from_const(value: BigInt) -> Self {
+        Expression::Const(value, None)
+    }
 }
-impl From<Expression> for Node {
-    fn from(e: Expression) -> Self {
+
+impl<F: Field> ExpressionTrait<F> for FieldSpecificExpression<F> {
+    fn from_const(value: BigInt) -> Self {
+        FieldSpecificExpression::Const(value, None)
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Node<E: ExpressionTrait<F>, F: Field> {
+    pub _e: E,
+    pub _t: Option<Type>,
+    pub dbg: Option<String>,
+    pub _phantom: PhantomData<F>,
+}
+
+impl<F: Field> From<Expression<F>> for Node<Expression<F>, F> {
+    fn from(e: Expression<F>) -> Self {
         Node::from_expr(e)
     }
 }
+
+impl<F: Field> From<FieldSpecificExpression<F>> for Node<FieldSpecificExpression<F>, F> {
+    fn from(e: FieldSpecificExpression<F>) -> Self {
+        Node {
+            _e: e,
+            _t: None,
+            dbg: None,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<F: Field> Node<FieldSpecificExpression<F>, F> {
+    pub fn _new(e: FieldSpecificExpression<F>) -> Self {
+        Node {
+            _e: e,
+            _t: None,
+            dbg: None,
+            _phantom: PhantomData,
+        }
+    }
+}
+
 #[buildstructor::buildstructor]
-impl Node {
-    pub fn from_expr(e: Expression) -> Node {
+impl<F: Field> Node<Expression<F>, F> {
+    #[builder(entry = "column", exit = "build", visibility = "pub")]
+    pub fn new_column(
+        handle: ColumnRef,
+        base: Option<Base>,
+        kind: Kind<Node<Expression<F>, F>>,
+        padding_value: Option<i64>,
+        t: Option<Magma>,
+    ) -> Node<Expression<F>, F> {
+        Node {
+            _e: Expression::Column {
+                handle,
+                kind,
+                padding_value,
+                base: base.unwrap_or(Base::Hex),
+                fetched: false,
+            },
+            _t: Some(Type::Column(t.unwrap_or(Magma::default()))),
+            dbg: None,
+            _phantom: PhantomData,
+        }
+    }
+    #[builder(entry = "array_column", exit = "build", visibility = "pub")]
+    fn new_array_column(
+        handle: ColumnRef,
+        domain: Domain,
+        base: Option<Base>,
+        t: Option<Magma>,
+    ) -> Node<Expression<F>, F> {
+        Node {
+            _e: Expression::ArrayColumn {
+                handle,
+                domain,
+                base: base.unwrap_or(Base::Hex),
+            },
+            _t: Some(Type::ArrayColumn(t.unwrap_or(Magma::default()))),
+            dbg: None,
+            _phantom: PhantomData,
+        }
+    }
+    pub fn phantom_column(x: &ColumnRef, m: Magma) -> Node<Expression<F>, F> {
+        Node {
+            _e: Expression::Column {
+                handle: x.to_owned(),
+                kind: Kind::Phantom,
+                padding_value: None,
+                base: Base::Hex,
+                fetched: false,
+            },
+            _t: Some(Type::Column(m)),
+            dbg: None,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<F: Field, E: ExpressionTrait<F>> Node<E, F> {
+    pub fn e(&self) -> &E {
+        &self._e
+    }
+}
+
+#[buildstructor::buildstructor]
+impl<F: Field> Node<Expression<F>, F> {
+    pub fn from_expr(e: Expression<F>) -> Node<Expression<F>, F> {
         Node {
             /// the expresssion contained within the node
             _e: e,
@@ -201,27 +335,23 @@ impl Node {
             /// if set, a string containing the original code of the node for
             /// debugging purposes
             dbg: None,
+            _phantom: PhantomData,
         }
     }
-    pub fn from_const(x: isize) -> Node {
+    pub fn from_const(x: isize) -> Node<Expression<F>, F> {
         Node {
-            _e: Expression::Const(BigInt::from_isize(x).unwrap(), Fr::from_str(&x.to_string())),
-            _t: Some(Type::Scalar(match x {
-                0 | 1 => Magma::Boolean,
-                _ => Magma::Integer,
-            })),
+            _e: Expression::Const(BigInt::from_isize(x).unwrap(), F::from_str(&x.to_string())),
+            _t: Some(Type::Scalar(Magma::from(x))),
             dbg: None,
+            _phantom: PhantomData,
         }
     }
-    pub fn from_bigint(x: BigInt) -> Node {
+    pub fn from_bigint(x: BigInt) -> Node<Expression<F>, F> {
         Node {
-            _e: Expression::Const(x.to_owned(), Fr::from_str(&x.to_string())),
-            _t: Some(Type::Scalar(if x.is_one() || x.is_zero() {
-                Magma::Boolean
-            } else {
-                Magma::Integer
-            })),
+            _e: Expression::Const(x.to_owned(), F::from_str(&x.to_string())),
+            _t: Some(Type::Scalar(Magma::from(&x))),
             dbg: None,
+            _phantom: PhantomData,
         }
     }
     pub fn with_type(self, t: Type) -> Self {
@@ -233,80 +363,21 @@ impl Node {
     pub fn with_debug(self, dbg: Option<String>) -> Self {
         Node { dbg, ..self }
     }
-    #[builder(entry = "column", exit = "build", visibility = "pub")]
-    pub fn new_column(
-        handle: ColumnRef,
-        base: Option<Base>,
-        kind: Kind<Node>,
-        padding_value: Option<i64>,
-        t: Option<Magma>,
-    ) -> Node {
-        Node {
-            _e: Expression::Column {
-                handle,
-                kind,
-                padding_value,
-                base: base.unwrap_or(Base::Hex),
-                fetched: false,
-            },
-            _t: Some(Type::Column(t.unwrap_or(Magma::Integer))),
-            dbg: None,
-        }
+    pub fn one() -> Node<Expression<F>, F> {
+        Self::from_expr(Expression::Const(One::one(), Some(F::one())))
     }
-    #[builder(entry = "array_column", exit = "build", visibility = "pub")]
-    fn new_array_column(
-        handle: ColumnRef,
-        domain: Domain,
-        base: Option<Base>,
-        t: Option<Magma>,
-    ) -> Node {
-        Node {
-            _e: Expression::ArrayColumn {
-                handle,
-                domain,
-                base: base.unwrap_or(Base::Hex),
-            },
-            _t: Some(Type::ArrayColumn(t.unwrap_or(Magma::Integer))),
-            dbg: None,
-        }
+    pub fn zero() -> Node<Expression<F>, F> {
+        Self::from_expr(Expression::Const(Zero::zero(), Some(F::zero())))
     }
-    pub fn phantom_column(x: &ColumnRef, m: Magma) -> Node {
-        Node {
-            _e: Expression::Column {
-                handle: x.to_owned(),
-                kind: Kind::Phantom,
-                padding_value: None,
-                base: Base::Hex,
-                fetched: false,
-            },
-            _t: Some(Type::Column(m)),
-            dbg: None,
-        }
-    }
-    pub fn one() -> Node {
-        Self::from_expr(Expression::Const(One::one(), Some(Fr::one())))
-    }
-    pub fn zero() -> Node {
-        Self::from_expr(Expression::Const(Zero::zero(), Some(Fr::zero())))
-    }
-    pub fn e(&self) -> &Expression {
-        &self._e
-    }
-    pub fn e_mut(&mut self) -> &mut Expression {
+    pub fn e_mut(&mut self) -> &mut Expression<F> {
         &mut self._e
     }
     pub fn t(&self) -> Type {
         self._t.unwrap_or_else(|| match &self.e() {
             Expression::Funcall { func, args } => {
-                func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
+                func.typing::<F>(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
             }
-            Expression::Const(ref x, _) => {
-                if Zero::is_zero(x) || One::is_one(x) {
-                    Type::Scalar(Magma::Boolean)
-                } else {
-                    Type::Scalar(Magma::Integer)
-                }
-            }
+            Expression::Const(ref x, _) => Type::Scalar(Magma::from(x)),
             Expression::Column { handle, .. } => {
                 unreachable!("COLUMN {} SHOULD BE TYPED", handle.pretty())
             }
@@ -325,8 +396,12 @@ impl Node {
         self.dbg.as_ref()
     }
 
-    pub fn pretty_with_handle(&self, cs: &ConstraintSet) -> String {
-        fn rec_pretty(s: &Node, depth: usize, cs: &ConstraintSet) -> String {
+    pub fn pretty_with_handle(&self, cs: &ConstraintSet<F>) -> String {
+        fn rec_pretty<F: Field>(
+            s: &Node<Expression<F>, F>,
+            depth: usize,
+            cs: &ConstraintSet<F>,
+        ) -> String {
             let c = &COLORS[depth % COLORS.len()];
             match s.e() {
                 Expression::Const(x, _) => format!("{}", x).color(*c).to_string(),
@@ -349,7 +424,11 @@ impl Node {
                 Expression::Void => "nil".color(*c).to_string(),
             }
         }
-        fn format_list(ns: &[Node], depth: usize, cs: &ConstraintSet) -> String {
+        fn format_list<F: Field>(
+            ns: &[Node<Expression<F>, F>],
+            depth: usize,
+            cs: &ConstraintSet<F>,
+        ) -> String {
             ns.iter()
                 .map(|n| rec_pretty(n, depth, cs))
                 .collect::<Vec<_>>()
@@ -384,7 +463,6 @@ impl Node {
                 Intrinsic::Shift => false,
                 Intrinsic::Neg => false,
                 Intrinsic::Inv => false,
-                Intrinsic::Begin => unreachable!(),
                 Intrinsic::IfZero | Intrinsic::IfNotZero => {
                     args[1].may_overflow() || args.get(2).map(|a| a.may_overflow()).unwrap_or(false)
                 }
@@ -413,7 +491,7 @@ impl Node {
 
     /// Compute the maximum past (negative) shift coefficient in the AST rooted at `self`
     pub fn past_spill(&self) -> isize {
-        fn _past_span(e: &Expression, ax: isize) -> isize {
+        fn _past_span<F: Field>(e: &Expression<F>, ax: isize) -> isize {
             match e {
                 Expression::Funcall { func, args } => {
                     let mut mine = ax;
@@ -441,7 +519,7 @@ impl Node {
 
     /// Compute the maximum future (positive) shift coefficient in the AST rooted at `self`
     pub fn future_spill(&self) -> isize {
-        fn _future_span(e: &Expression, ax: isize) -> isize {
+        fn _future_span<F: Field>(e: &Expression<F>, ax: isize) -> isize {
             match e {
                 Expression::Funcall { func, args } => {
                     let mut mine = ax;
@@ -482,8 +560,8 @@ impl Node {
     }
 
     /// Return all the leaves of the AST rooted at this `Node`
-    pub fn leaves(&self) -> Vec<Node> {
-        fn _flatten(e: &Node, ax: &mut Vec<Node>) {
+    pub fn leaves(&self) -> Vec<Node<Expression<F>, F>> {
+        fn _flatten<F: Field>(e: &Node<Expression<F>, F>, ax: &mut Vec<Node<Expression<F>, F>>) {
             match e.e() {
                 Expression::Funcall { args, .. } => {
                     for a in args {
@@ -568,10 +646,10 @@ impl Node {
     pub fn eval_trace(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<F>,
+        cache: &mut Option<cached::SizedCache<F, F>>,
         settings: &EvalSettings,
-    ) -> (Option<Fr>, HashMap<String, Option<Fr>>) {
+    ) -> (Option<F>, HashMap<String, Option<F>>) {
         let mut trace = HashMap::new();
         let r = self.eval_fold(i, get, cache, settings, &mut |n, v| {
             if !matches!(n.e(), Expression::List(_) | Expression::Const(..)) {
@@ -584,25 +662,25 @@ impl Node {
     pub fn eval(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<F>,
+        cache: &mut Option<cached::SizedCache<F, F>>,
         settings: &EvalSettings,
-    ) -> Option<Fr> {
+    ) -> Option<F> {
         self.eval_fold(i, get, cache, settings, &mut |_, _| {})
     }
 
     pub fn eval_fold(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<F>,
+        cache: &mut Option<cached::SizedCache<F, F>>,
         settings: &EvalSettings,
-        f: &mut dyn FnMut(&Node, &Option<Fr>),
-    ) -> Option<Fr> {
+        f: &mut dyn FnMut(&Node<Expression<F>, F>, &Option<F>),
+    ) -> Option<F> {
         let r = match self.e() {
             Expression::Funcall { func, args } => match func {
                 Intrinsic::Add => {
-                    let mut ax = Fr::zero();
+                    let mut ax = F::zero();
                     for arg in args.iter() {
                         ax.add_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
@@ -616,14 +694,14 @@ impl Node {
                     Some(ax)
                 }
                 Intrinsic::Mul => {
-                    let mut ax = Fr::one();
+                    let mut ax = F::one();
                     for arg in args.iter() {
                         ax.mul_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
                 }
                 Intrinsic::Exp => {
-                    let mut ax = Fr::one();
+                    let mut ax = F::one();
                     let mantissa = args[0].eval_fold(i, get, cache, settings, f)?;
                     let exp = args[1].pure_eval().unwrap().to_usize().unwrap();
                     for _ in 0..exp {
@@ -644,21 +722,20 @@ impl Node {
                     if let Some(ref mut rcache) = cache {
                         x.map(|x| {
                             rcache
-                                .cache_get_or_set_with(x, || x.inverse().unwrap_or_else(Fr::zero))
+                                .cache_get_or_set_with(x, || x.inverse().unwrap_or_else(F::zero))
                                 .to_owned()
                         })
                     } else {
-                        x.and_then(|x| x.inverse()).or_else(|| Some(Fr::zero()))
+                        x.and_then(|x| x.inverse()).or_else(|| Some(F::zero()))
                     }
                 }
-                Intrinsic::Begin => unreachable!(),
                 Intrinsic::IfZero => {
                     if args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
                         args[1].eval_fold(i, get, cache, settings, f)
                     } else {
                         args.get(2)
                             .map(|x| x.eval_fold(i, get, cache, settings, f))
-                            .unwrap_or_else(|| Some(Fr::zero()))
+                            .unwrap_or_else(|| Some(F::zero()))
                     }
                 }
                 Intrinsic::IfNotZero => {
@@ -667,7 +744,7 @@ impl Node {
                     } else {
                         args.get(2)
                             .map(|x| x.eval_fold(i, get, cache, settings, f))
-                            .unwrap_or_else(|| Some(Fr::zero()))
+                            .unwrap_or_else(|| Some(F::zero()))
                     }
                 }
             },
@@ -679,7 +756,7 @@ impl Node {
                 .iter()
                 .filter_map(|x| x.eval_fold(i, get, cache, settings, f))
                 .find(|x| !x.is_zero())
-                .or_else(|| Some(Fr::zero())),
+                .or_else(|| Some(F::zero())),
             _ => unreachable!("{:?}", self),
         };
         f(self, &r);
@@ -688,7 +765,7 @@ impl Node {
 
     pub fn debug(
         &self,
-        f: &dyn Fn(&Node) -> Option<Fr>,
+        f: &dyn Fn(&Node<Expression<F>, F>) -> Option<F>,
         unclutter: bool,
         dim: bool,
         src: bool,
@@ -700,11 +777,11 @@ impl Node {
                 tty.write(" ");
             }
         }
-        fn _debug(
-            n: &Node,
+        fn _debug<F: Field>(
+            n: &Node<Expression<F>, F>,
             tty: &mut Tty,
-            f: &dyn Fn(&Node) -> Option<Fr>,
-            faulty: &Fr, // the non-zero value of the constraint
+            f: &dyn Fn(&Node<Expression<F>, F>) -> Option<F>,
+            faulty: &F, // the non-zero value of the constraint
             unclutter: bool,
             dim: bool,           // whether the user enabled --debug-dim
             zero_context: bool,  // whether we are in a zero-path
@@ -911,7 +988,7 @@ impl Node {
         tty.page_feed()
     }
 
-    pub fn flat_map<T>(&self, f: &dyn Fn(&Node) -> T) -> Vec<T> {
+    pub fn flat_map<T>(&self, f: &dyn Fn(&Node<Expression<F>, F>) -> T) -> Vec<T> {
         let mut ax = vec![];
         match self.e() {
             Expression::List(xs) => {
@@ -924,9 +1001,9 @@ impl Node {
         ax
     }
 }
-impl Display for Node {
+impl<F: Field> Display for Node<Expression<F>, F> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        fn format_list(cs: &[Node]) -> String {
+        fn format_list<F: Field>(cs: &[Node<Expression<F>, F>]) -> String {
             cs.iter()
                 .map(|c| format!("{}", c))
                 .collect::<Vec<_>>()
@@ -950,9 +1027,9 @@ impl Display for Node {
         }
     }
 }
-impl Debug for Node {
+impl<F: Field> Debug for Node<Expression<F>, F> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        fn format_list(cs: &[Node]) -> String {
+        fn format_list<F: Field>(cs: &[Node<Expression<F>, F>]) -> String {
             cs.iter()
                 .map(|c| format!("{:?}", c))
                 .collect::<Vec<_>>()
@@ -971,6 +1048,35 @@ impl Debug for Node {
             Expression::Funcall { func, args } => write!(f, "({:?} {})", func, format_list(args))?,
             Expression::Void => write!(f, "nil")?,
             // Expression::Permutation(froms, tos) => write!(f, "{:?}<=>{:?}", froms, tos),
+        };
+        if let Some(t) = self._t {
+            write!(f, ":{}", t)
+        } else {
+            write!(f, ":?")
+        }
+    }
+}
+
+impl<F: Field> Debug for Node<FieldSpecificExpression<F>, F> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        fn format_list<F: Field>(cs: &[Node<FieldSpecificExpression<F>, F>]) -> String {
+            cs.iter()
+                .map(|c| format!("{:?}", c))
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+
+        match self.e() {
+            FieldSpecificExpression::Const(x, _) => write!(f, "{}", x)?,
+            FieldSpecificExpression::Register(register) => write!(f, "{:?}", register,)?,
+            FieldSpecificExpression::Column {
+                handle, fetched, ..
+            } => write!(f, "{}{}", if *fetched { "F:" } else { "" }, handle,)?,
+            FieldSpecificExpression::List(cs) => write!(f, "'({})", format_list(cs))?,
+            FieldSpecificExpression::Funcall { func, args } => {
+                write!(f, "({:?} {})", func, format_list(args))?
+            }
+            FieldSpecificExpression::Void => write!(f, "nil")?,
         };
         if let Some(t) = self._t {
             write!(f, ":{}", t)

@@ -3,20 +3,24 @@ use itertools::Itertools;
 use log::*;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
-use pairing_ce::{bn256::Fr, ff::PrimeField};
 use serde::Serialize;
 use std::{collections::HashSet, io::Write, unreachable};
 
 use anyhow::*;
 use convert_case::{Case, Casing};
 
-use crate::{column::Computation, compiler::*, pretty::Pretty, structs::Handle};
+use crate::{
+    column::Computation,
+    compiler::*,
+    pretty::Pretty,
+    structs::{Field, Handle},
+};
 
 const TEMPLATE: &str = include_str!("wizardiop.go");
 
 // const SIZE: usize = 4_194_304;
 
-fn shift(e: &Node, i: isize) -> Node {
+fn shift<F: Field>(e: &Node<Expression<F>, F>, i: isize) -> Node<Expression<F>, F> {
     if i == 0 {
         e.to_owned()
     } else {
@@ -27,7 +31,7 @@ fn shift(e: &Node, i: isize) -> Node {
                     Intrinsic::Shift
                         .call(&[
                             args[0].clone(),
-                            Expression::Const(value.clone(), Fr::from_str(&value.to_string()))
+                            Expression::Const(value.clone(), F::from_str(&value.to_string()))
                                 .into(),
                         ])
                         .unwrap()
@@ -42,7 +46,7 @@ fn shift(e: &Node, i: isize) -> Node {
             Expression::Column { .. } => Intrinsic::Shift
                 .call(&[
                     e.clone(),
-                    Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
+                    Expression::Const(BigInt::from(i), F::from_str(&i.to_string())).into(),
                 ])
                 .unwrap(),
             Expression::List(xs) => {
@@ -54,7 +58,12 @@ fn shift(e: &Node, i: isize) -> Node {
     }
 }
 
-fn make_chain(cs: &ConstraintSet, xs: &[Node], operand: &str, surround: bool) -> String {
+fn make_chain<F: Field>(
+    cs: &ConstraintSet<F>,
+    xs: &[Node<Expression<F>, F>],
+    operand: &str,
+    surround: bool,
+) -> String {
     let head = render_expression(cs, &xs[0]);
     if xs.len() > 1 {
         let tail = &xs[1..];
@@ -79,21 +88,21 @@ fn make_chain(cs: &ConstraintSet, xs: &[Node], operand: &str, surround: bool) ->
 }
 
 /// Render an expression, panicking if it is not a handle
-fn render_handle(cs: &ConstraintSet, e: &Node) -> String {
+fn render_handle<F: Field>(cs: &ConstraintSet<F>, e: &Node<Expression<F>, F>) -> String {
     match e.e() {
-        Expression::Column { handle, .. } => reg_mangle(cs, handle).unwrap(),
+        Expression::Column { handle, .. } => reg_mangle(cs, &handle).unwrap(),
         _ => unreachable!(),
     }
 }
 
-fn render_expression(cs: &ConstraintSet, e: &Node) -> String {
+fn render_expression<F: Field>(cs: &ConstraintSet<F>, e: &Node<Expression<F>, F>) -> String {
     match e.e() {
         Expression::ArrayColumn { .. } => unreachable!(),
         Expression::Const(x, _) => format!("symbolic.NewConstant(\"{}\")", x),
         Expression::Column { handle, .. } => {
-            format!("{}.AsVariable()", reg_mangle(cs, handle).unwrap())
+            format!("{}.AsVariable()", reg_mangle(cs, &handle).unwrap())
         }
-        Expression::Funcall { func, args } => render_funcall(cs, func, args),
+        Expression::Funcall { func, args } => render_funcall(cs, &func, &args),
         Expression::List(constraints) => constraints
             .iter()
             .map(|e| render_expression(cs, e))
@@ -112,7 +121,11 @@ fn render_expression(cs: &ConstraintSet, e: &Node) -> String {
     }
 }
 
-fn render_funcall(cs: &ConstraintSet, func: &Intrinsic, args: &[Node]) -> String {
+fn render_funcall<F: Field>(
+    cs: &ConstraintSet<F>,
+    func: &Intrinsic,
+    args: &[Node<Expression<F>, F>],
+) -> String {
     match func {
         Intrinsic::Add => make_chain(cs, args, "Add", true),
         Intrinsic::Mul => make_chain(cs, args, "Mul", false),
@@ -156,7 +169,7 @@ fn render_funcall(cs: &ConstraintSet, func: &Intrinsic, args: &[Node]) -> String
     }
 }
 
-fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
+fn render_constraints<F: Field>(cs: &ConstraintSet<F>) -> Vec<String> {
     cs.constraints
         .iter()
         .sorted_by_key(|c| c.name())
@@ -218,7 +231,7 @@ fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {
     r
 }
 
-fn reg_mangle(cs: &ConstraintSet, c: &ColumnRef) -> Result<String> {
+fn reg_mangle<F: Field>(cs: &ConstraintSet<F>, c: &ColumnRef) -> Result<String> {
     let reg_id = cs
         .columns
         .get_col(c)?
@@ -236,7 +249,7 @@ fn reg_mangle(cs: &ConstraintSet, c: &ColumnRef) -> Result<String> {
         .unwrap_or_else(|| Handle::new("", reg_id.to_string()).mangle()))
 }
 
-fn reg(cs: &ConstraintSet, c: &Handle) -> Result<Handle> {
+fn reg<F: Field>(cs: &ConstraintSet<F>, c: &Handle) -> Result<Handle> {
     let reg_id = cs
         .columns
         .by_handle(c)?
@@ -266,7 +279,7 @@ struct WiopInterleaved {
     interleaving: String,
 }
 
-fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> Vec<WiopColumn> {
+fn render_columns<F: Field>(cs: &ConstraintSet<F>, sizes: &mut HashSet<String>) -> Vec<WiopColumn> {
     cs.columns
         .iter()
         .filter(|c| {
@@ -295,7 +308,10 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> Vec<WiopCo
         .collect()
 }
 
-fn render_interleaved(cs: &ConstraintSet, _sizes: &mut HashSet<String>) -> Vec<WiopInterleaved> {
+fn render_interleaved<F: Field>(
+    cs: &ConstraintSet<F>,
+    _sizes: &mut HashSet<String>,
+) -> Vec<WiopInterleaved> {
     cs.columns
         .iter()
         .filter(|col| {
@@ -328,11 +344,11 @@ fn render_interleaved(cs: &ConstraintSet, _sizes: &mut HashSet<String>) -> Vec<W
         .collect()
 }
 
-fn render_constraint(
-    cs: &ConstraintSet,
+fn render_constraint<F: Field>(
+    cs: &ConstraintSet<F>,
     name: &str,
     domain: Option<Domain>,
-    expr: &Node,
+    expr: &Node<Expression<F>, F>,
 ) -> String {
     match expr.e() {
         Expression::List(xs) => xs
@@ -362,7 +378,7 @@ fn render_constraint(
     }
 }
 
-pub fn render(cs: &ConstraintSet, out_filename: &Option<String>) -> Result<()> {
+pub fn render<F: Field>(cs: &ConstraintSet<F>, out_filename: &Option<String>) -> Result<()> {
     #[derive(Serialize)]
     struct TemplateData {
         columns: Vec<WiopColumn>,

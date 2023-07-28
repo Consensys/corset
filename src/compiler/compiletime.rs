@@ -1,13 +1,19 @@
 #![cfg(feature = "parser")]
 use anyhow::*;
 
+use crate::structs::Field;
+
 use super::{
     generator::{make_ast_error, reduce},
     tables::Scope,
     Ast, AstNode, CompileSettings, Token,
 };
 
-fn compile_time_constants(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()> {
+fn compile_time_constants<F: Field>(
+    e: &AstNode,
+    ctx: &mut Scope<F>,
+    settings: &CompileSettings,
+) -> Result<()> {
     match &e.class {
         Token::DefModule(name) => {
             *ctx = ctx.switch_to_module(name)?;
@@ -28,7 +34,7 @@ fn compile_time_constants(e: &AstNode, ctx: &mut Scope, settings: &CompileSettin
     }
 }
 
-pub fn pass(ast: &Ast, ctx: Scope, settings: &CompileSettings) -> Result<()> {
+pub fn pass<F: Field>(ast: &Ast, ctx: Scope<F>, settings: &CompileSettings) -> Result<()> {
     let mut module = ctx;
     for exp in ast.exprs.iter() {
         compile_time_constants(exp, &mut module, settings).with_context(|| make_ast_error(exp))?;

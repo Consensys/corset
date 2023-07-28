@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{compiler::MAIN_MODULE, utils::purify};
 
-use super::{ARRAY_SEPARATOR, MODULE_SEPARATOR};
+use super::{ARRAY_SEPARATOR, MODULE_SEPARATOR, OVERFLOW_SEPARATOR, SUM_SEPARATOR, BYTE_SEPARATOR, ACC_SEPARATOR};
 
 /// A handle uniquely and absolutely defines a symbol
 #[derive(Clone, Serialize, Deserialize)]
@@ -77,6 +77,58 @@ impl Handle {
         Handle {
             module: self.module.clone(),
             name: format!("{}{}{}", self.name, ARRAY_SEPARATOR, i),
+            perspective: self.perspective.clone(),
+        }
+    }
+
+    /// Generate a symbol corresponding to the sum of two Handle (used to sum field agnostic columns)
+    pub fn sum(&self, other: &Handle) -> Handle {
+        Handle {
+            module: self.module.clone(),
+            name: format!(
+                "{}{}{}.{}",
+                self.name, SUM_SEPARATOR, other.module, other.name
+            ), // TODO reprendre
+            perspective: self.perspective.clone(), // TODO handle other.perspective
+        }
+    }
+
+    pub fn as_overflow_handle(&self, index: usize) -> Self {
+        Handle {
+            module: self.module.clone(),
+            name: format!("{}{}{}", self.name, OVERFLOW_SEPARATOR, index), // TODO reprendre
+            perspective: self.perspective.clone(), // TODO handle other.perspective
+        }
+    }
+
+    pub fn as_byte_handle(&self, index: usize) -> Self {
+        Handle {
+            module: self.module.clone(),
+            name: format!("{}{}{}", self.name, BYTE_SEPARATOR, index), // TODO reprendre
+            perspective: self.perspective.clone(), // TODO handle other.perspective
+        }
+    }
+
+    pub fn as_acc_handle(&self, index: usize) -> Self {
+        Handle {
+            module: self.module.clone(),
+            name: format!("{}{}{}", self.name, ACC_SEPARATOR, index), // TODO reprendre
+            perspective: self.perspective.clone(), // TODO handle other.perspective
+        }
+    }
+
+    pub fn as_counter_handle(&self) -> Self {
+        Handle {
+            module: self.module.clone(),
+            name: format!("{}{}", self.name, ACC_SEPARATOR), // TODO reprendre
+            perspective: self.perspective.clone(), // TODO handle other.perspective
+        }
+    }
+
+    pub fn to_sum_constraint(&self, index: usize) -> Handle {
+        Handle {
+            module: self.module.clone(),
+            name: format!("{}_sub_constraint_{}", self.name, index),
             perspective: self.perspective.clone(),
         }
     }

@@ -3,9 +3,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::println;
 
+use crate::structs::Handle;
 use crate::{
     compiler::{ConstraintSet, Kind, Magma},
-    structs::Handle,
+    structs::Field,
 };
 use anyhow::*;
 use convert_case::{Case, Casing};
@@ -57,7 +58,8 @@ fn magma_to_java_type(m: Magma) -> String {
         Magma::Boolean => "Boolean",
         Magma::Nibble => "UnsignedByte",
         Magma::Byte => "UnsignedByte",
-        Magma::Integer => "BigInteger",
+        Magma::Integer { .. } => "BigInteger",
+        Magma::FieldElement { .. } => todo!(),
         Magma::Any => unreachable!(),
         Magma::Loobean => unreachable!(),
     }
@@ -70,9 +72,10 @@ fn magma_to_java_zero(m: Magma) -> String {
         Magma::Boolean => "false",
         Magma::Nibble => "UnsignedByte.of(0)",
         Magma::Byte => "UnsignedByte.of(0)",
-        Magma::Integer => "BigInteger.ZERO",
+        Magma::Integer(_) => "BigInteger.ZERO",
         Magma::Any => unreachable!(),
         Magma::Loobean => unreachable!(),
+        Magma::FieldElement(_) => todo!(),
     }
     .to_string()
 }
@@ -111,7 +114,11 @@ fn fill_file(file_path: PathBuf, contents: String) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -> Result<()> {
+pub fn render<F: Field>(
+    cs: &ConstraintSet<F>,
+    package: &str,
+    output_path: Option<&String>,
+) -> Result<()> {
     let registers = cs
         .columns
         .registers

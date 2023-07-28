@@ -1,14 +1,19 @@
-use crate::compiler::{self, CompileSettings};
+use crate::{
+    compiler::{self, CompileSettings},
+    structs::Field,
+};
 use anyhow::*;
 
-fn make(name: &str, source: &str) -> Result<()> {
+type TestArithmetisationField = pairing_ce::bn256::Fr;
+
+fn make<F: Field>(name: &str, source: &str) -> Result<()> {
     let inputs = vec![("stdlib", include_str!("stdlib.lisp")), (name, source)];
 
-    compiler::make(inputs.as_slice(), &CompileSettings { debug: false }).map(|_| ())
+    compiler::make::<F, _, _>(inputs.as_slice(), &CompileSettings { debug: false }).map(|_| ())
 }
 
 fn must_run(name: &str, source: &str) {
-    let r = make(name, source);
+    let r = make::<TestArithmetisationField>(name, source);
     if let Err(err) = &r {
         eprintln!("{}", err);
     }
@@ -16,13 +21,13 @@ fn must_run(name: &str, source: &str) {
 }
 
 fn must_fail(name: &str, source: &str) {
-    let r = make(name, source);
+    let r = make::<TestArithmetisationField>(name, source);
     assert!(r.is_err());
 }
 
 #[test]
 fn types_declaration() -> Result<()> {
-    make("type", include_str!("../tests/types.lisp"))
+    make::<TestArithmetisationField>("type", include_str!("../tests/types.lisp"))
 }
 
 #[test]

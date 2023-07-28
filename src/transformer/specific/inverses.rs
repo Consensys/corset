@@ -4,24 +4,23 @@ use crate::{
     column::{Column, Computation},
     compiler::{ColumnRef, Constraint, ConstraintSet, Expression, Intrinsic, Kind, Magma, Node},
     pretty::Base,
-    structs::Handle,
+    structs::{Field, Handle},
+    transformer::expression_to_name,
 };
 use anyhow::{anyhow, Context, Result};
 
-use super::expression_to_name;
-
-fn invert_expr(e: &Node) -> Node {
+fn invert_expr<F: Field>(e: &Node<Expression<F>, F>) -> Node<Expression<F>, F> {
     Intrinsic::Inv.call(&[e.to_owned()]).unwrap()
 }
 
 /// For all Builtin::Inv encountered, create a new column and the associated constraints
 /// pre-computing and proving the inverted column.
 
-impl Node {
+impl<F: Field> Node<Expression<F>, F> {
     pub(crate) fn do_expand_inv(
         &mut self,
         gm: &dyn Fn(&HashSet<ColumnRef>) -> String,
-        new_cols: &mut Vec<(Handle, Node)>,
+        new_cols: &mut Vec<(Handle, Node<Expression<F>, F>)>,
     ) -> Result<()> {
         match self.e_mut() {
             Expression::List(es) => {
@@ -43,7 +42,7 @@ impl Node {
                         .kind(Kind::Phantom)
                         .t(match self.t().magma() {
                             Magma::Boolean => Magma::Boolean,
-                            _ => Magma::Integer,
+                            _ => Magma::default(),
                         }) // boolean are stable by inversion
                         .build();
                 }
@@ -54,7 +53,7 @@ impl Node {
     }
 }
 
-impl ConstraintSet {
+impl<F: Field> ConstraintSet<F> {
     pub fn expand_invs(&mut self) -> Result<()> {
         let mut new_cols = vec![];
         let get_module = |rs: &HashSet<ColumnRef>| self.columns.module_of(rs.iter()).unwrap();
@@ -96,7 +95,11 @@ impl ConstraintSet {
     }
 }
 
-fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Result<()> {
+fn validate_inv<F: Field>(
+    cs: &mut Vec<Node<Expression<F>, F>>,
+    x_expr: &Node<Expression<F>, F>,
+    inv_x_col: &ColumnRef,
+) -> Result<()> {
     cs.push(
         Intrinsic::Mul.call(&[
             x_expr.clone(),
@@ -106,7 +109,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Res
                     Node::column()
                         .handle(inv_x_col.clone())
                         .kind(Kind::Phantom)
-                        .t(Magma::Integer)
+                        .t(Magma::default())
                         .build(),
                 ])?,
                 Node::one(),
@@ -119,7 +122,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Res
                 .handle(inv_x_col.clone())
                 .kind(Kind::Phantom)
                 .base(Base::Hex)
-                .t(Magma::Integer)
+                .t(Magma::default())
                 .build(),
             Intrinsic::Sub.call(&[
                 Intrinsic::Mul.call(&[
@@ -128,7 +131,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Res
                         .handle(inv_x_col.clone())
                         .kind(Kind::Phantom)
                         .base(Base::Hex)
-                        .t(Magma::Integer)
+                        .t(Magma::default())
                         .build(),
                 ])?,
                 Node::one(),
@@ -139,6 +142,6 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Res
     Ok(())
 }
 
-pub fn expand_invs(cs: &mut ConstraintSet) -> Result<()> {
+pub fn expand_invs<F: Field>(cs: &mut ConstraintSet<F>) -> Result<()> {
     cs.expand_invs()
 }

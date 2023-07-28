@@ -3,6 +3,7 @@ use anyhow::*;
 use serde::{Deserialize, Serialize};
 
 use crate::errors::CompileError;
+use crate::structs::Field;
 
 use super::parser::{AstNode, Token};
 use super::{max_type, Expression, Magma, Node, Type};
@@ -21,7 +22,16 @@ pub enum Form {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Builtin {
     Len,
+    Begin,
 }
+
+impl Builtin {
+    pub fn list<F: Field>(args: &[Node<Expression<F>, F>]) -> Result<Node<Expression<F>, F>> {
+        Builtin::Begin.validate_args(args)?;
+        Ok(Node::from_expr(Expression::List(args.to_vec())))
+    }
+}
+
 impl std::fmt::Display for Builtin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -29,9 +39,19 @@ impl std::fmt::Display for Builtin {
             "{}",
             match self {
                 Builtin::Len => "len",
+                Builtin::Begin => "begin",
             }
         )
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+pub enum FieldIntrinsic {
+    Add,
+    Sub,
+    Mul,
+    Shift,
+    Neg,
 }
 
 /// An intrinsic is a function that can appear in the final compiled form
@@ -44,34 +64,35 @@ pub enum Intrinsic {
     Exp,
     Shift,
     Neg,
-    Inv,
-
-    Begin,
-
+    /// The only guarantee we provide is that inv(0) = 0 and inv(x) != 0 for x != 0
+    /// (and we always have inv(x) <= number of field elements that represent x)
+    /// Indeed if
+    Inv, // autoriser l'inv quand il y a 1 seul registre, sinon erreur.
     IfZero,
     IfNotZero,
 }
 impl Intrinsic {
-    pub fn call(self, args: &[Node]) -> Result<Node> {
+    pub fn call<F: Field>(self, args: &[Node<Expression<F>, F>]) -> Result<Node<Expression<F>, F>> {
         self.validate_args(args)?;
         Ok(Node::from_expr(self.raw_call(args)))
     }
 
-    pub fn raw_call(self, args: &[Node]) -> Expression {
+    pub fn raw_call<F: Field>(self, args: &[Node<Expression<F>, F>]) -> Expression<F> {
         Expression::Funcall {
             func: self,
             args: args.to_owned(),
         }
     }
 
-    pub fn typing(&self, argtype: &[Type]) -> Type {
+    pub fn typing<F: Field>(&self, argtype: &[Type]) -> Type {
         match self {
             Intrinsic::Inv => argtype[0],
             Intrinsic::Add | Intrinsic::Sub | Intrinsic::Neg => {
                 // Boolean is a corner case, as it is not stable under these operations
                 match max_type(argtype) {
-                    Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::Integer),
-                    Type::Column(Magma::Boolean) => Type::Column(Magma::Integer),
+                    Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::default()),
+                    Type::Column(Magma::Boolean) => Type::Column(Magma::default()),
+                    // TODO handle Loobean, etc ?
                     x => x,
                 }
             }
@@ -80,7 +101,6 @@ impl Intrinsic {
             Intrinsic::IfZero | Intrinsic::IfNotZero => {
                 argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
             }
-            Intrinsic::Begin => Type::List(max_type(argtype).magma()),
             Intrinsic::Shift => argtype[0],
         }
     }
@@ -98,7 +118,6 @@ impl std::fmt::Display for Intrinsic {
                 Intrinsic::Shift => "shift",
                 Intrinsic::Neg => "-",
                 Intrinsic::Inv => "inv",
-                Intrinsic::Begin => "begin",
                 Intrinsic::IfZero => "if-zero",
                 Intrinsic::IfNotZero => "if-not-zero",
             }
@@ -167,17 +186,23 @@ pub trait FuncVerifier<T: Clone> {
     }
 }
 
-impl FuncVerifier<Node> for Builtin {
+impl<F: Field> FuncVerifier<Node<Expression<F>, F>> for Builtin {
     fn arity(&self) -> Arity {
         match self {
             Builtin::Len => Arity::Monadic,
+            Builtin::Begin => Arity::AtLeast(1),
         }
     }
 
-    fn validate_types(&self, args: &[Node]) -> Result<()> {
+    fn validate_types(&self, args: &[Node<Expression<F>, F>]) -> Result<()> {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
         let expected_t: &[&[Type]] = match self {
             Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
+            Builtin::Begin => &[&[
+                Type::Scalar(Magma::Any),
+                Type::Column(Magma::Any),
+                Type::List(Magma::Any),
+            ]],
         };
 
         if super::compatible_with_repeating(expected_t, &args_t) {

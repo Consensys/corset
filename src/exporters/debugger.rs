@@ -2,7 +2,7 @@ use crate::column::Computation;
 use crate::compiler::codetyper::Tty;
 use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
 use crate::pretty::Pretty;
-use crate::structs::Handle;
+use crate::structs::{Field, Handle};
 use anyhow::*;
 use itertools::Itertools;
 use num_traits::ToPrimitive;
@@ -26,7 +26,12 @@ fn priority(a: Intrinsic, b: Intrinsic) -> Ordering {
     }
 }
 
-fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: bool) {
+fn pretty_expr<F: Field>(
+    n: &Node<Expression<F>, F>,
+    prev: Option<Intrinsic>,
+    tty: &mut Tty,
+    show_types: bool,
+) {
     const INDENT: usize = 4;
     let colors = [
         Color::Red,
@@ -80,7 +85,6 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
                 pretty_expr(&args[0], prev, tty, show_types);
                 tty.write(")");
             }
-            Intrinsic::Begin => todo!(),
             Intrinsic::IfZero => {
                 tty.write("if-zero ".color(c).bold().to_string());
                 pretty_expr(&args[0], Some(Intrinsic::Mul), tty, show_types);
@@ -151,8 +155,8 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
     }
 }
 
-fn render_constraints(
-    cs: &ConstraintSet,
+fn render_constraints<F: Field>(
+    cs: &ConstraintSet<F>,
     only: Option<&Vec<String>>,
     skip: &[String],
     show_types: bool,
@@ -200,16 +204,57 @@ fn render_constraints(
             }
         }
     }
+    println!("\n{}", "=== Field Specific Constraints ===".bold().yellow());
+    for c in cs.field_specific_constraints.iter() {
+        match c {
+            Constraint::Vanishes {
+                handle,
+                domain: _,
+                expr,
+            } => {
+                let mut tty = Tty::new();
+                println!("{expr:?}");
+                println!("\n- {}:", handle.pretty());
+                println!("{}", tty.page_feed());
+            }
+            Constraint::Plookup {
+                including,
+                included,
+                ..
+            } => {
+                println!(
+                    "{{{}}} ⊂ {{{}}}",
+                    included
+                        .iter()
+                        .map(|n| format!("{n:?}"))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    including
+                        .iter()
+                        .map(|n| format!("{n:?}"))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                )
+            }
+            Constraint::Permutation { .. } => (),
+            Constraint::InRange { handle, exp, max } => {
+                let mut tty = Tty::new();
+                println!("{exp:?}");
+                println!("\n{}", handle.pretty());
+                println!("{} < {}", tty.page_feed(), max);
+            }
+        }
+    }
 }
 
-fn render_modules(cs: &ConstraintSet) {
+fn render_modules<F: Field>(cs: &ConstraintSet<F>) {
     println!("\n{}", "=== Modules ===".bold().yellow());
     for (module, spilling) in cs.columns.spilling.iter().sorted_by_key(|s| s.0) {
         println!("{}: spilling {}", module, spilling);
     }
 }
 
-fn render_columns(cs: &ConstraintSet) {
+fn render_columns<F: Field>(cs: &ConstraintSet<F>) {
     println!("\n{}", "=== Columns ===".bold().yellow());
     for (r, col) in cs.columns.iter().sorted_by_key(|c| c.1.register) {
         println!(
@@ -240,7 +285,7 @@ fn render_columns(cs: &ConstraintSet) {
     }
 }
 
-fn render_computations(cs: &ConstraintSet) {
+fn render_computations<F: Field>(cs: &ConstraintSet<F>) {
     println!("\n{}", "=== Computations ===".bold().yellow());
     for comp in cs.computations.iter() {
         match comp {
@@ -280,7 +325,7 @@ fn render_computations(cs: &ConstraintSet) {
     }
 }
 
-fn render_perspectives(cs: &ConstraintSet) {
+fn render_perspectives<F: Field>(cs: &ConstraintSet<F>) {
     println!("\n{}", "=== Perspectives ===".bold().yellow());
     for (module, persps) in cs.perspectives.iter() {
         for (name, expr) in persps.iter() {
@@ -302,8 +347,8 @@ pub(crate) struct DebugSettings {
     pub types: bool,
 }
 
-pub(crate) fn debug(
-    cs: &ConstraintSet,
+pub(crate) fn debug<F: Field>(
+    cs: &ConstraintSet<F>,
     settings: DebugSettings,
     only: Option<&Vec<String>>,
     skip: &[String],

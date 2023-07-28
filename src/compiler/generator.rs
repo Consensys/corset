@@ -5,11 +5,8 @@ use log::*;
 use logging_timer::time;
 use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
-use num_traits::{One, Zero};
 use once_cell::sync::OnceCell;
 use owo_colors::OwoColorize;
-use pairing_ce::bn256::Fr;
-use pairing_ce::ff::{Field, PrimeField};
 use serde::{Deserialize, Serialize};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -18,7 +15,7 @@ use std::io::Write;
 
 use std::sync::atomic::AtomicUsize;
 
-use super::node::ColumnRef;
+use super::node::{ColumnRef, FieldSpecificExpression};
 use super::tables::{ComputationTable, Scope};
 use super::{common::*, CompileSettings, Expression, Magma, Node, Type};
 use crate::column::{Column, ColumnSet, Computation, RegisterID};
@@ -26,7 +23,7 @@ use crate::compiler::parser::*;
 use crate::dag::ComputationDag;
 use crate::errors::{self, CompileError, RuntimeError};
 use crate::pretty::Pretty;
-use crate::structs::Handle;
+use crate::structs::{Field, Handle};
 
 static COUNTER: OnceCell<AtomicUsize> = OnceCell::new();
 
@@ -40,17 +37,17 @@ fn uniquify(n: String) -> String {
     )
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum Constraint {
+#[derive(Debug, Serialize, Clone, Deserialize)]
+pub enum Constraint<N, F: Field> {
     Vanishes {
         handle: Handle,
         domain: Option<Domain>,
-        expr: Box<Node>,
+        expr: Box<N>,
     },
     Plookup {
         handle: Handle,
-        including: Vec<Node>,
-        included: Vec<Node>,
+        including: Vec<N>,
+        included: Vec<N>,
     },
     Permutation {
         handle: Handle,
@@ -60,11 +57,54 @@ pub enum Constraint {
     },
     InRange {
         handle: Handle,
-        exp: Node,
-        max: Fr,
+        exp: N,
+        max: F,
     },
 }
-impl Constraint {
+
+pub fn convert_constraint<F: Field, N1, N2>(
+    constraint: Constraint<N1, F>,
+    mut convert: impl FnMut(&N1) -> Result<N2>,
+) -> Result<Constraint<N2, F>> {
+    Ok(match constraint {
+        Constraint::Vanishes {
+            handle,
+            domain,
+            expr,
+        } => Constraint::Vanishes {
+            handle,
+            domain,
+            expr: Box::new(convert(&expr)?),
+        },
+        Constraint::Plookup {
+            handle,
+            including,
+            included,
+        } => Constraint::Plookup {
+            handle,
+            including: including.iter().map(&mut convert).collect::<Result<Vec<_>>>()?,
+            included: included.iter().map(&mut convert).collect::<Result<Vec<_>>>()?,
+        },
+        Constraint::Permutation {
+            handle,
+            from,
+            to,
+            signs,
+        } => Constraint::Permutation {
+            handle,
+            from,
+            to,
+            signs,
+        },
+        Constraint::InRange { handle, exp, max } => Constraint::InRange {
+            handle,
+            exp: convert(&exp)?,
+            max,
+        },
+    })
+}
+
+impl<F: Field> Constraint<Node<Expression<F>, F>, F> {
     pub fn name(&self) -> String {
         match self {
             Constraint::Vanishes { handle, .. } => handle.to_string(),
@@ -192,7 +232,7 @@ pub struct Specialization {
     pub nowarn: bool,
 }
 
-impl FuncVerifier<Node> for Intrinsic {
+impl<F: Field> FuncVerifier<Node<Expression<F>, F>> for Intrinsic {
     fn arity(&self) -> Arity {
         match self {
             Intrinsic::Add => Arity::AtLeast(1),
@@ -202,12 +242,11 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Neg => Arity::Monadic,
             Intrinsic::Inv => Arity::Monadic,
             Intrinsic::Shift => Arity::Dyadic,
-            Intrinsic::Begin => Arity::AtLeast(1),
             Intrinsic::IfZero => Arity::Between(2, 3),
             Intrinsic::IfNotZero => Arity::Between(2, 3),
         }
     }
-    fn validate_types(&self, args: &[Node]) -> Result<()> {
+    fn validate_types(&self, args: &[Node<Expression<F>, F>]) -> Result<()> {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
         // The typing of functions is represented as a list of list.
         //
@@ -233,7 +272,6 @@ impl FuncVerifier<Node> for Intrinsic {
                 // then/else arms type
                 &[Type::Any(Magma::Any), Type::List(Magma::Any)],
             ],
-            Intrinsic::Begin => &[&[Type::Any(Magma::Any)]],
         };
 
         if super::compatible_with_repeating(expected_t, &args_t) {
@@ -248,23 +286,25 @@ impl FuncVerifier<Node> for Intrinsic {
     }
 }
 
-pub type PerspectiveTable = HashMap<String, HashMap<String, Node>>;
+pub type PerspectiveTable<F> = HashMap<String, HashMap<String, Node<Expression<F>, F>>>;
 
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
-pub struct ConstraintSet {
-    pub columns: ColumnSet,
-    pub constraints: Vec<Constraint>,
+#[derive(Default, Debug, Serialize, Clone, Deserialize)]
+pub struct ConstraintSet<F: Field> {
+    pub columns: ColumnSet<F>,
+    pub constraints: Vec<Constraint<Node<Expression<F>, F>, F>>,
     pub constants: HashMap<Handle, BigInt>,
-    pub computations: ComputationTable,
-    pub perspectives: PerspectiveTable,
+    pub computations: ComputationTable<F>,
+    pub perspectives: PerspectiveTable<F>,
+    pub field_specific_constraints: Vec<Constraint<Node<FieldSpecificExpression<F>, F>, F>>,
 }
-impl ConstraintSet {
+
+impl<F: Field> ConstraintSet<F> {
     pub fn new(
-        columns: ColumnSet,
-        constraints: Vec<Constraint>,
+        columns: ColumnSet<F>,
+        constraints: Vec<Constraint<Node<Expression<F>, F>, F>>,
         constants: HashMap<Handle, BigInt>,
-        computations: ComputationTable,
-        perspectives: PerspectiveTable,
+        computations: ComputationTable<F>,
+        perspectives: PerspectiveTable<F>,
     ) -> Result<Self> {
         let mut r = ConstraintSet {
             constraints,
@@ -272,12 +312,14 @@ impl ConstraintSet {
             constants,
             computations,
             perspectives,
+            field_specific_constraints: Vec::new(),
         };
         r.convert_refs_to_ids()?;
         r.allocate_registers();
         r.fill_perspectives()?;
         r.fill_spilling();
         r.validate()?;
+        r.spread_registers()?;
         Ok(r)
     }
 
@@ -535,13 +577,13 @@ impl ConstraintSet {
 
     // do not pollute compilation output of the binary
     #[allow(dead_code)]
-    pub fn from_ptr<'a>(ptr: *const ConstraintSet) -> &'a Self {
+    pub fn from_ptr<'a>(ptr: *const ConstraintSet<F>) -> &'a Self {
         assert!(!ptr.is_null());
         unsafe { &*ptr }
     }
 
     #[allow(dead_code)]
-    pub fn mut_from_ptr<'a>(ptr: *mut ConstraintSet) -> &'a mut Self {
+    pub fn mut_from_ptr<'a>(ptr: *mut ConstraintSet<F>) -> &'a mut Self {
         assert!(!ptr.is_null());
         unsafe { &mut *ptr }
     }
@@ -554,7 +596,7 @@ impl ConstraintSet {
         &mut self,
         module: &str,
         name: &str,
-        guard: Node,
+        guard: Node<Expression<F>, F>,
     ) -> Result<bool> {
         let r = self
             .perspectives
@@ -565,7 +607,11 @@ impl ConstraintSet {
         Ok(r)
     }
 
-    pub(crate) fn get_perspective(&self, module: &str, name: &str) -> Result<&Node> {
+    pub(crate) fn get_perspective(
+        &self,
+        module: &str,
+        name: &str,
+    ) -> Result<&Node<Expression<F>, F>> {
         self.perspectives
             .get(module)
             .ok_or_else(|| anyhow!("unknown module"))?
@@ -725,17 +771,17 @@ impl ConstraintSet {
                                 Computation::Composite { exp, .. } => exp
                                     .eval(
                                         0,
-                                        &mut |_, _, _| Some(Fr::zero()),
+                                        &mut |_, _, _| Some(F::zero()),
                                         &mut None,
                                         &EvalSettings::default(),
                                     )
-                                    .unwrap_or_else(Fr::zero),
-                                Computation::Interleaved { .. } => Fr::zero(),
-                                Computation::Sorted { .. } => Fr::zero(),
-                                Computation::CyclicFrom { .. } => Fr::zero(),
-                                Computation::SortingConstraints { .. } => Fr::zero(),
+                                    .unwrap_or_else(F::zero),
+                                Computation::Interleaved { .. } => F::zero(),
+                                Computation::Sorted { .. } => F::zero(),
+                                Computation::CyclicFrom { .. } => F::zero(),
+                                Computation::SortingConstraints { .. } => F::zero(),
                             })
-                            .unwrap_or_else(Fr::zero)
+                            .unwrap_or_else(F::zero)
                     })
                 };
 
@@ -747,10 +793,7 @@ impl ConstraintSet {
                     out.write_all(
                         cache
                             .cache_get_or_set_with(x.to_owned(), || {
-                                format!(
-                                    "\"0x0{}\"",
-                                    x.into_repr().to_string()[2..].trim_start_matches('0')
-                                )
+                                format!("\"0x0{}\"", x.hex()[2..].trim_start_matches('0'))
                             })
                             .as_bytes(),
                     )?;
@@ -944,12 +987,12 @@ impl ConstraintSet {
 }
 
 // Compared to a function, a form do not evaluate all of its arguments by default
-fn apply_form(
+fn apply_form<F: Field>(
     f: Form,
     args: &[AstNode],
-    ctx: &mut Scope,
+    ctx: &mut Scope<F>,
     settings: &CompileSettings,
-) -> Result<Option<Node>> {
+) -> Result<Option<Node<Expression<F>, F>>> {
     f.validate_args(args)
         .with_context(|| anyhow!("evaluating call to {:?}", f))?;
 
@@ -965,7 +1008,7 @@ fn apply_form(
 
                     for_ctx.insert_symbol(
                         i_name,
-                        Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
+                        Expression::Const(BigInt::from(i), F::from_str(&i.to_string())).into(),
                     )?;
 
                     if let Some(r) = reduce(&body.clone(), &mut for_ctx, settings)? {
@@ -992,14 +1035,12 @@ fn apply_form(
                 match reduced.len() {
                     0 => Ok(None),
                     1 => Ok(reduced[0].to_owned()),
-                    _ => Ok(Some(
-                        Intrinsic::Begin.call(
-                            &reduced
-                                .into_iter()
-                                .map(|e| e.unwrap_or_else(|| Expression::Void.into()))
-                                .collect::<Vec<_>>(),
-                        )?,
-                    )),
+                    _ => Ok(Some(Builtin::list(
+                        &reduced
+                            .into_iter()
+                            .map(|e| e.unwrap_or_else(|| Expression::Void.into()))
+                            .collect::<Vec<_>>(),
+                    )?)),
                 }
             }
         }
@@ -1053,13 +1094,13 @@ fn apply_form(
     }
 }
 
-fn apply_defined(
+fn apply_defined<F: Field>(
     b: &Defined,
     h: &Handle,
-    traversed_args: Vec<Node>,
-    ctx: &mut Scope,
+    traversed_args: Vec<Node<Expression<F>, F>>,
+    ctx: &mut Scope<F>,
     settings: &CompileSettings,
-) -> Result<Option<Node>> {
+) -> Result<Option<Node<Expression<F>, F>>> {
     let f_mangle = uniquify(format!("fn-{}", h));
     let b = b
         .get_specialization(
@@ -1094,13 +1135,14 @@ fn apply_defined(
     })
 }
 
-fn apply_builtin(
+fn apply_builtin<F: Field>(
     b: &Builtin,
-    traversed_args: Vec<Node>,
-    _ctx: &mut Scope,
+    traversed_args: Vec<Node<Expression<F>, F>>,
+    _ctx: &mut Scope<F>,
     _settings: &CompileSettings,
-) -> Result<Option<Node>> {
+) -> Result<Option<Node<Expression<F>, F>>> {
     b.validate_args(&traversed_args)?;
+    let traversed_args_t = traversed_args.iter().map(|a| a.t()).collect::<Vec<_>>();
 
     match b {
         Builtin::Len => {
@@ -1115,19 +1157,8 @@ fn apply_builtin(
                 bail!(RuntimeError::NotAnArray(traversed_args[0].e().clone()))
             }
         }
-    }
-}
-
-fn apply_intrinsic(
-    b: &Intrinsic,
-    traversed_args: Vec<Node>,
-    _settings: &CompileSettings,
-) -> Result<Option<Node>> {
-    b.validate_args(&traversed_args)?;
-    let traversed_args_t = traversed_args.iter().map(|a| a.t()).collect::<Vec<_>>();
-    match b {
         // Begin flattens & concatenate any list argument
-        Intrinsic::Begin => Ok(Some(
+        Builtin::Begin => Ok(Some(
             Node::from(Expression::List(traversed_args.into_iter().fold(
                 vec![],
                 |mut ax, mut e| match e.e_mut() {
@@ -1143,7 +1174,17 @@ fn apply_intrinsic(
             )))
             .with_type(super::max_type(&traversed_args_t)),
         )),
+    }
+}
 
+fn apply_intrinsic<F: Field>(
+    b: &Intrinsic,
+    traversed_args: Vec<Node<Expression<F>, F>>,
+    _settings: &CompileSettings,
+) -> Result<Option<Node<Expression<F>, F>>> {
+    b.validate_args(&traversed_args)?;
+    let traversed_args_t = traversed_args.iter().map(|a| a.t()).collect::<Vec<_>>();
+    match b {
         b @ (Intrinsic::IfZero | Intrinsic::IfNotZero) => {
             let r = b.call(&traversed_args)?;
             if traversed_args[0].may_overflow() {
@@ -1167,12 +1208,12 @@ fn apply_intrinsic(
     }
 }
 
-fn apply_function(
+fn apply_function<F: Field>(
     f: &Function,
-    args: Vec<Node>,
-    ctx: &mut Scope,
+    args: Vec<Node<Expression<F>, F>>,
+    ctx: &mut Scope<F>,
     settings: &CompileSettings,
-) -> Result<Option<Node>> {
+) -> Result<Option<Node<Expression<F>, F>>> {
     match &f.class {
         FunctionClass::UserDefined(d) => apply_defined(d, &f.handle, args, ctx, settings),
         FunctionClass::Intrinsic(i) => apply_intrinsic(i, args, settings),
@@ -1181,12 +1222,12 @@ fn apply_function(
     }
 }
 
-fn apply(
+fn apply<F: Field>(
     f: &Function,
     args: &[AstNode],
-    ctx: &mut Scope,
+    ctx: &mut Scope<F>,
     settings: &CompileSettings,
-) -> Result<Option<Node>> {
+) -> Result<Option<Node<Expression<F>, F>>> {
     match f.class {
         FunctionClass::Form(sf) => apply_form(sf, args, ctx, settings),
         FunctionClass::Intrinsic(_) | FunctionClass::UserDefined(_) | FunctionClass::Builtin(_) => {
@@ -1204,17 +1245,16 @@ fn apply(
     }
 }
 
-pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<Option<Node>> {
+pub fn reduce<F: Field>(
+    e: &AstNode,
+    ctx: &mut Scope<F>,
+    settings: &CompileSettings,
+) -> Result<Option<Node<Expression<F>, F>>> {
     match &e.class {
         Token::Keyword(_) | Token::Domain(_) => Ok(None),
         Token::Value(x) => Ok(Some(
-            Node::from(Expression::Const(x.clone(), Fr::from_str(&x.to_string()))).with_type(
-                if *x >= Zero::zero() && *x <= One::one() {
-                    Type::Scalar(Magma::Boolean)
-                } else {
-                    Type::Scalar(Magma::Integer)
-                },
-            ),
+            Node::from(Expression::Const(x.clone(), F::from_str(&x.to_string())))
+                .with_type(Type::Scalar(Magma::from(x))),
         )),
         Token::Symbol(name) => Ok(Some(
             ctx.resolve_symbol(name)
@@ -1357,11 +1397,11 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
     .with_context(|| make_ast_error(e))
 }
 
-fn reduce_toplevel(
+fn reduce_toplevel<F: Field>(
     e: &AstNode,
-    ctx: &mut Scope,
+    ctx: &mut Scope<F>,
     settings: &CompileSettings,
-) -> Result<Option<Constraint>> {
+) -> Result<Option<Constraint<Node<Expression<F>, F>, F>>> {
     match &e.class {
         Token::DefConstraint {
             name,
@@ -1460,7 +1500,7 @@ fn reduce_toplevel(
             Ok(Some(Constraint::InRange {
                 handle,
                 exp: reduce(e, ctx, settings)?.unwrap(),
-                max: Fr::from_str(&range.to_string())
+                max: F::from_str(&range.to_string())
                     .ok_or_else(|| anyhow!("`{range}` is not representable in Fr"))?,
             }))
         }
@@ -1571,12 +1611,12 @@ pub fn make_ast_error(exp: &AstNode) -> String {
     errors::parser::make_src_error(&exp.src, exp.lc)
 }
 
-pub fn pass(
+pub fn pass<F: Field>(
     ast: &Ast,
-    ctx: Scope,
+    ctx: Scope<F>,
     source_name: &str,
     settings: &CompileSettings,
-) -> Vec<Result<Constraint>> {
+) -> Vec<Result<Constraint<Node<Expression<F>, F>, F>>> {
     let mut module = ctx;
 
     ast.exprs
