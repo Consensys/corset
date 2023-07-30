@@ -44,6 +44,20 @@ class Trace {
   }
   {{/each}}
 
+  {{#each columns}}
+  public Trace set{{ this.updater }}At(final {{ this.tupe }} b, int i) {
+    {{ this.register }}.set(i, b);
+    return this;
+  }
+  {{/each}}
+
+  {{#each columns}}
+  public Trace set{{ this.updater }}Relative(final {{ this.tupe }} b, int i) {
+    {{ this.register }}.set({{ this.register }}.size() - 1 - i, b);
+    return this;
+  }
+  {{/each}}
+
   public void commitRow() {
     {{#each registers}}
     if (!filled.get({{ this.id }})) {

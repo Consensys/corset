@@ -25,6 +25,7 @@ struct BesuColumn {
     corset_name: String,
     java_name: String,
     appender: String,
+    updater: String,
     tupe: String,
     register: String,
     reg_id: usize,
@@ -68,6 +69,14 @@ fn handle_to_appender(h: &Handle) -> String {
         None => h.name.to_case(Case::Camel),
         Some(p) => format!("{}_{}", p.to_case(Case::Camel), h.name.to_case(Case::Camel)),
     }
+}
+
+fn handle_to_updater(h: &Handle) -> String {
+    match h.perspective.as_ref() {
+        None => h.name.to_case(Case::Camel),
+        Some(p) => format!("{}_{}", p.to_case(Case::Camel), h.name.to_case(Case::Camel)),
+    }
+    .to_case(Case::Pascal)
 }
 
 fn fill_file(file_path: PathBuf, contents: String) -> Result<(), Error> {
@@ -116,6 +125,7 @@ pub fn render(
                     corset_name: c.handle.name.to_string(),
                     java_name: c.handle.name.to_case(Case::Camel),
                     appender: handle_to_appender(&c.handle),
+                    updater: handle_to_updater(&c.handle),
                     tupe: magma_to_java_type(c.t).into(),
                     register,
                     reg_id: r,

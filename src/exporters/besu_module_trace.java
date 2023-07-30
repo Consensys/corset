@@ -15,4 +15,4 @@ package net.consensys.linea.zktracer.module.{{ module }};
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-public record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace, @JsonProperty("Stamp") int stamp) {}
+public record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace) {}
