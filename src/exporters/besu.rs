@@ -1,9 +1,9 @@
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::println;
 
 use crate::{
-    column::Register,
     compiler::{ConstraintSet, Kind, Magma},
     structs::Handle,
 };
@@ -11,6 +11,7 @@ use anyhow::*;
 use convert_case::{Case, Casing};
 use handlebars::Handlebars;
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use serde::Serialize;
 
 use super::reg_to_string;
@@ -22,6 +23,8 @@ const TRACE_MODULE_TEMPLATE: &str = include_str!("besu_module_trace.java");
 struct BesuColumn {
     corset_name: String,
     java_name: String,
+    appender: String,
+    updater: String,
     tupe: String,
     register: String,
     reg_id: usize,
@@ -60,7 +63,37 @@ fn magma_to_java_type(m: Magma) -> String {
     .to_string()
 }
 
-pub fn render(cs: &ConstraintSet, package: &str, output_filepath: Option<&String>) -> () {
+fn handle_to_appender(h: &Handle) -> String {
+    match h.perspective.as_ref() {
+        None => h.name.to_case(Case::Camel),
+        Some(p) => perspectivize_name(h, p),
+    }
+}
+
+fn handle_to_updater(h: &Handle) -> String {
+    match h.perspective.as_ref() {
+        None => h.name.to_case(Case::Camel),
+        Some(p) => perspectivize_name(h, p),
+    }
+    .to_case(Case::Pascal)
+}
+
+fn perspectivize_name(h: &Handle, p: &str) -> String {
+    format!("p{}{}", p.to_case(Case::Camel), h.name.to_case(Case::Camel))
+}
+
+fn fill_file(file_path: PathBuf, contents: String) -> Result<(), Error> {
+    // Create a new file with the provided name
+    let mut file = File::create(file_path)?;
+
+    // Write the provided contents into the file
+    file.write_all(contents.as_bytes())?;
+
+    // Return Ok if everything was successful
+    Ok(())
+}
+
+pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -> Result<()> {
     let registers = cs
         .columns
         .registers
@@ -89,6 +122,8 @@ pub fn render(cs: &ConstraintSet, package: &str, output_filepath: Option<&String
                 Some(BesuColumn {
                     corset_name: c.handle.name.to_string(),
                     java_name: c.handle.name.to_case(Case::Camel),
+                    appender: handle_to_appender(&c.handle),
+                    updater: handle_to_updater(&c.handle),
                     tupe: magma_to_java_type(c.t).into(),
                     register,
                     reg_id: r,
@@ -128,8 +163,11 @@ pub fn render(cs: &ConstraintSet, package: &str, output_filepath: Option<&String
         .render_template(TRACE_COLUMNS_TEMPLATE, &template_data)
         .expect("error rendering trace columns java template for Besu");
 
-    match output_filepath {
+    match output_path {
         Some(f) => {
+            if !Path::new(f).is_dir() {
+                bail!("{} is not a directory", f.bold().yellow());
+            }
             let trace_module_java_filepath = {
                 let m = format!("{}{}", template_data.module_prefix, "Trace.java");
                 Path::new(f).join(m)
@@ -137,28 +175,17 @@ pub fn render(cs: &ConstraintSet, package: &str, output_filepath: Option<&String
 
             let trace_columns_java_filepath = Path::new(f).join("Trace.java");
 
-            create_file(trace_module_java_filepath, trace_module_render)
+            fill_file(trace_module_java_filepath, trace_module_render)
                 .expect("error creating trace module java file for Besu");
 
-            create_file(trace_columns_java_filepath, trace_columns_render)
+            fill_file(trace_columns_java_filepath, trace_columns_render)
                 .expect("error creating trace columns java file for Besu");
         }
         None => {
-            println!(
-                "{}\n=========================================================================\n{}",
-                trace_module_render, trace_columns_render
-            );
+            println!("{trace_module_render}");
+            println!("=========================================================================");
+            println!("{trace_columns_render}");
         }
     }
-
-    pub fn create_file(file_path: PathBuf, contents: String) -> Result<(), Error> {
-        // Create a new file with the provided name
-        let mut file = File::create(file_path)?;
-
-        // Write the provided contents into the file
-        file.write_all(contents.as_bytes())?;
-
-        // Return Ok if everything was successful
-        Ok(())
-    }
+    Ok(())
 }

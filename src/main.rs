@@ -371,9 +371,9 @@ fn main() -> Result<()> {
         #[cfg(feature = "exporters")]
         Commands::Besu {
             package,
-            output_file_path: filename,
+            output_file_path: output_path,
         } => {
-            exporters::besu::render(&constraints, &package, filename.as_ref());
+            exporters::besu::render(&constraints, &package, output_path.as_ref())?;
         }
         #[cfg(feature = "conflater")]
         Commands::Conflater { filename } => {
