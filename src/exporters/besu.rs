@@ -78,7 +78,7 @@ fn handle_to_updater(h: &Handle) -> String {
     .to_case(Case::Pascal)
 }
 
-fn perspectivize_name(h: &Handle, p: &String) -> String {
+fn perspectivize_name(h: &Handle, p: &str) -> String {
     format!("p{}{}", p.to_case(Case::Camel), h.name.to_case(Case::Camel))
 }
 
