@@ -29,9 +29,9 @@ import java.util.List;
  * Please DO NOT ATTEMPT TO MODIFY this code directly.
  */
 record Trace(
-        {{#each registers}}
-        @JsonProperty("{{ this.corset_name }}") List<{{ this.tupe }}> {{ this.java_name }}{{#unless @last}},{{/unless}}{{#if @last}}) { {{/if}}
-        {{/each}}
+  {{#each registers}}
+  @JsonProperty("{{ this.corset_name }}") List<{{ this.tupe }}> {{ this.java_name }}{{#unless @last}},{{/unless}}{{#if @last}}) { {{/if}}
+  {{/each}}
   {{#each constants}}
   public static final BigInteger {{ this.name }} = new BigInteger("{{ this.value }}");
   {{/each}}
@@ -88,7 +88,7 @@ record Trace(
     {{/unless}}
     {{/each}}
 
-    private void validateRow() {
+    public void validateRow() {
       {{#each registers}}
       if (!filled.get({{ this.id }})) {
         throw new IllegalStateException("{{ this.corset_name }} has not been filled");
