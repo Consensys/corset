@@ -13,6 +13,8 @@
 
 package net.consensys.linea.zktracer.module.{{ module }};
 
+import java.math.BigInteger;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -20,4 +22,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * Any modifications to this code may be overwritten and could lead to unexpected behavior.
  * Please DO NOT ATTEMPT TO MODIFY this code directly.
  */
-public record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace) {}
+record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace) {
+  {{#each constants}}
+  static final BigInteger {{ this.name }} = new BigInteger("{{ this.value }}");
+  {{/each}}
+}

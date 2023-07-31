@@ -32,15 +32,11 @@ record Trace(
         {{#each registers}}
         @JsonProperty("{{ this.corset_name }}") List<{{ this.tupe }}> {{ this.java_name }}{{#unless @last}},{{/unless}}{{#if @last}}) { {{/if}}
         {{/each}}
-  {{#each constants}}
-  public static final BigInteger {{ this.name }} = new BigInteger("{{ this.value }}");
-  {{/each}}
-
-  public static TraceBuilder builder() {
+  static TraceBuilder builder() {
     return new TraceBuilder();
   }
 
-  public static class TraceBuilder {
+  static class TraceBuilder {
     private final BitSet filled = new BitSet();
 
     {{#each registers}}
@@ -50,7 +46,7 @@ record Trace(
     private TraceBuilder() {}
 
     {{#each columns}}
-    public TraceBuilder {{ this.appender }}(final {{ this.tupe }} b) {
+    TraceBuilder {{ this.appender }}(final {{ this.tupe }} b) {
       if (filled.get({{ this.reg_id }})) {
         throw new IllegalStateException("{{ this.corset_name }} already set");
       } else {
@@ -67,7 +63,7 @@ record Trace(
     {{/each}}
 
     {{#each columns}}
-    public TraceBuilder set{{ this.updater }}At(final {{ this.tupe }} b, int i) {
+    TraceBuilder set{{ this.updater }}At(final {{ this.tupe }} b, int i) {
       {{ this.register }}.set(i, b);
 
       return this;
@@ -78,7 +74,7 @@ record Trace(
     {{/each}}
 
     {{#each columns}}
-    public TraceBuilder set{{ this.updater }}Relative(final {{ this.tupe }} b, int i) {
+    TraceBuilder set{{ this.updater }}Relative(final {{ this.tupe }} b, int i) {
       {{ this.register }}.set({{ this.register }}.size() - 1 - i, b);
 
       return this;
@@ -88,20 +84,19 @@ record Trace(
     {{/unless}}
     {{/each}}
 
-    private void validateRow() {
+    TraceBuilder validateRow() {
       {{#each registers}}
       if (!filled.get({{ this.id }})) {
         throw new IllegalStateException("{{ this.corset_name }} has not been filled");
       }
-      {{#unless @last}}
 
-      {{/unless}}
       {{/each}}
+      filled.clear();
+
+      return this;
     }
 
-    public Trace build() {
-      validateRow();
-
+    Trace build() {
       return new Trace(
         {{#each registers}}
         {{ this.java_name }}{{#unless @last}},{{/unless}}{{#if @last}});{{/if}}
