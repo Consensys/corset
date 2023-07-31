@@ -15,4 +15,9 @@ package net.consensys.linea.zktracer.module.{{ module }};
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+/**
+ * WARNING: This code is generated automatically.
+ * Any modifications to this code may be overwritten and could lead to unexpected behavior.
+ * Please DO NOT ATTEMPT TO MODIFY this code directly.
+ */
 public record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace) {}

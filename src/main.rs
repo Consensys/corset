@@ -102,9 +102,6 @@ enum Commands {
 
         #[arg(short = 'o', long = "out", help = "where to render the columns")]
         output_file_path: Option<String>,
-
-        #[arg(short = 'r')]
-        regs: bool,
     },
     #[cfg(feature = "conflater")]
     /// Export columns in a format usable by the trace conflater
@@ -375,9 +372,8 @@ fn main() -> Result<()> {
         Commands::Besu {
             package,
             output_file_path: output_path,
-            regs,
         } => {
-            exporters::besu::render(&constraints, &package, output_path.as_ref(), regs)?;
+            exporters::besu::render(&constraints, &package, output_path.as_ref())?;
         }
         #[cfg(feature = "conflater")]
         Commands::Conflater { filename } => {

@@ -17,7 +17,6 @@ use serde::Serialize;
 use super::reg_to_string;
 
 const TRACE_COLUMNS_TEMPLATE: &str = include_str!("besu_trace_columns.java");
-const TRACE_COLUMNS_REGS_TEMPLATE: &str = include_str!("besu_trace_columns_with_regs.java");
 const TRACE_MODULE_TEMPLATE: &str = include_str!("besu_module_trace.java");
 
 #[derive(Serialize)]
@@ -67,16 +66,20 @@ fn magma_to_java_type(m: Magma) -> String {
 fn handle_to_appender(h: &Handle) -> String {
     match h.perspective.as_ref() {
         None => h.name.to_case(Case::Camel),
-        Some(p) => format!("{}_{}", p.to_case(Case::Camel), h.name.to_case(Case::Camel)),
+        Some(p) => perspectivize_name(h, p),
     }
 }
 
 fn handle_to_updater(h: &Handle) -> String {
     match h.perspective.as_ref() {
         None => h.name.to_case(Case::Camel),
-        Some(p) => format!("{}_{}", p.to_case(Case::Camel), h.name.to_case(Case::Camel)),
+        Some(p) => perspectivize_name(h, p),
     }
     .to_case(Case::Pascal)
+}
+
+fn perspectivize_name(h: &Handle, p: &String) -> String {
+    format!("p{}{}", p.to_case(Case::Camel), h.name.to_case(Case::Camel))
 }
 
 fn fill_file(file_path: PathBuf, contents: String) -> Result<(), Error> {
@@ -90,12 +93,7 @@ fn fill_file(file_path: PathBuf, contents: String) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn render(
-    cs: &ConstraintSet,
-    package: &str,
-    output_path: Option<&String>,
-    regs: bool,
-) -> Result<()> {
+pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -> Result<()> {
     let registers = cs
         .columns
         .registers
@@ -162,14 +160,7 @@ pub fn render(
         .expect("error rendering trace module java template for Besu");
 
     let trace_columns_render = handlebars
-        .render_template(
-            if regs {
-                TRACE_COLUMNS_REGS_TEMPLATE
-            } else {
-                TRACE_COLUMNS_TEMPLATE
-            },
-            &template_data,
-        )
+        .render_template(TRACE_COLUMNS_TEMPLATE, &template_data)
         .expect("error rendering trace columns java template for Besu");
 
     match output_path {
