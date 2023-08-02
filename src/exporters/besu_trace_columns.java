@@ -97,10 +97,14 @@ record Trace(
 
       {{/unless}}
       {{/each}}
+
+      filled.clear();
     }
 
     public Trace build() {
-      validateRow();
+      if (!filled.is_empty()) {
+        throw new IllegalStateException("can not build trace with non-validated row");
+      }
 
       return new Trace(
         {{#each registers}}
