@@ -29,9 +29,9 @@ import java.util.List;
  * Please DO NOT ATTEMPT TO MODIFY this code directly.
  */
 record Trace(
-        {{#each registers}}
-        @JsonProperty("{{ this.corset_name }}") List<{{ this.tupe }}> {{ this.java_name }}{{#unless @last}},{{/unless}}{{#if @last}}) { {{/if}}
-        {{/each}}
+    {{#each registers}}
+    @JsonProperty("{{ this.corset_name }}") List<{{ this.tupe }}> {{ this.java_name }}{{#unless @last}},{{/unless}}{{#if @last}}) { {{/if}}
+    {{/each}}
   static TraceBuilder builder() {
     return new TraceBuilder();
   }
