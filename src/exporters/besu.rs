@@ -136,7 +136,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                 None
             }
         })
-        .sorted_by(|a, b| a.corset_name.cmp(&b.corset_name))
+        .sorted_by(|a, b| a.appender.cmp(&b.appender))
         .collect::<Vec<_>>();
 
     let constants = cs

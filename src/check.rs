@@ -30,8 +30,10 @@ pub struct DebugSettings {
     continue_on_error: bool,
     /// whether to report computation details on failing constraints
     report: bool,
-    /// how many lines to show left and right of the failure point
-    context_span: isize,
+    /// how many lines to show left of the failure point
+    context_span_before: isize,
+    /// how many lines to show right of the failure point
+    context_span_after: isize,
     /// whether to report all the module columns in a failing constraint or only the involved ones
     full_trace: bool,
     /// whether to display the original source code along the compiled form
@@ -44,7 +46,8 @@ impl DebugSettings {
             dim: false,
             continue_on_error: false,
             report: false,
-            context_span: 2,
+            context_span_before: 2,
+            context_span_after: 2,
             full_trace: false,
             src: false,
         }
@@ -72,8 +75,29 @@ impl DebugSettings {
     }
     pub fn context_span(self, x: isize) -> Self {
         Self {
-            context_span: x,
+            context_span_before: x,
+            context_span_after: x,
             ..self
+        }
+    }
+    pub fn and_context_span_before(self, x: Option<isize>) -> Self {
+        if let Some(before) = x {
+            Self {
+                context_span_before: before,
+                ..self
+            }
+        } else {
+            self
+        }
+    }
+    pub fn and_context_span_after(self, x: Option<isize>) -> Self {
+        if let Some(after) = x {
+            Self {
+                context_span_after: after,
+                ..self
+            }
+        } else {
+            self
         }
     }
     pub fn full_trace(self, x: bool) -> Self {
@@ -185,14 +209,14 @@ fn fail(
 
     let (eval_columns_range, idx_highlight) = if wrap {
         (
-            (i - settings.context_span)..=i + settings.context_span,
+            (i - settings.context_span_before)..=i + settings.context_span_after,
             // - 1 to account for the title column
-            (i - settings.context_span) - 1,
+            (i - settings.context_span_before) - 1,
         )
     } else {
         (
-            (i - settings.context_span).max(0)..=i + settings.context_span,
-            (i - settings.context_span).max(0) - 1,
+            (i - settings.context_span_before).max(0)..=i + settings.context_span_after,
+            (i - settings.context_span_before).max(0) - 1,
         )
     };
     for j in eval_columns_range {
@@ -503,7 +527,7 @@ pub fn check(
                                 if let Err(trace) = check_constraint(cs, e, domain, name, settings)
                                 {
                                     if settings.report {
-                                        error!(
+                                        println!(
                                             "{} failed:\n{}\n",
                                             name.to_string().red().bold(),
                                             trace
@@ -517,7 +541,7 @@ pub fn check(
                         _ => {
                             if let Err(trace) = check_constraint(cs, expr, domain, name, settings) {
                                 if settings.report {
-                                    error!(
+                                    println!(
                                         "{} failed:\n{}\n",
                                         name.to_string().red().bold(),
                                         trace
@@ -537,7 +561,7 @@ pub fn check(
                 } => {
                     if let Err(trace) = check_plookup(cs, parents, children) {
                         if settings.report {
-                            error!("{} failed:\n{:?}\n", name, trace);
+                            println!("{} failed:\n{:?}\n", name, trace);
                         }
                         Some(name.to_owned())
                     } else {
@@ -556,7 +580,7 @@ pub fn check(
                 Constraint::InRange { handle, exp, max } => {
                     if let Err(trace) = check_inrange(handle, exp, &cs.columns, max) {
                         if settings.report {
-                            error!("{} failed:\n{:?}\n", handle, trace);
+                            println!("{} failed:\n{:?}\n", handle, trace);
                         }
                         Some(handle.to_owned())
                     } else {

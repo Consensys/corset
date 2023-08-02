@@ -165,30 +165,6 @@ enum Commands {
         expand: bool,
 
         #[arg(
-            long = "no-abort",
-            help = "continue checking a constraint after it met an error"
-        )]
-        continue_on_error: bool,
-
-        #[arg(
-            long = "debug-unclutter",
-            help = "only display debug annotations for non-zero expressions in failing constraint"
-        )]
-        unclutter: bool,
-
-        #[arg(
-            long = "debug-dim",
-            help = "when reporting on failing constraints, dim expressions reducing to 0"
-        )]
-        dim: bool,
-
-        #[arg(
-            long = "debug-src",
-            help = "display the original source code along its compiled form"
-        )]
-        with_src: bool,
-
-        #[arg(
             long = "only",
             help = "only check these constraints",
             value_delimiter = ','
@@ -198,8 +174,47 @@ enum Commands {
         #[arg(long = "skip", help = "skip these constraints", value_delimiter = ',')]
         skip: Vec<String>,
 
+        #[arg(
+            long = "no-abort",
+            help = "continue checking a constraint after it met an error"
+        )]
+        continue_on_error: bool,
+
+        #[arg(short = 'r', long = "report", help = "detail the failing constraint")]
+        report: bool,
+
+        #[arg(
+            short = 'u',
+            long = "report-unclutter",
+            help = "only display debug annotations for non-zero expressions in failing constraint",
+            requires = "report"
+        )]
+        unclutter: bool,
+
+        #[arg(
+            short = 'd',
+            long = "report-dim",
+            help = "when reporting on failing constraints, dim expressions reducing to 0",
+            requires = "report"
+        )]
+        dim: bool,
+
+        #[arg(
+            short = 's',
+            long = "report-src",
+            help = "display the original source code along its compiled form",
+            requires = "report"
+        )]
+        with_src: bool,
+
         #[arg(short = 'S', long = "trace-span", help = "", default_value_t = 2)]
         trace_span: isize,
+
+        #[arg(short = 'B', long = "trace-span-before", help = "")]
+        trace_span_before: Option<isize>,
+
+        #[arg(short = 'A', long = "trace-span-after", help = "")]
+        trace_span_after: Option<isize>,
     },
     /// Display the compiled the constraint system
     Debug {
@@ -506,14 +521,17 @@ fn main() -> Result<()> {
         Commands::Check {
             tracefile,
             full_trace,
-            trace_span,
             expand,
+            report,
             only,
             skip,
             continue_on_error,
             unclutter,
             dim,
             with_src,
+            trace_span,
+            trace_span_before,
+            trace_span_after,
         } => {
             if utils::is_file_empty(&tracefile)? {
                 warn!("`{}` is empty, exiting", tracefile);
@@ -548,9 +566,11 @@ fn main() -> Result<()> {
                     .dim(dim)
                     .src(with_src)
                     .continue_on_error(continue_on_error)
-                    .report(args.verbose.log_level_filter() >= log::Level::Warn)
+                    .report(report)
                     .full_trace(full_trace)
-                    .context_span(trace_span),
+                    .context_span(trace_span)
+                    .and_context_span_before(trace_span_before)
+                    .and_context_span_after(trace_span_after),
             )
             .with_context(|| format!("while checking {}", tracefile.bright_white().bold()))?;
             info!("{}: SUCCESS", tracefile)
