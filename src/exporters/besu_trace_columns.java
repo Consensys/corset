@@ -46,6 +46,14 @@ record Trace(
 
     private TraceBuilder() {}
 
+    int size() {
+      if (!filled.isEmpty()) {
+        throw new RuntimeException("Cannot measure a trace with a non-validated row.");
+      }
+
+      return this.{{ registers.0.java_name }}.size();
+    }
+
     {{#each columns}}
     TraceBuilder {{ this.appender }}(final {{ this.tupe }} b) {
       if (filled.get({{ this.reg_id }})) {
