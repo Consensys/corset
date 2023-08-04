@@ -35,6 +35,7 @@ struct BesuRegister {
     java_name: String,
     tupe: String,
     id: usize,
+    zero_value: String,
 }
 #[derive(Serialize)]
 struct BesuConstant {
@@ -57,6 +58,19 @@ fn magma_to_java_type(m: Magma) -> String {
         Magma::Nibble => "UnsignedByte",
         Magma::Byte => "UnsignedByte",
         Magma::Integer => "BigInteger",
+        Magma::Any => unreachable!(),
+        Magma::Loobean => unreachable!(),
+    }
+    .to_string()
+}
+
+fn magma_to_java_zero(m: Magma) -> String {
+    match m {
+        Magma::None => unreachable!(),
+        Magma::Boolean => "false",
+        Magma::Nibble => "UnsignedByte.of(0)",
+        Magma::Byte => "UnsignedByte.of(0)",
+        Magma::Integer => "BigInteger.ZERO",
         Magma::Any => unreachable!(),
         Magma::Loobean => unreachable!(),
     }
@@ -111,6 +125,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                 java_name,
                 tupe: magma_to_java_type(r.magma),
                 id: i,
+                zero_value: magma_to_java_zero(r.magma),
             }
         })
         .sorted_by_key(|f| f.java_name.clone())

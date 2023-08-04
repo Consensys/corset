@@ -106,6 +106,17 @@ record Trace(
       return this;
     }
 
+    TraceBuilder fillAndValidateRow() {
+      {{#each registers}}
+      if (!filled.get({{ this.id }})) {
+          {{ this.java_name }}.add({{ this.zero_value }});
+          this.filled.set({{ this.id }});
+      }
+      {{/each}}
+
+      return this.validateRow();
+    }
+
     public Trace build() {
       if (!filled.isEmpty()) {
         throw new IllegalStateException("Cannot build trace with a non-validated row.");
