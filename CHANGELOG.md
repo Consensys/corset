@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.0.2] - 2023-08-10
+
+### Bug Fixes
+
+- Erroneous implementation of perspective scopes
+- Erroneous parsing of column type annotations
+
+### Features
+
+- Add warning on potentially overflowing `if` conditions
+- `for` can iterate over ranges, compile-time values, or arrays
+- Change besu java format trace generation format
+- Unclutch debug report from log level, add trace span options
+- Add a `size` method to zkBesu traces
+- `fillRemaining` zero-fills empty columns in zkBesu
+
+### Miscellaneous Tasks
+
+- Comments & re-organization
+
 ## [8.0.1] - 2023-07-26
 
 ### Bug Fixes
@@ -18,6 +38,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous Tasks
 
 - Prune old code
+- Release corset version 8.0.1
 
 ### Refactor
 
