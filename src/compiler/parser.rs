@@ -621,18 +621,6 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
                 Token::Keyword(ref kw) => {
                     // e.g. (A ... :integer ...)
                     match kw.to_lowercase().as_str() {
-                        ":boolean" | ":bool" | ":nibble" | ":byte" | ":integer" | ":natural" => {
-                            attributes.t.set(kw.as_str().try_into()?).map_err(|_| {
-                                anyhow!(
-                                    "trying to redefine column {} of type {:?} as {}",
-                                    attributes.name,
-                                    attributes.t.get().unwrap(),
-                                    kw
-                                )
-                            })?;
-
-                            ColumnParser::Begin
-                        }
                         // not really used for now.
                         ":comp" => ColumnParser::Computation,
                         // e.g. (A :array {1 3 5}) or (A :array [5])
@@ -641,9 +629,20 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
                         ":padding" => ColumnParser::PaddingValue,
                         // how to display the column values in debug
                         ":display" => ColumnParser::Base,
-                        _ => {
-                            bail!("unexpected keyword found: {}", kw)
-                        }
+                        _ => match kw.as_str().try_into() {
+                            Ok(m) => {
+                                attributes.t.set(m).map_err(|_| {
+                                    anyhow!(
+                                        "trying to redefine column {} of type {:?} as {}",
+                                        attributes.name,
+                                        attributes.t.get().unwrap(),
+                                        kw
+                                    )
+                                })?;
+                                ColumnParser::Begin
+                            }
+                            Err(_) => bail!("unexpected keyword found: {}", kw),
+                        },
                     }
                 }
                 // A range alone treated as if it were preceded by :array

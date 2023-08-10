@@ -379,18 +379,8 @@ impl Node {
                 }
             },
             Expression::Const(_, _) => false,
-            Expression::Column {
-                handle,
-                kind,
-                padding_value,
-                base,
-                fetched,
-            } => false,
-            Expression::ArrayColumn {
-                handle,
-                domain,
-                base,
-            } => false,
+            Expression::Column { .. } => false,
+            Expression::ArrayColumn { .. } => false,
             Expression::List(ns) => ns.iter().any(Node::may_overflow),
             Expression::Void => false,
         }
