@@ -209,6 +209,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
         Token::DefunAlias(from, to) => ctx
             .insert_funalias(from, to)
             .with_context(|| anyhow!("defining {} -> {}", from, to)),
+        Token::BlockComment(_) | Token::InlineComment(_) => unreachable!(),
     }
 }
 

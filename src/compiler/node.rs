@@ -801,7 +801,7 @@ impl Node {
                         }
                         tty.write(")".color(c).to_string());
                     }
-                    tty.buffer_end(format!(
+                    tty.annotate(format!(
                         " → {}",
                         v.pretty_with_base(Base::Hex).color(c_v).bold()
                     ));
@@ -825,7 +825,7 @@ impl Node {
                     };
 
                     tty.write(format!("{}", h));
-                    tty.buffer_end(format!(
+                    tty.annotate(format!(
                         " → {}",
                         v.pretty_with_base(Base::Hex).color(c).bold()
                     ));
@@ -870,7 +870,7 @@ impl Node {
             };
         }
 
-        let mut tty = Tty::new();
+        let mut tty = Tty::new().with_guides();
         let faulty = f(self).unwrap_or_default();
         _debug(self, &mut tty, f, &faulty, unclutter, dim, false, true, src);
         tty.page_feed()

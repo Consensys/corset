@@ -2,8 +2,12 @@
 #[macro_use]
 #[cfg(feature = "parser")]
 extern crate pest_derive;
+use anyhow::*;
+use compiler::{Ast, ConstraintSet};
+use either::Either;
 use is_terminal::IsTerminal;
 use log::*;
+use owo_colors::OwoColorize;
 use std::{io::Write, path::Path};
 
 use anyhow::{anyhow, Context, Result};
@@ -16,6 +20,7 @@ mod compute;
 mod dag;
 mod errors;
 mod exporters;
+mod formatter;
 mod import;
 mod pretty;
 mod structs;
@@ -273,6 +278,15 @@ enum Commands {
         )]
         skip: Vec<String>,
     },
+    /// Format the given source in an idiomatic way
+    Format {
+        #[arg(
+            short = 'i',
+            long = "in-place",
+            help = "format the given file in-place"
+        )]
+        inplace: bool,
+    },
     /// Given a set of constraints, indefinitely check the traces from an SQL table
     #[cfg(feature = "postgres")]
     CheckLoop {
@@ -316,10 +330,90 @@ enum Commands {
     },
 }
 
+struct ConstraintSetBuilder {
+    debug: bool,
+    no_stdlib: bool,
+    source: Either<Vec<(String, String)>, ConstraintSet>,
+}
+impl ConstraintSetBuilder {
+    fn from_sources(no_stdlib: bool, debug: bool) -> ConstraintSetBuilder {
+        ConstraintSetBuilder {
+            debug,
+            no_stdlib,
+            source: Either::Left(Vec::new()),
+        }
+    }
+
+    fn from_bin(filename: &str) -> Result<ConstraintSetBuilder> {
+        Ok(ConstraintSetBuilder {
+            debug: false,
+            no_stdlib: false,
+            source: Either::Right(
+                ron::from_str(
+                    &std::fs::read_to_string(filename)
+                        .with_context(|| anyhow!("while reading `{}`", filename))?,
+                )
+                .with_context(|| anyhow!("while parsing `{}`", filename))?,
+            ),
+        })
+    }
+
+    fn add_source(&mut self, src: &str) -> Result<()> {
+        if let Either::Left(ref mut sources) = self.source {
+            if std::path::Path::new(src).is_file() {
+                sources.push((
+                    src.to_string(),
+                    std::fs::read_to_string(src)
+                        .with_context(|| anyhow!("reading {}", src.yellow().bold()))?,
+                ));
+            } else {
+                sources.push(("Immediate expression".to_string(), src.into()));
+            }
+            Ok(())
+        } else {
+            bail!("unable to push source to ConstraintSetBuilder built from compiled ConstraintSet")
+        }
+    }
+
+    fn prepare_sources(&self, sources: &[(String, String)]) -> Vec<(String, String)> {
+        let mut sources = sources.to_vec();
+        if !self.no_stdlib {
+            sources.insert(
+                0,
+                ("stdlib".to_string(), include_str!("stdlib.lisp").to_owned()),
+            );
+        }
+        sources
+    }
+
+    fn to_simple_ast(&self) -> Result<Vec<(String, Ast)>> {
+        match self.source.as_ref() {
+            Either::Left(sources) => compiler::parse_simple_ast(&self.prepare_sources(sources)),
+            Either::Right(_) => bail!("unable to retrieve AST from compiled CponstraintSet"),
+        }
+    }
+
+    fn to_ast(&self) -> Result<Vec<(String, Ast)>> {
+        match self.source.as_ref() {
+            Either::Left(sources) => compiler::parse_ast(&self.prepare_sources(sources)),
+            Either::Right(_) => bail!("unable to retrieve AST from compiled CponstraintSet"),
+        }
+    }
+
+    fn to_constraint_set(&self) -> Result<ConstraintSet> {
+        match self.source.as_ref() {
+            Either::Left(sources) => compiler::make(
+                &self.prepare_sources(sources),
+                &compiler::CompileSettings { debug: self.debug },
+            )
+            .map(|r| r.1),
+            Either::Right(cs) => Ok(cs.clone()),
+        }
+    }
+}
+
 #[cfg(feature = "cli")]
 fn main() -> Result<()> {
-    use owo_colors::OwoColorize;
-
     let args = Args::parse();
     buche::new()
         .verbosity(args.verbose.log_level_filter())
@@ -332,43 +426,40 @@ fn main() -> Result<()> {
         .build_global()
         .unwrap();
 
-    let (ast, mut constraints): (Vec<compiler::Ast>, _) = if args.source.len() == 1
+    let mut builder = if matches!(args.command, Commands::Format { .. }) {
+        if args.source.len() != 1 {
+            bail!("can only format one file at a time")
+        } else if args.source.len() == 1
+            && Path::new(&args.source[0])
+                .extension()
+                .map(|e| e == "bin")
+                .unwrap_or(false)
+        {
+            bail!("expected Corset source file, found compiled constraint set")
+        } else {
+            let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
+            for f in args.source.iter() {
+                r.add_source(f)?;
+            }
+            r
+        }
+    } else if args.source.len() == 1
         && Path::new(&args.source[0])
             .extension()
             .map(|e| e == "bin")
             .unwrap_or(false)
     {
         info!("Loading `{}`", &args.source[0]);
-        (
-            Default::default(),
-            ron::from_str(
-                &std::fs::read_to_string(&args.source[0])
-                    .with_context(|| anyhow!("while reading `{}`", &args.source[0]))?,
-            )
-            .with_context(|| anyhow!("while parsing `{}`", &args.source[0]))?,
-        )
+        ConstraintSetBuilder::from_bin(&args.source[0])?
     } else {
         #[cfg(feature = "parser")]
         {
             info!("Parsing Corset source files...");
-            let mut inputs = vec![];
-            if !args.no_stdlib {
-                inputs.push(("stdlib", include_str!("stdlib.lisp").to_owned()));
-            }
+            let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
             for f in args.source.iter() {
-                if std::path::Path::new(&f).is_file() {
-                    inputs.push((
-                        f.as_str(),
-                        std::fs::read_to_string(f).with_context(|| anyhow!("reading `{}`", f))?,
-                    ));
-                } else {
-                    inputs.push(("Immediate expression", f.into()));
-                }
+                r.add_source(f);
             }
-            compiler::make(
-                inputs.as_slice(),
-                &compiler::CompileSettings { debug: args.debug },
-            )?
+            r
         }
 
         #[cfg(not(feature = "parser"))]
@@ -376,30 +467,34 @@ fn main() -> Result<()> {
             panic!("Compile Corset with the `parser` feature to enable the compiler")
         }
     };
-    transformer::precompute(&mut constraints);
 
     match args.command {
         #[cfg(feature = "exporters")]
         Commands::Go { package, filename } => {
-            exporters::zkgeth::render(&constraints, &package, filename.as_ref())?;
+            exporters::zkgeth::render(&builder.to_constraint_set()?, &package, filename.as_ref())?;
         }
         #[cfg(feature = "exporters")]
         Commands::Besu {
             package,
             output_file_path: output_path,
         } => {
-            exporters::besu::render(&constraints, &package, output_path.as_ref())?;
+            exporters::besu::render(
+                &builder.to_constraint_set()?,
+                &package,
+                output_path.as_ref(),
+            )?;
         }
         #[cfg(feature = "conflater")]
         Commands::Conflater { filename } => {
-            exporters::conflater::render(&constraints, filename.as_ref())?;
+            exporters::conflater::render(&builder.to_constraint_set(), filename.as_ref())?;
         }
         #[cfg(feature = "exporters")]
         Commands::WizardIOP {
             out_filename,
             package,
         } => {
-            transformer::validate_nhood(&mut constraints)?;
+            let mut constraints = builder.to_constraint_set()?;
+            // transformer::validate_nhood(&mut constraints)?;
             transformer::lower_shifts(&mut constraints);
             transformer::expand_ifs(&mut constraints);
             transformer::expand_constraints(&mut constraints)?;
@@ -412,13 +507,22 @@ fn main() -> Result<()> {
         Commands::Latex {
             constraints_filename,
         } => {
-            exporters::latex::render(ast.as_slice(), constraints_filename)?;
+            exporters::latex::render(
+                builder
+                    .to_ast()?
+                    .into_iter()
+                    .map(|x| x.1)
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+                constraints_filename,
+            )?;
         }
         Commands::Compute {
             tracefile,
             outfile,
             fail_on_missing,
         } => {
+            let mut constraints = builder.to_constraint_set()?;
             transformer::validate_nhood(&mut constraints)?;
             transformer::lower_shifts(&mut constraints);
             transformer::expand_ifs(&mut constraints);
@@ -450,6 +554,7 @@ fn main() -> Result<()> {
             only,
             skip,
         } => {
+            let mut constraints = builder.to_constraint_set()?;
             transformer::validate_nhood(&mut constraints)
                 .with_context(|| anyhow!("while creating nhood constraints"))?;
             transformer::lower_shifts(&mut constraints);
@@ -538,6 +643,7 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
+            let mut constraints = builder.to_constraint_set()?;
             if expand {
                 transformer::validate_nhood(&mut constraints)
                     .with_context(|| anyhow!("while creating nhood constraints"))?;
@@ -587,6 +693,7 @@ fn main() -> Result<()> {
             only,
             skip,
         } => {
+            let mut constraints = builder.to_constraint_set()?;
             if expand.contains(&"nhood".into()) || expand_all {
                 transformer::validate_nhood(&mut constraints)
                     .with_context(|| anyhow!("while creating nhood constraints"))?;
@@ -627,7 +734,20 @@ fn main() -> Result<()> {
                 &skip,
             )?;
         }
+        Commands::Format { inplace } => {
+            builder.no_stdlib = true;
+            let asts = builder.to_simple_ast()?;
+            for (filename, ast) in asts.iter() {
+                let formatted = ast.format();
+                if inplace {
+                    std::fs::File::create(filename)?.write_all(formatted.as_bytes())?;
+                } else {
+                    println!("{}", formatted);
+                }
+            }
+        }
         Commands::Compile { outfile, pretty } => {
+            let mut constraints = builder.to_constraint_set()?;
             std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?
                 .write_all(

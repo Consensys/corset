@@ -1,0 +1,18 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = { ";" ~ (!NEWLINE ~ ANY)* }
+
+corset = { SOI ~ expr* ~ EOI }
+
+sexpr = { "(" ~ (expr | keyword | range)* ~ ")" }
+expr = { integer | symbol | sexpr | nth }
+
+nth = { "[" ~ symbol ~ expr ~ "]" }
+
+range = _{ immediate_range | interval }
+immediate_range = { "{" ~ integer+ ~ "}" }
+interval = { "[" ~ (natural ~ (":" ~ natural ~ (":" ~ natural)?)?) ~ "]" }
+
+integer = @{ "-"? ~ natural }
+natural = @{ "0x" ~ ASCII_HEX_DIGIT+ | "0b" ~ ASCII_BIN_DIGIT+ | ASCII_DIGIT+ }
+symbol = @{ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" | "," | "." | "'" | "/" | "!")+ }
+keyword = @{ ":" ~ (LETTER | NUMBER | SYMBOL | "-" | "*" | "=" | "_" )+  }

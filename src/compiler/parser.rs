@@ -78,6 +78,15 @@ impl AstNode {
     pub fn is_symbol(&self) -> bool {
         matches!(self.class, Token::Symbol(_))
     }
+    pub fn is_comment(&self) -> bool {
+        matches!(self.class, Token::BlockComment(_) | Token::InlineComment(_))
+    }
+    pub fn is_block_comment(&self) -> bool {
+        matches!(self.class, Token::BlockComment(_))
+    }
+    pub fn is_inline_comment(&self) -> bool {
+        matches!(self.class, Token::InlineComment(_))
+    }
 }
 impl Debug for AstNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -142,6 +151,10 @@ pub enum Token {
     Value(BigInt),
     /// a symbol referencing another element of the tree
     Symbol(String),
+    /// a comment
+    BlockComment(String),
+    /// a comment
+    InlineComment(String),
     /// obtained by the syntax `[symbol index]` in the lisp
     IndexedSymbol {
         name: String,
@@ -256,9 +269,7 @@ impl Token {
     pub fn depth(&self) -> usize {
         match self {
             Token::List(xs) => {
-                let func = xs[0].as_symbol().unwrap();
-                (if func == "begin" { 0 } else { 1 })
-                    + xs.iter().map(|x| x.depth()).max().unwrap_or(0)
+                (if xs.len() > 1 { 1 } else { 0 }) + xs.iter().map(|x| x.depth()).max().unwrap_or(0)
             }
             _ => 0,
         }
@@ -412,6 +423,7 @@ impl Debug for Token {
             } => {
                 write!(f, "Interleaving {} by {:?}", target.name, sources)
             }
+            Token::BlockComment(s) | Token::InlineComment(s) => write!(f, "{}", s),
         }
     }
 }

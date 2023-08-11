@@ -1372,6 +1372,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
         | Token::DefPermutation { .. }
         | Token::DefPlookup { .. }
         | Token::DefInrange(..) => Ok(None),
+        Token::BlockComment(_) | Token::InlineComment(_) => unreachable!(),
     }
     .with_context(|| make_ast_error(e))
 }
