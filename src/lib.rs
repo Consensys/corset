@@ -88,10 +88,24 @@ fn cstr_to_string<'a>(s: *const c_char) -> &'a str {
     name.to_str().unwrap()
 }
 
+const EMPTY_MARKER: [u64; 4] = [0, u64::MAX, 0, u64::MAX];
 struct ComputedColumn {
     padding_value: [u64; 4],
     values: Vec<[u64; 4]>,
 }
+impl ComputedColumn {
+    fn empty() -> Self {
+        ComputedColumn {
+            padding_value: EMPTY_MARKER,
+            values: vec![EMPTY_MARKER],
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.values.is_empty() && self.padding_value == EMPTY_MARKER
+    }
+}
+
 #[derive(Default)]
 pub struct Trace {
     columns: Vec<ComputedColumn>,
@@ -169,9 +183,15 @@ impl Trace {
 
         r
     }
+
     fn from_ptr<'a>(ptr: *const Trace) -> &'a Self {
         assert!(!ptr.is_null());
         unsafe { &*ptr }
+    }
+
+    fn mut_from_ptr<'a>(ptr: *mut Trace) -> &'a mut Self {
+        assert!(!ptr.is_null());
+        unsafe { &mut *ptr }
     }
 }
 
@@ -517,7 +537,9 @@ pub extern "C" fn trace_column_by_id(trace: *const Trace, i: u32) -> ColumnData 
     let i = i as usize;
     assert!(i < r.columns.len());
     if let Some(col) = r.columns.get(i) {
-        if col.values.is_empty() {
+        if col.is_empty() {
+            panic!("FREED COLUMN")
+        } else if col.values.is_empty() {
             // A non-allocated Vec return an elt-aligned pointer, here 0x8
             // typically. However, Go twists his panties in a bunch if it merely
             // sees an invalid pointer on the stack. Therefore, we have to
@@ -533,6 +555,19 @@ pub extern "C" fn trace_column_by_id(trace: *const Trace, i: u32) -> ColumnData 
     } else {
         set_errno(CorsetError::ColumnIdNotFound.into());
         ColumnData::default()
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn free_column_by_name(trace: *mut Trace, name: *const c_char) {
+    let r = Trace::mut_from_ptr(trace);
+    let name = cstr_to_string(name);
+
+    let i = r.ids.iter().position(|n| *n == name);
+    if let Some(i) = i {
+        r.columns[i] = ComputedColumn::empty();
+    } else {
+        set_errno(CorsetError::ColumnNameNotFound.into());
     }
 }
 
