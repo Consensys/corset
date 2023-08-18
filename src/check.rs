@@ -15,7 +15,7 @@ use pairing_ce::{
 
 use crate::{
     column::ColumnSet,
-    compiler::{Constraint, ConstraintSet, Expression, Node},
+    compiler::{Constraint, ConstraintSet, Domain, Expression, Node},
     pretty::*,
     structs::Handle,
 };
@@ -329,7 +329,7 @@ fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Fr) -> R
 fn check_constraint(
     cs: &ConstraintSet,
     expr: &Node,
-    domain: &Option<Vec<isize>>,
+    domain: &Option<Domain>,
     name: &Handle,
     settings: DebugSettings,
 ) -> Result<()> {
@@ -338,8 +338,8 @@ fn check_constraint(
         let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
         match domain {
             Some(is) => {
-                for i in is {
-                    check_constraint_at(cs, expr, *i, true, true, &mut cache, settings)?;
+                for i in is.iter() {
+                    check_constraint_at(cs, expr, i, true, true, &mut cache, settings)?;
                 }
             }
             None => {

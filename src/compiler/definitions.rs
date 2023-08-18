@@ -14,7 +14,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
         | Token::Symbol(_)
         | Token::Keyword(_)
         | Token::List(_)
-        | Token::Range(_)
+        | Token::Domain(_)
         | Token::DefPlookup { .. }
         | Token::DefInrange(..) => Ok(()),
 
@@ -84,8 +84,8 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
         } => {
             let handle = Handle::maybe_with_perspective(ctx.module(), col, ctx.perspective());
             // those are inserted for symbol lookups
-            for i in range {
-                let ith_handle = handle.ith(*i);
+            for i in range.iter() {
+                let ith_handle = handle.ith(i.try_into().unwrap());
                 ctx.insert_used_symbol(
                     &ith_handle.name,
                     Node::column()

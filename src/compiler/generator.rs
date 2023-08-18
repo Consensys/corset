@@ -44,7 +44,7 @@ fn uniquify(n: String) -> String {
 pub enum Constraint {
     Vanishes {
         handle: Handle,
-        domain: Option<Vec<isize>>,
+        domain: Option<Domain>,
         expr: Box<Node>,
     },
     Plookup {
@@ -955,28 +955,12 @@ fn apply_form(
 
     match f {
         Form::For => {
-            if let (Token::Symbol(i_name), range, body) = (&args[0].class, &args[1], &args[2]) {
-                let is = match &range.class {
-                    // a for can iterate over an explicit range...
-                    Token::Range(is) => is.to_owned(),
-                    // ...or over [1..<compile-time evaluable value>]
-                    _ => {
-                        if let Some(range_exp) = reduce(&range, ctx, settings)? {
-                            if let Expression::ArrayColumn { domain, .. } = range_exp.e() {
-                                domain.iter().map(|&i| i as isize).collect::<Vec<_>>()
-                            } else {
-                                let k = range_exp.pure_eval()?.to_isize().unwrap();
-                                (1..=k).collect::<Vec<_>>()
-                            }
-                        } else {
-                            bail!("unable to iterate over {}", &range)
-                        }
-                    }
-                };
-
+            if let (Token::Symbol(i_name), Token::Domain(is), body) =
+                (&args[0].class, &args[1].class, &args[2])
+            {
                 let mut l = vec![];
                 let mut t = Type::INFIMUM;
-                for i in is {
+                for i in is.iter() {
                     let mut for_ctx = ctx.derive(&uniquify(format!("{}-for-{}", ctx.name(), i)))?;
 
                     for_ctx.insert_symbol(
@@ -1222,7 +1206,7 @@ fn apply(
 
 pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<Option<Node>> {
     match &e.class {
-        Token::Keyword(_) | Token::Range(_) => Ok(None),
+        Token::Keyword(_) | Token::Domain(_) => Ok(None),
         Token::Value(x) => Ok(Some(
             Node::from(Expression::Const(x.clone(), Fr::from_str(&x.to_string()))).with_type(
                 if *x >= Zero::zero() && *x <= One::one() {
@@ -1251,7 +1235,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                         domain,
                         base,
                     } => {
-                        if domain.contains(&i) {
+                        if domain.contains(i.try_into().unwrap()) {
                             Ok(Some(
                                 Node::column()
                                     .handle(handle.as_handle().ith(i))
@@ -1337,7 +1321,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                                     anyhow!("{:?} is not a valid index", index.white().bold())
                                 })?;
 
-                            if !domain.contains(&index_usize) {
+                            if !domain.contains(index_usize.try_into().unwrap()) {
                                 bail!("index {} is not in domain {:?}", index_usize, domain);
                             }
                             from_handles
@@ -1519,7 +1503,7 @@ fn reduce_toplevel(
             *ctx = ctx.switch_to_module(name)?;
             Ok(None)
         }
-        Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Range(_) => {
+        Token::Value(_) | Token::Symbol(_) | Token::List(_) | Token::Domain(_) => {
             bail!("unexpected top-level form: {:?}", e)
         }
         Token::Defun { .. }

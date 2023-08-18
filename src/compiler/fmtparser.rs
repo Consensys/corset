@@ -125,6 +125,8 @@ impl<'i> std::iter::Iterator for Commenter<'i> {
 fn rec_parse(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
     use num_traits::{FromPrimitive, Num};
 
+    use crate::compiler::Domain;
+
     let lc = pair.line_col();
     let src = pair.as_str().to_owned();
 
@@ -182,25 +184,23 @@ fn rec_parse(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
                 .map(|x| x.as_str())
                 .and_then(|x| x.parse::<isize>().ok());
             let range = match (x1, x2, x3) {
-                (Some(start), None, None) => (1..=start).collect(),
-                (Some(start), Some(stop), None) => (start..=stop).collect(),
-                (Some(start), Some(stop), Some(step)) => {
-                    (start..=stop).step_by(step.try_into()?).collect()
-                }
+                (Some(length), None, None) => Domain::Range(1, length),
+                (Some(start), Some(stop), None) => Domain::Range(start, stop),
+                (Some(start), Some(stop), Some(step)) => Domain::SteppedRange(start, step, stop),
                 x => unimplemented!("{} -> {:?}", src, x),
             };
             Ok(AstNode {
-                class: Token::Range(range),
+                class: Token::Domain(range),
                 lc,
                 src,
             })
         }
         Rule::immediate_range => Ok(AstNode {
-            class: Token::Range(
+            class: Token::Domain(Domain::Set(
                 pair.into_inner()
                     .map(|x| x.as_str().parse::<isize>().unwrap())
                     .collect(),
-            ),
+            )),
             lc,
             src,
         }),

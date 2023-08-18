@@ -166,7 +166,7 @@ fn render_constraints(
                     domain: _,
                     expr,
                 } => {
-                    let mut tty = Tty::new();
+                    let mut tty = Tty::new().with_guides();
                     pretty_expr(expr, None, &mut tty, show_types);
                     println!("\n- {}:", handle.pretty());
                     println!("{}", tty.page_feed());
@@ -192,7 +192,7 @@ fn render_constraints(
                 }
                 Constraint::Permutation { .. } => (),
                 Constraint::InRange { handle, exp, max } => {
-                    let mut tty = Tty::new();
+                    let mut tty = Tty::new().with_guides();
                     pretty_expr(exp, None, &mut tty, false);
                     println!("\n{}", handle.pretty());
                     println!("{} < {}", tty.page_feed(), max);

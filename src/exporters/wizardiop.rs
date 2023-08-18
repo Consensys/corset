@@ -331,7 +331,7 @@ fn render_interleaved(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> Vec<Wi
 fn render_constraint(
     cs: &ConstraintSet,
     name: &str,
-    domain: Option<Vec<isize>>,
+    domain: Option<Domain>,
     expr: &Node,
 ) -> String {
     match expr.e() {
@@ -353,7 +353,7 @@ fn render_constraint(
                     format!(
                         "build.LocalConstraint(\"{}\", {})",
                         name,
-                        render_expression(cs, &shift(expr, *x))
+                        render_expression(cs, &shift(expr, x))
                     )
                 })
                 .collect::<Vec<_>>()

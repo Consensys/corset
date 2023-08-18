@@ -560,7 +560,7 @@ impl AstNode {
             Token::Value(x) => x.to_string().len(),
             Token::Symbol(s) | Token::Keyword(s) => s.len(),
             Token::List(ns) => ns.iter().map(|n| n.len() + 1).sum::<usize>() + 2,
-            Token::Range(domain) => {
+            Token::Domain(domain) => {
                 domain
                     .iter()
                     .map(|d| d.to_string().len() + 1)
@@ -635,7 +635,7 @@ impl AstNode {
                         };
                         false
                     }
-                    Token::Range(_) => {
+                    Token::Domain(_) => {
                         tty.write(&self.src);
                         false
                     }

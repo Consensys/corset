@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::{
     column::{Column, Computation},
-    compiler::{ColumnRef, Constraint, ConstraintSet, Intrinsic, Kind, Magma, Node},
+    compiler::{ColumnRef, Constraint, ConstraintSet, Domain, Intrinsic, Kind, Magma, Node},
     pretty::Base,
     structs::Handle,
 };
@@ -73,13 +73,13 @@ fn process_nhood(
 
     cs.constraints.push(Constraint::Vanishes {
         handle: Handle::new(module, format!("2^{n}-hood-start")),
-        domain: Some(vec![0]),
+        domain: Some(Domain::Set(vec![0])),
         expr: Box::new(srt_intrld_aux_xs_node.clone()),
     });
 
     cs.constraints.push(Constraint::Vanishes {
         handle: Handle::new(module, format!("2^{n}-hood-end")),
-        domain: Some(vec![-1]),
+        domain: Some(Domain::Set(vec![-1])),
         expr: Box::new(
             Intrinsic::Sub.call(&[
                 Node::column()

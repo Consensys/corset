@@ -49,8 +49,8 @@ impl AstNode {
             bail!("expected usize, found `{:?}`", self)
         }
     }
-    pub fn as_range(&self) -> Result<&[isize]> {
-        if let Token::Range(r) = &self.class {
+    pub fn as_range(&self) -> Result<&Domain> {
+        if let Token::Domain(r) = &self.class {
             Ok(r)
         } else {
             bail!("expected range, found `{:?}`", self)
@@ -96,6 +96,51 @@ impl Debug for AstNode {
 impl std::fmt::Display for AstNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Debug::fmt(&self.class, f)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Domain {
+    Range(isize, isize),
+    SteppedRange(isize, isize, isize),
+    Set(Vec<isize>),
+}
+impl Domain {
+    pub fn iter(&self) -> Box<dyn Iterator<Item = isize> + '_> {
+        match self {
+            Domain::Range(start, stop) => Box::new(*start..=*stop),
+            Domain::SteppedRange(start, step, stop) => {
+                Box::new((*start..=*stop).step_by((*step).try_into().unwrap()))
+            }
+            Domain::Set(is) => Box::new(is.iter().cloned()),
+        }
+    }
+
+    pub fn contains(&self, x: isize) -> bool {
+        match self {
+            Domain::Range(start, stop) | Domain::SteppedRange(start, _, stop) => {
+                x >= *start && x <= *stop
+            }
+            Domain::Set(is) => is.contains(&x),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Domain::Range(start, stop) | Domain::SteppedRange(start, _, stop) => {
+                (stop - start + 1).try_into().unwrap()
+            }
+            Domain::Set(is) => is.len(),
+        }
+    }
+}
+impl std::fmt::Display for Domain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Domain::Range(start, stop) => write!(f, "{}:{}", start, stop),
+            Domain::SteppedRange(start, step, stop) => write!(f, "{}:{}:{}", start, step, stop),
+            Domain::Set(is) => write!(f, "{:?}", is),
+        }
     }
 }
 
@@ -165,7 +210,7 @@ pub enum Token {
     /// a list of nodes
     List(Vec<AstNode>),
     /// a range; typically used in discrete constraints declaration and loops
-    Range(Vec<isize>),
+    Domain(Domain),
 
     /// definition of a module; this will derive a symbol table
     DefModule(String),
@@ -195,7 +240,7 @@ pub enum Token {
     /// defines an array
     DefArrayColumn {
         name: String,
-        domain: Vec<usize>,
+        domain: Domain,
         t: Type,
         /// which numeric base should be used to display column values; this is a purely aesthetic setting
         base: Base,
@@ -234,7 +279,7 @@ pub enum Token {
         /// the given name of the constraint -- TODO enforce uniqueness
         name: String,
         /// if the domain of the constraint is `None`, it is supposed to hold everywhere
-        domain: Option<Vec<isize>>,
+        domain: Option<Domain>,
         /// an expression that enables the constraint only when it is non zero
         guard: Option<Box<AstNode>>,
         /// if the constraint is set in a perspective, it is automatically
@@ -308,7 +353,7 @@ impl Token {
                     ))
                 }
             }
-            Token::Range(ref args) => Some(format!("{:?}", args)),
+            Token::Domain(ref args) => Some(format!("{:?}", args)),
             _ => None,
         }
     }
@@ -358,7 +403,7 @@ impl Debug for Token {
             Token::List(ref args) => {
                 write!(f, "({})", Token::format_list(args, LIST_DISPLAY_THRESHOLD))
             }
-            Token::Range(ref args) => write!(f, "{:?}", args),
+            Token::Domain(ref args) => write!(f, "{:?}", args),
 
             Token::DefModule(name) => write!(f, "MODULE {}", name),
             Token::DefConsts(v) => {
@@ -486,7 +531,7 @@ fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
                     if domain.is_some() {
                         bail!("domain already defined: `{:?}`", domain.unwrap())
                     } else {
-                        if let Token::Range(range) = &x.class {
+                        if let Token::Domain(range) = &x.class {
                             domain = Some(range.to_owned())
                         } else {
                             bail!("expected range, found `{:?}`", x)
@@ -570,7 +615,7 @@ fn parse_defperspective<I: Iterator<Item = Result<AstNode>>>(mut tokens: I) -> R
 struct ColumnAttributes {
     name: String,
     t: OnceCell<Magma>,
-    range: OnceCell<Vec<isize>>,
+    range: OnceCell<Domain>,
     padding_value: OnceCell<i64>,
     base: OnceCell<Base>,
 }
@@ -658,7 +703,7 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
                     }
                 }
                 // A range alone treated as if it were preceded by :array
-                Token::Range(ref _range) => {
+                Token::Domain(ref _range) => {
                     attributes.range.set(_range.to_owned()).map_err(|_| {
                         anyhow!(
                             "trying to redefine column {} of type {:?} as {:?}",
@@ -746,10 +791,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                             t: Type::ArrayColumn(
                                 column_attributes.t.get().cloned().unwrap_or(Magma::Integer),
                             ),
-                            domain: range
-                                .iter()
-                                .map(|&x| x.try_into().map_err(|e| anyhow!("{:?}", e)))
-                                .collect::<Result<Vec<_>>>()?,
+                            domain: range.clone(),
                             base,
                         }
                     } else {
@@ -1173,25 +1215,23 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
                 .map(|x| x.as_str())
                 .and_then(|x| x.parse::<isize>().ok());
             let range = match (x1, x2, x3) {
-                (Some(start), None, None) => (1..=start).collect(),
-                (Some(start), Some(stop), None) => (start..=stop).collect(),
-                (Some(start), Some(stop), Some(step)) => {
-                    (start..=stop).step_by(step.try_into()?).collect()
-                }
+                (Some(length), None, None) => Domain::Range(1, length),
+                (Some(start), Some(stop), None) => Domain::Range(start, stop),
+                (Some(start), Some(stop), Some(step)) => Domain::SteppedRange(start, step, stop),
                 x => unimplemented!("{} -> {:?}", src, x),
             };
             Ok(AstNode {
-                class: Token::Range(range),
+                class: Token::Domain(range),
                 lc,
                 src,
             })
         }
         Rule::immediate_range => Ok(AstNode {
-            class: Token::Range(
+            class: Token::Domain(Domain::Set(
                 pair.into_inner()
                     .map(|x| x.as_str().parse::<isize>().unwrap())
                     .collect(),
-            ),
+            )),
             lc,
             src,
         }),
