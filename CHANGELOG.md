@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.1.0] - 2023-08-18
+
+### Features
+
+- Allow for dropping individual columns
+- Add a formatter
+
 ## [8.0.2] - 2023-08-10
 
 ### Bug Fixes
@@ -21,6 +28,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous Tasks
 
 - Comments & re-organization
+- Release corset version 8.0.2
 
 ## [8.0.1] - 2023-07-26
 
