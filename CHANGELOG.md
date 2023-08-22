@@ -2,12 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.1.1] - 2023-08-22
+
+### Refactor
+
+- Revamp domain implementation
+
+### Build
+
+- Add release.yml
+
 ## [8.1.0] - 2023-08-18
 
 ### Features
 
 - Allow for dropping individual columns
 - Add a formatter
+
+### Miscellaneous Tasks
+
+- Release corset version 8.1.0
 
 ## [8.0.2] - 2023-08-10
 
