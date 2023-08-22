@@ -2,7 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.1.2] - 2023-08-22
+
+### Build
+
+- Fix release.yml
+
 ## [8.1.1] - 2023-08-22
+
+### Miscellaneous Tasks
+
+- Release corset version 8.1.1
 
 ### Refactor
 
