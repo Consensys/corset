@@ -249,6 +249,7 @@ pub fn compute_composite_static(cs: &ConstraintSet, exp: &Node) -> Result<Vec<Fr
         .collect::<Result<Vec<_>>>()?
         .iter()
         .max()
+        // TODO: unwrap_or module size -- assert otherwise
         .unwrap();
 
     let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
