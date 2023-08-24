@@ -22,6 +22,8 @@ mod errors;
 mod exporters;
 mod formatter;
 mod import;
+#[cfg(feature = "inspector")]
+mod inspect;
 mod pretty;
 mod structs;
 #[cfg(test)]
@@ -220,6 +222,17 @@ enum Commands {
 
         #[arg(short = 'A', long = "trace-span-after", help = "")]
         trace_span_after: Option<isize>,
+    },
+    /// Inspect a trace file
+    #[cfg(feature = "inspector")]
+    Inspect {
+        #[arg(
+            short = 'T',
+            long = "trace",
+            required = true,
+            help = "the trace to inspect"
+        )]
+        tracefile: String,
     },
     /// Display the compiled the constraint system
     Debug {
@@ -457,7 +470,7 @@ fn main() -> Result<()> {
             info!("Parsing Corset source files...");
             let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
             for f in args.source.iter() {
-                r.add_source(f);
+                r.add_source(f)?;
             }
             r
         }
@@ -679,6 +692,21 @@ fn main() -> Result<()> {
                     .and_context_span_after(trace_span_after),
             )
             .with_context(|| format!("while checking {}", tracefile.bright_white().bold()))?;
+            info!("{}: SUCCESS", tracefile)
+        }
+        #[cfg(feature = "inspector")]
+        Commands::Inspect { tracefile } => {
+            if utils::is_file_empty(&tracefile)? {
+                warn!("`{}` is empty, exiting", tracefile);
+                return Ok(());
+            }
+            let mut constraints = builder.to_constraint_set()?;
+
+            compute::compute_trace(&tracefile, &mut constraints, false)
+                .with_context(|| format!("while expanding `{}`", tracefile))?;
+
+            inspect::inspect(&constraints)
+                .with_context(|| format!("while checking {}", tracefile.bright_white().bold()))?;
             info!("{}: SUCCESS", tracefile)
         }
         Commands::Debug {

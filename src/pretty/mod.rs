@@ -10,6 +10,8 @@ use crate::{
     structs::Handle,
 };
 
+mod opcodes;
+
 pub const COLORS: [Color; 7] = [
     Color::Green,
     Color::Yellow,
@@ -26,7 +28,9 @@ pub enum Base {
     Hex,
     Bin,
     Bytes,
+    OpCode,
 }
+
 impl std::convert::TryFrom<&str> for Base {
     type Error = anyhow::Error;
 
@@ -36,8 +40,9 @@ impl std::convert::TryFrom<&str> for Base {
             ":dec" => Ok(Base::Dec),
             ":hex" => Ok(Base::Hex),
             ":bytes" => Ok(Base::Bytes),
+            ":opcode" => Ok(Base::OpCode),
             _ => anyhow::bail!(
-                ":display expects one of :hex, :dec, :bin, :bytes; found {}",
+                ":display expects one of :hex, :dec, :bin, :bytes, :opcode; found {}",
                 value
             ),
         }
@@ -102,6 +107,13 @@ impl Pretty for Fr {
                         out
                     }
                 }
+                Base::OpCode => opcodes::to_str(
+                    u8::from_str_radix(
+                        self.into_repr().to_string()[2..].trim_start_matches('0'),
+                        16,
+                    )
+                    .expect("not an opcode"),
+                ),
             }
         }
     }

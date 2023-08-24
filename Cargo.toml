@@ -15,15 +15,18 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 buche = "0.7"
+buildstructor = "0.5.2"
 cached = { version = "0.43", default-features = false }
-clap-verbosity-flag = { version = "2", optional = true }
 clap = { version = "4", features = ["derive", "wrap_help", "cargo"], optional = true }
+clap-verbosity-flag = { version = "2", optional = true }
 convert_case = "0.6"
+crossterm = "0.27.0"
+either = { version = "1.8.1", features = ["serde"] }
 errno = "0.3.0"
 flate2 = "1"
 handlebars = { version = "4.3.6", default-features = false, optional = true }
 indicatif = { version = "0.17", optional = true }
-is-terminal = "0.4"
+is-terminal = "0.4" # TODO: repalce with builtin IsTerminal
 itertools = "0.10"
 lazy_static = "1.4"
 libc = {version = "0.2.139", default-features = false }
@@ -31,36 +34,37 @@ log = "0.4"
 logging_timer = "1.1.0"
 maplit = "1.0"
 md5 = "0.7"
-names = { version = "0.14.0", default-features = false }
+names = { version = "0.14.0", default-features = false } # TODO: remove
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
-once_cell = "1.17"
+once_cell = "1.17" # TODO: replace with builtin
 owo-colors = "3.5.0"
 pairing_ce = "0.28"
-pest_derive = { version = "2.4", optional = true }
 pest = { version = "2.4", optional = true }
+pest_derive = { version = "2.4", optional = true }
 postgres = { version = "0.19", optional = true }
+ratatui = {version = "0.22.0", optional = true }
 rayon = "1.5"
+regex-lite = { version = "0.1", optional = true }
 ron = "0.8"
-serde_json = { version = "1", features = ["arbitrary_precision"] }
 serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["arbitrary_precision"] }
 sorbus = "0.9"
 thiserror = "1.0.38"
-buildstructor = "0.5.2"
-either = { version = "1.8.1", features = ["serde"] }
-
+tui-textarea = { git = "https://github.com/delehef/tui-textarea", default-features = false, features = ["ratatui-crossterm"], optional = true }
 
 [target.'cfg(all(target_arch = "x86_64", target_feature = "avx"))'.dependencies]
 simd-json = "0.10"
 
 [features]
-default = ["interactive", "cli", "exporters", "parser"]
 cli = ["dep:clap-verbosity-flag", "dep:clap"]
+conflater = []
+default = ["interactive", "cli", "exporters", "parser", "inspector"]
+exporters = ["dep:handlebars"]
+inspector = ["dep:regex-lite", "dep:ratatui", "dep:tui-textarea"]
 interactive = ["dep:indicatif"]
 parser = ["dep:pest", "dep:pest_derive"]
 postgres = ["dep:postgres"]
-conflater = []
-exporters = ["dep:handlebars"]
 
 [package.metadata.release]
 tag-prefix = ""

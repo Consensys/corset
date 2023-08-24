@@ -289,8 +289,19 @@ impl ColumnSet {
         (0..self._cols.len()).map(|i| (ColumnRef::from(i), &self._cols[i]))
     }
 
+    pub fn iter_module<'a>(
+        &'a self,
+        module: &'a str,
+    ) -> impl Iterator<Item = (ColumnRef, &Column)> + 'a {
+        self.iter().filter(move |c| c.1.handle.module == module)
+    }
+
     pub fn iter_cols(&self) -> impl Iterator<Item = &Column> {
         self._cols.iter()
+    }
+
+    pub fn iter_cols_module<'a>(&'a self, module: &'a str) -> impl Iterator<Item = &Column> + 'a {
+        self.iter_cols().filter(move |c| c.handle.module == module)
     }
 
     pub fn new_register(&mut self, handle: Handle, magma: Magma) -> RegisterID {
