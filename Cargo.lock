@@ -381,7 +381,6 @@ dependencies = [
  "logging_timer",
  "maplit",
  "md5",
- "names",
  "num-bigint",
  "num-traits",
  "once_cell",
@@ -1077,15 +1076,6 @@ dependencies = [
  "log",
  "wasi",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "names"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bddcd3bf5144b6392de80e04c347cd7fab2508f6df16a85fc496ecd5cec39bc"
-dependencies = [
- "rand 0.8.5",
 ]
 
 [[package]]

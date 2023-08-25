@@ -1460,7 +1460,7 @@ fn reduce_toplevel(
             }
         }
         Token::DefInrange(e, range) => {
-            let handle = Handle::new(ctx.module(), names::Generator::default().next().unwrap());
+            let handle = Handle::new(ctx.module(), format!("{}_lt_{}", e, range));
             Ok(Some(Constraint::InRange {
                 handle,
                 exp: reduce(e, ctx, settings)?.unwrap(),
@@ -1550,7 +1550,14 @@ fn reduce_toplevel(
             )?;
 
             Ok(Some(Constraint::Permutation {
-                handle: Handle::new(ctx.module(), names::Generator::default().next().unwrap()),
+                handle: Handle::new(
+                    ctx.module(),
+                    format!(
+                        "{}_intrld_{}",
+                        froms.iter().map(|f| f.to_string()).join("_"),
+                        tos.iter().map(|f| f.to_string()).join("_"),
+                    ),
+                ),
                 from: froms,
                 to: tos,
                 signs: signs.clone(),
