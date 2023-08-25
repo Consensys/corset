@@ -295,7 +295,7 @@ fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> Vec<WiopCo
         .collect()
 }
 
-fn render_interleaved(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> Vec<WiopInterleaved> {
+fn render_interleaved(cs: &ConstraintSet, _sizes: &mut HashSet<String>) -> Vec<WiopInterleaved> {
     cs.columns
         .iter()
         .filter(|col| {
@@ -362,7 +362,7 @@ fn render_constraint(
     }
 }
 
-pub fn render(cs: &ConstraintSet, out_filename: &Option<String>, package: &str) -> Result<()> {
+pub fn render(cs: &ConstraintSet, out_filename: &Option<String>) -> Result<()> {
     #[derive(Serialize)]
     struct TemplateData {
         columns: Vec<WiopColumn>,

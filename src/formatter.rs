@@ -1,3 +1,4 @@
+#![cfg(feature = "parser")]
 use std::matches;
 use std::unreachable;
 
@@ -427,11 +428,11 @@ fn format_list(
     n: &AstNode,
     force_newline: bool,
     force_no_newline: bool,
-    maybe_funcall: bool,
+    _maybe_funcall: bool,
     tty: &mut Tty,
 ) {
     const UNMERGING_FNAMES: &[&str] = &["if-zero", "if", "if-not-zero", "begin"];
-    let reserved_names = BUILTINS
+    let _reserved_names = BUILTINS
         .keys()
         .chain(["if-zero", "if-not-zero", "if", "if-eq", "vanishes!"].iter())
         .cloned()

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::cmp::Ordering;
 
 use anyhow::bail;
@@ -32,7 +33,6 @@ impl std::fmt::Display for Type {
     }
 }
 impl Type {
-    pub const SUPREMUM: Self = Type::Column(Magma::SUPREMUM);
     pub const INFIMUM: Self = Type::Void;
 
     pub fn magma(self) -> Magma {

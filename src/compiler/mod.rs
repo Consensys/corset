@@ -26,6 +26,7 @@ pub mod codetyper;
 mod common;
 mod compiletime;
 mod definitions;
+#[cfg(feature = "parser")]
 mod fmtparser;
 pub mod generator;
 mod node;

@@ -47,6 +47,7 @@ impl ColumnRef {
         self.id = Some(i);
         self
     }
+    #[allow(dead_code)]
     pub fn handle(mut self, h: Handle) -> Self {
         if let Some(ho) = self.h {
             if ho != h {

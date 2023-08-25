@@ -25,11 +25,11 @@ use crate::{column::Column, compiler::ConstraintSet, pretty::Pretty, structs::Ha
 #[time("info", "Parsing trace from JSON file with SIMD")]
 pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
     let mut f = File::open(tracefile).with_context(|| format!("while opening `{}`", tracefile))?;
-    let mut gz = GzDecoder::new(BufReader::new(&f));
 
     #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
     {
         let mut content = Vec::new();
+        let mut gz = GzDecoder::new(BufReader::new(&f));
         match gz.header() {
             Some(_) => gz.read_to_end(&mut content),
             None => {
@@ -44,6 +44,7 @@ pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
     }
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
     {
+        let gz = GzDecoder::new(BufReader::new(&f));
         let v: Value = match gz.header() {
             Some(_) => serde_json::from_reader(gz),
             None => {
@@ -58,10 +59,10 @@ pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
 
 #[time("info", "Parsing trace from JSON with SIMD")]
 pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
-    let mut gz = GzDecoder::new(BufReader::new(tracestr));
     #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
     {
         let mut content = Vec::new();
+        let mut gz = GzDecoder::new(BufReader::new(tracestr));
         match gz.header() {
             Some(_) => {
                 gz.read_to_end(&mut content)?;
@@ -76,6 +77,7 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
     }
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
     {
+        let gz = GzDecoder::new(BufReader::new(tracestr));
         let v: Value = match gz.header() {
             Some(_) => serde_json::from_reader(gz),
             None => serde_json::from_reader(BufReader::new(tracestr)),

@@ -300,10 +300,6 @@ impl ColumnSet {
         self._cols.iter()
     }
 
-    pub fn iter_cols_module<'a>(&'a self, module: &'a str) -> impl Iterator<Item = &Column> + 'a {
-        self.iter_cols().filter(move |c| c.handle.module == module)
-    }
-
     pub fn new_register(&mut self, handle: Handle, magma: Magma) -> RegisterID {
         self.registers.push(Register {
             handle: Some(handle),

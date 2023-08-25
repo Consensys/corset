@@ -1,16 +1,17 @@
+#![cfg(feature = "parser")]
 use super::Ast;
 use crate::compiler::Token;
 use crate::pretty::Base;
 use anyhow::Result;
 use num_bigint::BigInt;
-use pest::iterators::Pairs;
-#[cfg(feature = "parser")]
-use pest::{iterators::Pair, Parser};
+use pest::{
+    iterators::{Pair, Pairs},
+    Parser,
+};
 use std::fmt::Debug;
 
 use super::AstNode;
 
-#[cfg(feature = "parser")]
 #[derive(Parser)]
 #[grammar = "corset-fmt.pest"]
 struct FmtParser;
@@ -121,7 +122,6 @@ impl<'i> std::iter::Iterator for Commenter<'i> {
     }
 }
 
-#[cfg(feature = "parser")]
 fn rec_parse(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
     use num_traits::{FromPrimitive, Num};
 
@@ -233,7 +233,6 @@ fn rec_parse(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
     }
 }
 
-#[cfg(feature = "parser")]
 pub fn parse(source: &str) -> Result<Ast> {
     let mut ast = Ast { exprs: vec![] };
 

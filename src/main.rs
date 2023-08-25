@@ -20,6 +20,7 @@ mod compute;
 mod dag;
 mod errors;
 mod exporters;
+#[cfg(feature = "parser")]
 mod formatter;
 mod import;
 #[cfg(feature = "inspector")]
@@ -87,14 +88,6 @@ enum Commands {
     WizardIOP {
         #[arg(short = 'o', long = "out", help = "where to render the constraints")]
         out_filename: Option<String>,
-
-        #[arg(
-            short = 'P',
-            long = "package",
-            default_value = "define",
-            help = "In which package the function will be generated"
-        )]
-        package: String,
     },
     #[cfg(feature = "exporters")]
     /// Export columns in a format usable by zkBesu
@@ -292,6 +285,7 @@ enum Commands {
         skip: Vec<String>,
     },
     /// Format the given source in an idiomatic way
+    #[cfg(feature = "parser")]
     Format {
         #[arg(
             short = 'i',
@@ -439,44 +433,53 @@ fn main() -> Result<()> {
         .build_global()
         .unwrap();
 
-    let mut builder = if matches!(args.command, Commands::Format { .. }) {
-        if args.source.len() != 1 {
-            bail!("can only format one file at a time")
+    let mut builder = if cfg!(feature = "parser") {
+        if matches!(args.command, Commands::Format { .. }) {
+            if args.source.len() != 1 {
+                bail!("can only format one file at a time")
+            } else if args.source.len() == 1
+                && Path::new(&args.source[0])
+                    .extension()
+                    .map(|e| e == "bin")
+                    .unwrap_or(false)
+            {
+                bail!("expected Corset source file, found compiled constraint set")
+            } else {
+                let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
+                for f in args.source.iter() {
+                    r.add_source(f)?;
+                }
+                r
+            }
         } else if args.source.len() == 1
             && Path::new(&args.source[0])
                 .extension()
                 .map(|e| e == "bin")
                 .unwrap_or(false)
         {
-            bail!("expected Corset source file, found compiled constraint set")
+            info!("Loading `{}`", &args.source[0]);
+            ConstraintSetBuilder::from_bin(&args.source[0])?
         } else {
-            let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
-            for f in args.source.iter() {
-                r.add_source(f)?;
+            #[cfg(feature = "parser")]
+            {
+                info!("Parsing Corset source files...");
+                let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
+                for f in args.source.iter() {
+                    r.add_source(f)?;
+                }
+                r
             }
-            r
         }
-    } else if args.source.len() == 1
-        && Path::new(&args.source[0])
-            .extension()
-            .map(|e| e == "bin")
-            .unwrap_or(false)
-    {
-        info!("Loading `{}`", &args.source[0]);
-        ConstraintSetBuilder::from_bin(&args.source[0])?
     } else {
-        #[cfg(feature = "parser")]
+        if args.source.len() == 1
+            && Path::new(&args.source[0])
+                .extension()
+                .map(|e| e == "bin")
+                .unwrap_or(false)
         {
-            info!("Parsing Corset source files...");
-            let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
-            for f in args.source.iter() {
-                r.add_source(f)?;
-            }
-            r
-        }
-
-        #[cfg(not(feature = "parser"))]
-        {
+            info!("Loading `{}`", &args.source[0]);
+            ConstraintSetBuilder::from_bin(&args.source[0])?
+        } else {
             panic!("Compile Corset with the `parser` feature to enable the compiler")
         }
     };
@@ -502,10 +505,7 @@ fn main() -> Result<()> {
             exporters::conflater::render(&builder.to_constraint_set(), filename.as_ref())?;
         }
         #[cfg(feature = "exporters")]
-        Commands::WizardIOP {
-            out_filename,
-            package,
-        } => {
+        Commands::WizardIOP { out_filename } => {
             let mut constraints = builder.to_constraint_set()?;
             // transformer::validate_nhood(&mut constraints)?;
             transformer::lower_shifts(&mut constraints);
@@ -514,7 +514,7 @@ fn main() -> Result<()> {
             transformer::sorts(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
 
-            exporters::wizardiop::render(&constraints, &out_filename, &package)?;
+            exporters::wizardiop::render(&constraints, &out_filename)?;
         }
         #[cfg(all(feature = "parser", feature = "exporters"))]
         Commands::Latex {
@@ -775,7 +775,7 @@ fn main() -> Result<()> {
             }
         }
         Commands::Compile { outfile, pretty } => {
-            let mut constraints = builder.to_constraint_set()?;
+            let constraints = builder.to_constraint_set()?;
             std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?
                 .write_all(

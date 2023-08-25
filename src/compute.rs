@@ -451,6 +451,8 @@ pub fn compute_trace(tracefile: &str, cs: &mut ConstraintSet, fail_on_missing: b
     prepare(cs, fail_on_missing)
 }
 
+// This is only used by the lib
+#[allow(dead_code)]
 pub fn compute_trace_str(
     trace: &[u8],
     cs: &mut ConstraintSet,
