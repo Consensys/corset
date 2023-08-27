@@ -1,8 +1,11 @@
-use crate::{compiler::ColumnRef, pretty::Pretty};
+use crate::{
+    compiler::ColumnRef,
+    pretty::{self, Pretty},
+};
 use anyhow::*;
 use either::Either;
 use num_bigint::BigInt;
-use num_traits::Num;
+use num_traits::{FromPrimitive, Num};
 use pairing_ce::{
     bn256::Fr,
     ff::{Field, PrimeField},
@@ -253,12 +256,16 @@ fn parse_token(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> R
                 || (s.starts_with("0x") && s.chars().all(|c| c.is_ascii_hexdigit()))
                 || s.starts_with('0')
             {
-                if let Some(s) = s.strip_prefix("0x") {
-                    BigInt::from_str_radix(s, 16)
-                } else if let Some(s) = s.strip_prefix("0b") {
-                    BigInt::from_str_radix(s, 2)
+                if let Some(x) = s.strip_prefix("0x") {
+                    BigInt::from_str_radix(x, 16).map_err(|_| anyhow!("unable to parse {}", s))
+                } else if let Some(x) = s.strip_prefix("0b") {
+                    BigInt::from_str_radix(x, 2).map_err(|_| anyhow!("unable to parse {}", s))
+                } else if let Some(x) = s.strip_prefix("0o") {
+                    pretty::opcodes::opcode_to_int(x)
+                        .and_then(|x| BigInt::from_u8(x).ok_or(()))
+                        .map_err(|_| anyhow!("unable to parse {}", x))
                 } else {
-                    BigInt::from_str_radix(s, 10)
+                    BigInt::from_str_radix(s, 10).map_err(|_| anyhow!("unable to parse {}", s))
                 }
                 .map(Token::Const)
                 .map_err(anyhow::Error::msg)

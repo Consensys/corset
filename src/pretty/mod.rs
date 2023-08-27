@@ -10,7 +10,7 @@ use crate::{
     structs::Handle,
 };
 
-mod opcodes;
+pub mod opcodes;
 
 pub const COLORS: [Color; 7] = [
     Color::Green,

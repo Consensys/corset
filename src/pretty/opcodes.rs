@@ -83,3 +83,127 @@ pub fn to_str(opcode: u8) -> String {
         _ => "???".to_string(),
     }
 }
+
+pub fn opcode_to_int(opcode: &str) -> Result<u8, ()> {
+    match opcode.to_uppercase().as_ref() {
+        "STOP" => Ok(0x0),
+        "ADD" => Ok(0x1),
+        "MUL" => Ok(0x2),
+        "SUB" => Ok(0x3),
+        "DIV" => Ok(0x4),
+        "SDIV" => Ok(0x5),
+        "MOD" => Ok(0x6),
+        "SMOD" => Ok(0x7),
+        "ADDMOD" => Ok(0x8),
+        "MULMOD" => Ok(0x9),
+        "EXP" => Ok(0xa),
+        "SIGNEXTEND" => Ok(0xb),
+        "LT" => Ok(0x10),
+        "GT" => Ok(0x11),
+        "SLT" => Ok(0x12),
+        "SGT" => Ok(0x13),
+        "EQ" => Ok(0x14),
+        "ISZERO" => Ok(0x15),
+        "AND" => Ok(0x16),
+        "OR" => Ok(0x17),
+        "XOR" => Ok(0x18),
+        "NOT" => Ok(0x19),
+        "BYTE" => Ok(0x1a),
+        "SHL" => Ok(0x1b),
+        "SHR" => Ok(0x1c),
+        "SAR" => Ok(0x1d),
+        "SHA3" => Ok(0x20),
+        "ADDRESS" => Ok(0x30),
+        "BALANCE" => Ok(0x31),
+        "ORIGIN" => Ok(0x32),
+        "CALLER" => Ok(0x33),
+        "CALLVALUE" => Ok(0x34),
+        "CALLDATALOAD" => Ok(0x35),
+        "CALLDATASIZE" => Ok(0x36),
+        "CALLDATACOPY" => Ok(0x37),
+        "CODESIZE" => Ok(0x38),
+        "CODECOPY" => Ok(0x39),
+        "GASPRICE" => Ok(0x3a),
+        "EXTCODESIZE" => Ok(0x3b),
+        "EXTCODECOPY" => Ok(0x3c),
+        "RETURNDATASIZE" => Ok(0x3d),
+        "RETURNDATACOPY" => Ok(0x3e),
+        "EXTCODEHASH" => Ok(0x3f),
+        "BLOCKHASH" => Ok(0x40),
+        "COINBASE" => Ok(0x41),
+        "TIMESTAMP" => Ok(0x42),
+        "NUMBER" => Ok(0x43),
+        "PREVRANDAO" => Ok(0x44),
+        "GASLIMIT" => Ok(0x45),
+        "CHAINID" => Ok(0x46),
+        "SELFBALANCE" => Ok(0x47),
+        "BASEFEE" => Ok(0x48),
+        "POP" => Ok(0x50),
+        "MLOAD" => Ok(0x51),
+        "MSTORE" => Ok(0x52),
+        "MSTORE8" => Ok(0x53),
+        "SLOAD" => Ok(0x54),
+        "SSTORE" => Ok(0x55),
+        "JUMP" => Ok(0x56),
+        "JUMPI" => Ok(0x57),
+        "PC" => Ok(0x58),
+        "MSIZE" => Ok(0x59),
+        "GAS" => Ok(0x5a),
+        "JUMPDEST" => Ok(0x5b),
+        push if push.starts_with("PUSH") => {
+            if let Some(offset) = push.strip_prefix("PUSH").and_then(|x| x.parse::<u8>().ok()) {
+                if offset <= 32 {
+                    Ok(0x5f + offset)
+                } else {
+                    Err(())
+                }
+            } else {
+                Err(())
+            }
+        }
+        dup if dup.starts_with("DUP") => {
+            if let Some(offset) = dup.strip_prefix("DUP").and_then(|x| x.parse::<u8>().ok()) {
+                if offset >= 1 && offset <= 16 {
+                    Ok(0x7f + offset)
+                } else {
+                    Err(())
+                }
+            } else {
+                Err(())
+            }
+        }
+        swap if swap.starts_with("SWAP") => {
+            if let Some(offset) = swap.strip_prefix("SWAP").and_then(|x| x.parse::<u8>().ok()) {
+                if offset >= 1 && offset <= 16 {
+                    Ok(0x8f + offset)
+                } else {
+                    Err(())
+                }
+            } else {
+                Err(())
+            }
+        }
+        log if log.starts_with("LOG") => {
+            if let Some(offset) = log.strip_prefix("LOG").and_then(|x| x.parse::<u8>().ok()) {
+                if offset <= 4 {
+                    Ok(0xa0 + offset)
+                } else {
+                    Err(())
+                }
+            } else {
+                Err(())
+            }
+        }
+        "CREATE" => Ok(0xf0),
+        "CALL" => Ok(0xf1),
+        "CALLCODE" => Ok(0xf2),
+        "RETURN" => Ok(0xf3),
+        "DELEGATECALL" => Ok(0xf4),
+        "CREATE2" => Ok(0xf5),
+        "STATICCALL" => Ok(0xfa),
+        "REVERT" => Ok(0xfd),
+        "INVALID" => Ok(0xfe),
+        "SELFDESTRUCT" => Ok(0xff),
+        _ => Err(()),
+    }
+}
