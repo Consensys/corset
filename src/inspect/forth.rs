@@ -109,17 +109,17 @@ impl Function {
     fn apply(&self, args: &[Fr]) -> Fr {
         match self {
             Function::Add => {
-                let mut x = args[0].clone();
+                let mut x = args[0];
                 x.add_assign(&args[1]);
                 x
             }
             Function::Sub => {
-                let mut x = args[0].clone();
+                let mut x = args[0];
                 x.sub_assign(&args[1]);
                 x
             }
             Function::Mul => {
-                let mut x = args[0].clone();
+                let mut x = args[0];
                 x.mul_assign(&args[1]);
                 x
             }
@@ -157,16 +157,10 @@ pub enum Node {
 }
 impl Node {
     fn is_bool(&self) -> bool {
-        match self {
-            Node::Comparison(..) | Node::Combinator(..) => true,
-            _ => false,
-        }
+        matches!(self, Node::Comparison(..) | Node::Combinator(..))
     }
     fn is_value(&self) -> bool {
-        match self {
-            Node::Comparison(_, _) | Node::Combinator(..) => false,
-            _ => true,
-        }
+        !self.is_bool()
     }
 }
 impl Node {
@@ -175,18 +169,12 @@ impl Node {
     /// matches the expression.
     pub fn scan<F: Fn(isize, &ColumnRef) -> Option<Fr>>(&self, get: &F, max: isize) -> Vec<isize> {
         (0..max)
-            .filter_map(|i| {
-                let r = self.eval(i, &get);
+            .filter(|i| {
+                let r = self.eval(*i, &get);
                 match r {
-                    Some(Either::Right(b)) => {
-                        if b {
-                            Some(i)
-                        } else {
-                            None
-                        }
-                    }
+                    Some(Either::Right(b)) => b,
                     Some(Either::Left(_)) => panic!("not a boolean"),
-                    None => None,
+                    None => false,
                 }
             })
             .collect()
@@ -225,8 +213,8 @@ impl Node {
                     .collect::<Option<Vec<_>>>();
                 args.map(|args| Either::Left(f.apply(&args)))
             }
-            Node::Column(_, column) => get(i, column).map(|x| Either::Left(x)),
-            Node::Const(x) => Some(Either::Left(x.clone())),
+            Node::Column(_, column) => get(i, column).map(Either::Left),
+            Node::Const(x) => Some(Either::Left(*x)),
         }
     }
 }
@@ -261,8 +249,8 @@ fn parse_token(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> R
         "=" | ">" | ">=" | "<" | "<=" => Ok(Token::Relation(s.into())),
         "+" | "-" | "*" => Ok(Token::Function(s.into())),
         _ => {
-            if s.chars().all(|c| c.is_digit(10))
-                || (s.starts_with("0x") && s.chars().all(|c| c.is_digit(16)))
+            if s.chars().all(|c| c.is_ascii_digit())
+                || (s.starts_with("0x") && s.chars().all(|c| c.is_ascii_hexdigit()))
                 || s.starts_with('0')
             {
                 if let Some(s) = s.strip_prefix("0x") {
@@ -272,14 +260,12 @@ fn parse_token(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> R
                 } else {
                     BigInt::from_str_radix(s, 10)
                 }
-                .map(|x| Token::Const(x))
+                .map(Token::Const)
                 .map_err(anyhow::Error::msg)
+            } else if let Some(r) = columns.get(s) {
+                Ok(Token::Column(s.to_string(), r.clone()))
             } else {
-                if let Some(r) = columns.get(s) {
-                    Ok(Token::Column(s.to_string(), r.clone()))
-                } else {
-                    bail!("{} unknown in {}", s, module)
-                }
+                bail!("{} unknown in {}", s, module)
             }
         }
     }
@@ -346,8 +332,8 @@ pub fn parse(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> Res
                 stack.push(match f {
                     Function::Add => {
                         if let (Node::Const(c1), Node::Const(c2)) = (&args[0], &args[1]) {
-                            let mut r = c1.clone();
-                            r.add_assign(&c2);
+                            let mut r = *c1;
+                            r.add_assign(c2);
                             Node::Const(r)
                         } else {
                             Node::Funcall(Function::Add, args)
@@ -355,8 +341,8 @@ pub fn parse(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> Res
                     }
                     Function::Sub => {
                         if let (Node::Const(c1), Node::Const(c2)) = (&args[0], &args[1]) {
-                            let mut r = c1.clone();
-                            r.sub_assign(&c2);
+                            let mut r = *c1;
+                            r.sub_assign(c2);
                             Node::Const(r)
                         } else {
                             Node::Funcall(Function::Sub, args)
@@ -364,8 +350,8 @@ pub fn parse(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> Res
                     }
                     Function::Mul => {
                         if let (Node::Const(c1), Node::Const(c2)) = (&args[0], &args[1]) {
-                            let mut r = c1.clone();
-                            r.mul_assign(&c2);
+                            let mut r = *c1;
+                            r.mul_assign(c2);
                             Node::Const(r)
                         } else {
                             Node::Funcall(Function::Mul, args)

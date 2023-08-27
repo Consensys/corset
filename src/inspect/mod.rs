@@ -99,18 +99,15 @@ impl ModuleView {
             .iter()
             .enumerate()
             .filter_map(|(i, (_, handle))| {
-                if self.regexps.is_empty() {
-                    Some(i)
-                } else {
-                    if self
+                if self.regexps.is_empty()
+                    || self
                         .regexps
                         .iter()
                         .any(|regex| regex.is_match(&handle.name))
-                    {
-                        Some(i)
-                    } else {
-                        None
-                    }
+                {
+                    Some(i)
+                } else {
+                    None
                 }
             })
             .collect();
@@ -136,7 +133,7 @@ impl ModuleView {
                 .chain(span.clone().enumerate().map(|(k, i)| {
                     let is = cs
                         .columns
-                        .get(&column_ref, i as isize, false)
+                        .get(column_ref, i, false)
                         .map(|x| x.pretty_with_base(cs.columns.get_col(column_ref).unwrap().base))
                         .unwrap_or(".".to_string());
                     maxes[k + 1] = maxes[k + 1].max(is.len());
@@ -268,7 +265,7 @@ impl<'a> Inspector<'a> {
                 .as_ref(),
             )
             .split(size);
-        self.minibuffer = chunks[2].clone();
+        self.minibuffer = chunks[2];
 
         let block = Block::default();
         f.render_widget(block, size);

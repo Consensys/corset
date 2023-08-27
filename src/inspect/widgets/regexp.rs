@@ -25,8 +25,7 @@ impl RegexpInput<'_> {
     fn validate(&mut self) -> Result<Vec<Regex>, regex_lite::Error> {
         let r = self.input.lines()[0]
             .split_whitespace()
-            .into_iter()
-            .map(|s| Regex::new(s))
+            .map(Regex::new)
             .collect::<Result<Vec<_>, _>>();
 
         if let Err(ref err) = r {
