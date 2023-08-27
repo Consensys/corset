@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     compiler::{ColumnRef, ConstraintSet},
     pretty::Pretty,
@@ -19,6 +21,7 @@ type StdTerminal = Terminal<Backend>;
 
 const CONTEXT: isize = 50;
 
+mod forth;
 mod widgets;
 
 struct ModuleView {
@@ -229,6 +232,9 @@ impl<'a> Inspector<'a> {
             "[F]".yellow().bold(),
             "ilter".into(),
             " :: ".dark_gray(),
+            "[s]".yellow().bold(),
+            "can".into(),
+            " :: ".dark_gray(),
             // "[p]".yellow().bold(),
             // "lookup".into(),
             // " :: ".into(),
@@ -283,6 +289,36 @@ impl<'a> Inspector<'a> {
                 if key.kind == KeyEventKind::Press {
                     match key.code {
                         KeyCode::Char('q') => return Ok(()),
+                        KeyCode::Char('s') => {
+                            let mut t = Terminal::with_options(
+                                CrosstermBackend::new(std::io::stdout()),
+                                TerminalOptions {
+                                    viewport: Viewport::Fixed(self.minibuffer),
+                                },
+                            )
+                            .unwrap();
+                            let column_cache = self
+                                .current_module()
+                                .columns
+                                .iter()
+                                .map(|(r, h)| (h.name.clone(), r.clone()))
+                                .collect::<HashMap<_, _>>();
+                            let i = widgets::ForthInput::new(
+                                &self.current_module().name,
+                                "".to_string(),
+                                &column_cache,
+                            )
+                            .run(
+                                &mut t,
+                                &|i, r| self.cs.columns.get_raw(r, i, false).copied(),
+                                self.current_module().size,
+                                self.minibuffer,
+                            );
+                            if let Some(i) = i {
+                                self.current_module_mut().goto(i);
+                            }
+                            let _ = terminal.clear();
+                        }
                         KeyCode::Char('g') => {
                             let mut t = Terminal::with_options(
                                 CrosstermBackend::new(std::io::stdout()),
