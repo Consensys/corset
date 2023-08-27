@@ -38,6 +38,9 @@ struct ModuleView {
     regexps: Vec<Regex>,
     /// The current indices of the subset of columns to show from `columns`
     to_show: Vec<usize>,
+
+    /// If any, the latest used Forth/scan expression
+    last_scan: String,
 }
 impl ModuleView {
     fn from_cs(cs: &ConstraintSet, name: &str) -> ModuleView {
@@ -55,11 +58,13 @@ impl ModuleView {
         ModuleView {
             name: name.to_owned(),
             columns,
-            to_show: currently_shown,
-
-            regexps: Vec::new(),
             shift: 0,
             size: max_size as isize - 1,
+
+            regexps: Vec::new(),
+            to_show: currently_shown,
+
+            last_scan: String::new(),
         }
     }
 
@@ -161,6 +166,7 @@ struct Inspector<'a> {
     modules: Vec<ModuleView>,
     current_module: usize,
     minibuffer: Rect,
+    message: Span<'a>,
 }
 impl<'a> Inspector<'a> {
     fn from_cs(cs: &'a ConstraintSet) -> Result<Self> {
@@ -175,6 +181,7 @@ impl<'a> Inspector<'a> {
                 .collect(),
             current_module: 0,
             minibuffer: Default::default(),
+            message: Span::from(""),
         };
         if r.modules.is_empty() {
             bail!("no modules found in provided constraint system");
@@ -242,7 +249,7 @@ impl<'a> Inspector<'a> {
             "uit".into(),
         ];
         f.render_widget(
-            Paragraph::new(Line::from(titles))
+            Paragraph::new(vec![Line::from(titles), Line::from(self.message.clone())])
                 .block(Block::default().title("Commands").borders(Borders::TOP)),
             self.minibuffer,
         );
@@ -303,9 +310,9 @@ impl<'a> Inspector<'a> {
                                 .iter()
                                 .map(|(r, h)| (h.name.clone(), r.clone()))
                                 .collect::<HashMap<_, _>>();
-                            let i = widgets::ForthInput::new(
+                            let is = widgets::scan::ScanInput::new(
                                 &self.current_module().name,
-                                "".to_string(),
+                                &self.current_module().last_scan,
                                 &column_cache,
                             )
                             .run(
@@ -314,8 +321,19 @@ impl<'a> Inspector<'a> {
                                 self.current_module().size,
                                 self.minibuffer,
                             );
-                            if let Some(i) = i {
-                                self.current_module_mut().goto(i);
+                            if let Some((exp, is)) = is {
+                                if is.is_empty() {
+                                    self.message = "Not found".red();
+                                } else {
+                                    self.message = Span::from(format!(
+                                        "'{}' found at {}",
+                                        exp,
+                                        is.iter().join(" ")
+                                    ))
+                                    .green();
+                                    self.current_module_mut().last_scan = exp;
+                                    self.current_module_mut().goto(is[0]);
+                                }
                             }
                             let _ = terminal.clear();
                         }
@@ -327,7 +345,7 @@ impl<'a> Inspector<'a> {
                                 },
                             )
                             .unwrap();
-                            let i = widgets::NumberInput::new("Go to column...")
+                            let i = widgets::number::NumberInput::new("Go to column...")
                                 .run(&mut t, self.minibuffer);
                             if let Some(i) = i {
                                 self.current_module_mut().goto(i);
@@ -342,7 +360,7 @@ impl<'a> Inspector<'a> {
                                 },
                             )
                             .unwrap();
-                            let regexs = widgets::RegexpInput::new(
+                            let regexs = widgets::regexp::RegexpInput::new(
                                 "Filter columns matching",
                                 self.current_module()
                                     .regexps

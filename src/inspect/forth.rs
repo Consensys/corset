@@ -1,4 +1,4 @@
-use crate::compiler::ColumnRef;
+use crate::{compiler::ColumnRef, pretty::Pretty};
 use anyhow::*;
 use either::Either;
 use num_bigint::BigInt;
@@ -9,6 +9,7 @@ use pairing_ce::{
 };
 use std::collections::HashMap;
 
+/// A Combinator operates on boolean expressions
 #[derive(Clone, Debug)]
 pub enum Combinator {
     And,
@@ -16,15 +17,15 @@ pub enum Combinator {
     Not,
 }
 impl Combinator {
-    fn apply(&self, args: &[Either<Fr, bool>]) -> bool {
-        let a1 = *args[0].as_ref().right().unwrap();
+    fn apply(&self, args: &[bool]) -> bool {
+        let a1 = args[0];
         match self {
             Combinator::And => {
-                let a2 = *args[1].as_ref().right().unwrap();
+                let a2 = args[1];
                 a1 && a2
             }
             Combinator::Or => {
-                let a2 = *args[1].as_ref().right().unwrap();
+                let a2 = args[1];
                 a1 || a2
             }
             Combinator::Not => !a1,
@@ -51,6 +52,7 @@ impl std::fmt::Display for Combinator {
     }
 }
 
+/// A Relation operates on Fr values and convert them to boolean, which can be used with Combinators
 #[derive(Clone, Debug)]
 pub enum Relation {
     Eq,
@@ -96,6 +98,7 @@ impl std::fmt::Display for Relation {
     }
 }
 
+/// A Function operates on Fr value and produces Fr values
 #[derive(Clone, Debug)]
 pub enum Function {
     Add,
@@ -143,12 +146,13 @@ impl std::fmt::Display for Function {
     }
 }
 
+/// Nodes represent the parsed AST, sequentially built from a stack of Tokens.
 #[derive(Clone, Debug)]
 pub enum Node {
     Combinator(Combinator, Vec<Node>),
     Comparison(Relation, Vec<Node>),
     Funcall(Function, Vec<Node>),
-    Column(ColumnRef),
+    Column(String, ColumnRef),
     Const(Fr),
 }
 impl Node {
@@ -166,26 +170,34 @@ impl Node {
     }
 }
 impl Node {
-    pub fn scan<F: Fn(isize, &ColumnRef) -> Option<Fr>>(
-        &self,
-        get: &F,
-        max: isize,
-    ) -> Option<isize> {
-        for i in 0..max {
-            let r = self.eval(i, &get);
-            match r {
-                Some(Either::Right(b)) => {
-                    if b {
-                        return Some(i);
+    /// From a root Node, returns a (potentially empty) list of all the
+    /// positions in [[0; size]] such that the columns accessed through get
+    /// matches the expression.
+    pub fn scan<F: Fn(isize, &ColumnRef) -> Option<Fr>>(&self, get: &F, max: isize) -> Vec<isize> {
+        (0..max)
+            .filter_map(|i| {
+                let r = self.eval(i, &get);
+                match r {
+                    Some(Either::Right(b)) => {
+                        if b {
+                            Some(i)
+                        } else {
+                            None
+                        }
                     }
+                    Some(Either::Left(_)) => panic!("not a boolean"),
+                    None => None,
                 }
-                Some(Either::Left(_)) => panic!("not a boolean"),
-                None => {}
-            }
-        }
-        return None;
+            })
+            .collect()
     }
 
+    /// Evaluates an AST at a given position i and returns, if any, the computed
+    /// value.
+    ///
+    /// The computed value may be either Fr or boolean; depending on whether
+    /// they stem from a column or a function call, or from a condition or a
+    /// combinator. An Either monad encodes this dichotomy.
     fn eval<F: Fn(isize, &ColumnRef) -> Option<Fr>>(
         &self,
         i: isize,
@@ -195,7 +207,7 @@ impl Node {
             Node::Combinator(c, args) => {
                 let args = args
                     .iter()
-                    .map(|a| a.eval(i, get))
+                    .map(|a| a.eval(i, get).map(|x| x.right().unwrap()))
                     .collect::<Option<Vec<_>>>();
                 args.map(|args| Either::Right(c.apply(&args)))
             }
@@ -213,7 +225,7 @@ impl Node {
                     .collect::<Option<Vec<_>>>();
                 args.map(|args| Either::Left(f.apply(&args)))
             }
-            Node::Column(cref) => get(i, cref).map(|x| Either::Left(x)),
+            Node::Column(_, column) => get(i, column).map(|x| Either::Left(x)),
             Node::Const(x) => Some(Either::Left(x.clone())),
         }
     }
@@ -222,25 +234,26 @@ impl std::fmt::Display for Node {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Node::Combinator(c, args) => match c {
-                Combinator::Not => write!(f, "{} ({})", c, args[0]),
+                Combinator::Not => write!(f, "({} {})", c, args[0]),
                 _ => {
-                    write!(f, "({}) {} ({})", args[0], c, args[1])
+                    write!(f, "({} {} {})", c, args[0], args[1])
                 }
             },
-            Node::Comparison(r, args) => write!(f, "({}) {} ({})", args[0], r, args[1]),
-            Node::Funcall(ff, args) => write!(f, "({}) {} ({})", args[0], ff, args[1]),
-            Node::Const(x) => write!(f, "{}", x.to_string()),
-            Node::Column(name) => write!(f, "{}", name),
+            Node::Comparison(r, args) => write!(f, "({} {} {})", r, args[0], args[1]),
+            Node::Funcall(ff, args) => write!(f, "({} {} {})", ff, args[0], args[1]),
+            Node::Const(x) => write!(f, "{}", x.pretty()),
+            Node::Column(name, _) => write!(f, "{}", name),
         }
     }
 }
 
+/// Tokens are used to parse a sequence of Forth tokens from a string
 enum Token {
     Combinator(Combinator),
     Relation(Relation),
     Function(Function),
     Const(BigInt),
-    Column(ColumnRef),
+    Column(String, ColumnRef),
 }
 fn parse_token(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> Result<Token> {
     match s {
@@ -263,7 +276,7 @@ fn parse_token(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> R
                 .map_err(anyhow::Error::msg)
             } else {
                 if let Some(r) = columns.get(s) {
-                    Ok(Token::Column(r.clone()))
+                    Ok(Token::Column(s.to_string(), r.clone()))
                 } else {
                     bail!("{} unknown in {}", s, module)
                 }
@@ -272,6 +285,7 @@ fn parse_token(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> R
     }
 }
 
+/// Pops & returns an argument of a stack, returns an error is none are available
 fn take_one(stack: &mut Vec<Node>, fname: &str) -> Result<Node> {
     let r1 = stack
         .pop()
@@ -279,6 +293,7 @@ fn take_one(stack: &mut Vec<Node>, fname: &str) -> Result<Node> {
     Ok(r1)
 }
 
+/// Pops & returns two arguments of a stack, returns an error is two are not available
 fn take_two(stack: &mut Vec<Node>, fname: &str) -> Result<Vec<Node>> {
     let r2 = stack
         .pop()
@@ -289,6 +304,7 @@ fn take_two(stack: &mut Vec<Node>, fname: &str) -> Result<Vec<Node>> {
     Ok(vec![r1, r2])
 }
 
+/// Returns a Node representing the root of the AST parsed from the string representation of a Forth program
 pub fn parse(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> Result<Node> {
     let tokens = s.split_whitespace();
     let mut stack = Vec::new();
@@ -358,12 +374,12 @@ pub fn parse(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> Res
                 });
             }
             Token::Const(x) => stack.push(Node::Const(Fr::from_str(&x.to_string()).unwrap())),
-            Token::Column(c) => stack.push(Node::Column(c)),
+            Token::Column(s, c) => stack.push(Node::Column(s, c)),
         }
     }
 
     if stack.is_empty() || stack.len() > 1 {
-        bail!("expected a single epxression")
+        bail!("expected a single final expression")
     }
     if stack[0].is_value() {
         bail!("expected a comparison")
