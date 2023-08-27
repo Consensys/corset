@@ -221,7 +221,12 @@ impl Node {
 impl std::fmt::Display for Node {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Node::Combinator(c, args) => write!(f, "({}) {} ({})", args[0], c, args[1]),
+            Node::Combinator(c, args) => match c {
+                Combinator::Not => write!(f, "{} ({})", c, args[0]),
+                _ => {
+                    write!(f, "({}) {} ({})", args[0], c, args[1])
+                }
+            },
             Node::Comparison(r, args) => write!(f, "({}) {} ({})", args[0], r, args[1]),
             Node::Funcall(ff, args) => write!(f, "({}) {} ({})", args[0], ff, args[1]),
             Node::Const(x) => write!(f, "{}", x.to_string()),
