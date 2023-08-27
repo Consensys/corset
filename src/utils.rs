@@ -8,7 +8,7 @@ use postgres::Client;
 #[cfg(feature = "postgres")]
 use std::io::Read;
 
-use crate::{compiler::Magma, errors::RuntimeError};
+use crate::{compiler::Magma, errors::RuntimeError, pretty::Pretty, structs::Handle};
 
 pub fn is_file_empty(f: &str) -> Result<bool> {
     std::fs::metadata(f)
@@ -44,10 +44,15 @@ lazy_static::lazy_static! {
     static ref F_255: Fr = Fr::from_str("255").unwrap();
 }
 
-pub fn maybe_warn(t: Magma, xs: &[Fr]) -> Result<()> {
+pub fn maybe_warn(t: Magma, xs: &[Fr], h: &Handle) -> Result<()> {
     if t != Magma::Boolean {
         if xs.iter().all(|x| x.is_zero() || *x == Fr::one()) {
-            bail!("")
+            if xs.iter().any(|x| *x == Fr::one()) {
+                bail!(
+                    "Column {} filled with boolean, but not annotated as :bool",
+                    h.pretty(),
+                );
+            }
         }
     }
 

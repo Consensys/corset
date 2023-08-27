@@ -87,7 +87,7 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
 }
 
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
-fn parse_column(xs: &[Value], t: Magma) -> Result<Vec<Fr>> {
+fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
     let mut cache_num = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut cache_str = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut r = vec![Fr::zero()];
@@ -106,15 +106,15 @@ fn parse_column(xs: &[Value], t: Magma) -> Result<Vec<Fr>> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    if crate::utils::maybe_warn(t, &r).is_err() {
-        error!("Column of boolean found, but not annotated as :bool");
+    if let Err(msg) = crate::utils::maybe_warn(t, &r, h) {
+        error!("{}", msg);
     };
     r.extend(xs);
     Ok(r)
 }
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
-fn parse_column(xs: &[Value], t: Magma) -> Result<Vec<Fr>> {
+fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
     let mut cache = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut r = vec![Fr::zero()];
     let xs = xs
@@ -169,7 +169,7 @@ pub fn fill_traces(
         Value::Array(xs) => {
             if path.len() >= 2 {
                 let module = path[path.len() - 2].to_string();
-                let handle: ColumnRef = Handle::new(&module, &path[path.len() - 1]).into();
+                let handle: ColumnRef = Handle::new(&module, &path[path.len() - 1]).clone().into();
                 // The first column sets the size of its module
                 let module_raw_size = cs.raw_len_for_or_set(&module, xs.len() as isize);
 
@@ -202,7 +202,7 @@ pub fn fill_traces(
                         );
                     }
 
-                    let mut xs = parse_column(xs, *t)
+                    let mut xs = parse_column(xs, handle.as_handle(), *t)
                         .with_context(|| anyhow!("while importing {}", handle))?;
 
                     // If the parsed column is not long enought w.r.t. the
