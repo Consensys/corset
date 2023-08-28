@@ -143,7 +143,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                     java_name: c.handle.name.to_case(Case::Camel),
                     appender: handle_to_appender(&c.handle),
                     updater: handle_to_updater(&c.handle),
-                    tupe: magma_to_java_type(c.t).into(),
+                    tupe: magma_to_java_type(c.t),
                     register,
                     reg_id: r,
                 })

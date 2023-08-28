@@ -45,15 +45,14 @@ lazy_static::lazy_static! {
 }
 
 pub fn maybe_warn(t: Magma, xs: &[Fr], h: &Handle) -> Result<()> {
-    if t != Magma::Boolean {
-        if xs.iter().all(|x| x.is_zero() || *x == Fr::one()) {
-            if xs.iter().any(|x| *x == Fr::one()) {
-                bail!(
-                    "Column {} filled with boolean, but not annotated as :bool",
-                    h.pretty(),
-                );
-            }
-        }
+    if t != Magma::Boolean
+        && xs.iter().all(|x| x.is_zero() || *x == Fr::one())
+        && xs.iter().any(|x| *x == Fr::one())
+    {
+        bail!(
+            "Column {} filled with boolean, but not annotated as :bool",
+            h.pretty(),
+        );
     }
 
     Ok(())

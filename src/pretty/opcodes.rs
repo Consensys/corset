@@ -163,7 +163,7 @@ pub fn opcode_to_int(opcode: &str) -> Result<u8, ()> {
         }
         dup if dup.starts_with("DUP") => {
             if let Some(offset) = dup.strip_prefix("DUP").and_then(|x| x.parse::<u8>().ok()) {
-                if offset >= 1 && offset <= 16 {
+                if (1..=16).contains(&offset) {
                     Ok(0x7f + offset)
                 } else {
                     Err(())
@@ -174,7 +174,7 @@ pub fn opcode_to_int(opcode: &str) -> Result<u8, ()> {
         }
         swap if swap.starts_with("SWAP") => {
             if let Some(offset) = swap.strip_prefix("SWAP").and_then(|x| x.parse::<u8>().ok()) {
-                if offset >= 1 && offset <= 16 {
+                if (1..=16).contains(&offset) {
                     Ok(0x8f + offset)
                 } else {
                     Err(())

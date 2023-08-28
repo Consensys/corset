@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use owo_colors::{colored::Color, OwoColorize};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Line {
     indentation: usize,
     text: String,
@@ -11,15 +11,6 @@ impl Line {
     fn with_indent(indent: usize) -> Line {
         Line {
             indentation: indent,
-            text: String::new(),
-            annotation: None,
-        }
-    }
-}
-impl std::default::Default for Line {
-    fn default() -> Self {
-        Line {
-            indentation: 0,
             text: String::new(),
             annotation: None,
         }
@@ -139,7 +130,7 @@ impl Tty {
                 .collect::<Vec<_>>()
                 .join("│".color(Color::BrightBlack).to_string().as_str())
         } else {
-            " ".repeat(self.indentation_for(&l))
+            " ".repeat(self.indentation_for(l))
         }
     }
 
@@ -151,10 +142,7 @@ impl Tty {
                     format!(
                         "{}{}",
                         line.text,
-                        line.annotation
-                            .as_ref()
-                            .map(|s| s.as_str())
-                            .unwrap_or_default()
+                        line.annotation.as_deref().unwrap_or_default()
                     )
                 })
                 .join("\n")
@@ -169,35 +157,28 @@ impl Tty {
                         for j in i + 1..self.lines.len() {
                             if self.indentation_for(&self.lines[j]) == 0 {
                                 break;
-                            } else {
-                                if self.lines[j].annotation.is_some() {
-                                    max_len = max_len.max(
-                                        self.indentation_for(&self.lines[j])
-                                            + self.lines[j].text.len()
-                                            + 1,
-                                    );
-                                }
+                            } else if self.lines[j].annotation.is_some() {
+                                max_len = max_len.max(
+                                    self.indentation_for(&self.lines[j])
+                                        + self.lines[j].text.len()
+                                        + 1,
+                                );
                             }
                         }
                     }
 
                     if l.text.is_empty() {
                         String::new()
+                    } else if l.annotation.is_some() {
+                        format!(
+                            "{}{:w$}{}",
+                            self.make_indent(l),
+                            l.text,
+                            l.annotation.as_deref().unwrap_or_default(),
+                            w = max_len - self.indentation_for(l)
+                        )
                     } else {
-                        if l.annotation.is_some() {
-                            format!(
-                                "{}{:w$}{}",
-                                self.make_indent(l),
-                                l.text,
-                                l.annotation
-                                    .as_ref()
-                                    .map(|s| s.as_str())
-                                    .unwrap_or_default(),
-                                w = max_len - self.indentation_for(l)
-                            )
-                        } else {
-                            format!("{}{}", self.make_indent(l), l.text,)
-                        }
+                        format!("{}{}", self.make_indent(l), l.text,)
                     }
                 })
                 .join("\n")

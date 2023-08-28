@@ -470,18 +470,16 @@ fn main() -> Result<()> {
                 r
             }
         }
+    } else if args.source.len() == 1
+        && Path::new(&args.source[0])
+            .extension()
+            .map(|e| e == "bin")
+            .unwrap_or(false)
+    {
+        info!("Loading `{}`", &args.source[0]);
+        ConstraintSetBuilder::from_bin(&args.source[0])?
     } else {
-        if args.source.len() == 1
-            && Path::new(&args.source[0])
-                .extension()
-                .map(|e| e == "bin")
-                .unwrap_or(false)
-        {
-            info!("Loading `{}`", &args.source[0]);
-            ConstraintSetBuilder::from_bin(&args.source[0])?
-        } else {
-            panic!("Compile Corset with the `parser` feature to enable the compiler")
-        }
+        panic!("Compile Corset with the `parser` feature to enable the compiler")
     };
 
     match args.command {

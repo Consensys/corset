@@ -169,7 +169,7 @@ pub fn fill_traces(
         Value::Array(xs) => {
             if path.len() >= 2 {
                 let module = path[path.len() - 2].to_string();
-                let handle: ColumnRef = Handle::new(&module, &path[path.len() - 1]).clone().into();
+                let handle: ColumnRef = Handle::new(&module, &path[path.len() - 1]).into();
                 // The first column sets the size of its module
                 let module_raw_size = cs.raw_len_for_or_set(&module, xs.len() as isize);
 

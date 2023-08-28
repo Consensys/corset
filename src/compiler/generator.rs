@@ -163,14 +163,14 @@ impl Defined {
 
     pub(crate) fn get_specialization(&self, args_t: &[Type]) -> Result<&Specialization> {
         for s in self.specializations.iter() {
-            if crate::compiler::compatible_with(&s.in_types, &args_t) {
+            if crate::compiler::compatible_with(&s.in_types, args_t) {
                 return Ok(s);
             }
         }
         error!("available specializations:");
         for s in self.specializations.iter() {
             let (expected_str, found_str) =
-                errors::compiler::type_comparison_message(&s.in_types, &args_t);
+                errors::compiler::type_comparison_message(&s.in_types, args_t);
             error!(
                 "expected {} mismatches with found {}",
                 expected_str, found_str
@@ -1214,10 +1214,8 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
         Token::IndexedSymbol { name, index } => {
             if let Expression::ArrayColumn { handle, .. } = ctx.resolve_symbol(name)?.e() {
                 let i = reduce(index, ctx, settings)?
-                    .map(|n| n.pure_eval().ok())
-                    .flatten()
-                    .map(|b| b.to_usize())
-                    .flatten()
+                    .and_then(|n| n.pure_eval().ok())
+                    .and_then(|b| b.to_usize())
                     .ok_or_else(|| anyhow!("{:?} is not a valid index", index))?;
                 let array = ctx.resolve_handle(handle.as_handle())?;
                 match array.e() {
@@ -1304,10 +1302,8 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                             ctx.resolve_symbol(name)?.e()
                         {
                             let index_usize = reduce(index, ctx, settings)?
-                                .map(|n| n.pure_eval().ok())
-                                .flatten()
-                                .map(|b| b.to_usize())
-                                .flatten()
+                                .and_then(|n| n.pure_eval().ok())
+                                .and_then(|b| b.to_usize())
                                 .ok_or_else(|| {
                                     anyhow!("{:?} is not a valid index", index.white().bold())
                                 })?;

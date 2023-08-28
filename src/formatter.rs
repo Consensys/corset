@@ -32,7 +32,7 @@ impl Tty {
         while let Some(x) = iter.next() {
             all(&x, self);
             if let Some(y) = iter.peek() {
-                but_last(&y, self);
+                but_last(y, self);
             }
         }
     }
@@ -404,15 +404,11 @@ fn format_defpairs(xs: &[AstNode], tty: &mut Tty) {
                     n.format(tty);
                 }
 
-                match iter.peek() {
-                    Some(a) => match &a.class {
-                        Token::InlineComment(_) => {
-                            a.format(tty);
-                            iter.next();
-                        }
-                        _ => {}
-                    },
-                    None => {}
+                if let Some(a) = iter.peek() {
+                    if let Token::InlineComment(_) = &a.class {
+                        a.format(tty);
+                        iter.next();
+                    }
                 };
 
                 if matches!(n.class, Token::BlockComment(_)) || (!i && iter.peek().is_some()) {
@@ -590,10 +586,7 @@ impl AstNode {
                             }
                         }
 
-                        match pragma {
-                            "corset:noformat" => true,
-                            _ => false,
-                        }
+                        pragma == "corset:noformat"
                     }
                     Token::InlineComment(c) => {
                         tty.annotate(c.to_owned());

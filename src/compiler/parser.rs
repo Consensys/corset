@@ -323,8 +323,8 @@ impl Token {
     pub fn debug_info(&self) -> Option<String> {
         match self {
             Token::Value(x) => Some(format!("{}", x)),
-            Token::Symbol(ref name) => Some(format!("{}", name)),
-            Token::Keyword(ref name) => Some(format!("{}", name)),
+            Token::Symbol(ref name) => Some(name.to_string()),
+            Token::Keyword(ref name) => Some(name.to_string()),
             Token::List(ref args) => {
                 if let Some(verb) = args.get(0) {
                     if let Ok(verb) = verb.as_symbol() {
@@ -806,7 +806,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                         }
                     },
                     lc: c.lc,
-                    src: c.src.clone(),
+                    src: c.src,
                 })
             })
         })
@@ -1058,8 +1058,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 .with_context(|| anyhow!("missing target columns"))??
                 .as_list()?
                 .iter()
-                .map(|t| parse_column_attributes(t.clone()))
-                .flatten()
+                .flat_map(|t| parse_column_attributes(t.clone()))
                 .map(|attributes| attributes.try_into())
                 .collect::<Result<Vec<DisplayableColumn>>>()?;
 
@@ -1073,7 +1072,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 .to_vec();
             for from_w_sign in froms_with_sign {
                 if let Result::Ok(list) = from_w_sign.as_list() {
-                    if let Some(s) = list.get(0).map(|a| a.as_symbol().ok()).flatten() {
+                    if let Some(s) = list.get(0).and_then(|a| a.as_symbol().ok()) {
                         let sign = if s == "+" || s == "↓" {
                             Some(true)
                         } else if s == "-" || s == "↑" {

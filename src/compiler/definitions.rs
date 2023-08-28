@@ -71,7 +71,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     ctx.perspective(),
                 ))
                 .kind(Kind::Phantom)
-                .base(target.base.clone())
+                .base(target.base)
                 .build();
 
             ctx.insert_symbol(&target.name, node)
@@ -136,7 +136,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                         .handle(Handle::new(ctx.module(), to.name.clone()))
                         .kind(Kind::Phantom)
                         .t(Magma::Integer) // TODO previously we took the type of the corresponding 'from' column, is that a problem?
-                        .base(to.base.clone())
+                        .base(to.base)
                         .build(),
                 )
                 .with_context(|| anyhow!("while defining permutation: {}", e))?;
