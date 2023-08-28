@@ -2,7 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.2.0] - 2023-08-28
+
+### Bug Fixes
+
+- OoB in Combinator display
+- Incoherences in the type system regarding cyclic validation
+
+### Features
+
+- Add `corset inspect` to visualize trace files
+- Add a Forth micro-language to select rows in the inspector
+- Specify columns potentially missing bool annotation
+- Opcodes can be used as immediate values
+- Always save valid scan expressions
+- Corset code can be provided from STDIN
+
+### Miscellaneous Tasks
+
+- Rename jobs
+- Github++
+- Clippy
+- Clippy
+
+### Refactor
+
+- Split inputs in their own modules
+
+### Build
+
+- Fix conditional compilation
+- Drop dependency on names
+
 ## [8.1.3] - 2023-08-22
+
+### Miscellaneous Tasks
+
+- Release corset version 8.1.3
 
 ### Build
 
