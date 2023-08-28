@@ -319,6 +319,7 @@ impl<'a> Inspector<'a> {
                                 self.minibuffer,
                             );
                             if let Some((exp, is)) = is {
+                                self.current_module_mut().last_scan = exp.clone();
                                 if is.is_empty() {
                                     self.message = "Not found".red();
                                 } else {
@@ -328,7 +329,6 @@ impl<'a> Inspector<'a> {
                                         is.iter().join(" ")
                                     ))
                                     .green();
-                                    self.current_module_mut().last_scan = exp;
                                     self.current_module_mut().goto(is[0]);
                                 }
                             }
