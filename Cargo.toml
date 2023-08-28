@@ -14,6 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+atty = "0.2.14"
 buche = "0.7"
 buildstructor = "0.5.2"
 cached = { version = "0.43", default-features = false }
