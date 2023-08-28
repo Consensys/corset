@@ -217,35 +217,26 @@ impl FuncVerifier<Node> for Intrinsic {
         // Each nested second-level list represent the acceptable typings for
         // the argument they type.
         //
-        // The first-level list is cycled as many times is needed to validate
-        // all the arguments. Therefore, for function taking homogeneous
-        // arguments (e.g. Add), a single second-level list is enough.
+        // The first-level list last element is cycled as many times is needed
+        // to validate all the arguments. Therefore, for function taking
+        // homogeneous arguments (e.g. Add), a single second-level list is
+        // enough.
         let expected_t: &[&[Type]] = match self {
             Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => &[&[Type::Any(Magma::Any)]],
             Intrinsic::Exp => &[&[Type::Any(Magma::Any)], &[Type::Scalar(Magma::Any)]],
             Intrinsic::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
-            Intrinsic::Inv => &[&[Type::Column(Magma::Any)]],
+            Intrinsic::Inv => &[&[Type::Any(Magma::Any)]],
             Intrinsic::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
             Intrinsic::IfZero | Intrinsic::IfNotZero => &[
-                &[
-                    Type::Scalar(Magma::Any),
-                    Type::Column(Magma::Any),
-                    Type::List(Magma::Any),
-                ],
-                &[
-                    Type::Scalar(Magma::Any),
-                    Type::Column(Magma::Any),
-                    Type::List(Magma::Any),
-                ],
+                // condition type TODO: force to bool/loob
+                &[Type::Any(Magma::Any)],
+                // then/else arms type
+                &[Type::Any(Magma::Any), Type::List(Magma::Any)],
             ],
-            Intrinsic::Begin => &[&[
-                Type::Scalar(Magma::Any),
-                Type::Column(Magma::Any),
-                Type::List(Magma::Any),
-            ]],
+            Intrinsic::Begin => &[&[Type::Any(Magma::Any)]],
         };
 
-        if super::cyclic_compatible_with(expected_t, &args_t) {
+        if super::compatible_with_repeating(expected_t, &args_t) {
             Ok(())
         } else {
             bail!(CompileError::TypeError(
@@ -1152,7 +1143,7 @@ fn apply_intrinsic(
                 } else {
                     traversed_args[0].to_string()
                 };
-                error!("condition {} may overflow", pretty.bright_white().bold());
+                warn!("condition {} may overflow", pretty.bright_white().bold());
             }
             Ok(Some(r))
         }

@@ -402,12 +402,15 @@ impl Node {
                 Expression::Funcall { func, args } => {
                     let mut mine = ax;
                     if let Intrinsic::Shift = func {
-                        let arg_big = args[1]
-                            .pure_eval()
-                            .unwrap_or_else(|_| panic!("{}", args[1].to_string().as_str()));
-                        let arg = arg_big
-                            .to_isize()
-                            .unwrap_or_else(|| panic!("{}", arg_big.to_string().as_str()));
+                        let arg_big = args[1].pure_eval().unwrap_or_else(|_| {
+                            panic!(
+                                "{} is not a valid shift offset",
+                                args[1].to_string().as_str()
+                            )
+                        });
+                        let arg = arg_big.to_isize().unwrap_or_else(|| {
+                            panic!("{} is not an isize", arg_big.to_string().as_str())
+                        });
                         mine = mine.min(mine + arg);
                     }
                     args.iter().map(|e| _past_span(e.e(), mine)).min().unwrap()

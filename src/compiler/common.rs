@@ -180,7 +180,7 @@ impl FuncVerifier<Node> for Builtin {
             Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
         };
 
-        if super::cyclic_compatible_with(expected_t, &args_t) {
+        if super::compatible_with_repeating(expected_t, &args_t) {
             Ok(())
         } else {
             bail!(CompileError::TypeError(

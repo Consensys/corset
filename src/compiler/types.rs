@@ -26,7 +26,7 @@ impl std::fmt::Display for Type {
             Type::Void => write!(f, "∅"),
             Type::Scalar(m) => write!(f, "{}", m),
             Type::Column(m) => write!(f, "[{}]", m),
-            Type::Any(m) => write!(f, "∀{}", m),
+            Type::Any(m) => write!(f, "∋{}", m),
             Type::ArrayColumn(m) => write!(f, "[[{}]]", m),
             Type::List(m) => write!(f, "{{{}}}", m),
         }
@@ -290,23 +290,41 @@ impl std::fmt::Display for Magma {
             Magma::None => write!(f, "NONE"),
             Magma::Loobean => write!(f, "𝕃"),
             Magma::Boolean => write!(f, "𝔹"),
-            Magma::Nibble => write!(f, "Nib."),
-            Magma::Byte => write!(f, "Byte"),
+            Magma::Nibble => write!(f, "4×"),
+            Magma::Byte => write!(f, "8×"),
             Magma::Integer => write!(f, "Fr"),
             Magma::Any => write!(f, "∀"),
         }
     }
 }
 
-pub fn cyclic_compatible_with(expected: &[&[Type]], found: &[Type]) -> bool {
-    for (es, f) in expected.iter().cycle().zip(found.iter()) {
-        if !es.iter().any(|e| e >= f) {
+/// Checks that a given list of types `found` is compatible with a list of list
+/// of types `expected`. For each position in the lists, the type in `found`
+/// must match with one of the types in the corresponding nested list in
+/// `expected` for the operation to be a success.
+///
+/// In the case where `found` is longer than `expected`, the last element of
+/// `expected` is repeated as many times as required. This allows for typing
+/// variadic functions, as long as their tail of arguments is type-homogeneous.
+pub fn compatible_with_repeating(expected: &[&[Type]], found: &[Type]) -> bool {
+    for (es, f) in expected
+        .iter()
+        .chain(std::iter::repeat(expected.last().unwrap()))
+        .zip(found.iter())
+    {
+        if !es.iter().any(|e| f.can_cast_to(*e)) {
             return false;
         }
     }
     true
 }
 
+/// Checks that a given list of types `found` is compatible with a list of list
+/// of types `expected`. For each position in the lists, the type in `found`
+/// must match with the corresponding type `expected` for the operation to be a
+/// success.
+///
+/// If `found` and `expected` differ in length, the operation is a failure.
 pub fn compatible_with(expected: &[Type], found: &[Type]) -> bool {
     if expected.len() != found.len() {
         return false;

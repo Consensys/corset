@@ -117,15 +117,16 @@ pub(crate) mod compiler {
             expected
                 .iter()
                 .cycle()
+                .chain(std::iter::repeat(expected.last().unwrap()))
                 .zip(found.iter())
                 .map(|(es, f)| {
                     let es_str = es
                         .iter()
-                        .map(|e| format!("{:?}", e))
+                        .map(|e| e.to_string())
                         .collect::<Vec<_>>()
                         .join("|");
-                    if es.iter().any(|e| e >= f) {
-                        es_str.black().to_string()
+                    if es.iter().any(|e| f.can_cast_to(*e)) {
+                        es_str.white().to_string()
                     } else {
                         es_str.blue().to_string()
                     }
@@ -139,10 +140,11 @@ pub(crate) mod compiler {
             expected
                 .iter()
                 .cycle()
+                .chain(std::iter::repeat(expected.last().unwrap()))
                 .zip(found.iter())
                 .map(|(e, f)| {
-                    if e.iter().any(|e| e >= f) {
-                        f.black().to_string()
+                    if e.iter().any(|e| f.can_cast_to(*e)) {
+                        f.white().to_string()
                     } else {
                         f.red().to_string()
                     }
