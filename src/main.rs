@@ -421,8 +421,6 @@ impl ConstraintSetBuilder {
 
 #[cfg(feature = "cli")]
 fn main() -> Result<()> {
-    use std::io::{self, Read};
-
     let args = Args::parse();
     buche::new()
         .verbosity(args.verbose.log_level_filter())
@@ -436,15 +434,12 @@ fn main() -> Result<()> {
         .unwrap();
 
     let mut builder = if cfg!(feature = "parser") {
-        if !atty::is(atty::Stream::Stdin) {
-            let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
-            let mut input = String::new();
-            io::stdin().read_to_string(&mut input)?;
-            r.add_source(&input)?;
-            r
-        } else if matches!(args.command, Commands::Format { .. }) {
+        if matches!(args.command, Commands::Format { .. }) {
             if args.source.len() != 1 {
-                bail!("can only format one file at a time")
+                bail!(
+                    "can only format one file at a time; found {}",
+                    args.source.len()
+                )
             } else if args.source.len() == 1
                 && Path::new(&args.source[0])
                     .extension()
