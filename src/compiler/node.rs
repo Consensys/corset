@@ -832,7 +832,7 @@ impl Node {
                         Color::BrightWhite
                     };
 
-                    tty.write(h.bold().to_string());
+                    tty.write(h.as_handle().name.bold().to_string());
                     if show_value {
                         tty.write(
                             format!("<{}>", v.pretty_with_base(*base))
