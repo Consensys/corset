@@ -755,11 +755,11 @@ impl Node {
                             false,
                         );
                         if subponent > 0 {
-                            tty.write("₊".bold().to_string());
+                            tty.write("₊".color(c_v).to_string());
                         }
                         tty.write(
                             crate::pretty::subscript(&subponent.to_string())
-                                .bold()
+                                .color(c_v)
                                 .to_string(),
                         );
                         tty.write(
@@ -834,10 +834,10 @@ impl Node {
                     } else if v.eq(faulty) {
                         Color::Red
                     } else {
-                        Color::BrightWhite
+                        Color::White
                     };
 
-                    tty.write(h.as_handle().name.bold().to_string());
+                    tty.write(h.as_handle().name.color(c).bold().to_string());
                     if show_value {
                         tty.write(
                             format!("<{}>", v.pretty_with_base(*base))
