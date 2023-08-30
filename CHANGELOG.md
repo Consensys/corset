@@ -2,11 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.3.2] - 2023-08-30
+
+### Bug Fixes
+
+- Only show column names in checker
+
 ## [8.3.1] - 2023-08-30
 
 ### Bug Fixes
 
 - Erroneous display of checker reports
+
+### Miscellaneous Tasks
+
+- Release corset version 8.3.1
 
 ## [8.3.0] - 2023-08-30
 
