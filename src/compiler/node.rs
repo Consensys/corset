@@ -755,9 +755,13 @@ impl Node {
                             false,
                         );
                         if subponent > 0 {
-                            tty.write("₊");
+                            tty.write("₊".bold().to_string());
                         }
-                        tty.write(crate::pretty::subscript(&subponent.to_string()));
+                        tty.write(
+                            crate::pretty::subscript(&subponent.to_string())
+                                .bold()
+                                .to_string(),
+                        );
                         tty.write(format!(
                             "→ {}",
                             v.pretty_with_base(Base::Hex).color(c_v).bold()
