@@ -694,6 +694,7 @@ impl Node {
             zero_context: bool,  // whether we are in a zero-path
             with_newlines: bool, // whether we want the expression to span several lines
             with_src: bool,
+            show_value: bool,
         ) {
             let colors = [
                 Color::Red,
@@ -751,11 +752,16 @@ impl Node {
                             zero_context,
                             false,
                             with_src,
+                            false,
                         );
                         if subponent > 0 {
                             tty.write("₊");
                         }
                         tty.write(crate::pretty::subscript(&subponent.to_string()));
+                        tty.write(format!(
+                            "→ {}",
+                            v.pretty_with_base(Base::Hex).color(c_v).bold()
+                        ));
                     } else {
                         tty.write(format!("({fname} ",).color(c).to_string());
                         if with_newlines {
@@ -773,6 +779,7 @@ impl Node {
                                 zero_context,
                                 a.depth() > 2,
                                 with_src,
+                                show_value,
                             );
                             spacer(tty, with_newlines);
                         }
@@ -788,6 +795,7 @@ impl Node {
                                 zero_context,
                                 a.depth() > 2,
                                 with_src,
+                                show_value,
                             );
                             if args.peek().is_some() {
                                 spacer(tty, with_newlines)
@@ -798,11 +806,11 @@ impl Node {
                             tty.cr();
                         }
                         tty.write(")".color(c).to_string());
+                        tty.annotate(format!(
+                            "→ {}",
+                            v.pretty_with_base(Base::Hex).color(c_v).bold()
+                        ));
                     }
-                    tty.annotate(format!(
-                        " → {}",
-                        v.pretty_with_base(Base::Hex).color(c_v).bold()
-                    ));
                 }
                 Expression::Const(x, _) => {
                     let c = if dim && zero_context {
@@ -812,7 +820,9 @@ impl Node {
                     };
                     tty.write(x.to_string().color(c).bold().to_string());
                 }
-                Expression::Column { handle: h, .. } => {
+                Expression::Column {
+                    handle: h, base, ..
+                } => {
                     let v = f(n).unwrap_or_default();
                     let c = if dim && zero_context {
                         Color::BrightBlack
@@ -822,11 +832,14 @@ impl Node {
                         Color::BrightWhite
                     };
 
-                    tty.write(format!("{}", h));
-                    tty.annotate(format!(
-                        " → {}",
-                        v.pretty_with_base(Base::Hex).color(c).bold()
-                    ));
+                    tty.write(h.bold().to_string());
+                    if show_value {
+                        tty.write(
+                            format!("<{}>", v.pretty_with_base(*base))
+                                .color(c)
+                                .to_string(),
+                        );
+                    }
                 }
                 Expression::ArrayColumn { handle, .. } => tty.write(handle.to_string()),
                 Expression::List(ns) => {
@@ -855,6 +868,7 @@ impl Node {
                             v.is_zero() || zero_context,
                             n.depth() > 2,
                             with_src,
+                            show_value,
                         );
                         if ns.peek().is_some() {
                             spacer(tty, true);
@@ -870,7 +884,9 @@ impl Node {
 
         let mut tty = Tty::new().with_guides();
         let faulty = f(self).unwrap_or_default();
-        _debug(self, &mut tty, f, &faulty, unclutter, dim, false, true, src);
+        _debug(
+            self, &mut tty, f, &faulty, unclutter, dim, false, true, src, true,
+        );
         tty.page_feed()
     }
 

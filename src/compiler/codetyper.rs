@@ -139,11 +139,18 @@ impl Tty {
             self.lines
                 .iter()
                 .map(|line| {
-                    format!(
-                        "{}{}",
-                        line.text,
-                        line.annotation.as_deref().unwrap_or_default()
-                    )
+                    if line.text.is_empty() {
+                        String::new()
+                    } else if line.annotation.is_some() {
+                        format!(
+                            "{}{} {}",
+                            self.make_indent(line),
+                            line.text,
+                            line.annotation.as_deref().unwrap_or_default(),
+                        )
+                    } else {
+                        format!("{}{}", self.make_indent(line), line.text)
+                    }
                 })
                 .join("\n")
         } else {
