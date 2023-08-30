@@ -2,11 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.3.1] - 2023-08-30
+
+### Bug Fixes
+
+- Erroneous display of checker reports
+
 ## [8.3.0] - 2023-08-30
 
 ### Bug Fixes
 
 - Stop using STDIN
+
+### Miscellaneous Tasks
+
+- Release corset version 8.3.0
 
 ## [8.2.0] - 2023-08-28
 
