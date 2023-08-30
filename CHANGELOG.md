@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.3.0] - 2023-08-30
+
+### Bug Fixes
+
+- Stop using STDIN
+
 ## [8.2.0] - 2023-08-28
 
 ### Bug Fixes
@@ -24,6 +30,7 @@ All notable changes to this project will be documented in this file.
 - Github++
 - Clippy
 - Clippy
+- Release corset version 8.2.0
 
 ### Refactor
 
