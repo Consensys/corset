@@ -2,11 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.3.5] - 2023-08-30
+
+### Bug Fixes
+
+- Dim/non-dim formatting
+
 ## [8.3.4] - 2023-08-30
 
 ### Bug Fixes
 
 - Homogeneize shift display
+
+### Miscellaneous Tasks
+
+- Release corset version 8.3.4
 
 ## [8.3.3] - 2023-08-30
 
