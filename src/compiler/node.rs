@@ -762,10 +762,11 @@ impl Node {
                                 .bold()
                                 .to_string(),
                         );
-                        tty.write(format!(
-                            "→ {}",
-                            v.pretty_with_base(Base::Hex).color(c_v).bold()
-                        ));
+                        tty.write(
+                            format!("<{}>", v.pretty_with_base(Base::Hex))
+                                .color(c_v)
+                                .to_string(),
+                        );
                     } else {
                         tty.write(format!("({fname} ",).color(c).to_string());
                         if with_newlines {
