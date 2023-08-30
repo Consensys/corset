@@ -2,11 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.3.4] - 2023-08-30
+
+### Bug Fixes
+
+- Homogeneize shift display
+
 ## [8.3.3] - 2023-08-30
 
 ### Bug Fixes
 
 - Correct format for subponents
+
+### Miscellaneous Tasks
+
+- Release corset version 8.3.3
 
 ## [8.3.2] - 2023-08-30
 
