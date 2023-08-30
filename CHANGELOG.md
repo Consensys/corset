@@ -2,11 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.3.3] - 2023-08-30
+
+### Bug Fixes
+
+- Correct format for subponents
+
 ## [8.3.2] - 2023-08-30
 
 ### Bug Fixes
 
 - Only show column names in checker
+
+### Miscellaneous Tasks
+
+- Release corset version 8.3.2
 
 ## [8.3.1] - 2023-08-30
 
