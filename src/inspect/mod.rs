@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{
     compiler::{ColumnRef, ConstraintSet},
     pretty::Pretty,
@@ -12,8 +10,10 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use itertools::Itertools;
+use pairing_ce::ff::PrimeField;
 use ratatui::{prelude::*, widgets::*};
 use regex_lite::Regex;
+use std::collections::HashMap;
 
 type Backend = CrosstermBackend<std::io::Stdout>;
 type Frame<'a> = ratatui::Frame<'a, Backend>;
@@ -131,13 +131,35 @@ impl ModuleView {
                     Cell::from(h.name.to_owned()).style(Style::default().blue().bold()),
                 )
                 .chain(span.clone().enumerate().map(|(k, i)| {
-                    let is = cs
-                        .columns
+                    cs.columns
                         .get(column_ref, i, false)
-                        .map(|x| x.pretty_with_base(cs.columns.get_col(column_ref).unwrap().base))
-                        .unwrap_or(".".to_string());
-                    maxes[k + 1] = maxes[k + 1].max(is.len());
-                    Cell::from(is)
+                        .map(|x| {
+                            let base = cs.columns.get_col(column_ref).unwrap().base;
+                            let x_str = x.pretty_with_base(base);
+                            maxes[k + 1] = maxes[k + 1].max(x_str.len());
+                            let bg_color = x
+                                .into_repr()
+                                .0
+                                .iter()
+                                .flat_map(|x| x.to_le_bytes())
+                                .fold(0u8, |ax, bx| ax.wrapping_add(bx));
+                            // ensure that we write white on dark colors and white on dark ones
+                            let fg_color = if bg_color % 36 > 18 {
+                                Color::Black
+                            } else {
+                                Color::White
+                            };
+                            Cell::from(x_str)
+                                .bg({
+                                    if bg_color > 0 {
+                                        Color::Indexed(bg_color.wrapping_add(16) % 251)
+                                    } else {
+                                        Color::Reset
+                                    }
+                                })
+                                .fg(fg_color)
+                        })
+                        .unwrap_or(Cell::from("."))
                 })),
             )
             .style(Style::default().white())
