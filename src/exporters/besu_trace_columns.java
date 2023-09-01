@@ -28,7 +28,7 @@ import java.util.List;
  * Any modifications to this code may be overwritten and could lead to unexpected behavior.
  * Please DO NOT ATTEMPT TO MODIFY this code directly.
  */
-record Trace(
+public record Trace(
   {{#each registers}}
   @JsonProperty("{{ this.corset_name }}") List<{{ this.tupe }}> {{ this.java_name }}{{#unless @last}},{{/unless}}{{#if @last}}) { {{/if}}
   {{/each}}
@@ -46,7 +46,7 @@ record Trace(
 
     private TraceBuilder() {}
 
-    int size() {
+    public int size() {
       if (!filled.isEmpty()) {
         throw new RuntimeException("Cannot measure a trace with a non-validated row.");
       }
@@ -55,7 +55,7 @@ record Trace(
     }
 
     {{#each columns}}
-    TraceBuilder {{ this.appender }}(final {{ this.tupe }} b) {
+    public TraceBuilder {{ this.appender }}(final {{ this.tupe }} b) {
       if (filled.get({{ this.reg_id }})) {
         throw new IllegalStateException("{{ this.corset_name }} already set");
       } else {
@@ -72,7 +72,7 @@ record Trace(
     {{/each}}
 
     {{#each columns}}
-    TraceBuilder set{{ this.updater }}At(final {{ this.tupe }} b, int i) {
+    public TraceBuilder set{{ this.updater }}At(final {{ this.tupe }} b, int i) {
       {{ this.register }}.set(i, b);
 
       return this;
@@ -83,7 +83,7 @@ record Trace(
     {{/each}}
 
     {{#each columns}}
-    TraceBuilder set{{ this.updater }}Relative(final {{ this.tupe }} b, int i) {
+    public TraceBuilder set{{ this.updater }}Relative(final {{ this.tupe }} b, int i) {
       {{ this.register }}.set({{ this.register }}.size() - 1 - i, b);
 
       return this;
@@ -93,7 +93,7 @@ record Trace(
     {{/unless}}
     {{/each}}
 
-    TraceBuilder validateRow() {
+    public TraceBuilder validateRow() {
       {{#each registers}}
       if (!filled.get({{ this.id }})) {
         throw new IllegalStateException("{{ this.corset_name }} has not been filled");
@@ -106,7 +106,7 @@ record Trace(
       return this;
     }
 
-    TraceBuilder fillAndValidateRow() {
+    public TraceBuilder fillAndValidateRow() {
       {{#each registers}}
       if (!filled.get({{ this.id }})) {
           {{ this.java_name }}.add({{ this.zero_value }});
