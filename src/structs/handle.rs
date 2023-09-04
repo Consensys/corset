@@ -17,8 +17,11 @@ pub struct Handle {
 }
 impl std::cmp::Ord for Handle {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.module.cmp(&other.module) {
-            std::cmp::Ordering::Equal => self.name.cmp(&other.name),
+        match self.perspective.cmp(&other.perspective) {
+            std::cmp::Ordering::Equal => match self.module.cmp(&other.module) {
+                std::cmp::Ordering::Equal => self.name.cmp(&other.name),
+                other => other,
+            },
             other => other,
         }
     }

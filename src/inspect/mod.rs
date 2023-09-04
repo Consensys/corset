@@ -10,7 +10,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use itertools::Itertools;
-use pairing_ce::ff::PrimeField;
+use pairing_ce::ff::{Field, PrimeField};
 use ratatui::{prelude::*, widgets::*};
 use regex_lite::Regex;
 use std::collections::HashMap;
@@ -48,7 +48,7 @@ impl ModuleView {
         let columns: Vec<(ColumnRef, Handle)> = cs
             .columns
             .iter_module(name)
-            .sorted_by(|c, d| c.1.handle.name.cmp(&d.1.handle.name))
+            .sorted_by(|c, d| c.1.handle.cmp(&d.1.handle))
             .map(|c| {
                 max_size = max_size.max(cs.columns.len(&c.0).unwrap_or_default());
                 (c.0, c.1.handle.clone())
@@ -120,6 +120,11 @@ impl ModuleView {
     fn render(&self, cs: &ConstraintSet, f: &mut Frame, target: Rect) {
         let span = 0.max(self.shift)..(self.shift + CONTEXT).min(self.size) + 1;
         // max width for each column; defaults to 3
+        let max_column_name_width = self
+            .current_columns()
+            .filter_map(|(_, h)| h.perspective.as_ref().map(|p| p.len()))
+            .max()
+            .unwrap_or_default();
         let mut maxes = vec![3; span.len() + 1];
 
         let block = Block::new().borders(Borders::NONE);
@@ -128,7 +133,17 @@ impl ModuleView {
             maxes[0] = maxes[0].max(h.name.len());
             Row::new(
                 std::iter::once(
-                    Cell::from(h.name.to_owned()).style(Style::default().blue().bold()),
+                    Cell::from(format!(
+                        "{:width$} {}",
+                        if let Some(p) = h.perspective.as_ref() {
+                            p
+                        } else {
+                            ""
+                        },
+                        h.name.to_owned(),
+                        width = max_column_name_width,
+                    ))
+                    .style(Style::default().blue().bold()),
                 )
                 .chain(span.clone().enumerate().map(|(k, i)| {
                     cs.columns
@@ -144,20 +159,46 @@ impl ModuleView {
                                 .flat_map(|x| x.to_le_bytes())
                                 .fold(0u8, |ax, bx| ax.wrapping_add(bx));
                             // ensure that we write white on dark colors and white on dark ones
-                            let fg_color = if bg_color % 36 > 18 {
+                            let corrected_fg_color = if bg_color % 36 > 18 {
                                 Color::Black
                             } else {
                                 Color::White
                             };
+
+                            // dim the column if its perspective is inactive
+                            let dim = if let Some(perspective) =
+                                cs.columns.perspective(column_ref).unwrap()
+                            {
+                                cs.get_perspective(&h.module, perspective)
+                                    .unwrap()
+                                    .eval(
+                                        i,
+                                        &mut |handle, i, wrap| {
+                                            cs.columns.get_raw(handle, i, wrap).cloned()
+                                        },
+                                        &mut None,
+                                        &Default::default(),
+                                    )
+                                    .map(|x| x.is_zero())
+                                    .unwrap_or(false)
+                            } else {
+                                false
+                            };
+
+                            // render the cell
                             Cell::from(x_str)
+                                .fg(if dim {
+                                    Color::Black
+                                } else {
+                                    corrected_fg_color
+                                })
                                 .bg({
-                                    if bg_color > 0 {
+                                    if bg_color > 0 && !dim {
                                         Color::Indexed(bg_color.wrapping_add(16) % 251)
                                     } else {
                                         Color::Reset
                                     }
                                 })
-                                .fg(fg_color)
                         })
                         .unwrap_or(Cell::from("."))
                 })),
@@ -195,7 +236,6 @@ impl<'a> Inspector<'a> {
                 .columns
                 .modules()
                 .iter()
-                .sorted()
                 .map(|n| ModuleView::from_cs(cs, n))
                 .collect(),
             current_module: 0,
