@@ -228,11 +228,41 @@ impl ColumnSet {
         }
     }
 
+    pub fn get_register(&self, h: &RegisterRef) -> Option<&Register> {
+        if h.is_id() {
+            self.registers.get(h.as_id())
+        } else if h.is_handle() {
+            self.registers.iter().find(|r| {
+                r.handle
+                    .as_ref()
+                    .map(|handle| handle == h.as_handle())
+                    .unwrap_or(false)
+            })
+        } else {
+            unreachable!()
+        }
+    }
+
     pub fn get_col_mut(&mut self, h: &ColumnRef) -> Option<&mut Column> {
         if h.is_id() {
             self._cols.get_mut(h.as_id())
         } else if h.is_handle() {
             self.by_handle_mut(h.as_handle())
+        } else {
+            unreachable!()
+        }
+    }
+
+    pub fn get_register_mut(&mut self, h: &RegisterRef) -> Option<&mut Register> {
+        if h.is_id() {
+            self.registers.get_mut(h.as_id())
+        } else if h.is_handle() {
+            self.registers.iter_mut().find(|r| {
+                r.handle
+                    .as_ref()
+                    .map(|handle| handle == h.as_handle())
+                    .unwrap_or(false)
+            })
         } else {
             unreachable!()
         }
@@ -389,9 +419,44 @@ impl ColumnSet {
         self.get_col(h).unwrap().computed
     }
 
-    pub fn set_value(&mut self, h: &ColumnRef, v: Vec<Fr>, spilling: isize) -> Result<()> {
+    pub fn set_column_value(&mut self, h: &ColumnRef, v: Vec<Fr>, spilling: isize) -> Result<()> {
         self.get_col_mut(h).unwrap().computed = true;
         self.register_of_mut(h)
+            .set_value(v, spilling)
+            .with_context(|| anyhow!("while filling {}", h.pretty()))
+    }
+
+    pub fn set_register_value(
+        &mut self,
+        h: &RegisterRef,
+        v: Vec<Fr>,
+        spilling: isize,
+    ) -> Result<()> {
+        let reg_id = if h.is_id() {
+            h.as_id()
+        } else {
+            self.registers
+                .iter()
+                .enumerate()
+                .find(|(_, r)| {
+                    r.handle
+                        .as_ref()
+                        .map(|handle| handle == h.as_handle())
+                        .unwrap_or(false)
+                })
+                .map(|(id, _)| id)
+                .unwrap()
+        };
+        for column in self
+            ._cols
+            .iter_mut()
+            .filter(|c| c.register.map(|r| r == reg_id).unwrap_or(false))
+        {
+            column.computed = true;
+        }
+
+        self.get_register_mut(h)
+            .unwrap()
             .set_value(v, spilling)
             .with_context(|| anyhow!("while filling {}", h.pretty()))
     }
@@ -401,6 +466,8 @@ impl ColumnSet {
         self.register_of_mut(h).set_raw_value(v, spilling)
     }
 }
+
+type RegisterRef = ColumnRef;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Computation {

@@ -20,7 +20,12 @@ use std::{
     io::{BufReader, Seek},
 };
 
-use crate::{column::Column, compiler::ConstraintSet, pretty::Pretty, structs::Handle};
+use crate::{
+    column::{Column, Register},
+    compiler::ConstraintSet,
+    pretty::Pretty,
+    structs::Handle,
+};
 
 #[time("info", "Parsing trace from JSON file with SIMD")]
 pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
@@ -173,6 +178,11 @@ pub fn fill_traces(
                 // The first column sets the size of its module
                 let module_raw_size = cs.raw_len_for_or_set(&module, xs.len() as isize);
 
+                // The min length can be set if the module contains range
+                // proofs, that require a minimal length of a certain power of 2
+                let module_min_len = cs.columns.min_len.get(&module).cloned().unwrap_or(0);
+                let module_spilling = cs.spilling_for(&handle);
+
                 if let Result::Ok(Column {
                     t, padding_value, ..
                 }) = cs.columns.get_col(&handle)
@@ -184,12 +194,7 @@ pub fn fill_traces(
                         }
                     }
 
-                    // The min length can be set if the module contains range
-                    // proofs, that require a minimal length of a certain power of 2
-                    let module_min_len = cs.columns.min_len.get(&module).cloned().unwrap_or(0);
-
-                    let module_spilling = cs
-                        .spilling_for(&handle)
+                    let module_spilling = module_spilling
                         .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 
                     if xs.len() as isize != module_raw_size {
@@ -217,7 +222,36 @@ pub fn fill_traces(
                         });
                         xs.reverse();
                     }
-                    cs.columns.set_value(&handle, xs, module_spilling)?
+                    cs.columns.set_column_value(&handle, xs, module_spilling)?
+                } else if let Some(Register { magma, .. }) = cs.columns.get_register(&handle) {
+                    let module_spilling = module_spilling
+                        .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
+
+                    if xs.len() as isize != module_raw_size {
+                        bail!(
+                            "{} has an incorrect length: expected {} (from {}), found {}",
+                            handle.to_string().blue(),
+                            module_raw_size.to_string().red().bold(),
+                            initiator.as_ref().unwrap(),
+                            xs.len().to_string().yellow().bold(),
+                        );
+                    }
+
+                    let mut xs = parse_column(xs, handle.as_handle(), *magma)
+                        .with_context(|| anyhow!("while importing {}", handle))?;
+
+                    // If the parsed column is not long enought w.r.t. the
+                    // minimal module length, prepend it with as many zeroes as
+                    // required.
+                    // Atomic columns are always padded with zeroes, so there is
+                    // no need to trigger a more complex padding system.
+                    if xs.len() < module_min_len {
+                        xs.reverse();
+                        xs.resize(module_min_len, Fr::zero()); // TODO: register padding values
+                        xs.reverse();
+                    }
+                    cs.columns
+                        .set_register_value(&handle, xs, module_spilling)?
                 } else {
                     debug!("ignoring unknown column {}", handle.pretty());
                 }
