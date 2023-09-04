@@ -15,6 +15,19 @@ pub struct Handle {
     /// the perspective this symbol belongs to, if applicable
     pub perspective: Option<String>,
 }
+impl std::cmp::Ord for Handle {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.module.cmp(&other.module) {
+            std::cmp::Ordering::Equal => self.name.cmp(&other.name),
+            other => other,
+        }
+    }
+}
+impl std::cmp::PartialOrd for Handle {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 // The equality relation is only used in a semantic way, not computational
 impl std::cmp::PartialEq for Handle {
     fn eq(&self, other: &Self) -> bool {

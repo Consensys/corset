@@ -12,7 +12,7 @@ use pairing_ce::bn256::Fr;
 use pairing_ce::ff::{Field, PrimeField};
 use serde::{Deserialize, Serialize};
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
 use std::io::Write;
 
@@ -285,13 +285,22 @@ impl ConstraintSet {
         #[derive(Default, Debug)]
         struct ColumnPool {
             root: Vec<ColumnRef>,
+            // It is important for the allocation to be deterministic, so that
+            // multiple compilations of the same constraint system result in the
+            // same allocation; hence the use of BTreeMap instead of HashMap.
             // Module -> SizeFactor -> Type -> Perspective -> Columns names
-            perspectives:
-                HashMap<String, HashMap<usize, HashMap<Magma, HashMap<String, Vec<ColumnRef>>>>>,
+            perspectives: BTreeMap<
+                String,
+                BTreeMap<usize, BTreeMap<Magma, BTreeMap<String, Vec<ColumnRef>>>>,
+            >,
         }
 
         let mut pool: ColumnPool = Default::default();
-        for (h, col) in self.columns.iter() {
+        for (h, col) in self
+            .columns
+            .iter()
+            .sorted_by(|a, b| a.1.handle.cmp(&b.1.handle))
+        {
             if col.kind == Kind::Atomic {
                 match &col.handle.perspective {
                     Some(name) => {
@@ -324,7 +333,7 @@ impl ConstraintSet {
             self.columns.assign_register(&c, reg).unwrap();
         }
 
-        // perspective columns are grouped together if they are of the same type
+        // perspective columns are grouped together if they are of the same type & size factor
         for (module, sizes) in pool.perspectives.iter() {
             for (size, magmas) in sizes.iter() {
                 for (magma, sets) in magmas.iter() {

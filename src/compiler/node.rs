@@ -24,6 +24,22 @@ pub struct ColumnRef {
     h: Option<Handle>,
     id: Option<ColumnID>,
 }
+impl std::cmp::Ord for ColumnRef {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.is_handle() && other.is_handle() {
+            self.as_handle().cmp(other.as_handle())
+        } else if self.is_id() && other.is_id() {
+            self.as_id().cmp(&other.as_id())
+        } else {
+            panic!("uncomparable handles")
+        }
+    }
+}
+impl std::cmp::PartialOrd for ColumnRef {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 impl ColumnRef {
     pub fn from_handle(h: Handle) -> ColumnRef {
         ColumnRef {
