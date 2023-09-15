@@ -4,7 +4,7 @@ use anyhow::*;
 use super::{
     generator::{make_ast_error, reduce},
     tables::Scope,
-    Ast, AstNode, CompileSettings, Token,
+    Ast, AstNode, CompileSettings, Node, Token,
 };
 
 fn compile_time_constants(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()> {
@@ -15,7 +15,15 @@ fn compile_time_constants(e: &AstNode, ctx: &mut Scope, settings: &CompileSettin
         }
         Token::DefConsts(cs) => {
             for (name, exp) in cs.iter() {
-                let value = reduce(exp, ctx, settings)?.unwrap();
+                let value = match &exp.class {
+                    // If the constant value is iota, assign it to a deterministic pseudo-random value
+                    Token::Symbol(x) if ["iota", "ι", "ɩ"].contains(&x.as_str()) => {
+                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                        std::hash::Hash::hash(&name, &mut hasher);
+                        Node::from_const((std::hash::Hasher::finish(&hasher) >> 1) as isize)
+                    }
+                    _ => reduce(exp, ctx, settings)?.unwrap(),
+                };
                 ctx.insert_constant(
                     name,
                     value.pure_eval().with_context(|| make_ast_error(exp))?,
