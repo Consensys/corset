@@ -2,11 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.3.6] - 2023-09-16
+
+### Bug Fixes
+
+- Besu templates
+- Make register allocation stable
+
+### Features
+
+- Colorize numbers
+- Columns or register can both be loaded from trace files
+- Colorize perspective columns only when active
+- Add a `iota` keyword to create distinct constants
+- Accept STDIN as an input with `-`
+
+### Miscellaneous Tasks
+
+- Update dependencies
+
 ## [8.3.5] - 2023-08-30
 
 ### Bug Fixes
 
 - Dim/non-dim formatting
+
+### Miscellaneous Tasks
+
+- Release corset version 8.3.5
 
 ## [8.3.4] - 2023-08-30
 
