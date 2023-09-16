@@ -8,7 +8,10 @@ use either::Either;
 use is_terminal::IsTerminal;
 use log::*;
 use owo_colors::OwoColorize;
-use std::{io::Write, path::Path};
+use std::{
+    io::{Read, Write},
+    path::Path,
+};
 
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
@@ -373,6 +376,10 @@ impl ConstraintSetBuilder {
                     std::fs::read_to_string(src)
                         .with_context(|| anyhow!("reading {}", src.yellow().bold()))?,
                 ));
+            } else if src == "-" {
+                let mut buffer = String::new();
+                std::io::stdin().read_to_string(&mut buffer)?;
+                sources.push(("STDIN".to_string(), buffer.into()));
             } else {
                 sources.push(("Immediate expression".to_string(), src.into()));
             }
