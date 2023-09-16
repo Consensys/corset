@@ -26,6 +26,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace) {
   {{#each constants}}
-  static final BigInteger {{ this.name }} = new BigInteger("{{ this.value }}");
+  static final {{ this.tupe }} {{ this.name }} = {{ this.value }};
   {{/each}}
 }

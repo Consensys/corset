@@ -41,6 +41,7 @@ struct BesuRegister {
 struct BesuConstant {
     name: String,
     value: String,
+    tupe: String,
 }
 #[derive(Serialize)]
 struct TemplateData {
@@ -159,7 +160,12 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
         .iter()
         .map(|c| BesuConstant {
             name: crate::utils::purify(&c.0.name),
-            value: c.1.to_string(),
+            value: if c.1.bits() > 31 {
+                format!("new BigInteger(\"{}\")", c.1.to_string())
+            } else {
+                c.1.to_string()
+            },
+            tupe: (if c.1.bits() > 31 { "BigInteger" } else { "int" }).to_string(),
         })
         .sorted_by_cached_key(|c| c.name.to_owned())
         .collect::<Vec<_>>();
