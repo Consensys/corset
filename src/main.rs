@@ -246,6 +246,8 @@ enum Commands {
             help = "show modules and their properties"
         )]
         show_modules: bool,
+        #[arg(short = 'n', long = "constants", help = "show constants")]
+        show_constants: bool,
         #[arg(
             short = 'C',
             long = "columns",
@@ -721,6 +723,7 @@ fn main() -> Result<()> {
             expand,
             expand_all,
             show_modules,
+            show_constants,
             show_columns,
             show_constraints,
             show_computations,
@@ -760,6 +763,7 @@ fn main() -> Result<()> {
                 &constraints,
                 exporters::debugger::DebugSettings {
                     modules: show_modules,
+                    constants: show_constants,
                     constraints: show_constraints,
                     columns: show_columns,
                     types: show_types,

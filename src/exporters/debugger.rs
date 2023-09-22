@@ -168,7 +168,7 @@ fn render_constraints(
                 } => {
                     let mut tty = Tty::new().with_guides();
                     pretty_expr(expr, None, &mut tty, show_types);
-                    println!("\n- {}:", handle.pretty());
+                    println!("\n{} :=", handle.pretty());
                     println!("{}", tty.page_feed());
                 }
                 Constraint::Plookup {
@@ -206,6 +206,17 @@ fn render_modules(cs: &ConstraintSet) {
     println!("\n{}", "=== Modules ===".bold().yellow());
     for (module, spilling) in cs.columns.spilling.iter().sorted_by_key(|s| s.0) {
         println!("{}: spilling {}", module, spilling);
+    }
+}
+
+fn render_constants(cs: &ConstraintSet) {
+    println!("\n{}", "=== Constants ===".bold().yellow());
+    for (name, value) in cs
+        .constants
+        .iter()
+        .sorted_by_key(|s| (&s.0.module, &s.0.name))
+    {
+        println!("{} := 0x{}", name.pretty(), value.to_str_radix(16));
     }
 }
 
@@ -296,6 +307,7 @@ fn render_perspectives(cs: &ConstraintSet) {
 pub(crate) struct DebugSettings {
     pub modules: bool,
     pub constraints: bool,
+    pub constants: bool,
     pub columns: bool,
     pub computations: bool,
     pub perspectives: bool,
@@ -310,6 +322,9 @@ pub(crate) fn debug(
 ) -> Result<()> {
     if settings.modules {
         render_modules(cs);
+    }
+    if settings.constants {
+        render_constants(cs);
     }
     if settings.constraints {
         render_constraints(cs, only, skip, settings.types);
