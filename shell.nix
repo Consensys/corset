@@ -6,4 +6,6 @@ pkgs.mkShell {
     pkgs.libiconv
     pkgs.git-cliff
   ];
+
+  RUSTFLAGS = "-C target-cpu=native";
 }

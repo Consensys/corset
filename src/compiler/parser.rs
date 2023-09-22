@@ -2,10 +2,10 @@ use crate::{errors, pretty::Base};
 use anyhow::{anyhow, bail, Context, Result};
 use itertools::Itertools;
 use num_bigint::BigInt;
-use once_cell::unsync::OnceCell;
 #[cfg(feature = "parser")]
 use pest::{iterators::Pair, Parser};
 use serde::{Deserialize, Serialize};
+use std::cell::OnceCell;
 use std::fmt::Debug;
 use std::{fmt, vec};
 

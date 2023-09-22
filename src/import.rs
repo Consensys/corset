@@ -143,8 +143,8 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
         })
         .collect::<Result<Vec<_>>>()?;
     r.extend(xs);
-    if crate::utils::maybe_warn(t, &r).is_err() {
-        error!("Column of boolean found, but not annotated as :bool");
+    if let Err(msg) = crate::utils::maybe_warn(t, &r, h) {
+        error!("{}", msg);
     };
     Ok(r)
 }

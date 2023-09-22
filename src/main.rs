@@ -5,9 +5,9 @@ extern crate pest_derive;
 use anyhow::*;
 use compiler::{Ast, ConstraintSet};
 use either::Either;
-use is_terminal::IsTerminal;
 use log::*;
 use owo_colors::OwoColorize;
+use std::io::IsTerminal;
 use std::{
     io::{Read, Write},
     path::Path,

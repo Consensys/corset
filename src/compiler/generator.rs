@@ -6,11 +6,11 @@ use logging_timer::time;
 use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
 use num_traits::{One, Zero};
-use once_cell::sync::OnceCell;
 use owo_colors::OwoColorize;
 use pairing_ce::bn256::Fr;
 use pairing_ce::ff::{Field, PrimeField};
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
@@ -28,7 +28,7 @@ use crate::errors::{self, CompileError, RuntimeError};
 use crate::pretty::Pretty;
 use crate::structs::Handle;
 
-static COUNTER: OnceCell<AtomicUsize> = OnceCell::new();
+static COUNTER: OnceLock<AtomicUsize> = OnceLock::new();
 
 fn uniquify(n: String) -> String {
     format!(
