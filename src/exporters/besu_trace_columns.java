@@ -71,28 +71,6 @@ public record Trace(
     {{/unless}}
     {{/each}}
 
-    {{#each columns}}
-    public TraceBuilder set{{ this.updater }}At(final {{ this.tupe }} b, int i) {
-      {{ this.register }}.set(i, b);
-
-      return this;
-    }
-    {{#unless @last}}
-
-    {{/unless}}
-    {{/each}}
-
-    {{#each columns}}
-    public TraceBuilder set{{ this.updater }}Relative(final {{ this.tupe }} b, int i) {
-      {{ this.register }}.set({{ this.register }}.size() - 1 - i, b);
-
-      return this;
-    }
-    {{#unless @last}}
-
-    {{/unless}}
-    {{/each}}
-
     public TraceBuilder validateRow() {
       {{#each registers}}
       if (!filled.get({{ this.id }})) {
