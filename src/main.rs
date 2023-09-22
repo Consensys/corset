@@ -13,7 +13,6 @@ use std::{
     path::Path,
 };
 
-use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
 mod check;
@@ -342,10 +341,11 @@ enum Commands {
     },
 }
 
+type SourceMapping = Vec<(String, String)>;
 struct ConstraintSetBuilder {
     debug: bool,
     no_stdlib: bool,
-    source: Either<Vec<(String, String)>, ConstraintSet>,
+    source: Either<SourceMapping, ConstraintSet>,
 }
 impl ConstraintSetBuilder {
     fn from_sources(no_stdlib: bool, debug: bool) -> ConstraintSetBuilder {
@@ -370,9 +370,99 @@ impl ConstraintSetBuilder {
         })
     }
 
+    fn find_section(root: &Path, section: &str) -> Result<Option<SourceMapping>> {
+        let section_file = root.join(format!("{}.lisp", section));
+        let section_str = section_file.to_str().unwrap();
+        // 1. Find a matching file
+        if section_file.is_file() {
+            let content = std::fs::read_to_string(&section_file)
+                .with_context(|| anyhow!("reading {}", section_str.yellow().bold()))?;
+            info!("adding {}", section_str.bright_white().bold());
+            return Ok(Some(vec![(
+                section_file
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+                content,
+            )]));
+            // 2. Fail is the file is actually a directory
+        } else if section_file.is_dir() {
+            bail!(
+                "expected {} to be a file, not a directory",
+                section_file.to_str().unwrap().yellow().bold()
+            )
+        } else {
+            // 3. Otherwise, repeat the process with a folder
+            let section_dir = root.join(section);
+            if section_dir.is_file() {
+                bail!(
+                    "expected {} to be a directory, not a file",
+                    section_file.to_str().unwrap().yellow().bold()
+                )
+            } else if section_dir.is_dir() {
+                let mut r = Vec::new();
+                for entry in section_dir.read_dir().with_context(|| {
+                    anyhow!(
+                        "while reading {}",
+                        section_dir.to_str().unwrap().yellow().bold()
+                    )
+                })? {
+                    let p = entry?.path();
+                    if p.extension()
+                        .map(|ext| ["lisp", "corset"].contains(&ext.to_str().unwrap()))
+                        .unwrap_or(false)
+                    {
+                        info!("adding {}", p.to_str().unwrap().bright_white().bold());
+                        let content = std::fs::read_to_string(&p).with_context(|| {
+                            anyhow!("reading {}", section_file.to_str().unwrap().yellow().bold())
+                        })?;
+                        r.push((p.file_name().unwrap().to_str().unwrap().to_owned(), content))
+                    }
+                }
+                Ok(Some(r))
+            } else {
+                Ok(None)
+            }
+        }
+    }
+
+    fn parse_dir(dir: &Path) -> Result<SourceMapping> {
+        let mut sources = Vec::new();
+        let mut columns = Self::find_section(dir, "columns")?.ok_or_else(|| {
+            anyhow!(
+                "no columns found in {}",
+                dir.to_str().unwrap().yellow().bold()
+            )
+        })?;
+        sources.append(&mut columns);
+
+        let mut constraints = Self::find_section(dir, "constraints")?.ok_or_else(|| {
+            anyhow!(
+                "no constraints found in {}",
+                dir.to_str().unwrap().yellow().bold()
+            )
+        })?;
+        sources.append(&mut constraints);
+
+        if let Some(mut constants) = Self::find_section(dir, "constants")? {
+            sources.append(&mut constants);
+        }
+
+        if let Some(mut plookups) = Self::find_section(dir, "plookups")? {
+            sources.append(&mut plookups);
+        }
+
+        Ok(sources)
+    }
+
     fn add_source(&mut self, src: &str) -> Result<()> {
         if let Either::Left(ref mut sources) = self.source {
-            if std::path::Path::new(src).is_file() {
+            let as_path = std::path::Path::new(src);
+            if as_path.is_dir() {
+                sources.append(&mut Self::parse_dir(as_path)?);
+            } else if as_path.is_file() {
                 sources.push((
                     src.to_string(),
                     std::fs::read_to_string(src)
