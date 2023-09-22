@@ -161,7 +161,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
         .map(|c| BesuConstant {
             name: crate::utils::purify(&c.0.name),
             value: if c.1.bits() > 31 {
-                format!("new BigInteger(\"{}\")", c.1.to_string())
+                format!("new BigInteger(\"{}\")", c.1)
             } else {
                 c.1.to_string()
             },

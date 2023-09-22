@@ -379,7 +379,7 @@ impl ConstraintSetBuilder {
             } else if src == "-" {
                 let mut buffer = String::new();
                 std::io::stdin().read_to_string(&mut buffer)?;
-                sources.push(("STDIN".to_string(), buffer.into()));
+                sources.push(("STDIN".to_string(), buffer));
             } else {
                 sources.push(("Immediate expression".to_string(), src.into()));
             }
