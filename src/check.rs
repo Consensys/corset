@@ -226,7 +226,7 @@ fn fail(
                 .chain(handles.iter().map(|handle| {
                     cs.columns
                         .get(handle, j, true)
-                        .map(|x| x.pretty_with_base(cs.columns.get_col(handle).unwrap().base))
+                        .map(|x| x.pretty_with_base(cs.columns.column(handle).unwrap().base))
                         .unwrap_or_else(|| "nil".into())
                 }))
                 .collect(),

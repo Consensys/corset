@@ -149,7 +149,7 @@ impl ModuleView {
                     cs.columns
                         .get(column_ref, i, false)
                         .map(|x| {
-                            let base = cs.columns.get_col(column_ref).unwrap().base;
+                            let base = cs.columns.column(column_ref).unwrap().base;
                             let x_str = x.pretty_with_base(base);
                             maxes[k + 1] = maxes[k + 1].max(x_str.len());
                             let bg_color = x

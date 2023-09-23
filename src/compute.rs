@@ -59,7 +59,7 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
 
 fn ensure_is_computed(h: &ColumnRef, cs: &ConstraintSet) -> Result<()> {
     if !cs.columns.is_computed(h) {
-        bail!(err_missing_column(cs.columns.get_col(h).unwrap()))
+        bail!(err_missing_column(cs.columns.column(h).unwrap()))
     }
     Ok(())
 }
@@ -209,7 +209,7 @@ pub fn compute_composite(
                                 // past spilling, and None should be converted
                                 // to the padding value or 0.
                                 cs.columns
-                                    .get_col(handle)
+                                    .column(handle)
                                     .unwrap()
                                     .padding_value
                                     .as_ref()
@@ -434,7 +434,7 @@ fn prepare(cs: &mut ConstraintSet, fail_on_missing: bool) -> Result<()> {
     compute_all(cs).with_context(|| "while computing columns")?;
     for h in cs.columns.all() {
         if !cs.columns.is_computed(&h) {
-            let err = err_missing_column(cs.columns.get_col(&h).unwrap());
+            let err = err_missing_column(cs.columns.column(&h).unwrap());
             if fail_on_missing {
                 bail!(err)
             } else {

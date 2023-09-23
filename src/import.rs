@@ -185,7 +185,7 @@ pub fn fill_traces(
 
                 if let Result::Ok(Column {
                     t, padding_value, ..
-                }) = cs.columns.get_col(&handle)
+                }) = cs.columns.column(&handle)
                 {
                     trace!("inserting {} ({})", handle, xs.len());
                     if let Some(first_column) = initiator.as_mut() {
@@ -223,7 +223,7 @@ pub fn fill_traces(
                         xs.reverse();
                     }
                     cs.columns.set_column_value(&handle, xs, module_spilling)?
-                } else if let Some(Register { magma, .. }) = cs.columns.get_register(&handle) {
+                } else if let Some(Register { magma, .. }) = cs.columns.register(&handle) {
                     let module_spilling = module_spilling
                         .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 

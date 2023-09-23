@@ -22,9 +22,9 @@ fn create_sort_constraint(
             froms.len()
         );
     }
-    let module = cs.columns.get_col(&froms[0]).unwrap().handle.module.clone();
+    let module = cs.columns.column(&froms[0]).unwrap().handle.module.clone();
     for from in froms {
-        let from_col = cs.columns.get_col(from).unwrap();
+        let from_col = cs.columns.column(from).unwrap();
         if from_col.handle.module != *module {
             bail!(
                 "column {} does not belong to the same module as {}",
@@ -131,7 +131,7 @@ fn create_sort_constraint(
         domain: None,
         expr: Box::new(
             Intrinsic::Sub.call(&[
-                Node::phantom_column(&delta, Magma::Integer),
+                Node::phantom_column(&delta, Magma::Native),
                 Intrinsic::Add.call(
                     &delta_bytes
                         .iter()
@@ -174,7 +174,7 @@ fn create_sort_constraint(
             Node::from_const(1)
         };
 
-        let sorted_t = cs.columns.get_col(&sorted[i])?.t;
+        let sorted_t = cs.columns.column(&sorted[i])?.t;
         cs.constraints.push(Constraint::Vanishes {
             handle: Handle::new(&module, format!("{at}-0")),
             domain: None,
@@ -255,11 +255,11 @@ fn create_sort_constraint(
                 ])?,
                 // Δ = ∑ ε_i × @_i × δSorted_i
                 Intrinsic::Sub.call(&[
-                    Node::phantom_column(&delta, Magma::Integer), // TODO: fixme GL
+                    Node::phantom_column(&delta, Magma::Native), // TODO: fixme GL
                     Intrinsic::Add.call(
                         (0..signs.len())
                             .map(|l| {
-                                let sorted_l_t = cs.columns.get_col(&sorted[l])?.t;
+                                let sorted_l_t = cs.columns.column(&sorted[l])?.t;
                                 let tgt_diff = Intrinsic::Sub.call(&[
                                     Node::phantom_column(&sorted[l], sorted_l_t),
                                     Intrinsic::Shift.call(&[

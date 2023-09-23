@@ -328,7 +328,7 @@ impl ConstraintSet {
         for c in pool.root {
             let reg = self.columns.new_register(
                 self.handle(&c).to_owned(),
-                self.columns.get_col(&c).unwrap().t,
+                self.columns.column(&c).unwrap().t,
             );
             self.columns.assign_register(&c, reg).unwrap();
         }
@@ -384,7 +384,7 @@ impl ConstraintSet {
                 match c {
                     Computation::Interleaved { target, .. }
                     | Computation::CyclicFrom { target, .. } => {
-                        let col = self.columns.get_col(&target).unwrap();
+                        let col = self.columns.column(&target).unwrap();
                         let reg = self.columns.new_register(col.handle.clone(), col.t);
                         self.columns.assign_register(&target, reg).unwrap();
                     }
@@ -392,9 +392,9 @@ impl ConstraintSet {
                         let mut reg_translation = HashMap::<RegisterID, RegisterID>::new();
                         for (f, t) in froms.iter().zip(tos.iter()) {
                             let reg = reg_translation
-                                .entry(self.columns.get_col(f).unwrap().register.unwrap())
+                                .entry(self.columns.column(f).unwrap().register.unwrap())
                                 .or_insert_with(|| {
-                                    let col = self.columns.get_col(t).unwrap();
+                                    let col = self.columns.column(t).unwrap();
                                     self.columns.new_register(col.handle.clone(), col.t)
                                 });
                             self.columns.assign_register(t, *reg).unwrap();
@@ -412,7 +412,7 @@ impl ConstraintSet {
                             .chain(ats.iter())
                             .chain(delta_bytes.iter())
                         {
-                            let col = self.columns.get_col(r).unwrap();
+                            let col = self.columns.column(r).unwrap();
                             let reg = self.columns.new_register(col.handle.clone(), col.t);
                             self.columns.assign_register(r, reg).unwrap();
                         }
@@ -436,7 +436,7 @@ impl ConstraintSet {
                 match self.computations.get_mut(i).unwrap().clone() {
                     Computation::Interleaved { target, froms } => {
                         if let Some(perspective) = self.columns.perspective_of(froms.iter())? {
-                            let from_handle = self.columns.get_col(&froms[0])?.handle.to_owned();
+                            let from_handle = self.columns.column(&froms[0])?.handle.to_owned();
                             let module = from_handle.module.to_owned();
                             if let Expression::Column { handle, .. } =
                                 self.get_perspective(&module, &perspective)?.e().clone()
@@ -445,7 +445,7 @@ impl ConstraintSet {
                                     &module,
                                     format!(
                                         "{}%intrld",
-                                        self.columns.get_col(&handle).unwrap().handle.name,
+                                        self.columns.column(&handle).unwrap().handle.name,
                                     ),
                                 );
                                 let srt_guard_id = self
@@ -480,7 +480,7 @@ impl ConstraintSet {
                     Computation::Sorted { froms, tos, .. } => {
                         for (j, from) in froms.clone().iter().enumerate() {
                             if let Some(perspective) = self.columns.perspective(from)?.cloned() {
-                                let from_handle = self.columns.get_col(from)?.handle.to_owned();
+                                let from_handle = self.columns.column(from)?.handle.to_owned();
                                 let module = from_handle.module.to_owned();
                                 if let Expression::Column { handle, .. } =
                                     self.get_perspective(&module, &perspective)?.e().clone()
@@ -489,7 +489,7 @@ impl ConstraintSet {
                                         &module,
                                         format!(
                                             "{}%srt",
-                                            self.columns.get_col(&handle).unwrap().handle.name,
+                                            self.columns.column(&handle).unwrap().handle.name,
                                         ),
                                     );
                                     let srt_guard_id = self
@@ -547,7 +547,7 @@ impl ConstraintSet {
     }
 
     pub(crate) fn handle(&self, h: &ColumnRef) -> &Handle {
-        &self.columns.get_col(h).unwrap().handle
+        &self.columns.column(h).unwrap().handle
     }
 
     pub(crate) fn insert_perspective(
@@ -627,7 +627,7 @@ impl ConstraintSet {
         let module = if h.is_handle() {
             &h.as_handle().module
         } else {
-            &self.columns.get_col(h).ok()?.handle.module
+            &self.columns.column(h).ok()?.handle.module
         };
         self.columns.spilling.get(module).cloned()
     }
@@ -685,7 +685,7 @@ impl ConstraintSet {
             .unwrap_or(1)
             * self
                 .columns
-                .get_col(h)
+                .column(h)
                 .unwrap()
                 .intrinsic_size_factor
                 .unwrap_or(1)
@@ -707,7 +707,7 @@ impl ConstraintSet {
                 .columns
                 .all()
                 .into_iter()
-                .map(|h| (h.clone(), self.columns.get_col(&h).unwrap()))
+                .map(|h| (h.clone(), self.columns.column(&h).unwrap()))
                 .filter(|(_, c)| c.handle.module == module)
                 .peekable();
             let empty_vec = Vec::new();

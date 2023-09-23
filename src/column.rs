@@ -181,19 +181,23 @@ pub struct ColumnSet {
 }
 
 impl ColumnSet {
-    pub(crate) fn module_of<'a, C: IntoIterator<Item = &'a ColumnRef>>(
+    pub(crate) fn module_of<'a, I: std::borrow::Borrow<ColumnRef>, C: IntoIterator<Item = I>>(
         &self,
         cols: C,
     ) -> Option<String> {
         let modules = cols
             .into_iter()
-            .map(|c| self.get_col(c).unwrap().handle.module.clone())
+            .map(|c| self.column(c.borrow()).unwrap().handle.module.clone())
             .collect::<HashSet<_>>();
         if modules.len() != 1 {
             None
         } else {
             modules.into_iter().next()
         }
+    }
+
+    pub(crate) fn module(&self, h: &ColumnRef) -> &str {
+        &self.column(h).unwrap().handle.module
     }
 
     pub fn set_min_len(&mut self, module: &str, len: usize) {
@@ -218,7 +222,7 @@ impl ColumnSet {
         }
     }
 
-    pub fn get_col(&self, h: &ColumnRef) -> Result<&Column> {
+    pub fn column(&self, h: &ColumnRef) -> Result<&Column> {
         if h.is_id() {
             self._cols.get(h.as_id()).ok_or_else(|| unreachable!())
         } else if h.is_handle() {
@@ -228,7 +232,7 @@ impl ColumnSet {
         }
     }
 
-    pub fn get_register(&self, h: &RegisterRef) -> Option<&Register> {
+    pub fn register(&self, h: &RegisterRef) -> Option<&Register> {
         if h.is_id() {
             self.registers.get(h.as_id())
         } else if h.is_handle() {
@@ -241,6 +245,10 @@ impl ColumnSet {
         } else {
             unreachable!()
         }
+    }
+
+    pub fn register_by_id(&self, id: RegisterID) -> Option<&Register> {
+        self.registers.get(id)
     }
 
     pub fn get_col_mut(&mut self, h: &ColumnRef) -> Option<&mut Column> {
@@ -288,7 +296,7 @@ impl ColumnSet {
     }
 
     pub fn perspective(&self, r: &ColumnRef) -> Result<Option<&String>> {
-        Ok(self.get_col(r)?.handle.perspective.as_ref())
+        Ok(self.column(r)?.handle.perspective.as_ref())
     }
 
     pub(crate) fn perspective_of<'a, H: IntoIterator<Item = &'a ColumnRef>>(
@@ -297,7 +305,7 @@ impl ColumnSet {
     ) -> Result<Option<String>> {
         let ps = hs
             .into_iter()
-            .filter_map(|h| self.get_col(h).unwrap().handle.perspective.clone())
+            .filter_map(|h| self.column(h).unwrap().handle.perspective.clone())
             .collect::<HashSet<_>>();
         if ps.len() > 1 {
             bail!("no unique perspective")
@@ -386,12 +394,12 @@ impl ColumnSet {
     }
 
     fn register_of_mut(&mut self, h: &ColumnRef) -> &mut Register {
-        let reg = self.get_col(h).unwrap().register.unwrap();
+        let reg = self.column(h).unwrap().register.unwrap();
         &mut self.registers[reg]
     }
 
     fn register_of(&self, h: &ColumnRef) -> &Register {
-        let reg = self.get_col(h).unwrap().register.unwrap();
+        let reg = self.column(h).unwrap().register.unwrap();
         &self.registers[reg]
     }
 
@@ -416,7 +424,7 @@ impl ColumnSet {
     }
 
     pub fn is_computed(&self, h: &ColumnRef) -> bool {
-        self.get_col(h).unwrap().computed
+        self.column(h).unwrap().computed
     }
 
     pub fn set_column_value(&mut self, h: &ColumnRef, v: Vec<Fr>, spilling: isize) -> Result<()> {

@@ -20,22 +20,22 @@ fn invert_expr(e: &Node) -> Node {
 impl Node {
     pub(crate) fn do_expand_inv(
         &mut self,
-        gm: &dyn Fn(&HashSet<ColumnRef>) -> String,
+        get_module: &dyn Fn(&HashSet<ColumnRef>) -> String,
         new_cols: &mut Vec<(Handle, Node)>,
     ) -> Result<()> {
         match self.e_mut() {
             Expression::List(es) => {
                 for e in es.iter_mut() {
-                    e.do_expand_inv(gm, new_cols)?;
+                    e.do_expand_inv(get_module, new_cols)?;
                 }
                 Ok(())
             }
             Expression::Funcall { func, args, .. } => {
                 for e in args.iter_mut() {
-                    e.do_expand_inv(gm, new_cols)?;
+                    e.do_expand_inv(get_module, new_cols)?;
                 }
                 if matches!(func, Intrinsic::Inv) {
-                    let module = gm(&args[0].dependencies());
+                    let module = get_module(&args[0].dependencies());
                     let inverted_handle = Handle::new(module, expression_to_name(&args[0], "INV"));
                     new_cols.push((inverted_handle.clone(), args[0].to_owned()));
                     *self = Node::column()

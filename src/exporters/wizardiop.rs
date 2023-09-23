@@ -221,7 +221,7 @@ fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {
 fn reg_mangle(cs: &ConstraintSet, c: &ColumnRef) -> Result<String> {
     let reg_id = cs
         .columns
-        .get_col(c)?
+        .column(c)?
         .register
         .ok_or_else(|| anyhow!("column {} has no backing register", c.pretty()))?;
     let reg = &cs
