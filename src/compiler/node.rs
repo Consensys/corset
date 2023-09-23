@@ -208,7 +208,7 @@ impl Node {
             _e: Expression::Const(BigInt::from_isize(x).unwrap(), Fr::from_str(&x.to_string())),
             _t: Some(Type::Scalar(match x {
                 0 | 1 => Magma::Boolean,
-                _ => Magma::Integer,
+                _ => Magma::Native,
             })),
             dbg: None,
         }
@@ -219,7 +219,7 @@ impl Node {
             _t: Some(Type::Scalar(if x.is_one() || x.is_zero() {
                 Magma::Boolean
             } else {
-                Magma::Integer
+                Magma::Native
             })),
             dbg: None,
         }
@@ -249,7 +249,7 @@ impl Node {
                 base: base.unwrap_or_else(|| t.unwrap_or(Magma::Integer).into()),
                 fetched: false,
             },
-            _t: Some(Type::Column(t.unwrap_or(Magma::Integer))),
+            _t: Some(Type::Column(t.unwrap_or(Magma::Native))),
             dbg: None,
         }
     }
@@ -266,7 +266,7 @@ impl Node {
                 domain,
                 base: base.unwrap_or(Base::Hex),
             },
-            _t: Some(Type::ArrayColumn(t.unwrap_or(Magma::Integer))),
+            _t: Some(Type::ArrayColumn(t.unwrap_or(Magma::Native))),
             dbg: None,
         }
     }
@@ -304,7 +304,7 @@ impl Node {
                 if Zero::is_zero(x) || One::is_one(x) {
                     Type::Scalar(Magma::Boolean)
                 } else {
-                    Type::Scalar(Magma::Integer)
+                    Type::Scalar(Magma::Native)
                 }
             }
             Expression::Column { handle, .. } => {

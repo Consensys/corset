@@ -178,18 +178,43 @@ pub enum Magma {
     /// 8-bits
     Byte,
     /// a field element
-    Integer,
+    Native,
+    /// an arbitrary long integer
+    Integer(usize),
     /// Anything
     Any,
 }
 impl Magma {
     // the dominant instantiable magma
-    const SUPREMUM: Self = Magma::Integer;
+    const SUPREMUM: Self = Magma::Native;
+
+    pub fn bit_size(&self) -> usize {
+        match self {
+            Magma::None => 0,
+            Magma::Boolean => 1,
+            Magma::Loobean => 1,
+            Magma::Nibble => 4,
+            Magma::Byte => 8,
+            Magma::Native => 254,
+            Magma::Integer(x) => *x,
+            Magma::Any => 254,
+        }
+    }
+
+    pub fn byte_size(&self) -> usize {
+        let bit_size = self.bit_size();
+        if bit_size % 8 == 0 || bit_size < 8 {
+            bit_size / 8
+        } else {
+            bit_size / 8 + 1
+        }
+    }
 
     fn can_cast_to(&self, other: Magma) -> bool {
         match (self, other) {
             (Magma::None, Magma::None) => true,
             (Magma::None, _) => false,
+
             (Magma::Boolean, Magma::None) => false,
             (Magma::Boolean, _) => true,
 
@@ -198,7 +223,8 @@ impl Magma {
             (Magma::Loobean, Magma::Loobean) => true,
             (Magma::Loobean, Magma::Nibble) => false,
             (Magma::Loobean, Magma::Byte) => false,
-            (Magma::Loobean, Magma::Integer) => false,
+            (Magma::Loobean, Magma::Native) => false,
+            (Magma::Loobean, Magma::Integer(_)) => false,
             (Magma::Loobean, Magma::Any) => true,
 
             (Magma::Nibble, Magma::None)
@@ -206,20 +232,31 @@ impl Magma {
             | (Magma::Nibble, Magma::Loobean) => false,
             (Magma::Nibble, Magma::Nibble)
             | (Magma::Nibble, Magma::Byte)
-            | (Magma::Nibble, Magma::Integer) => true,
+            | (Magma::Nibble, Magma::Native) => true,
 
             (Magma::Byte, Magma::None)
             | (Magma::Byte, Magma::Boolean)
             | (Magma::Byte, Magma::Loobean)
             | (Magma::Byte, Magma::Nibble) => false,
-            (Magma::Byte, Magma::Byte) | (Magma::Byte, Magma::Integer) => true,
+            (Magma::Byte, Magma::Byte) | (Magma::Byte, Magma::Native) => true,
 
-            (Magma::Integer, Magma::None)
-            | (Magma::Integer, Magma::Boolean)
-            | (Magma::Integer, Magma::Loobean)
-            | (Magma::Integer, Magma::Nibble)
-            | (Magma::Integer, Magma::Byte) => false,
-            (Magma::Integer, Magma::Integer) | (Magma::Integer, Magma::Any) => true,
+            (Magma::Native, Magma::None)
+            | (Magma::Native, Magma::Boolean)
+            | (Magma::Native, Magma::Loobean)
+            | (Magma::Native, Magma::Nibble)
+            | (Magma::Native, Magma::Byte) => false,
+            (Magma::Native, Magma::Native) => true,
+            (Magma::Native, Magma::Any) => true,
+
+            (Magma::Integer(_), Magma::None) => false,
+            (Magma::Integer(_), Magma::Boolean) => true,
+            (Magma::Integer(_), Magma::Loobean) => false,
+            (Magma::Integer(_), Magma::Nibble)
+            | (Magma::Integer(_), Magma::Byte)
+            | (Magma::Integer(_), Magma::Native)
+            | (Magma::Integer(_), Magma::Integer(_)) => self.bit_size() <= other.bit_size(),
+
+            (_, Magma::Integer(_)) => self.bit_size() >= other.bit_size(),
 
             (Magma::Any, _) => false,
             (_, Magma::Any) => true,
@@ -230,13 +267,18 @@ impl std::convert::TryFrom<&str> for Magma {
     type Error = anyhow::Error;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
+        let re = regex_lite::Regex::new(r":i(\d+)").unwrap();
+
         match s.to_lowercase().as_str() {
             ":loobean" | ":loob" => Ok(Magma::Loobean),
             ":boolean" | ":bool" => Ok(Magma::Boolean),
             ":nibble" => Ok(Magma::Nibble),
             ":byte" => Ok(Magma::Byte),
-            ":integer" | ":natural" => Ok(Magma::Integer),
-            _ => bail!("unknown type: `{}`", s),
+            ":native" | ":natural" => Ok(Magma::Native),
+            s => match re.captures(s).and_then(|cs| cs.get(1)) {
+                Some(x) => Ok(Magma::Integer(dbg!(x.as_str()).parse::<usize>().unwrap())),
+                None => bail!("unknown type: `{}`", s),
+            },
         }
     }
 }
@@ -257,22 +299,26 @@ impl std::cmp::PartialOrd for Magma {
             (Magma::Boolean, Magma::Boolean) => Some(Ordering::Equal),
             (Magma::Boolean, Magma::Nibble) => Some(Ordering::Less),
             (Magma::Boolean, Magma::Byte) => Some(Ordering::Less),
-            (Magma::Boolean, Magma::Integer) => Some(Ordering::Less),
+            (Magma::Boolean, Magma::Native) => Some(Ordering::Less),
+            (Magma::Boolean, Magma::Integer(_)) => Some(Ordering::Less),
 
             (Magma::Nibble, Magma::Boolean) => Some(Ordering::Greater),
             (Magma::Nibble, Magma::Nibble) => Some(Ordering::Equal),
             (Magma::Nibble, Magma::Byte) => Some(Ordering::Less),
-            (Magma::Nibble, Magma::Integer) => Some(Ordering::Less),
+            (Magma::Nibble, Magma::Native) => Some(Ordering::Less),
+            (Magma::Nibble, Magma::Integer(_)) => Some(Ordering::Less),
 
             (Magma::Byte, Magma::Boolean) => Some(Ordering::Greater),
             (Magma::Byte, Magma::Nibble) => Some(Ordering::Greater),
             (Magma::Byte, Magma::Byte) => Some(Ordering::Equal),
-            (Magma::Byte, Magma::Integer) => Some(Ordering::Less),
+            (Magma::Byte, Magma::Native) => Some(Ordering::Less),
+            (Magma::Byte, Magma::Integer(_)) => Some(Ordering::Less),
 
-            (Magma::Integer, Magma::Boolean) => Some(Ordering::Greater),
-            (Magma::Integer, Magma::Nibble) => Some(Ordering::Greater),
-            (Magma::Integer, Magma::Byte) => Some(Ordering::Greater),
-            (Magma::Integer, Magma::Integer) => Some(Ordering::Equal),
+            (Magma::Native, Magma::Boolean) => Some(Ordering::Greater),
+            (Magma::Native, Magma::Nibble) => Some(Ordering::Greater),
+            (Magma::Native, Magma::Byte) => Some(Ordering::Greater),
+            (Magma::Native, Magma::Native) => Some(Ordering::Equal),
+            (Magma::Native, Magma::Integer(_)) => Some(self.bit_size().cmp(&other.bit_size())),
 
             (Magma::Any, Magma::Any) => Some(Ordering::Equal),
             (Magma::Any, _) => Some(Ordering::Greater),
@@ -281,6 +327,13 @@ impl std::cmp::PartialOrd for Magma {
             (Magma::Loobean, Magma::Loobean) => Some(Ordering::Equal),
             (Magma::Loobean, _) => Some(Ordering::Less),
             (_, Magma::Loobean) => Some(Ordering::Greater),
+
+            // The following are assuming that field elements will always be larger than 8 bits
+            (Magma::Integer(_), Magma::Boolean) => Some(Ordering::Greater),
+            (Magma::Integer(_), Magma::Nibble) => Some(Ordering::Greater),
+            (Magma::Integer(_), Magma::Byte) => Some(Ordering::Greater),
+            (Magma::Integer(_), Magma::Native) => Some(self.bit_size().cmp(&other.bit_size())),
+            (Magma::Integer(_), Magma::Integer(_)) => Some(self.bit_size().cmp(&other.bit_size())),
         }
     }
 }
@@ -290,9 +343,10 @@ impl std::fmt::Display for Magma {
             Magma::None => write!(f, "NONE"),
             Magma::Loobean => write!(f, "𝕃"),
             Magma::Boolean => write!(f, "𝔹"),
-            Magma::Nibble => write!(f, "4×"),
-            Magma::Byte => write!(f, "8×"),
-            Magma::Integer => write!(f, "Fr"),
+            Magma::Nibble => write!(f, "𝟜"),
+            Magma::Byte => write!(f, "𝟠"),
+            Magma::Native => write!(f, "𝔽"),
+            Magma::Integer(x) => write!(f, "i{}", x),
             Magma::Any => write!(f, "∀"),
         }
     }

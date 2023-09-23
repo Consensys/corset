@@ -43,7 +43,7 @@ impl Node {
                         .kind(Kind::Phantom)
                         .t(match self.t().magma() {
                             Magma::Boolean => Magma::Boolean,
-                            _ => Magma::Integer,
+                            _ => Magma::Native,
                         }) // boolean are stable by inversion
                         .build();
                 }
@@ -106,7 +106,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Res
                     Node::column()
                         .handle(inv_x_col.clone())
                         .kind(Kind::Phantom)
-                        .t(Magma::Integer)
+                        .t(Magma::Native)
                         .build(),
                 ])?,
                 Node::one(),
@@ -119,7 +119,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Res
                 .handle(inv_x_col.clone())
                 .kind(Kind::Phantom)
                 .base(Base::Hex)
-                .t(Magma::Integer)
+                .t(Magma::Native)
                 .build(),
             Intrinsic::Sub.call(&[
                 Intrinsic::Mul.call(&[
@@ -128,7 +128,7 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Res
                         .handle(inv_x_col.clone())
                         .kind(Kind::Phantom)
                         .base(Base::Hex)
-                        .t(Magma::Integer)
+                        .t(Magma::Native)
                         .build(),
                 ])?,
                 Node::one(),

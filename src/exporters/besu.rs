@@ -58,7 +58,8 @@ fn magma_to_java_type(m: Magma) -> String {
         Magma::Boolean => "Boolean",
         Magma::Nibble => "UnsignedByte",
         Magma::Byte => "UnsignedByte",
-        Magma::Integer => "BigInteger",
+        Magma::Native => "BigInteger",
+        Magma::Integer(_) => "BigInteger",
         Magma::Any => unreachable!(),
         Magma::Loobean => unreachable!(),
     }
@@ -71,7 +72,8 @@ fn magma_to_java_zero(m: Magma) -> String {
         Magma::Boolean => "false",
         Magma::Nibble => "UnsignedByte.of(0)",
         Magma::Byte => "UnsignedByte.of(0)",
-        Magma::Integer => "BigInteger.ZERO",
+        Magma::Native => "BigInteger.ZERO",
+        Magma::Integer(_) => "BigInteger.ZERO",
         Magma::Any => unreachable!(),
         Magma::Loobean => unreachable!(),
     }

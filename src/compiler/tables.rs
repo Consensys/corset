@@ -786,7 +786,7 @@ impl Scope {
         let t = if Zero::is_zero(&value) || One::is_one(&value) {
             Type::Scalar(Magma::Boolean)
         } else {
-            Type::Scalar(Magma::Integer)
+            Type::Scalar(Magma::Native)
         };
         if data!(self).symbols.contains_key(name) && !replace {
             bail!(symbols::Error::SymbolAlreadyExists(

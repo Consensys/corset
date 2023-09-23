@@ -7,6 +7,7 @@ use pairing_ce::{
 use postgres::Client;
 #[cfg(feature = "postgres")]
 use std::io::Read;
+use std::unreachable;
 
 use crate::{compiler::Magma, errors::RuntimeError, pretty::Pretty, structs::Handle};
 
@@ -82,7 +83,8 @@ pub fn validate(t: Magma, x: Fr) -> Result<Fr> {
                 bail!(RuntimeError::InvalidValue("byte", x))
             }
         }
-        Magma::Integer => Ok(x),
+        Magma::Native => Ok(x),
+        Magma::Integer(_) => unreachable!(),
         Magma::Any => unreachable!(),
         Magma::Loobean => unreachable!(), // input should never be declared as loobeans
     }

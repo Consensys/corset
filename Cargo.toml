@@ -43,7 +43,7 @@ pest_derive = { version = "2.4", optional = true }
 postgres = { version = "0.19", optional = true }
 ratatui = {version = "0.23", optional = true }
 rayon = "1.5"
-regex-lite = { version = "0.1", optional = true }
+regex-lite = "0.1"
 ron = "^0.7.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
@@ -59,7 +59,7 @@ cli = ["dep:clap-verbosity-flag", "dep:clap"]
 conflater = []
 default = ["interactive", "cli", "exporters", "parser", "inspector"]
 exporters = ["dep:handlebars"]
-inspector = ["dep:regex-lite", "dep:ratatui", "dep:ratatui-textarea", "cli", "parser"]
+inspector = ["dep:ratatui", "dep:ratatui-textarea", "cli", "parser"]
 interactive = ["dep:indicatif"]
 parser = ["dep:pest", "dep:pest_derive"]
 postgres = ["dep:postgres"]

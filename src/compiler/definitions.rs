@@ -21,6 +21,9 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
         Token::IndexedSymbol { name: _, index } => reduce(index, ctx),
         Token::DefConstraint { name, .. } => ctx.insert_constraint(name),
         Token::DefModule(name) => {
+            if name.starts_with("#") {
+                bail!("module names starting with # are reserved");
+            }
             *ctx = ctx.switch_to_module(name)?.public(true);
             Ok(())
         }
@@ -135,7 +138,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     Node::column()
                         .handle(Handle::new(ctx.module(), to.name.clone()))
                         .kind(Kind::Phantom)
-                        .t(Magma::Integer) // TODO previously we took the type of the corresponding 'from' column, is that a problem?
+                        .t(Magma::Native) // TODO previously we took the type of the corresponding 'from' column, is that a problem?
                         .base(to.base)
                         .build(),
                 )

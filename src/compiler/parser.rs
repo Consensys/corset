@@ -789,7 +789,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                         Token::DefArrayColumn {
                             name: column_attributes.name,
                             t: Type::ArrayColumn(
-                                column_attributes.t.get().cloned().unwrap_or(Magma::Integer),
+                                column_attributes.t.get().cloned().unwrap_or(Magma::Native),
                             ),
                             domain: range.clone(),
                             base,
@@ -798,7 +798,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                         Token::DefColumn {
                             name: column_attributes.name,
                             t: Type::Column(
-                                column_attributes.t.get().cloned().unwrap_or(Magma::Integer),
+                                column_attributes.t.get().cloned().unwrap_or(Magma::Native),
                             ),
                             kind: Kind::Atomic,
                             padding_value: column_attributes.padding_value.get().cloned(),

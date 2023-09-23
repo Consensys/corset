@@ -1212,7 +1212,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                 if *x >= Zero::zero() && *x <= One::one() {
                     Type::Scalar(Magma::Boolean)
                 } else {
-                    Type::Scalar(Magma::Integer)
+                    Type::Scalar(Magma::Native)
                 },
             ),
         )),

@@ -159,7 +159,7 @@ impl Column {
             padding_value: padding_value.map(|x| (x, Fr::from_str(&x.to_string()).unwrap())),
             used: used.unwrap_or(true),
             kind,
-            t: t.unwrap_or(Magma::Integer),
+            t: t.unwrap_or(Magma::Native),
             intrinsic_size_factor,
             base: base.unwrap_or(Base::Dec),
             computed: false,

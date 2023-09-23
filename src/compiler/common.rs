@@ -70,8 +70,8 @@ impl Intrinsic {
             Intrinsic::Add | Intrinsic::Sub | Intrinsic::Neg => {
                 // Boolean is a corner case, as it is not stable under these operations
                 match max_type(argtype) {
-                    Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::Integer),
-                    Type::Column(Magma::Boolean) => Type::Column(Magma::Integer),
+                    Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::Native),
+                    Type::Column(Magma::Boolean) => Type::Column(Magma::Native),
                     x => x,
                 }
             }
