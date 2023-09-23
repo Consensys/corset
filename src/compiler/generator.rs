@@ -8,7 +8,7 @@ use num_traits::cast::ToPrimitive;
 use num_traits::{One, Zero};
 use owo_colors::OwoColorize;
 use pairing_ce::bn256::Fr;
-use pairing_ce::ff::{Field, PrimeField};
+use pairing_ce::ff::PrimeField;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 
@@ -21,7 +21,7 @@ use std::sync::atomic::AtomicUsize;
 use super::node::ColumnRef;
 use super::tables::{ComputationTable, Scope};
 use super::{common::*, CompileSettings, Expression, Magma, Node, Type};
-use crate::column::{Column, ColumnSet, Computation, RegisterID};
+use crate::column::{Column, ColumnSet, Computation, RegisterID, Value};
 use crate::compiler::parser::*;
 use crate::dag::ComputationDag;
 use crate::errors::{self, CompileError, RuntimeError};
@@ -61,7 +61,7 @@ pub enum Constraint {
     InRange {
         handle: Handle,
         exp: Node,
-        max: Fr,
+        max: Value,
     },
 }
 impl Constraint {
@@ -609,6 +609,16 @@ impl ConstraintSet {
                 Computation::SortingConstraints { .. } => {
                     // These computations are built with IDs from the very start
                 }
+                Computation::ExoAddition { sources, target }
+                | Computation::ExoMultiplication { sources, target } => {
+                    for source in sources.iter_mut() {
+                        source.add_id_to_handles(&convert_to_id);
+                    }
+                    convert_to_id(target);
+                }
+                Computation::ExoConstant { target, .. } => {
+                    convert_to_id(target);
+                }
             }
         }
 
@@ -681,6 +691,14 @@ impl ConstraintSet {
                     self.length_multiplier(&froms[0])
                 }
                 Computation::SortingConstraints { .. } => 1,
+                Computation::ExoAddition { sources, .. }
+                | Computation::ExoMultiplication { sources, .. } => sources
+                    .iter()
+                    .flat_map(|s| s.dependencies())
+                    .next()
+                    .map(|c| self.length_multiplier(&c))
+                    .unwrap_or(1),
+                Computation::ExoConstant { .. } => 1,
             })
             .unwrap_or(1)
             * self
@@ -716,7 +734,7 @@ impl ConstraintSet {
                 trace!("Writing {}", handle);
                 let value = self.columns.value(&r).unwrap_or(&empty_vec);
                 let padding = if let Some((_, fr)) = column.padding_value {
-                    fr
+                    fr.into()
                 } else {
                     value.get(0).cloned().unwrap_or_else(|| {
                         self.computations
@@ -725,17 +743,20 @@ impl ConstraintSet {
                                 Computation::Composite { exp, .. } => exp
                                     .eval(
                                         0,
-                                        &mut |_, _, _| Some(Fr::zero()),
+                                        &mut |_, _, _| Some(Value::zero()),
                                         &mut None,
                                         &EvalSettings::default(),
                                     )
-                                    .unwrap_or_else(Fr::zero),
-                                Computation::Interleaved { .. } => Fr::zero(),
-                                Computation::Sorted { .. } => Fr::zero(),
-                                Computation::CyclicFrom { .. } => Fr::zero(),
-                                Computation::SortingConstraints { .. } => Fr::zero(),
+                                    .unwrap_or_else(Value::zero),
+                                Computation::Interleaved { .. } => Value::zero(),
+                                Computation::Sorted { .. } => Value::zero(),
+                                Computation::CyclicFrom { .. } => Value::zero(),
+                                Computation::SortingConstraints { .. } => Value::zero(),
+                                Computation::ExoAddition { .. } => Value::zero(), // TODO: FIXME:
+                                Computation::ExoMultiplication { .. } => Value::zero(), // TODO: FIXME:
+                                Computation::ExoConstant { .. } => Value::zero(), // TODO: FIXME:
                             })
-                            .unwrap_or_else(Fr::zero)
+                            .unwrap_or_else(Value::zero)
                     })
                 };
 
@@ -747,10 +768,7 @@ impl ConstraintSet {
                     out.write_all(
                         cache
                             .cache_get_or_set_with(x.to_owned(), || {
-                                format!(
-                                    "\"0x0{}\"",
-                                    x.into_repr().to_string()[2..].trim_start_matches('0')
-                                )
+                                format!("\"0x0{}\"", x.to_string()[2..].trim_start_matches('0'))
                             })
                             .as_bytes(),
                     )?;
@@ -876,6 +894,24 @@ impl ConstraintSet {
                     {
                         bail!(errors::compiler::Error::ComputationWithHandles(
                             c.to_string()
+                        ))
+                    }
+                }
+                Computation::ExoAddition { sources, target }
+                | Computation::ExoMultiplication { sources, target } => {
+                    if std::iter::once(target.clone())
+                        .chain(sources.iter().flat_map(|s| s.dependencies()))
+                        .any(|r| !r.is_id())
+                    {
+                        bail!(errors::compiler::Error::ComputationWithHandles(
+                            c.to_string()
+                        ))
+                    }
+                }
+                Computation::ExoConstant { target, .. } => {
+                    if !target.is_id() {
+                        bail!(errors::compiler::Error::ComputationWithHandles(
+                            target.to_string()
                         ))
                     }
                 }
@@ -1048,6 +1084,7 @@ fn apply_form(
                         r
                     }
                 }
+                Expression::ExoColumn { .. } => todo!(),
             };
         }
     }
@@ -1461,7 +1498,8 @@ fn reduce_toplevel(
                 handle,
                 exp: reduce(e, ctx, settings)?.unwrap(),
                 max: Fr::from_str(&range.to_string())
-                    .ok_or_else(|| anyhow!("`{range}` is not representable in Fr"))?,
+                    .ok_or_else(|| anyhow!("`{range}` is not representable in Fr"))?
+                    .into(), // TODO: may be out of Fr and in Value
             }))
         }
         Token::DefColumns(columns) => {

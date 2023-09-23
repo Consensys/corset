@@ -1,4 +1,4 @@
-use crate::column::ColumnID;
+use crate::column::{ColumnID, Value};
 use crate::compiler::Domain;
 use anyhow::*;
 use cached::Cached;
@@ -8,8 +8,9 @@ use owo_colors::{colored::Color, OwoColorize};
 use pairing_ce::ff::Field;
 use pairing_ce::{bn256::Fr, ff::PrimeField};
 use serde::{Deserialize, Serialize};
+use std::write;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fmt::{Debug, Display, Formatter},
 };
 
@@ -161,17 +162,21 @@ pub enum Expression {
         func: Intrinsic,
         args: Vec<Node>,
     },
-    Const(BigInt, Option<Fr>),
+    Const(BigInt, Option<Fr>), // TODO: see non-native constants
     Column {
         handle: ColumnRef,
         kind: Kind<Node>,
         padding_value: Option<i64>,
         base: Base,
-        fetched: bool,
     },
     ArrayColumn {
         handle: ColumnRef,
         domain: Domain,
+        base: Base,
+    },
+    ExoColumn {
+        handle: ColumnRef,
+        padding_value: Option<i64>,
         base: Base,
     },
     List(Vec<Node>),
@@ -241,16 +246,28 @@ impl Node {
         padding_value: Option<i64>,
         t: Option<Magma>,
     ) -> Node {
-        Node {
-            _e: Expression::Column {
-                handle,
-                kind,
-                padding_value,
-                base: base.unwrap_or_else(|| t.unwrap_or(Magma::Integer).into()),
-                fetched: false,
-            },
-            _t: Some(Type::Column(t.unwrap_or(Magma::Native))),
-            dbg: None,
+        let magma = t.unwrap_or(Magma::Native);
+        if magma > Magma::Native {
+            Node {
+                _e: Expression::ExoColumn {
+                    handle,
+                    padding_value,
+                    base: base.unwrap_or_else(|| t.unwrap_or(Magma::Native).into()),
+                },
+                _t: Some(Type::Column(magma)),
+                dbg: None,
+            }
+        } else {
+            Node {
+                _e: Expression::Column {
+                    handle,
+                    kind,
+                    padding_value,
+                    base: base.unwrap_or_else(|| t.unwrap_or(Magma::Native).into()),
+                },
+                _t: Some(Type::Column(t.unwrap_or(Magma::Native))),
+                dbg: None,
+            }
         }
     }
     #[builder(entry = "array_column", exit = "build", visibility = "pub")]
@@ -277,7 +294,6 @@ impl Node {
                 kind: Kind::Phantom,
                 padding_value: None,
                 base: Base::Hex,
-                fetched: false,
             },
             _t: Some(Type::Column(m)),
             dbg: None,
@@ -288,6 +304,12 @@ impl Node {
     }
     pub fn zero() -> Node {
         Self::from_expr(Expression::Const(Zero::zero(), Some(Fr::zero())))
+    }
+    pub fn is_constant(&self) -> bool {
+        matches!(self.e(), Expression::Const(..))
+    }
+    pub fn is_exocolumn(&self) -> bool {
+        matches!(self.e(), Expression::ExoColumn { .. })
     }
     pub fn e(&self) -> &Expression {
         &self._e
@@ -310,6 +332,7 @@ impl Node {
             Expression::Column { handle, .. } => {
                 unreachable!("COLUMN {} SHOULD BE TYPED", handle.pretty())
             }
+            Expression::ExoColumn { .. } => unreachable!("FIELDVALUES SHOULD BE TYPED"),
             Expression::ArrayColumn { .. } => unreachable!("ARRAYCOLUMN SHOULD BE TYPED"),
             Expression::List(xs) => Type::List(
                 xs.iter()
@@ -324,13 +347,12 @@ impl Node {
     pub fn dbg(&self) -> Option<&String> {
         self.dbg.as_ref()
     }
-
     pub fn pretty_with_handle(&self, cs: &ConstraintSet) -> String {
         fn rec_pretty(s: &Node, depth: usize, cs: &ConstraintSet) -> String {
             let c = &COLORS[depth % COLORS.len()];
             match s.e() {
                 Expression::Const(x, _) => format!("{}", x).color(*c).to_string(),
-                Expression::Column { handle, .. } => {
+                Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
                     cs.handle(handle).to_string().color(*c).to_string()
                 }
                 Expression::ArrayColumn { handle, domain, .. } => {
@@ -364,11 +386,16 @@ impl Node {
         match self.e() {
             Expression::Funcall { args, .. } => 1 + args.iter().map(Node::size).sum::<usize>(),
             Expression::Const(..) => 0,
-            Expression::Column { .. } => 1,
+            Expression::Column { .. } => 0,
+            Expression::ExoColumn { .. } => 0,
             Expression::ArrayColumn { .. } => 0,
             Expression::List(xs) => xs.iter().map(Node::size).sum::<usize>(),
             Expression::Void => 0,
         }
+    }
+
+    pub fn bit_size(&self) -> usize {
+        self.t().magma().bit_size()
     }
 
     /// Return whether this [`Expression`] is susceptible to overflow withtin the field
@@ -391,6 +418,7 @@ impl Node {
             },
             Expression::Const(_, _) => false,
             Expression::Column { .. } => false,
+            Expression::ExoColumn { .. } => false,
             Expression::ArrayColumn { .. } => false,
             Expression::List(ns) => ns.iter().any(Node::may_overflow),
             Expression::Void => false,
@@ -406,6 +434,7 @@ impl Node {
             Expression::List(xs) => 1 + xs.iter().map(Node::depth).max().unwrap_or_default(),
             Expression::Const(..)
             | Expression::Column { .. }
+            | Expression::ExoColumn { .. }
             | Expression::ArrayColumn { .. }
             | Expression::Void => 0,
         }
@@ -477,7 +506,10 @@ impl Node {
             Expression::Column { handle, .. } => set_id(handle),
             Expression::List(xs) => xs.iter_mut().for_each(|x| x.add_id_to_handles(set_id)),
 
-            Expression::ArrayColumn { .. } | Expression::Const(_, _) | Expression::Void => {}
+            Expression::ExoColumn { .. }
+            | Expression::ArrayColumn { .. }
+            | Expression::Const(_, _)
+            | Expression::Void => {}
         }
     }
 
@@ -492,6 +524,7 @@ impl Node {
                 }
                 Expression::Const(..) => ax.push(e.clone()),
                 Expression::Column { .. } => ax.push(e.clone()),
+                Expression::ExoColumn { .. } => ax.push(e.clone()),
                 Expression::ArrayColumn { .. } => {}
                 Expression::List(args) => {
                     for a in args {
@@ -564,45 +597,45 @@ impl Node {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn eval_trace(
-        &self,
-        i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
-        settings: &EvalSettings,
-    ) -> (Option<Fr>, HashMap<String, Option<Fr>>) {
-        let mut trace = HashMap::new();
-        let r = self.eval_fold(i, get, cache, settings, &mut |n, v| {
-            if !matches!(n.e(), Expression::List(_) | Expression::Const(..)) {
-                trace.insert(n.to_string(), *v);
-            }
-        });
-        (r, trace)
-    }
+    // #[allow(dead_code)]
+    // pub fn eval_trace(
+    //     &self,
+    //     i: isize,
+    //     get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
+    //     cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+    //     settings: &EvalSettings,
+    // ) -> (Option<Value>, HashMap<String, Option<Value>>) {
+    //     let mut trace = HashMap::new();
+    //     let r = self.eval_fold(i, get, cache, settings, &mut |n, v| {
+    //         if !matches!(n.e(), Expression::List(_) | Expression::Const(..)) {
+    //             trace.insert(n.to_string(), *v);
+    //         }
+    //     });
+    //     (r, trace)
+    // }
 
     pub fn eval(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Value>,
+        cache: &mut Option<cached::SizedCache<Value, Value>>,
         settings: &EvalSettings,
-    ) -> Option<Fr> {
+    ) -> Option<Value> {
         self.eval_fold(i, get, cache, settings, &mut |_, _| {})
     }
 
     pub fn eval_fold(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Value>,
+        cache: &mut Option<cached::SizedCache<Value, Value>>,
         settings: &EvalSettings,
-        f: &mut dyn FnMut(&Node, &Option<Fr>),
-    ) -> Option<Fr> {
+        f: &mut dyn FnMut(&Node, &Option<Value>),
+    ) -> Option<Value> {
         let r = match self.e() {
             Expression::Funcall { func, args } => match func {
                 Intrinsic::Add => {
-                    let mut ax = Fr::zero();
+                    let mut ax = Value::zero();
                     for arg in args.iter() {
                         ax.add_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
@@ -616,14 +649,14 @@ impl Node {
                     Some(ax)
                 }
                 Intrinsic::Mul => {
-                    let mut ax = Fr::one();
+                    let mut ax = Value::one();
                     for arg in args.iter() {
                         ax.mul_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
                 }
                 Intrinsic::Exp => {
-                    let mut ax = Fr::one();
+                    let mut ax = Value::one();
                     let mantissa = args[0].eval_fold(i, get, cache, settings, f)?;
                     let exp = args[1].pure_eval().unwrap().to_usize().unwrap();
                     for _ in 0..exp {
@@ -644,11 +677,13 @@ impl Node {
                     if let Some(ref mut rcache) = cache {
                         x.map(|x| {
                             rcache
-                                .cache_get_or_set_with(x, || x.inverse().unwrap_or_else(Fr::zero))
+                                .cache_get_or_set_with(x.clone(), || {
+                                    x.inverse().unwrap_or_else(Value::zero)
+                                })
                                 .to_owned()
                         })
                     } else {
-                        x.and_then(|x| x.inverse()).or_else(|| Some(Fr::zero()))
+                        x.and_then(|x| x.inverse()).or_else(|| Some(Value::zero()))
                     }
                 }
                 Intrinsic::Begin => unreachable!(),
@@ -658,7 +693,7 @@ impl Node {
                     } else {
                         args.get(2)
                             .map(|x| x.eval_fold(i, get, cache, settings, f))
-                            .unwrap_or_else(|| Some(Fr::zero()))
+                            .unwrap_or_else(|| Some(Value::zero()))
                     }
                 }
                 Intrinsic::IfNotZero => {
@@ -667,19 +702,20 @@ impl Node {
                     } else {
                         args.get(2)
                             .map(|x| x.eval_fold(i, get, cache, settings, f))
-                            .unwrap_or_else(|| Some(Fr::zero()))
+                            .unwrap_or_else(|| Some(Value::zero()))
                     }
                 }
             },
-            Expression::Const(v, x) => {
-                Some(x.unwrap_or_else(|| panic!("{} is not an Fr element.", v)))
-            }
+            Expression::Const(v, x) => Some(
+                x.unwrap_or_else(|| panic!("{} is not an Fr element.", v))
+                    .into(),
+            ),
             Expression::Column { handle, .. } => get(handle, i, settings.wrap),
             Expression::List(xs) => xs
                 .iter()
                 .filter_map(|x| x.eval_fold(i, get, cache, settings, f))
                 .find(|x| !x.is_zero())
-                .or_else(|| Some(Fr::zero())),
+                .or_else(|| Some(Value::zero())),
             _ => unreachable!("{:?}", self),
         };
         f(self, &r);
@@ -688,7 +724,7 @@ impl Node {
 
     pub fn debug(
         &self,
-        f: &dyn Fn(&Node) -> Option<Fr>,
+        f: &dyn Fn(&Node) -> Option<Value>,
         unclutter: bool,
         dim: bool,
         src: bool,
@@ -703,8 +739,8 @@ impl Node {
         fn _debug(
             n: &Node,
             tty: &mut Tty,
-            f: &dyn Fn(&Node) -> Option<Fr>,
-            faulty: &Fr, // the non-zero value of the constraint
+            f: &dyn Fn(&Node) -> Option<Value>,
+            faulty: &Value, // the non-zero value of the constraint
             unclutter: bool,
             dim: bool,           // whether the user enabled --debug-dim
             zero_context: bool,  // whether we are in a zero-path
@@ -843,6 +879,9 @@ impl Node {
                 }
                 Expression::Column {
                     handle: h, base, ..
+                }
+                | Expression::ExoColumn {
+                    handle: h, base, ..
                 } => {
                     let v = f(n).unwrap_or_default();
                     let c = if dim && zero_context {
@@ -935,7 +974,7 @@ impl Display for Node {
 
         match self.e() {
             Expression::Const(x, _) => write!(f, "{}", x),
-            Expression::Column { handle, .. } => {
+            Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
                 write!(f, "{}", handle)
             }
             Expression::ArrayColumn { handle, domain, .. } => {
@@ -961,9 +1000,9 @@ impl Debug for Node {
 
         match self.e() {
             Expression::Const(x, _) => write!(f, "{}", x)?,
-            Expression::Column {
-                handle, fetched, ..
-            } => write!(f, "{}{}", if *fetched { "F:" } else { "" }, handle,)?,
+            Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
+                write!(f, "{}", handle,)?
+            }
             Expression::ArrayColumn { handle, domain, .. } => {
                 write!(f, "{}:{:?}{}", handle, self.t(), domain)?
             }

@@ -20,6 +20,7 @@ pub struct LatexExporter {
 fn sanitize(s: &str) -> String {
     s.replace('_', "\\_")
 }
+
 fn romanize(s: &str) -> String {
     s.replace('1', "I")
         .replace('2', "II")

@@ -8,13 +8,9 @@ use std::collections::HashSet;
 
 use anyhow::*;
 use log::*;
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 
 use crate::{
-    column::ColumnSet,
+    column::{ColumnSet, Value},
     compiler::{Constraint, ConstraintSet, Domain, Expression, Node},
     pretty::*,
     structs::Handle,
@@ -226,7 +222,10 @@ fn fail(
                 .chain(handles.iter().map(|handle| {
                     cs.columns
                         .get(handle, j, true)
-                        .map(|x| x.pretty_with_base(cs.columns.column(handle).unwrap().base))
+                        .map(|x| {
+                            x.pretty_with_base(cs.columns.column(handle).unwrap().base)
+                                .to_string()
+                        })
                         .unwrap_or_else(|| "nil".into())
                 }))
                 .collect(),
@@ -280,7 +279,7 @@ fn check_constraint_at(
     i: isize,
     wrap: bool,
     fail_on_oob: bool,
-    cache: &mut Option<SizedCache<Fr, Fr>>,
+    cache: &mut Option<SizedCache<Value, Value>>,
     settings: DebugSettings,
 ) -> Result<()> {
     let r = expr.eval(
@@ -299,7 +298,7 @@ fn check_constraint_at(
     Ok(())
 }
 
-fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Fr) -> Result<()> {
+fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Value) -> Result<()> {
     let l = columns_len(expr, columns, name, false)?;
     if let Some(l) = l {
         for i in 0..l as isize {
@@ -368,10 +367,10 @@ fn check_constraint(
 
 fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Result<()> {
     // Compute the LC \sum_k (k+1) × x_k[i]
-    fn pseudo_rlc(cols: &[Vec<Fr>], i: usize) -> Fr {
-        let mut ax = Fr::zero();
+    fn pseudo_rlc(cols: &[Vec<Value>], i: usize) -> Value {
+        let mut ax = Value::zero();
         for (j, col) in cols.iter().enumerate() {
-            let mut x = Fr::from_str(&(j + 2).to_string()).unwrap();
+            let mut x = Value::from(j + 2);
             x.mul_assign(&col[i]);
             ax.add_assign(&x);
         }
@@ -379,7 +378,7 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
     }
 
     // Given a list of column expression to PLookup, retrieve the corresponding values
-    fn compute_cols(exps: &[Node], cs: &ConstraintSet) -> Result<Vec<Vec<Fr>>> {
+    fn compute_cols(exps: &[Node], cs: &ConstraintSet) -> Result<Vec<Vec<Value>>> {
         let cols = exps
             .iter()
             .map(|e| crate::compute::compute_composite_static(cs, e))
@@ -441,7 +440,7 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
                 i,
                 children
                     .iter()
-                    .zip(child_cols.iter().map(|c| c[i]))
+                    .zip(child_cols.iter().map(|c| &c[i]))
                     .map(|(k, v)| format!("{}: {}", k, v.pretty()))
                     .collect::<Vec<_>>()
                     .join("\n"),

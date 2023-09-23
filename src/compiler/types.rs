@@ -195,19 +195,15 @@ impl Magma {
             Magma::Loobean => 1,
             Magma::Nibble => 4,
             Magma::Byte => 8,
-            Magma::Native => 254,
+            Magma::Native => crate::constants::FIELD_BITSIZE,
             Magma::Integer(x) => *x,
-            Magma::Any => 254,
+            Magma::Any => crate::constants::FIELD_BITSIZE,
         }
     }
 
     pub fn byte_size(&self) -> usize {
         let bit_size = self.bit_size();
-        if bit_size % 8 == 0 || bit_size < 8 {
-            bit_size / 8
-        } else {
-            bit_size / 8 + 1
-        }
+        (bit_size + 8 - 1) / 8
     }
 
     fn can_cast_to(&self, other: Magma) -> bool {

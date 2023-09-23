@@ -50,6 +50,7 @@ fn shift(e: &Node, i: isize) -> Node {
             }
             Expression::ArrayColumn { .. } => unreachable!(),
             Expression::Void => Expression::Void.into(),
+            Expression::ExoColumn { .. } => todo!(),
         }
     }
 }
@@ -81,8 +82,28 @@ fn make_chain(cs: &ConstraintSet, xs: &[Node], operand: &str, surround: bool) ->
 /// Render an expression, panicking if it is not a handle
 fn render_handle(cs: &ConstraintSet, e: &Node) -> String {
     match e.e() {
+        Expression::Column { handle, .. } => {
+            if cs.columns.register(handle).unwrap().width() > 1 {
+                panic!("unable to render exo-columns");
+            }
+            reg_mangle(cs, handle).unwrap()
+        }
+        _ => unreachable!("{:?}", e.e()),
+    }
+}
+
+fn render_maybe_exo_handle(cs: &ConstraintSet, e: &Node) -> String {
+    match e.e() {
         Expression::Column { handle, .. } => reg_mangle(cs, handle).unwrap(),
-        _ => unreachable!(),
+        Expression::ExoColumn { handle, .. } => {
+            dbg!(&cs.columns);
+            let register = cs.columns.register(dbg!(handle)).unwrap();
+            let width = register.width();
+            (0..width)
+                .map(|i| reg_mangle_ith(cs, handle, i).unwrap())
+                .join(", ")
+        }
+        _ => unreachable!("{:?}", e.e()),
     }
 }
 
@@ -109,6 +130,9 @@ fn render_expression(cs: &ConstraintSet, e: &Node) -> String {
             warn!("Rendering VOID expression");
             "symbolic.NewConstant(\"0\")".into()
         }
+        // ExoColumn are supposed to trickle up to the top level of a constraint
+        // expression and can not appear *within* an expression
+        Expression::ExoColumn { .. } => unreachable!(),
     }
 }
 
@@ -160,7 +184,7 @@ fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
     cs.constraints
         .iter()
         .sorted_by_key(|c| c.name())
-        .map(|constraint| match constraint {
+        .flat_map(|constraint| match constraint {
             Constraint::Vanishes {
                 handle,
                 domain,
@@ -170,26 +194,26 @@ fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
                 handle,
                 including,
                 included,
-            } => format!(
+            } => vec![format!(
                 "build.Inclusion(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
                 handle,
                 including
                     .iter()
-                    .map(|h| render_handle(cs, h))
+                    .map(|h| render_maybe_exo_handle(cs, h))
                     .collect::<Vec<_>>()
                     .join(", "),
                 included
                     .iter()
-                    .map(|h| render_handle(cs, h))
+                    .map(|h| render_maybe_exo_handle(cs, h))
                     .collect::<Vec<_>>()
                     .join(", ")
-            ),
+            )],
             Constraint::Permutation {
                 handle,
                 from,
                 to,
                 signs: _,
-            } => format!(
+            } => vec![format!(
                 "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
                 handle.mangle().to_case(Case::Snake),
                 from.iter()
@@ -200,15 +224,15 @@ fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
                     .map(|h| reg_mangle(cs, h).unwrap())
                     .collect::<Vec<_>>()
                     .join(", ")
-            ),
-            Constraint::InRange { handle, exp, max } => format!(
+            )],
+            Constraint::InRange { handle, exp, max } => vec![format!(
                 "build.Range(\"{}\", {}, {})",
                 handle.mangle().to_case(Case::Snake),
                 render_handle(cs, exp),
                 max.pretty()
-            ),
+            )],
         })
-        .collect::<Vec<String>>()
+        .collect()
 }
 
 fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {
@@ -236,6 +260,24 @@ fn reg_mangle(cs: &ConstraintSet, c: &ColumnRef) -> Result<String> {
         .unwrap_or_else(|| Handle::new("", reg_id.to_string()).mangle()))
 }
 
+fn reg_mangle_ith(cs: &ConstraintSet, c: &ColumnRef, i: usize) -> Result<String> {
+    let reg_id = cs
+        .columns
+        .column(c)?
+        .register
+        .ok_or_else(|| anyhow!("column {} has no backing register", c.pretty()))?;
+    let reg = &cs
+        .columns
+        .registers
+        .get(reg_id)
+        .ok_or_else(|| anyhow!("register {} for column {} does not exist", reg_id, c))?;
+    Ok(reg
+        .handle
+        .as_ref()
+        .map(|h| h.mangle_ith(i))
+        .unwrap_or_else(|| Handle::new("", format!("{}_#{}", reg_id.to_string(), i)).mangle()))
+}
+
 fn reg(cs: &ConstraintSet, c: &Handle) -> Result<Handle> {
     let reg_id = cs
         .columns
@@ -254,7 +296,25 @@ fn reg(cs: &ConstraintSet, c: &Handle) -> Result<Handle> {
         .unwrap_or_else(|| Handle::new(&c.module, reg_id.to_string())))
 }
 
-#[derive(Serialize)]
+fn reg_splatter(cs: &ConstraintSet, c: &Handle, i: usize) -> Result<Handle> {
+    let reg_id = cs
+        .columns
+        .by_handle(c)?
+        .register
+        .ok_or_else(|| anyhow!("column {} has no backing register", c.pretty()))?;
+    let reg = &cs
+        .columns
+        .registers
+        .get(reg_id)
+        .ok_or_else(|| anyhow!("register {} for column {} does not exist", reg_id, c))?;
+    Ok(reg
+        .handle
+        .as_ref()
+        .map(|h| h.iota(i))
+        .unwrap_or_else(|| Handle::new(&c.module, reg_id.to_string())))
+}
+
+#[derive(Serialize, Debug)]
 struct WiopColumn {
     go_id: String,
     json_register: String,
@@ -269,27 +329,39 @@ struct WiopInterleaved {
 fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> Vec<WiopColumn> {
     cs.columns
         .iter()
-        .filter(|c| {
+        .filter(|(r, _)| {
             cs.computations
-                .computation_for(&c.0)
+                .computation_for(r)
                 .map(|c| c.is_interleaved())
                 != Some(true)
         })
-        .sorted_by_cached_key(|c| c.1.handle.mangle())
-        .filter_map(|(h, column)| {
-            if column.used {
-                let size_multiplier = cs.length_multiplier(&h);
-                Some(WiopColumn {
-                    go_id: reg_mangle(cs, &h).unwrap(),
+        .sorted_by_cached_key(|(_, c)| c.handle.mangle())
+        .filter(|(_, c)| c.used)
+        .flat_map(|(reference, column)| {
+            let size_multiplier = cs.length_multiplier(&reference);
+            let register = cs.columns.register_of(&reference);
+            if register.width() > 1 {
+                (0..register.width())
+                    .map(|i| WiopColumn {
+                        go_id: reg_mangle_ith(cs, &reference, i).unwrap(),
+                        json_register: reg_splatter(cs, &column.handle, i).unwrap().to_string(),
+                        size: if size_multiplier == 1 {
+                            make_size(&column.handle, sizes)
+                        } else {
+                            format!("{} * {}", size_multiplier, make_size(&column.handle, sizes))
+                        },
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![WiopColumn {
+                    go_id: reg_mangle(cs, &reference).unwrap(),
                     json_register: reg(cs, &column.handle).unwrap().to_string(),
                     size: if size_multiplier == 1 {
                         make_size(&column.handle, sizes)
                     } else {
                         format!("{} * {}", size_multiplier, make_size(&column.handle, sizes))
                     },
-                })
-            } else {
-                None
+                }]
             }
         })
         .collect()
@@ -333,20 +405,45 @@ fn render_constraint(
     name: &str,
     domain: Option<Domain>,
     expr: &Node,
-) -> String {
+) -> Vec<String> {
     match expr.e() {
         Expression::List(xs) => xs
             .iter()
             .enumerate()
-            .map(|(i, x)| render_constraint(cs, &format!("{}_{}", name, i), domain.clone(), x))
-            .collect::<Vec<_>>()
-            .join("\n"),
+            .flat_map(|(i, x)| render_constraint(cs, &format!("{}#{}", name, i), domain.clone(), x))
+            .collect(),
+        Expression::ExoColumn { handle, .. }
+            if cs.columns.register(handle).unwrap().width() > 1 =>
+        {
+            let register = cs.columns.register(handle).unwrap();
+
+            (0..register.width())
+                .map(|i| {
+                    let reg_name = reg_mangle_ith(cs, handle, i).unwrap();
+                    match &domain {
+                        None => {
+                            format!("build.GlobalConstraint(\"{}/{}\", {})", name, i, reg_name)
+                        }
+                        Some(domain) => domain
+                            .iter()
+                            .map(|x| {
+                                format!(
+                                    "build.LocalConstraint(\"{}/{}\", {}.Shift({}).AsVariable())",
+                                    name, i, reg_name, x,
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                    }
+                })
+                .collect()
+        }
         _ => match domain {
-            None => format!(
+            None => vec![format!(
                 "build.GlobalConstraint(\"{}\", {})",
                 name,
                 render_expression(cs, expr)
-            ),
+            )],
             Some(domain) => domain
                 .iter()
                 .map(|x| {
@@ -356,8 +453,7 @@ fn render_constraint(
                         render_expression(cs, &shift(expr, x))
                     )
                 })
-                .collect::<Vec<_>>()
-                .join("\n"),
+                .collect::<Vec<_>>(),
         },
     }
 }

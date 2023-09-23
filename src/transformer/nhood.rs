@@ -19,7 +19,7 @@ fn process_nhood(
         Column::builder()
             .handle(Handle::new(module, format!("AUX_2_{}_HOOD", n)))
             .kind(Kind::Phantom)
-            .t(Magma::Native) // TODO: tighten for GL
+            .t(Magma::Integer(n as usize + 1))
             .build(),
     )?;
     cs.computations.insert(

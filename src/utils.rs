@@ -1,15 +1,13 @@
 use anyhow::*;
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 #[cfg(feature = "postgres")]
 use postgres::Client;
 #[cfg(feature = "postgres")]
 use std::io::Read;
 use std::unreachable;
 
-use crate::{compiler::Magma, errors::RuntimeError, pretty::Pretty, structs::Handle};
+use crate::{
+    column::Value, compiler::Magma, errors::RuntimeError, pretty::Pretty, structs::Handle,
+};
 
 pub fn is_file_empty(f: &str) -> Result<bool> {
     std::fs::metadata(f)
@@ -41,14 +39,14 @@ pub fn connect_to_db(
 }
 
 lazy_static::lazy_static! {
-    static ref F_15: Fr = Fr::from_str("15").unwrap();
-    static ref F_255: Fr = Fr::from_str("255").unwrap();
+    static ref F_15: Value = Value::from(15);
+    static ref F_255: Value = Value::from(255);
 }
 
-pub fn maybe_warn(t: Magma, xs: &[Fr], h: &Handle) -> Result<()> {
+pub fn maybe_warn(t: Magma, xs: &[Value], h: &Handle) -> Result<()> {
     if t != Magma::Boolean
-        && xs.iter().all(|x| x.is_zero() || *x == Fr::one())
-        && xs.iter().any(|x| *x == Fr::one())
+        && xs.iter().all(|x| x.is_zero() || x.is_one())
+        && xs.iter().any(|x| x.is_one())
     {
         bail!(
             "Column {} filled with boolean, but not annotated as :bool",
@@ -59,11 +57,11 @@ pub fn maybe_warn(t: Magma, xs: &[Fr], h: &Handle) -> Result<()> {
     Ok(())
 }
 
-pub fn validate(t: Magma, x: Fr) -> Result<Fr> {
+pub fn validate(t: Magma, x: Value) -> Result<Value> {
     match t {
         Magma::None => unreachable!(),
         Magma::Boolean => {
-            if x.is_zero() || x == Fr::one() {
+            if x.is_zero() || x == Value::one() {
                 Ok(x)
             } else {
                 bail!(RuntimeError::InvalidValue("bool", x))
@@ -84,7 +82,7 @@ pub fn validate(t: Magma, x: Fr) -> Result<Fr> {
             }
         }
         Magma::Native => Ok(x),
-        Magma::Integer(_) => unreachable!(),
+        Magma::Integer(_) => Ok(x), // TODO: FIXME:
         Magma::Any => unreachable!(),
         Magma::Loobean => unreachable!(), // input should never be declared as loobeans
     }
@@ -93,10 +91,11 @@ pub fn validate(t: Magma, x: Fr) -> Result<Fr> {
 /// Remove all symbols in a symbol which are invalid in Go identifiers
 pub fn purify(s: &str) -> String {
     s.replace(
-        ['(', ')', '{', '}', '[', ']', '<', '>', ':', '%', '.', '_'],
+        [
+            '(', ')', '{', '}', '[', ']', '<', '>', ':', '%', '.', '-', '#',
+        ],
         "_",
     )
-    .replace('-', "sub")
     .replace('*', "mul")
     .replace('+', "add")
     .replace('/', "div")

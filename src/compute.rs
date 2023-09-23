@@ -2,15 +2,11 @@ use anyhow::{anyhow, bail, Context, Result};
 use log::*;
 use logging_timer::time;
 use owo_colors::OwoColorize;
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 use rayon::prelude::*;
 use std::{cmp::Ordering, collections::HashSet};
 
 use crate::{
-    column::Computation,
+    column::{Computation, Value},
     compiler::{ColumnRef, ConstraintSet, EvalSettings, Node},
     dag::ComputationDag,
     errors::RuntimeError,
@@ -89,7 +85,10 @@ fn compute_interleaved(
         .map(|k| {
             let i = k / count;
             let j = k % count;
-            *cs.columns.get(&froms[j], i as isize, false).unwrap()
+            cs.columns
+                .get(&froms[j], i as isize, false)
+                .unwrap()
+                .clone()
         })
         .collect();
 
@@ -131,12 +130,13 @@ fn compute_sorted(
         .iter()
         .enumerate()
         .map(|(k, from)| {
-            let value: Vec<Fr> = vec![Fr::zero(); spilling as usize]
+            let value: Vec<Value> = vec![Value::zero(); spilling as usize]
                 .into_iter()
                 .chain(sorted_is.iter().map(|i| {
-                    *cs.columns
+                    cs.columns
                         .get(from, (*i).try_into().unwrap(), false)
                         .unwrap()
+                        .clone()
                 }))
                 .collect();
 
@@ -165,15 +165,15 @@ fn compute_cyclic(
         )
     }
 
-    let value: Vec<Fr> = vec![Fr::zero(); spilling as usize]
+    let value: Vec<Value> = vec![Value::zero(); spilling as usize]
         .into_iter()
-        .chain((0..len).map(|i| Fr::from_str(&((i % modulo).to_string())).unwrap()))
+        .chain((0..len).map(|i| (i % modulo).into()))
         .collect();
 
     Ok(vec![(to.to_owned(), value, spilling)])
 }
 
-type ComputedColumn = (ColumnRef, Vec<Fr>, isize);
+type ComputedColumn = (ColumnRef, Vec<Value>, isize);
 pub fn compute_composite(
     cs: &ConstraintSet,
     exp: &Node,
@@ -213,9 +213,9 @@ pub fn compute_composite(
                                     .unwrap()
                                     .padding_value
                                     .as_ref()
-                                    .map(|x| x.1)
+                                    .map(|x| x.1.into())
                             })
-                            .unwrap_or_else(Fr::zero),
+                            .unwrap_or_else(Value::zero),
                     )
                 },
                 &mut cache,
@@ -231,7 +231,7 @@ pub fn compute_composite(
 }
 
 /// Compared to `compute_composite`, this function directly return the compute values without any other informations
-pub fn compute_composite_static(cs: &ConstraintSet, exp: &Node) -> Result<Vec<Fr>> {
+pub fn compute_composite_static(cs: &ConstraintSet, exp: &Node) -> Result<Vec<Value>> {
     let cols_in_expr = exp.dependencies();
     for c in &cols_in_expr {
         ensure_is_computed(c, cs)?;
@@ -261,7 +261,7 @@ pub fn compute_composite_static(cs: &ConstraintSet, exp: &Node) -> Result<Vec<Fr
                 &mut cache,
                 &EvalSettings { wrap: false },
             )
-            .unwrap_or_else(Fr::zero)
+            .unwrap_or_else(Value::zero)
         })
         .collect::<Vec<_>>();
 
@@ -287,15 +287,16 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
         let spilling = cs.spilling_for(&froms[0]).unwrap();
         let len = cs.columns.len(&froms[0]).unwrap();
 
-        let mut at_values = std::iter::repeat_with(|| vec![Fr::zero(); spilling as usize])
+        let mut at_values = std::iter::repeat_with(|| vec![Value::zero(); spilling as usize])
             .take(ats.len())
             .collect::<Vec<_>>();
         // in the spilling, all @ == 0; thus Eq = 1
-        let mut eq_values = vec![Fr::one(); spilling as usize];
-        let mut delta_values = vec![Fr::zero(); spilling as usize];
-        let mut delta_bytes_values = std::iter::repeat_with(|| vec![Fr::zero(); spilling as usize])
-            .take(delta_bytes.len())
-            .collect::<Vec<_>>();
+        let mut eq_values = vec![Value::one(); spilling as usize];
+        let mut delta_values = vec![Value::zero(); spilling as usize];
+        let mut delta_bytes_values =
+            std::iter::repeat_with(|| vec![Value::zero(); spilling as usize])
+                .take(delta_bytes.len())
+                .collect::<Vec<_>>();
         for i in 0..len as isize {
             // Compute @s
             let mut found = false;
@@ -309,26 +310,26 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
 
                 let v = if !eq {
                     if found {
-                        Fr::zero()
+                        Value::zero()
                     } else {
                         found = true;
-                        Fr::one()
+                        Value::one()
                     }
                 } else {
-                    Fr::zero()
+                    Value::zero()
                 };
 
                 at_values[l].push(v);
             }
 
             // Compute Eq
-            eq_values.push(if found { Fr::zero() } else { Fr::one() });
+            eq_values.push(if found { Value::zero() } else { Value::one() });
 
             // Compute Delta
-            let mut delta = Fr::zero();
+            let mut delta = Value::zero();
             if eq_values.last().unwrap().is_zero() {
                 for l in 0..ats.len() {
-                    let mut term = *cs.columns.get(&sorted[l], i, false).unwrap();
+                    let mut term = cs.columns.get(&sorted[l], i, false).unwrap().clone();
                     term.sub_assign(cs.columns.get(&sorted[l], i - 1, false).unwrap());
                     term.mul_assign(at_values[l].last().unwrap());
                     if !signs[l] {
@@ -337,15 +338,12 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
                     delta.add_assign(&term);
                 }
             }
-            // delta.sub_assign(&Fr::one());
-            delta_values.push(delta);
+            delta_values.push(delta.clone());
 
             delta
                 .into_repr()
-                .as_ref()
-                .iter()
                 .flat_map(|u| u.to_le_bytes().into_iter())
-                .map(|i| Fr::from_str(&i.to_string()).unwrap())
+                .map(|i| Value::from(i as usize))
                 .enumerate()
                 .take(16)
                 .for_each(|(i, b)| delta_bytes_values[i].push(b));
@@ -407,6 +405,27 @@ pub fn apply_computation(
         } => {
             if !cs.columns.is_computed(target) {
                 Some(compute_cyclic(cs, froms, target, *modulo))
+            } else {
+                None
+            }
+        }
+        Computation::ExoAddition { sources, target } => {
+            if !cs.columns.is_computed(target) {
+                todo!()
+            } else {
+                None
+            }
+        }
+        Computation::ExoMultiplication { sources, target } => {
+            if !cs.columns.is_computed(target) {
+                todo!()
+            } else {
+                None
+            }
+        }
+        Computation::ExoConstant { value, target } => {
+            if !cs.columns.is_computed(target) {
+                todo!()
             } else {
                 None
             }

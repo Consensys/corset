@@ -1,14 +1,11 @@
 use super::compiler::{ColumnRef, Magma};
+use crate::column::Value as CValue;
 use anyhow::*;
 use cached::Cached;
 use flate2::bufread::GzDecoder;
 use log::*;
 use logging_timer::time;
 use owo_colors::OwoColorize;
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
 use serde_json::Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
@@ -119,9 +116,9 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
 }
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
-fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
+fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
     let mut cache = cached::SizedCache::with_size(200000); // ~1.60MB cache
-    let mut r = vec![Fr::zero()];
+    let mut r = vec![CValue::zero()];
     let xs = xs
         .iter()
         .map(|x| {
@@ -136,10 +133,12 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
                 Value::String(s) => s.to_string(),
                 _ => bail!("expected numeric value, found `{}`", x),
             };
-            cache
-                .cache_get_or_set_with(s.clone(), || Fr::from_str(&s))
-                .with_context(|| format!("while parsing Fr from `{:?}`", x))
-                .and_then(|x| crate::utils::validate(t, x))
+            crate::utils::validate(
+                t,
+                cache
+                    .cache_get_or_set_with(s.clone(), || CValue::from_str(&s))
+                    .to_owned(),
+            )
         })
         .collect::<Result<Vec<_>>>()?;
     r.extend(xs);
@@ -218,7 +217,7 @@ pub fn fill_traces(
                     if xs.len() < module_min_len {
                         xs.reverse();
                         xs.resize_with(module_min_len, || {
-                            padding_value.map(|v| v.1).unwrap_or_default()
+                            padding_value.map(|v| v.1).unwrap_or_default().into()
                         });
                         xs.reverse();
                     }
@@ -247,7 +246,7 @@ pub fn fill_traces(
                     // no need to trigger a more complex padding system.
                     if xs.len() < module_min_len {
                         xs.reverse();
-                        xs.resize(module_min_len, Fr::zero()); // TODO: register padding values
+                        xs.resize(module_min_len, CValue::zero()); // TODO: register padding values
                         xs.reverse();
                     }
                     cs.columns

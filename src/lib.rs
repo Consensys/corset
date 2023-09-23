@@ -20,6 +20,7 @@ mod check;
 mod column;
 mod compiler;
 mod compute;
+mod constants;
 mod dag;
 mod errors;
 mod import;
@@ -144,6 +145,8 @@ impl Trace {
                                 Computation::Sorted { .. } => Fr::zero(),
                                 Computation::CyclicFrom { .. } => Fr::zero(),
                                 Computation::SortingConstraints { .. } => Fr::zero(),
+                                Computation::ExoAddition { sources, target } => todo!(),
+                                Computation::ExoMultiplication { sources, target } => todo!(),
                             })
                             .unwrap_or_else(Fr::zero)
                     })

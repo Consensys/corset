@@ -5,10 +5,12 @@ use crate::{
     structs::Handle,
 };
 use anyhow::*;
+use either::Either;
 use itertools::Itertools;
+use num_bigint::BigInt;
 use owo_colors::OwoColorize;
 use pairing_ce::{
-    bn256::Fr,
+    bn256::{Fr, FrRepr},
     ff::{Field, PrimeField},
 };
 use serde::{Deserialize, Serialize};
@@ -17,24 +19,176 @@ use std::collections::{HashMap, HashSet};
 pub type RegisterID = usize;
 pub type ColumnID = usize;
 
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, Ord, Hash)]
+pub struct Value(Either<Fr, Vec<Fr>>);
+impl Value {
+    pub fn to_string(&self) -> String {
+        match self.0 {
+            Either::Left(f) => f.to_string(),
+            Either::Right(_) => String::from("TODO:to_string"),
+        }
+    }
+
+    pub fn is_zero(&self) -> bool {
+        match &self.0 {
+            Either::Left(f) => f.is_zero(),
+            Either::Right(fs) => fs.iter().all(|f| f.is_zero()),
+        }
+    }
+
+    pub fn is_one(&self) -> bool {
+        match &self.0 {
+            Either::Left(f) => *f == Fr::one(),
+            Either::Right(fs) => fs[0] == Fr::one() && fs.iter().skip(1).all(|f| f.is_zero()),
+        }
+    }
+
+    pub(crate) fn zero() -> Self {
+        Value(Either::Left(Fr::zero()))
+    }
+
+    pub(crate) fn one() -> Self {
+        Value(Either::Left(Fr::one()))
+    }
+
+    pub(crate) fn add_assign(&mut self, other: &Value) {
+        todo!()
+    }
+
+    pub(crate) fn sub_assign(&mut self, other: &Value) {
+        todo!()
+    }
+
+    pub(crate) fn mul_assign(&mut self, other: &Value) {
+        todo!()
+    }
+
+    pub(crate) fn negate(&mut self) {
+        todo!()
+    }
+
+    pub(crate) fn inverse(&self) -> Option<Value> {
+        match &self.0 {
+            Either::Left(f) => f.inverse().map(|i| Value(Either::Left(i))),
+            Either::Right(_) => panic!("can not inverse ExoValue"),
+        }
+    }
+
+    pub(crate) fn from_str(s: &str) -> Value {
+        let int = s.parse::<BigInt>().unwrap();
+        if int.bits() <= crate::constants::FIELD_BITSIZE as u64 {
+            Value(Either::Left(Fr::from_str(s).unwrap()))
+        } else {
+            assert!(int.sign() != num_bigint::Sign::Minus);
+            let bs = int.to_bytes_le();
+            let mut r = Vec::new();
+            for bytes in &bs.1.iter().chunks(crate::constants::FIELD_BITSIZE / 8) {
+                let bb = bytes.cloned().collect_vec();
+                dbg!(&bb);
+                let small_big_int = BigInt::from_bytes_le(num_bigint::Sign::Plus, &bb);
+                r.push(Fr::from_str(&small_big_int.to_string()).unwrap());
+            }
+            r.reverse();
+            Value(Either::Right(r))
+        }
+    }
+
+    pub(crate) fn into_repr(&self) -> impl Iterator<Item = u64> {
+        let us = match &self.0 {
+            Either::Left(f) => f.into_repr().0.to_vec(),
+            Either::Right(fs) => fs.iter().flat_map(|f| f.into_repr().0.to_vec()).collect(),
+        };
+        us.into_iter()
+    }
+}
+impl std::default::Default for Value {
+    fn default() -> Value {
+        Value(Either::Left(Fr::zero()))
+    }
+}
+impl From<Fr> for Value {
+    fn from(f: Fr) -> Self {
+        Value(Either::Left(f))
+    }
+}
+impl From<usize> for Value {
+    fn from(x: usize) -> Self {
+        Value(Either::Left(Fr::from_str(&x.to_string()).unwrap()))
+    }
+}
+impl From<&str> for Value {
+    fn from(x: &str) -> Self {
+        Value(Either::Left(Fr::from_str(x).unwrap()))
+    }
+}
+impl Pretty for Value {
+    fn pretty(&self) -> String {
+        self.0
+            .as_ref()
+            .either(|f| f.pretty(), |fs| fs.iter().map(|f| f.pretty()).join("/"))
+    }
+
+    fn pretty_with_base(&self, base: Base) -> String {
+        self.0.as_ref().either(
+            |f| f.pretty_with_base(base),
+            |fs| fs.iter().map(|f| f.pretty_with_base(base)).join("/"),
+        )
+    }
+}
+impl std::cmp::PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        todo!()
+    }
+}
+impl std::cmp::PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match &self.0 {
+            Either::Left(f) => match &other.0 {
+                Either::Left(o) => f.eq(&o),
+                Either::Right(os) => os[0].eq(&f) && os.iter().skip(1).all(|o| o.is_zero()),
+            },
+            Either::Right(fs) => todo!(),
+        }
+    }
+}
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            Either::Left(fr) => write!(f, "{}", fr),
+            Either::Right(frs) => write!(f, "{}", frs.iter().map(|fr| fr.to_string()).join(" ")),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FieldRegister {
+    pub handle: Handle,
+    value: Option<Vec<Fr>>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Register {
     pub handle: Option<Handle>,
     pub magma: Magma,
-    value: Option<Vec<Fr>>,
+    value: Option<Vec<Value>>,
     spilling: Option<isize>,
+    width: usize,
 }
 
 impl Register {
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
     pub fn make_with_spilling(
-        f: &mut dyn FnMut(isize) -> Fr,
+        f: &mut dyn FnMut(isize) -> Value,
         len: usize,
         spilling: isize,
-    ) -> Vec<Fr> {
+    ) -> Vec<Value> {
         (-spilling..len as isize).map(f).collect()
     }
 
-    pub fn set_value(&mut self, v: Vec<Fr>, spilling: isize) -> Result<()> {
+    pub fn set_value(&mut self, v: Vec<Value>, spilling: isize) -> Result<()> {
         assert!(self.spilling.map(|s| s == spilling).unwrap_or(true));
         self.spilling = Some(spilling);
         if self.value.is_some() {
@@ -48,7 +202,7 @@ impl Register {
             }
         } else {
             self.value = Some(Self::make_with_spilling(
-                &mut |i| v.get(i as usize).cloned().unwrap_or_else(Fr::zero),
+                &mut |i| v.get(i as usize).cloned().unwrap_or_else(Value::zero),
                 v.len(),
                 spilling,
             ));
@@ -56,7 +210,7 @@ impl Register {
         Ok(())
     }
 
-    pub fn set_raw_value(&mut self, v: Vec<Fr>, spilling: isize) -> Result<()> {
+    pub fn set_raw_value(&mut self, v: Vec<Value>, spilling: isize) -> Result<()> {
         assert!(self.spilling.map(|s| s == spilling).unwrap_or(true));
         if self.value.is_some() {
             assert!(self.value.as_ref().unwrap().len() == v.len());
@@ -74,7 +228,7 @@ impl Register {
         Ok(())
     }
 
-    pub fn value(&self) -> Option<&Vec<Fr>> {
+    pub fn value(&self) -> Option<&Vec<Value>> {
         self.value.as_ref()
     }
 
@@ -88,7 +242,7 @@ impl Register {
             .map(|v| v.len() - self.spilling.unwrap() as usize)
     }
 
-    pub fn get(&self, i: isize, wrap: bool) -> Option<&Fr> {
+    pub fn get(&self, i: isize, wrap: bool) -> Option<&Value> {
         if i < 0 {
             if wrap {
                 let new_i = self.value.as_ref().map(Vec::len).unwrap() as isize + i;
@@ -112,7 +266,7 @@ impl Register {
         }
     }
 
-    pub fn get_raw(&self, i: isize, wrap: bool) -> Option<&Fr> {
+    pub fn get_raw(&self, i: isize, wrap: bool) -> Option<&Value> {
         if i < 0 {
             if wrap {
                 self.value
@@ -132,7 +286,7 @@ impl Register {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Column {
     pub register: Option<RegisterID>,
-    pub padding_value: Option<(i64, Fr)>,
+    pub padding_value: Option<(i64, Fr)>, // TODO: convert to Value
     pub used: bool,
     pub kind: Kind<()>,
     pub t: Magma,
@@ -176,6 +330,7 @@ pub struct ColumnSet {
     /// a module may have a lower bound on its columns length if it is involved
     /// in range proofs
     pub min_len: HashMap<String, usize>,
+    pub field_registers: Vec<FieldRegister>,
     pub registers: Vec<Register>,
     pub spilling: HashMap<String, isize>, // module -> (past-spilling, future-spilling)
 }
@@ -338,12 +493,13 @@ impl ColumnSet {
         self._cols.iter()
     }
 
-    pub fn new_register(&mut self, handle: Handle, magma: Magma) -> RegisterID {
+    pub(crate) fn new_register(&mut self, handle: Handle, magma: Magma) -> RegisterID {
         self.registers.push(Register {
             handle: Some(handle),
             magma,
             value: None,
             spilling: None,
+            width: crate::constants::col_count_magma(magma),
         });
         self.registers.len() - 1
     }
@@ -393,21 +549,21 @@ impl ColumnSet {
             .all(|c| self.registers[c.register.unwrap()].value().is_none())
     }
 
-    fn register_of_mut(&mut self, h: &ColumnRef) -> &mut Register {
+    pub fn register_of_mut(&mut self, h: &ColumnRef) -> &mut Register {
         let reg = self.column(h).unwrap().register.unwrap();
         &mut self.registers[reg]
     }
 
-    fn register_of(&self, h: &ColumnRef) -> &Register {
+    pub fn register_of(&self, h: &ColumnRef) -> &Register {
         let reg = self.column(h).unwrap().register.unwrap();
         &self.registers[reg]
     }
 
-    pub fn get(&self, h: &ColumnRef, i: isize, wrap: bool) -> Option<&Fr> {
+    pub fn get(&self, h: &ColumnRef, i: isize, wrap: bool) -> Option<&Value> {
         self.register_of(h).get(i, wrap)
     }
 
-    pub fn get_raw(&self, h: &ColumnRef, i: isize, wrap: bool) -> Option<&Fr> {
+    pub fn get_raw(&self, h: &ColumnRef, i: isize, wrap: bool) -> Option<&Value> {
         self.register_of(h).get_raw(i, wrap)
     }
 
@@ -419,7 +575,7 @@ impl ColumnSet {
         self.register_of(h).padded_len()
     }
 
-    pub fn value(&self, h: &ColumnRef) -> Option<&Vec<Fr>> {
+    pub fn value(&self, h: &ColumnRef) -> Option<&Vec<Value>> {
         self.register_of(h).value()
     }
 
@@ -427,7 +583,12 @@ impl ColumnSet {
         self.column(h).unwrap().computed
     }
 
-    pub fn set_column_value(&mut self, h: &ColumnRef, v: Vec<Fr>, spilling: isize) -> Result<()> {
+    pub fn set_column_value(
+        &mut self,
+        h: &ColumnRef,
+        v: Vec<Value>,
+        spilling: isize,
+    ) -> Result<()> {
         self.get_col_mut(h).unwrap().computed = true;
         self.register_of_mut(h)
             .set_value(v, spilling)
@@ -437,7 +598,7 @@ impl ColumnSet {
     pub fn set_register_value(
         &mut self,
         h: &RegisterRef,
-        v: Vec<Fr>,
+        v: Vec<Value>,
         spilling: isize,
     ) -> Result<()> {
         let reg_id = if h.is_id() {
@@ -469,7 +630,7 @@ impl ColumnSet {
             .with_context(|| anyhow!("while filling {}", h.pretty()))
     }
 
-    pub fn set_raw_value(&mut self, h: &ColumnRef, v: Vec<Fr>, spilling: isize) -> Result<()> {
+    pub fn set_raw_value(&mut self, h: &ColumnRef, v: Vec<Value>, spilling: isize) -> Result<()> {
         self.get_col_mut(h).unwrap().computed = true;
         self.register_of_mut(h).set_raw_value(v, spilling)
     }
@@ -477,11 +638,24 @@ impl ColumnSet {
 
 type RegisterRef = ColumnRef;
 
+// TODO: add a targets() function to automatize computation insertion
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Computation {
     Composite {
         target: ColumnRef,
         exp: Node,
+    },
+    ExoAddition {
+        sources: [Node; 2],
+        target: ColumnRef,
+    },
+    ExoMultiplication {
+        sources: [Node; 2],
+        target: ColumnRef,
+    },
+    ExoConstant {
+        value: BigInt,
+        target: ColumnRef,
     },
     Interleaved {
         target: ColumnRef,
@@ -521,6 +695,15 @@ impl std::fmt::Display for Computation {
                     froms.iter().map(|c| c.pretty()).join(", ")
                 )
             }
+            Computation::ExoAddition { sources, target } => {
+                write!(f, "+ {:?} -> {}", sources, target)
+            }
+            Computation::ExoMultiplication { sources, target } => {
+                write!(f, "× {:?} -> {}", sources, target)
+            }
+            Computation::ExoConstant { value, target } => {
+                write!(f, "{} := {}", target, value)
+            }
             Computation::Sorted { froms, tos, signs } => write!(
                 f,
                 "[{}] ⇳ [{}]",
@@ -548,8 +731,11 @@ impl std::fmt::Display for Computation {
 impl Computation {
     pub fn pretty_target(&self) -> String {
         match self {
-            Computation::Composite { target, .. } => target.to_string(),
-            Computation::Interleaved { target, .. } => target.to_string(),
+            Computation::Composite { target, .. }
+            | Computation::Interleaved { target, .. }
+            | Computation::ExoAddition { target, .. }
+            | Computation::ExoMultiplication { target, .. }
+            | Computation::ExoConstant { target, .. } => target.to_string(),
             Computation::Sorted { tos, .. } => tos
                 .iter()
                 .map(|t| t.to_string())

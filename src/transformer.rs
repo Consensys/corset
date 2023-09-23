@@ -4,6 +4,7 @@ mod nhood;
 mod selectors;
 mod shifter;
 mod sort;
+mod splatter;
 mod statics;
 
 pub use ifs::expand_ifs;
@@ -12,6 +13,7 @@ pub use nhood::validate_nhood;
 pub use selectors::expand_constraints;
 pub use shifter::lower_shifts;
 pub use sort::sorts;
+pub use splatter::splatter;
 pub use statics::precompute;
 
 use crate::{

@@ -1,6 +1,6 @@
 use super::pretty::Pretty;
+use crate::column::Value;
 use owo_colors::OwoColorize;
-use pairing_ce::bn256::Fr;
 use thiserror::Error;
 
 use crate::{
@@ -29,7 +29,7 @@ pub enum RuntimeError<'a> {
     NotComputed(Handle),
 
     #[error("expected a {} value, found {}", .0.white().bold(), .1.pretty().red())]
-    InvalidValue(&'a str, Fr),
+    InvalidValue(&'a str, Value),
 
     #[error("expected an array, found {:?}", .0)]
     NotAnArray(Expression),

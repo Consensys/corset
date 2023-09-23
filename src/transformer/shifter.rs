@@ -17,7 +17,7 @@ fn do_lower_shifts(e: &mut Node, depth: isize) {
             }
         }
         Expression::Const(_, _) => (),
-        Expression::Column { .. } => {
+        Expression::Column { .. } | Expression::ExoColumn { .. } => {
             if depth != 0 {
                 let column = e.clone();
                 *e = Intrinsic::Shift

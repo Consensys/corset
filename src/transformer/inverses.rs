@@ -97,6 +97,7 @@ impl ConstraintSet {
 }
 
 fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Result<()> {
+    // X × (X × /X - 1)
     cs.push(
         Intrinsic::Mul.call(&[
             x_expr.clone(),
@@ -113,6 +114,8 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Res
             ])?,
         ])?,
     );
+
+    // /X × (X × /X - 1)
     cs.push(
         Intrinsic::Mul.call(&[
             Node::column()

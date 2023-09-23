@@ -19,6 +19,7 @@ mod check;
 mod column;
 mod compiler;
 mod compute;
+mod constants;
 mod dag;
 mod errors;
 mod exporters;
@@ -231,7 +232,7 @@ enum Commands {
     },
     /// Display the compiled the constraint system
     Debug {
-        #[arg(short = 'e', long = "expand", value_parser=["nhood", "lower-shifts", "ifs", "constraints", "permutations", "inverses"], value_delimiter=',')]
+        #[arg(short = 'e', long = "expand", value_parser=["nhood", "lower-shifts", "ifs", "constraints", "permutations", "inverses", "splatter"], value_delimiter=',')]
         expand: Vec<String>,
         #[arg(
             short = 'E',
@@ -610,8 +611,9 @@ fn main() -> Result<()> {
             // transformer::validate_nhood(&mut constraints)?;
             transformer::lower_shifts(&mut constraints);
             transformer::expand_ifs(&mut constraints);
-            transformer::expand_constraints(&mut constraints)?;
             transformer::sorts(&mut constraints)?;
+            transformer::splatter(&mut constraints)?;
+            transformer::expand_constraints(&mut constraints)?;
             transformer::expand_invs(&mut constraints)?;
 
             exporters::wizardiop::render(&constraints, &out_filename)?;
@@ -833,13 +835,17 @@ fn main() -> Result<()> {
             if expand.contains(&"ifs".into()) || expand_all {
                 transformer::expand_ifs(&mut constraints);
             }
-            if expand.contains(&"constraints".into()) || expand_all {
-                transformer::expand_constraints(&mut constraints)
-                    .with_context(|| anyhow!("while expanding constraints"))?;
-            }
             if expand.contains(&"permutations".into()) || expand_all {
                 transformer::sorts(&mut constraints)
                     .with_context(|| anyhow!("while creating sorting constraints"))?;
+            }
+            if expand.contains(&"splatter".into()) || expand_all {
+                transformer::splatter(&mut constraints)
+                    .with_context(|| anyhow!("while splattering exo-operations"))?;
+            }
+            if expand.contains(&"constraints".into()) || expand_all {
+                transformer::expand_constraints(&mut constraints)
+                    .with_context(|| anyhow!("while expanding constraints"))?;
             }
             if expand.contains(&"inverses".into()) || expand_all {
                 transformer::expand_invs(&mut constraints)

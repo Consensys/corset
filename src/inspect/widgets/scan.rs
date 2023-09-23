@@ -1,11 +1,11 @@
 use crate::{
+    column::Value,
     compiler::ColumnRef,
     inspect::{
         forth::{self, Node},
         StdTerminal,
     },
 };
-use pairing_ce::bn256::Fr;
 use ratatui::{
     prelude::Rect,
     style::{Color, Style},
@@ -54,7 +54,7 @@ impl<'a> ScanInput<'a> {
         r
     }
 
-    pub fn run<F: Fn(isize, &ColumnRef) -> Option<Fr>>(
+    pub fn run<F: Fn(isize, &ColumnRef) -> Option<Value>>(
         mut self,
         term: &mut StdTerminal,
         get: &F,

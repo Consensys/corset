@@ -120,7 +120,7 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
             }
         },
         Expression::Const(x, _) => tty.write(x.to_string()),
-        Expression::Column { handle, .. } => {
+        Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
             let color = handle.to_string().chars().fold(0, |ax, c| ax + c as usize) % 255 + 1;
             tty.write(
                 handle
@@ -173,10 +173,11 @@ fn render_constraints(
                     println!("{}", tty.page_feed());
                 }
                 Constraint::Plookup {
+                    handle,
                     including,
                     included,
-                    ..
                 } => {
+                    println!("\n{}", handle.pretty());
                     println!(
                         "{{{}}} ⊂ {{{}}}",
                         included
@@ -237,13 +238,14 @@ fn render_columns(cs: &ConstraintSet) {
             cs.length_multiplier(&r),
             col.register
                 .map(|r| format!(
-                    "r{}/{}",
+                    "r{}/{}ι{}",
                     r,
                     cs.columns.registers[r]
                         .handle
                         .as_ref()
                         .map(|h| h.to_string())
-                        .unwrap_or("?".into())
+                        .unwrap_or("?".into()),
+                    cs.columns.registers[r].width()
                 ))
                 .unwrap_or_default()
                 .as_str()
@@ -288,6 +290,21 @@ fn render_computations(cs: &ConstraintSet) {
                 "Sorting constraints for {}",
                 sorted.iter().map(|c| cs.handle(c).pretty()).join(", ")
             ),
+            Computation::ExoAddition { sources, target } => println!(
+                "{} ≜ {} ⊕ {}",
+                target.pretty(),
+                sources[0].pretty(),
+                sources[1].pretty(),
+            ),
+            Computation::ExoMultiplication { sources, target } => println!(
+                "{} ≜ {} ⊗ {}",
+                target.pretty(),
+                sources[0].pretty(),
+                sources[1].pretty(),
+            ),
+            Computation::ExoConstant { value, target } => {
+                println!("{} := {}", target.pretty(), value)
+            }
         }
     }
 }

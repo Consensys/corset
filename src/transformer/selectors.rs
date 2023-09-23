@@ -15,7 +15,7 @@ fn do_expand_expr(
     new_cs: &mut Vec<Node>,
 ) -> Result<Node> {
     match e.e() {
-        Expression::Column { .. } => Ok(e.clone()),
+        Expression::Column { .. } | Expression::ExoColumn { .. } => Ok(e.clone()),
         _ => {
             let module = cols.module_of(e.dependencies().iter()).unwrap();
             let new_handle = Handle::new(module, expression_to_name(e, "EXPAND"));

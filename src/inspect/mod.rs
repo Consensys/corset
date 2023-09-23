@@ -10,7 +10,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use itertools::Itertools;
-use pairing_ce::ff::{Field, PrimeField};
 use ratatui::{prelude::*, widgets::*};
 use regex_lite::Regex;
 use std::collections::HashMap;
@@ -154,8 +153,6 @@ impl ModuleView {
                             maxes[k + 1] = maxes[k + 1].max(x_str.len());
                             let bg_color = x
                                 .into_repr()
-                                .0
-                                .iter()
                                 .flat_map(|x| x.to_le_bytes())
                                 .fold(0u8, |ax, bx| ax.wrapping_add(bx));
                             // ensure that we write white on dark colors and white on dark ones
@@ -376,7 +373,7 @@ impl<'a> Inspector<'a> {
                             )
                             .run(
                                 &mut t,
-                                &|i, r| self.cs.columns.get_raw(r, i, false).copied(),
+                                &|i, r| self.cs.columns.get_raw(r, i, false).cloned(),
                                 self.current_module().size,
                                 self.minibuffer,
                             );

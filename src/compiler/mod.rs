@@ -188,6 +188,22 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
                             )?,
                         }
                     }
+                    Expression::ExoColumn {
+                        handle,
+                        padding_value,
+                        base,
+                        ..
+                    } => {
+                        let column = Column::builder()
+                            .and_padding_value(padding_value.to_owned())
+                            .handle(handle.as_handle().clone())
+                            .used(*used)
+                            .kind(Kind::Atomic)
+                            .t(symbol.t().magma())
+                            .base(*base)
+                            .build();
+                        columns.insert_column(column)?;
+                    }
                     Expression::Const(ref x, _) => {
                         constants.insert(handle, x.clone());
                     }
