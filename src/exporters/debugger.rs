@@ -4,6 +4,7 @@ use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
 use crate::pretty::Pretty;
 use crate::structs::Handle;
 use anyhow::*;
+use ellipse::Ellipse;
 use itertools::Itertools;
 use num_traits::ToPrimitive;
 use owo_colors::XtermColors;
@@ -222,31 +223,31 @@ fn render_constants(cs: &ConstraintSet) {
 
 fn render_columns(cs: &ConstraintSet) {
     println!("\n{}", "=== Columns ===".bold().yellow());
+
+    println!(
+        "{:>4}{:>80}{:>6}{:>4}{:>50}",
+        "ID", "Name", "Type", "×", "Reg."
+    );
     for (r, col) in cs.columns.iter().sorted_by_key(|c| c.1.register) {
         println!(
-            "{:4}{:>80} {:>20}{}",
+            "{:>4}{:>80}{:>6}{:>4}{:>50}",
             r.as_id(),
-            format!(
-                "{}{}",
-                col.handle
-                    .perspective
-                    .as_ref()
-                    .map(|p| format!(" ({})", p))
-                    .unwrap_or_default(),
-                &col.handle,
-            ),
-            format!("{} × {:?}", cs.length_multiplier(&r), col.t),
+            col.handle.to_string().as_str().truncate_ellipse(75),
+            col.t.to_string(),
+            cs.length_multiplier(&r),
             col.register
                 .map(|r| format!(
-                    " ∈ {}/{}",
+                    "r{}/{}",
                     r,
                     cs.columns.registers[r]
                         .handle
                         .as_ref()
                         .map(|h| h.to_string())
-                        .unwrap_or(format!("r{}", r))
+                        .unwrap_or("?".into())
                 ))
                 .unwrap_or_default()
+                .as_str()
+                .truncate_ellipse(45)
         );
     }
 }
@@ -279,9 +280,9 @@ fn render_computations(cs: &ConstraintSet) {
                     .join(" "),
             ),
             Computation::CyclicFrom { target, froms, .. } => println!(
-                "{} ↻ {}",
+                "{} ≜ ↻ {}",
+                target.pretty(),
                 froms.iter().map(|c| cs.handle(c).pretty()).join(", "),
-                target
             ),
             Computation::SortingConstraints { sorted, .. } => println!(
                 "Sorting constraints for {}",

@@ -50,6 +50,7 @@ serde_json = { version = "1", features = ["arbitrary_precision"] }
 sorbus = "0.9"
 thiserror = "1.0.38"
 ratatui-textarea = { version = "0.3", optional = true }
+ellipse = "0.2.0"
 
 [target.'cfg(all(target_arch = "x86_64", target_feature = "avx"))'.dependencies]
 simd-json = "0.11"
