@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.3.8] - 2023-09-28
+
+### Features
+
+- Add `:truthiness` as a display option
+
 ## [8.3.7] - 2023-09-28
 
 ### Bug Fixes
@@ -18,6 +24,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous Tasks
 
 - Clippy
+- Release corset version 8.3.7
 
 ### Build
 
