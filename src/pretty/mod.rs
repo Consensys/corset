@@ -6,7 +6,7 @@ use pairing_ce::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    compiler::{ColumnRef, Expression, Node},
+    compiler::{ColumnRef, Expression, Magma, Node},
     structs::Handle,
 };
 
@@ -27,6 +27,8 @@ pub enum Base {
     Dec,
     Hex,
     Bin,
+    Bool,
+    Loob,
     Bytes,
     OpCode,
 }
@@ -41,10 +43,21 @@ impl std::convert::TryFrom<&str> for Base {
             ":hex" => Ok(Base::Hex),
             ":bytes" => Ok(Base::Bytes),
             ":opcode" => Ok(Base::OpCode),
+            ":truthiness" => Ok(Base::Bool),
             _ => anyhow::bail!(
-                ":display expects one of :hex, :dec, :bin, :bytes, :opcode; found {}",
+                ":display expects one of :hex, :dec, :bin, :bytes, :opcode, :truthiness; found {}",
                 value
             ),
+        }
+    }
+}
+
+impl std::convert::From<Magma> for Base {
+    fn from(m: Magma) -> Self {
+        match m {
+            Magma::Boolean => Base::Bool,
+            Magma::Loobean => Base::Loob,
+            _ => Base::Hex,
         }
     }
 }
@@ -107,6 +120,8 @@ impl Pretty for Fr {
                         out
                     }
                 }
+                Base::Bool => if self.is_zero() { "false" } else { "true" }.to_string(),
+                Base::Loob => if self.is_zero() { "true" } else { "false" }.to_string(),
                 Base::OpCode => opcodes::to_str(
                     u8::from_str_radix(
                         self.into_repr().to_string()[2..].trim_start_matches('0'),
