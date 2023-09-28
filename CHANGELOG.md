@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.3.7] - 2023-09-28
+
+### Bug Fixes
+
+- Use appropriate type for constants in Besu
+- Downgrade ron due to stack overflow issue
+
+### Features
+
+- Remove setter methods in generated traces
+- Add an option to display columns
+- Corset can now parse module following the standard hierarchy
+
+### Miscellaneous Tasks
+
+- Clippy
+
+### Build
+
+- Update to Rust 1.70.0
+
 ## [8.3.6] - 2023-09-16
 
 ### Bug Fixes
@@ -20,6 +41,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous Tasks
 
 - Update dependencies
+- Release corset version 8.3.6
 
 ## [8.3.5] - 2023-08-30
 
