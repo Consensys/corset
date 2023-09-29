@@ -2,11 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.3.9] - 2023-09-29
+
+### Bug Fixes
+
+- Do not ignore explicit base annotation on column declarations
+
 ## [8.3.8] - 2023-09-28
 
 ### Features
 
 - Add `:truthiness` as a display option
+
+### Miscellaneous Tasks
+
+- Release corset version 8.3.8
 
 ## [8.3.7] - 2023-09-28
 
