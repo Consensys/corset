@@ -246,7 +246,7 @@ impl Node {
                 handle,
                 kind,
                 padding_value,
-                base: t.unwrap_or(Magma::Integer).into(),
+                base: base.unwrap_or_else(|| t.unwrap_or(Magma::Integer).into()),
                 fetched: false,
             },
             _t: Some(Type::Column(t.unwrap_or(Magma::Integer))),
