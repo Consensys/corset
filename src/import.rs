@@ -89,21 +89,26 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
 }
 
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
-fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
+fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
     let mut cache_num = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut cache_str = cached::SizedCache::with_size(200000); // ~1.60MB cache
-    let mut r = vec![Fr::zero()];
+    let mut r = vec![CValue::zero()];
     let xs = xs
         .iter()
         .map(|x| match x {
-            Value::Number(n) => cache_num
-                .cache_get_or_set_with(n, || Fr::from_str(&n.to_string()))
-                .with_context(|| format!("while parsing Fr from Number `{:?}`", x))
-                .and_then(|x| crate::utils::validate(t, x)),
-            Value::String(s) => cache_str
-                .cache_get_or_set_with(s, || Fr::from_str(s))
-                .with_context(|| format!("while parsing Fr from String `{:?}`", x))
-                .and_then(|x| crate::utils::validate(t, x)),
+            Value::Number(n) => crate::utils::validate(
+                t,
+                cache_num
+                    .cache_get_or_set_with(n, || CValue::from_str(&n.to_string()))
+                    .to_owned(),
+            ),
+
+            Value::String(s) => crate::utils::validate(
+                t,
+                cache_str
+                    .cache_get_or_set_with(s.clone(), || CValue::from_str(&s))
+                    .to_owned(),
+            ),
             _ => bail!("expected numeric value, found `{}`", x),
         })
         .collect::<Result<Vec<_>>>()?;
