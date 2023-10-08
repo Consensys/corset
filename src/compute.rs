@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail, Context, Result};
 use log::*;
 use logging_timer::time;
+use num_bigint::BigInt;
 use owo_colors::OwoColorize;
 use rayon::prelude::*;
 use std::{cmp::Ordering, collections::HashSet};
@@ -145,6 +146,78 @@ fn compute_sorted(
         .collect::<Vec<_>>())
 }
 
+fn compute_exoconstant(
+    cs: &ConstraintSet,
+    to: &ColumnRef,
+    value: &BigInt,
+) -> Result<Vec<ComputedColumn>> {
+    let spilling = cs.spilling_for(to).unwrap();
+    let len = cs
+        .raw_len_for(&cs.columns.column(to).unwrap().handle.module)
+        .unwrap() as usize;
+
+    let value: Vec<Value> = vec![Value::from(value).exoize(); spilling as usize + len];
+
+    Ok(vec![(to.to_owned(), value, spilling)])
+}
+
+fn compute_exoaddition(
+    cs: &ConstraintSet,
+    sources: &[Node; 2],
+    target: &ColumnRef,
+) -> Result<Vec<ComputedColumn>> {
+    let spilling = cs.spilling_for(target).unwrap();
+    let len = cs
+        .raw_len_for(&cs.columns.column(target).unwrap().handle.module)
+        .unwrap();
+
+    let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
+    let getter = |handle: &ColumnRef, j, _| {
+        Some(
+            cs.columns
+                .get(handle, j, false)
+                .cloned()
+                .or_else(|| {
+                    // This is triggered when filling the spilling
+                    // of an expression with past spilling. In this
+                    // case, the expression will overflow past the
+                    // past spilling, and None should be converted
+                    // to the padding value or 0.
+                    cs.columns
+                        .column(handle)
+                        .unwrap()
+                        .padding_value
+                        .as_ref()
+                        .map(|x| x.1.into())
+                })
+                .unwrap_or_else(Value::zero),
+        )
+    };
+
+    let value: Vec<Value> = //vec![Value::from(value).exoize(); spilling as usize + len];
+        (-spilling..len).map(|i| {
+            let mut r1 = sources[0].eval(
+                i,
+                getter,
+                &mut cache,
+                &EvalSettings { wrap: false },
+            ).unwrap();
+            let r2 = sources[1].eval(
+                i,
+                getter,
+                &mut cache,
+                &EvalSettings { wrap: false },
+            ).unwrap();
+            // This should never fail, as we always provide a default value for
+            // column accesses
+            r1.add_assign(&r2);
+            r1
+        })
+        .collect();
+
+    Ok(vec![(target.to_owned(), value, spilling)])
+}
+
 fn compute_cyclic(
     cs: &ConstraintSet,
     froms: &[ColumnRef],
@@ -197,7 +270,7 @@ pub fn compute_composite(
         .map(|i| {
             let r = exp.eval(
                 i,
-                &mut |handle, j, _| {
+                |handle, j, _| {
                     Some(
                         cs.columns
                             .get(handle, j, false)
@@ -257,7 +330,7 @@ pub fn compute_composite_static(cs: &ConstraintSet, exp: &Node) -> Result<Vec<Va
         .map(|i| {
             exp.eval(
                 i,
-                &mut |handle, j, _| cs.columns.get(handle, j, false).cloned(),
+                |handle, j, _| cs.columns.get(handle, j, false).cloned(),
                 &mut cache,
                 &EvalSettings { wrap: false },
             )
@@ -411,7 +484,7 @@ pub fn apply_computation(
         }
         Computation::ExoAddition { sources, target } => {
             if !cs.columns.is_computed(target) {
-                todo!()
+                Some(compute_exoaddition(cs, sources, target))
             } else {
                 None
             }
@@ -425,7 +498,7 @@ pub fn apply_computation(
         }
         Computation::ExoConstant { value, target } => {
             if !cs.columns.is_computed(target) {
-                todo!()
+                Some(compute_exoconstant(cs, target, value))
             } else {
                 None
             }

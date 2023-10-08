@@ -53,9 +53,9 @@ lazy_static::lazy_static! {
         },
 
         // Intrinsics
-        "inv" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "inv"),
-            class: FunctionClass::Intrinsic(Intrinsic::Inv)
+        "~" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "~"),
+            class: FunctionClass::Intrinsic(Intrinsic::Normalize)
         },
         "neg" => Function {
             handle: Handle::new(super::MAIN_MODULE, "neg"),

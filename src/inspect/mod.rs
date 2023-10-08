@@ -170,7 +170,7 @@ impl ModuleView {
                                     .unwrap()
                                     .eval(
                                         i,
-                                        &mut |handle, i, wrap| {
+                                        |handle, i, wrap| {
                                             cs.columns.get_raw(handle, i, wrap).cloned()
                                         },
                                         &mut None,

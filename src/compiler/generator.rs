@@ -201,6 +201,7 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Exp => Arity::Dyadic,
             Intrinsic::Neg => Arity::Monadic,
             Intrinsic::Inv => Arity::Monadic,
+            Intrinsic::Normalize => Arity::Monadic,
             Intrinsic::Shift => Arity::Dyadic,
             Intrinsic::Begin => Arity::AtLeast(1),
             Intrinsic::IfZero => Arity::Between(2, 3),
@@ -225,7 +226,7 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => &[&[Type::Any(Magma::Any)]],
             Intrinsic::Exp => &[&[Type::Any(Magma::Any)], &[Type::Scalar(Magma::Any)]],
             Intrinsic::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
-            Intrinsic::Inv => &[&[Type::Any(Magma::Any)]],
+            Intrinsic::Inv | Intrinsic::Normalize => &[&[Type::Any(Magma::Any)]],
             Intrinsic::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
             Intrinsic::IfZero | Intrinsic::IfNotZero => &[
                 // condition type TODO: force to bool/loob
@@ -629,6 +630,10 @@ impl ConstraintSet {
         Ok(())
     }
 
+    pub fn raw_len_for(&self, m: &str) -> Option<isize> {
+        self.columns.raw_len.get(m).copied()
+    }
+
     pub fn raw_len_for_or_set(&mut self, m: &str, x: isize) -> isize {
         *self.columns.raw_len.entry(m.to_string()).or_insert(x)
     }
@@ -743,7 +748,7 @@ impl ConstraintSet {
                                 Computation::Composite { exp, .. } => exp
                                     .eval(
                                         0,
-                                        &mut |_, _, _| Some(Value::zero()),
+                                        |_, _, _| Some(Value::zero()),
                                         &mut None,
                                         &EvalSettings::default(),
                                     )
@@ -1200,6 +1205,7 @@ fn apply_intrinsic(
         | Intrinsic::Exp
         | Intrinsic::Neg
         | Intrinsic::Inv
+        | Intrinsic::Normalize
         | Intrinsic::Shift) => Ok(Some(b.call(&traversed_args)?)),
     }
 }

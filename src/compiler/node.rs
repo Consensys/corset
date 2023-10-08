@@ -411,6 +411,7 @@ impl Node {
                 Intrinsic::Shift => false,
                 Intrinsic::Neg => false,
                 Intrinsic::Inv => false,
+                Intrinsic::Normalize => false,
                 Intrinsic::Begin => unreachable!(),
                 Intrinsic::IfZero | Intrinsic::IfNotZero => {
                     args[1].may_overflow() || args.get(2).map(|a| a.may_overflow()).unwrap_or(false)
@@ -614,20 +615,20 @@ impl Node {
     //     (r, trace)
     // }
 
-    pub fn eval(
+    pub fn eval<F: Fn(&ColumnRef, isize, bool) -> Option<Value>>(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Value>,
+        get: F,
         cache: &mut Option<cached::SizedCache<Value, Value>>,
         settings: &EvalSettings,
     ) -> Option<Value> {
-        self.eval_fold(i, get, cache, settings, &mut |_, _| {})
+        self.eval_fold(i, &get, cache, settings, &mut |_, _| {})
     }
 
-    pub fn eval_fold(
+    pub fn eval_fold<F: Fn(&ColumnRef, isize, bool) -> Option<Value>>(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Value>,
+        get: &F,
         cache: &mut Option<cached::SizedCache<Value, Value>>,
         settings: &EvalSettings,
         f: &mut dyn FnMut(&Node, &Option<Value>),
@@ -673,19 +674,23 @@ impl Node {
                     x
                 }),
                 Intrinsic::Inv => {
-                    let x = args[0].eval_fold(i, get, cache, settings, f);
-                    if let Some(ref mut rcache) = cache {
-                        x.map(|x| {
-                            rcache
-                                .cache_get_or_set_with(x.clone(), || {
-                                    x.inverse().unwrap_or_else(Value::zero)
-                                })
-                                .to_owned()
-                        })
-                    } else {
-                        x.and_then(|x| x.inverse()).or_else(|| Some(Value::zero()))
-                    }
+                    unreachable!()
+                    // let x = args[0].eval_fold(i, get, cache, settings, f);
+                    // if let Some(ref mut rcache) = cache {
+                    //     x.map(|x| {
+                    //         rcache
+                    //             .cache_get_or_set_with(x.clone(), || {
+                    //                 x.inverse().unwrap_or_else(Value::zero)
+                    //             })
+                    //             .to_owned()
+                    //     })
+                    // } else {
+                    //     x.and_then(|x| x.inverse()).or_else(|| Some(Value::zero()))
+                    // }
                 }
+                Intrinsic::Normalize => args[0]
+                    .eval_fold(i, get, cache, settings, f)
+                    .map(|x| x.normalize()),
                 Intrinsic::Begin => unreachable!(),
                 Intrinsic::IfZero => {
                     if args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
@@ -711,6 +716,7 @@ impl Node {
                     .into(),
             ),
             Expression::Column { handle, .. } => get(handle, i, settings.wrap),
+            Expression::ExoColumn { handle, .. } => dbg!(get(dbg!(handle), i, settings.wrap)),
             Expression::List(xs) => xs
                 .iter()
                 .filter_map(|x| x.eval_fold(i, get, cache, settings, f))

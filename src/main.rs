@@ -764,10 +764,11 @@ fn main() -> Result<()> {
                     .with_context(|| anyhow!("while creating nhood constraints"))?;
                 transformer::lower_shifts(&mut constraints);
                 transformer::expand_ifs(&mut constraints);
-                transformer::expand_constraints(&mut constraints)
-                    .with_context(|| anyhow!("while expanding constraints"))?;
                 transformer::sorts(&mut constraints)
                     .with_context(|| anyhow!("while creating sorting constraints"))?;
+                transformer::splatter(&mut constraints)?;
+                transformer::expand_constraints(&mut constraints)
+                    .with_context(|| anyhow!("while expanding constraints"))?;
                 transformer::expand_invs(&mut constraints)
                     .with_context(|| anyhow!("while expanding inverses"))?;
             }

@@ -8,19 +8,23 @@ use anyhow::*;
 use either::Either;
 use itertools::Itertools;
 use num_bigint::BigInt;
+use num_traits::{FromPrimitive, One, Zero};
 use owo_colors::OwoColorize;
 use pairing_ce::{
     bn256::{Fr, FrRepr},
     ff::{Field, PrimeField},
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 
 pub type RegisterID = usize;
 pub type ColumnID = usize;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, Ord, Hash)]
-pub struct Value(Either<Fr, Vec<Fr>>);
+pub struct Value(Either<Fr, BigInt>);
 impl Value {
     pub fn to_string(&self) -> String {
         match self.0 {
@@ -32,14 +36,14 @@ impl Value {
     pub fn is_zero(&self) -> bool {
         match &self.0 {
             Either::Left(f) => f.is_zero(),
-            Either::Right(fs) => fs.iter().all(|f| f.is_zero()),
+            Either::Right(i) => i.is_zero(),
         }
     }
 
     pub fn is_one(&self) -> bool {
         match &self.0 {
             Either::Left(f) => *f == Fr::one(),
-            Either::Right(fs) => fs[0] == Fr::one() && fs.iter().skip(1).all(|f| f.is_zero()),
+            Either::Right(fs) => fs.is_one(),
         }
     }
 
@@ -52,15 +56,33 @@ impl Value {
     }
 
     pub(crate) fn add_assign(&mut self, other: &Value) {
-        todo!()
+        match self.0 {
+            Either::Left(ref mut f1) => match other.0 {
+                Either::Left(f2) => f1.add_assign(&f2),
+                Either::Right(_) => unreachable!(),
+            },
+            Either::Right(_) => unreachable!(),
+        }
     }
 
     pub(crate) fn sub_assign(&mut self, other: &Value) {
-        todo!()
+        match self.0 {
+            Either::Left(ref mut f1) => match other.0 {
+                Either::Left(f2) => f1.sub_assign(&f2),
+                Either::Right(_) => unreachable!(),
+            },
+            Either::Right(_) => unreachable!(),
+        }
     }
 
     pub(crate) fn mul_assign(&mut self, other: &Value) {
-        todo!()
+        match self.0 {
+            Either::Left(ref mut f1) => match other.0 {
+                Either::Left(f2) => f1.mul_assign(&f2),
+                Either::Right(_) => unreachable!(),
+            },
+            Either::Right(_) => unreachable!(),
+        }
     }
 
     pub(crate) fn negate(&mut self) {
@@ -76,34 +98,70 @@ impl Value {
 
     pub(crate) fn from_str(s: &str) -> Value {
         let int = s.parse::<BigInt>().unwrap();
-        if int.bits() <= crate::constants::FIELD_BITSIZE as u64 {
-            Value(Either::Left(Fr::from_str(s).unwrap()))
-        } else {
-            assert!(int.sign() != num_bigint::Sign::Minus);
-            let bs = int.to_bytes_le();
-            let mut r = Vec::new();
-            for bytes in &bs.1.iter().chunks(crate::constants::FIELD_BITSIZE / 8) {
-                let bb = bytes.cloned().collect_vec();
-                dbg!(&bb);
-                let small_big_int = BigInt::from_bytes_le(num_bigint::Sign::Plus, &bb);
-                r.push(Fr::from_str(&small_big_int.to_string()).unwrap());
-            }
-            r.reverse();
-            Value(Either::Right(r))
+        Value::from(&int)
+    }
+
+    pub fn exoize(&self) -> Value {
+        match self.0 {
+            Either::Left(f) => Value(Either::Right(BigInt::from_str(&f.to_string()).unwrap())),
+            Either::Right(_) => self.clone(),
         }
     }
 
     pub(crate) fn into_repr(&self) -> impl Iterator<Item = u64> {
         let us = match &self.0 {
             Either::Left(f) => f.into_repr().0.to_vec(),
-            Either::Right(fs) => fs.iter().flat_map(|f| f.into_repr().0.to_vec()).collect(),
+            Either::Right(_) => todo!(),
         };
         us.into_iter()
+    }
+
+    pub(crate) fn to_fr(&self) -> Vec<Fr> {
+        match &self.0 {
+            Either::Left(f) => vec![f.clone()],
+            Either::Right(int) => {
+                if int.bits() <= crate::constants::FIELD_BITSIZE as u64 {
+                    vec![Fr::from_str(&int.to_string()).unwrap()]
+                } else {
+                    assert!(int.sign() != num_bigint::Sign::Minus);
+                    let bs = int.to_bytes_le();
+                    let mut r = Vec::new();
+                    for bytes in &bs.1.iter().chunks(crate::constants::FIELD_BITSIZE / 8) {
+                        let bb = bytes.cloned().collect_vec();
+                        dbg!(&bb);
+                        let small_big_int = BigInt::from_bytes_le(num_bigint::Sign::Plus, &bb);
+                        r.push(Fr::from_str(&small_big_int.to_string()).unwrap());
+                    }
+                    r.reverse();
+                    r
+                }
+            }
+        }
+    }
+
+    pub(crate) fn normalize(&self) -> Value {
+        match &self.0 {
+            Either::Left(f) => {
+                let mut r = f.inverse().unwrap();
+                r.mul_assign(&f);
+                Value(Either::Left(r))
+            }
+            Either::Right(i) => Value(Either::Right(if i.is_zero() {
+                BigInt::zero()
+            } else {
+                BigInt::one()
+            })),
+        }
     }
 }
 impl std::default::Default for Value {
     fn default() -> Value {
         Value(Either::Left(Fr::zero()))
+    }
+}
+impl From<&BigInt> for Value {
+    fn from(int: &BigInt) -> Self {
+        Value(Either::Right(int.clone()))
     }
 }
 impl From<Fr> for Value {
@@ -125,13 +183,23 @@ impl Pretty for Value {
     fn pretty(&self) -> String {
         self.0
             .as_ref()
-            .either(|f| f.pretty(), |fs| fs.iter().map(|f| f.pretty()).join("/"))
+            .either(|f| f.pretty(), |i| format!("E{}", i))
     }
 
     fn pretty_with_base(&self, base: Base) -> String {
         self.0.as_ref().either(
             |f| f.pretty_with_base(base),
-            |fs| fs.iter().map(|f| f.pretty_with_base(base)).join("/"),
+            |i| {
+                format!(
+                    "E{}",
+                    i.to_str_radix(match base {
+                        Base::Dec => 10,
+                        Base::Hex => 16,
+                        Base::Bin | Base::Bool | Base::Loob => 2,
+                        Base::Bytes | Base::OpCode => 16,
+                    })
+                )
+            },
         )
     }
 }
@@ -145,9 +213,12 @@ impl std::cmp::PartialEq for Value {
         match &self.0 {
             Either::Left(f) => match &other.0 {
                 Either::Left(o) => f.eq(&o),
-                Either::Right(os) => os[0].eq(&f) && os.iter().skip(1).all(|o| o.is_zero()),
+                Either::Right(_) => todo!(),
             },
-            Either::Right(fs) => todo!(),
+            Either::Right(fs) => match &other.0 {
+                Either::Left(_) => todo!("{} -- {}", self, other),
+                Either::Right(os) => fs.cmp(os).is_eq(),
+            },
         }
     }
 }
@@ -155,7 +226,7 @@ impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
             Either::Left(fr) => write!(f, "{}", fr),
-            Either::Right(frs) => write!(f, "{}", frs.iter().map(|fr| fr.to_string()).join(" ")),
+            Either::Right(i) => write!(f, "E{}", i),
         }
     }
 }

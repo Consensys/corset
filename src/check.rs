@@ -262,7 +262,7 @@ fn fail(
             + &expr.debug(
                 &|n| n.eval(
                     i,
-                    &mut |handle, i, wrap| cs.columns.get(handle, i, wrap).cloned(),
+                    |handle, i, wrap| cs.columns.get(handle, i, wrap).cloned(),
                     &mut None,
                     &Default::default(),
                 ),
@@ -284,7 +284,7 @@ fn check_constraint_at(
 ) -> Result<()> {
     let r = expr.eval(
         i,
-        &mut |handle, i, wrap| cs.columns.get_raw(handle, i, wrap).cloned(),
+        |handle, i, wrap| cs.columns.get_raw(handle, i, wrap).cloned(),
         cache,
         &Default::default(),
     );
@@ -305,7 +305,7 @@ fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Value) -
             let r = expr
                 .eval(
                     i,
-                    &mut |handle, i, wrap| columns.get_raw(handle, i, wrap).cloned(),
+                    |handle, i, wrap| columns.get_raw(handle, i, wrap).cloned(),
                     &mut None,
                     &Default::default(),
                 )

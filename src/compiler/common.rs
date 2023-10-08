@@ -45,6 +45,7 @@ pub enum Intrinsic {
     Shift,
     Neg,
     Inv,
+    Normalize,
 
     Begin,
 
@@ -67,6 +68,7 @@ impl Intrinsic {
     pub fn typing(&self, argtype: &[Type]) -> Type {
         match self {
             Intrinsic::Inv => argtype[0],
+            Intrinsic::Normalize => argtype[0].with_magma(Magma::Boolean),
             Intrinsic::Add | Intrinsic::Sub | Intrinsic::Neg => {
                 // Boolean is a corner case, as it is not stable under these operations
                 match max_type(argtype) {
@@ -98,6 +100,7 @@ impl std::fmt::Display for Intrinsic {
                 Intrinsic::Shift => "shift",
                 Intrinsic::Neg => "-",
                 Intrinsic::Inv => "inv",
+                Intrinsic::Normalize => "~",
                 Intrinsic::Begin => "begin",
                 Intrinsic::IfZero => "if-zero",
                 Intrinsic::IfNotZero => "if-not-zero",
