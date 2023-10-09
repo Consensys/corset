@@ -24,71 +24,110 @@ pub type RegisterID = usize;
 pub type ColumnID = usize;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, Ord, Hash)]
-pub struct Value(Either<Fr, BigInt>);
+pub enum Value {
+    BigInt(BigInt),
+    Native(Fr),
+    ExoNative(Vec<Fr>),
+}
 impl Value {
     pub fn to_string(&self) -> String {
-        match self.0 {
-            Either::Left(f) => f.to_string(),
-            Either::Right(_) => String::from("TODO:to_string"),
+        match self {
+            Value::Native(f) => f.to_string(),
+            Value::ExoNative(fs) => fs.iter().map(|f| f.to_string()).join(" "),
+            Value::BigInt(_) => String::from("TODO:to_string"),
         }
     }
 
     pub fn is_zero(&self) -> bool {
-        match &self.0 {
-            Either::Left(f) => f.is_zero(),
-            Either::Right(i) => i.is_zero(),
+        match self {
+            Value::Native(f) => f.is_zero(),
+            Value::ExoNative(fs) => fs.iter().all(|f| f.is_zero()),
+            Value::BigInt(i) => i.is_zero(),
         }
     }
 
     pub fn is_one(&self) -> bool {
-        match &self.0 {
-            Either::Left(f) => *f == Fr::one(),
-            Either::Right(fs) => fs.is_one(),
+        match &self {
+            Value::Native(f) => *f == Fr::one(),
+            Value::ExoNative(fs) => fs[0] == Fr::one() && fs.iter().skip(1).all(|f| f.is_zero()),
+            Value::BigInt(bi) => bi.is_one(),
         }
     }
 
     pub(crate) fn zero() -> Self {
-        Value(Either::Right(BigInt::zero()))
+        Value::BigInt(BigInt::zero())
     }
 
     pub(crate) fn one() -> Self {
-        Value(Either::Right(BigInt::one()))
+        Value::BigInt(BigInt::one())
     }
 
     pub(crate) fn add_assign(&mut self, other: &Value) {
-        match self.0 {
-            Either::Left(ref mut f1) => match other.0 {
-                Either::Left(f2) => f1.add_assign(&f2),
-                Either::Right(_) => unreachable!(),
-            },
-            Either::Right(ref mut i1) => match &other.0 {
-                Either::Left(_) => unreachable!("{} += {}", self, other),
-                Either::Right(i2) => *i1 = i1.clone() + i2.clone(),
-            },
+        match (self, other) {
+            (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 += i2,
+            (Value::BigInt(_), Value::Native(_)) => todo!(),
+            (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
+            (Value::Native(_), Value::BigInt(_)) => todo!(),
+            (Value::Native(ref mut f1), Value::Native(ref f2)) => f1.add_assign(f2),
+            (Value::Native(_), Value::ExoNative(_)) => todo!(),
+            (Value::ExoNative(_), Value::BigInt(_)) => todo!(),
+            (Value::ExoNative(_), Value::Native(_)) => todo!(),
+            (Value::ExoNative(_), Value::ExoNative(_)) => todo!(),
+            // Value::Native(_) => todo!(),
+            // Value::ExoNative(ref mut f1) => match other {
+            //     Value::ExoNative(f2) => f1.add_assign(&f2),
+            //     Value::BigInt(_) => unreachable!(),
+            // },
+            // Value::BigInt(ref mut i1) => match &other {
+            //     Value::ExoNative(_) => unreachable!("{} += {}", self, other),
+            //     Value::BigInt(i2) => *i1 = i1.clone() + i2.clone(),
+            // },
         }
     }
 
     pub(crate) fn sub_assign(&mut self, other: &Value) {
-        match self.0 {
-            Either::Left(ref mut f1) => match other.0 {
-                Either::Left(f2) => f1.sub_assign(&f2),
-                Either::Right(_) => unreachable!(),
-            },
-            Either::Right(_) => unreachable!(),
+        match (self, other) {
+            (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 -= i2,
+            (Value::BigInt(_), Value::Native(_)) => todo!(),
+            (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
+            (Value::Native(_), Value::BigInt(_)) => todo!(),
+            (Value::Native(ref mut f1), Value::Native(ref f2)) => f1.sub_assign(f2),
+            (Value::Native(_), Value::ExoNative(_)) => todo!(),
+            (Value::ExoNative(_), Value::BigInt(_)) => todo!(),
+            (Value::ExoNative(_), Value::Native(_)) => todo!(),
+            (Value::ExoNative(_), Value::ExoNative(_)) => todo!(),
         }
+        // match self {
+        //     Value::ExoNative(ref mut f1) => match other {
+        //         Value::ExoNative(f2) => f1.sub_assign(&f2),
+        //         Value::BigInt(_) => unreachable!(),
+        //     },
+        //     Value::BigInt(_) => unreachable!(),
+        // }
     }
 
     pub(crate) fn mul_assign(&mut self, other: &Value) {
-        match self.0 {
-            Either::Left(ref mut f1) => match other.0 {
-                Either::Left(f2) => f1.mul_assign(&f2),
-                Either::Right(_) => unreachable!(),
-            },
-            Either::Right(ref mut i1) => match &other.0 {
-                Either::Left(_) => unreachable!(),
-                Either::Right(i2) => *i1 = i1.clone() * i2.clone(),
-            },
+        match (self, other) {
+            (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 *= i2,
+            (Value::BigInt(_), Value::Native(_)) => todo!(),
+            (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
+            (Value::Native(_), Value::BigInt(_)) => todo!(),
+            (Value::Native(ref mut f1), Value::Native(ref f2)) => f1.mul_assign(f2),
+            (Value::Native(_), Value::ExoNative(_)) => todo!(),
+            (Value::ExoNative(_), Value::BigInt(_)) => todo!(),
+            (Value::ExoNative(_), Value::Native(_)) => todo!(),
+            (Value::ExoNative(_), Value::ExoNative(_)) => todo!(),
         }
+        // match self {
+        //     Value::ExoNative(ref mut f1) => match other {
+        //         Value::ExoNative(f2) => f1.mul_assign(&f2),
+        //         Value::BigInt(_) => unreachable!(),
+        //     },
+        //     Value::BigInt(ref mut i1) => match &other {
+        //         Value::ExoNative(_) => unreachable!(),
+        //         Value::BigInt(i2) => *i1 = i1.clone() * i2.clone(),
+        //     },
+        // }
     }
 
     pub(crate) fn negate(&mut self) {
@@ -96,55 +135,64 @@ impl Value {
     }
 
     pub(crate) fn inverse(&self) -> Option<Value> {
-        match &self.0 {
-            Either::Left(f) => f.inverse().map(|i| Value(Either::Left(i))),
-            Either::Right(_) => panic!("can not inverse ExoValue"),
+        match &self {
+            Value::Native(f) => f.inverse().map(Value::Native),
+            Value::ExoNative(f) => unreachable!(),
+            Value::BigInt(_) => panic!("can not inverse ExoValue"),
         }
     }
 
     pub(crate) fn from_str(s: &str) -> Result<Value> {
-        Ok(Value(Either::Right(
+        Ok(Value::BigInt(
             s.parse::<BigInt>()
                 .with_context(|| anyhow!("while parsing `{}`", s))?,
-        )))
+        ))
     }
 
     pub fn exoize(&self) -> Value {
-        match self.0 {
-            Either::Left(f) => Value(Either::Right(BigInt::from_str(&f.to_string()).unwrap())),
-            Either::Right(_) => self.clone(),
+        match self {
+            Value::Native(f) => Value::BigInt(BigInt::from_str(&f.to_string()).unwrap()),
+            Value::ExoNative(_) => todo!(),
+            Value::BigInt(_) => self.clone(),
         }
     }
 
     pub(crate) fn into_repr(&self) -> impl Iterator<Item = u64> {
-        let us = match &self.0 {
-            Either::Left(f) => f.into_repr().0.to_vec(),
-            Either::Right(_) => todo!(),
+        let us = match &self {
+            Value::Native(f) => f.into_repr().0.to_vec(),
+            Value::ExoNative(fs) => fs
+                .iter()
+                .flat_map(|f| f.into_repr().0.into_iter())
+                .collect(),
+            Value::BigInt(_) => todo!(),
         };
         us.into_iter()
     }
 
     pub(crate) fn into_bytes(&self) -> Vec<u8> {
-        match &self.0 {
-            Either::Left(f) => f
+        match &self {
+            Value::Native(f) => f
                 .into_repr()
                 .0
                 .iter()
                 .flat_map(|x| x.to_be_bytes())
                 .collect(),
-            Either::Right(bi) => bi.to_bytes_be().1,
+            Value::ExoNative(fs) => fs
+                .iter()
+                .flat_map(|f| f.into_repr().0.into_iter().flat_map(|x| x.to_be_bytes()))
+                .collect(),
+            Value::BigInt(bi) => bi.to_bytes_be().1,
         }
     }
 
-    pub(crate) fn to_fr(&self) -> Vec<Fr> {
-        match &self.0 {
-            Either::Left(f) => vec![f.clone()],
-            Either::Right(int) => {
-                if int.bits() <= crate::constants::FIELD_BITSIZE as u64 {
-                    vec![Fr::from_str(&int.to_string()).unwrap()]
+    pub(crate) fn bi_to_fr(&mut self) {
+        match self {
+            Value::BigInt(i) => {
+                *self = if i.bits() <= crate::constants::FIELD_BITSIZE as u64 {
+                    Value::Native(Fr::from_str(&i.to_string()).unwrap())
                 } else {
-                    assert!(int.sign() != num_bigint::Sign::Minus);
-                    let bs = int.to_bytes_le();
+                    assert!(i.sign() != num_bigint::Sign::Minus);
+                    let bs = i.to_bytes_le();
                     let mut r = Vec::new();
                     for bytes in &bs.1.iter().chunks(crate::constants::FIELD_BITSIZE / 8) {
                         let bb = bytes.cloned().collect_vec();
@@ -153,76 +201,81 @@ impl Value {
                         r.push(Fr::from_str(&small_big_int.to_string()).unwrap());
                     }
                     r.reverse();
-                    r
-                }
+                    Value::ExoNative(r)
+                };
             }
+            _ => {}
         }
     }
 
     pub(crate) fn normalize(&self) -> Value {
-        match &self.0 {
-            Either::Left(f) => {
+        match &self {
+            Value::Native(f) => {
                 let mut r = f.inverse().unwrap();
                 r.mul_assign(&f);
-                Value(Either::Left(r))
+                Value::Native(r)
             }
-            Either::Right(i) => Value(Either::Right(if i.is_zero() {
+            Value::ExoNative(f) => {
+                todo!()
+            }
+            Value::BigInt(i) => Value::BigInt(if i.is_zero() {
                 BigInt::zero()
             } else {
                 BigInt::one()
-            })),
+            }),
         }
     }
 
     pub(crate) fn fr_zero() -> Value {
-        Value(Either::Left(Fr::zero()))
+        Value::Native(Fr::zero())
     }
 
     pub(crate) fn bi_zero() -> Value {
-        Value(Either::Right(BigInt::zero()))
+        Value::BigInt(BigInt::zero())
     }
 }
 // impl std::default::Default for Value {
 //     fn default() -> Value {
-//         Value(Either::Right(BigInt::zero()))
+//         Value(Value::BigInt(BigInt::zero()))
 //     }
 // }
 impl From<BigInt> for Value {
     fn from(int: BigInt) -> Self {
-        Value(Either::Right(int))
+        Value::BigInt(int)
     }
 }
 impl From<&BigInt> for Value {
     fn from(int: &BigInt) -> Self {
-        Value(Either::Right(int.clone()))
+        Value::BigInt(int.clone())
     }
 }
 impl From<Fr> for Value {
     fn from(f: Fr) -> Self {
-        Value(Either::Left(f))
+        Value::Native(f)
     }
 }
 impl From<usize> for Value {
     fn from(x: usize) -> Self {
-        Value(Either::Right(BigInt::from_usize(x).unwrap()))
+        Value::BigInt(BigInt::from_usize(x).unwrap())
     }
 }
 impl From<&str> for Value {
     fn from(x: &str) -> Self {
-        Value(Either::Right(BigInt::from_str(x).unwrap()))
+        Value::BigInt(BigInt::from_str(x).unwrap())
     }
 }
 impl Pretty for Value {
     fn pretty(&self) -> String {
-        self.0
-            .as_ref()
-            .either(|f| f.pretty(), |i| format!("E{}", i))
+        match self {
+            Value::BigInt(i) => format!("ε{}", i),
+            Value::Native(f) => f.pretty(),
+            Value::ExoNative(fs) => fs.iter().map(|f| f.pretty()).join("/"),
+        }
     }
 
     fn pretty_with_base(&self, base: Base) -> String {
-        self.0.as_ref().either(
-            |f| f.pretty_with_base(base),
-            |i| {
+        match self {
+            Value::BigInt(i) => {
                 format!(
                     "ε{}",
                     match base {
@@ -238,8 +291,10 @@ impl Pretty for Value {
                         Base::OpCode => opcodes::to_str(i.to_usize().unwrap().try_into().unwrap()),
                     }
                 )
-            },
-        )
+            }
+            Value::Native(f) => f.pretty_with_base(base),
+            Value::ExoNative(fs) => fs.iter().map(|f| f.pretty_with_base(base)).join("."),
+        }
     }
 }
 impl std::cmp::PartialOrd for Value {
@@ -249,23 +304,33 @@ impl std::cmp::PartialOrd for Value {
 }
 impl std::cmp::PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
-        match &self.0 {
-            Either::Left(f) => match &other.0 {
-                Either::Left(o) => f.eq(&o),
-                Either::Right(_) => todo!(),
-            },
-            Either::Right(fs) => match &other.0 {
-                Either::Left(_) => todo!("{} -- {}", self, other),
-                Either::Right(os) => fs.cmp(os).is_eq(),
-            },
+        match (self, other) {
+            (Value::BigInt(i1), Value::BigInt(i2)) => i1.cmp(i2).is_eq(),
+            (Value::BigInt(_), Value::Native(_)) => todo!(),
+            (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
+            (Value::Native(_), Value::BigInt(_)) => todo!(),
+            (Value::Native(f1), Value::Native(f2)) => f1.eq(f2),
+            (Value::Native(_), Value::ExoNative(_)) => todo!(),
+            (Value::ExoNative(_), Value::BigInt(_)) => todo!(),
+            (Value::ExoNative(_), Value::Native(_)) => todo!(),
+            (Value::ExoNative(fs1), Value::ExoNative(fs2)) => {
+                fs1.iter().zip(fs2.iter()).all(|(f1, f2)| f1.eq(f2))
+            }
         }
     }
 }
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.0 {
-            Either::Left(fr) => write!(f, "{}", fr),
-            Either::Right(i) => write!(f, "E{}", i),
+        match &self {
+            Value::BigInt(i) => write!(f, "ε{}", i),
+            Value::Native(fr) => write!(f, "{}", fr),
+            Value::ExoNative(fs) => {
+                write!(
+                    f,
+                    "{:?}",
+                    fs.iter().map(|f| f.to_string()).collect::<Vec<_>>()
+                )
+            }
         }
     }
 }
@@ -340,6 +405,10 @@ impl Register {
 
     pub fn value(&self) -> Option<&Vec<Value>> {
         self.value.as_ref()
+    }
+
+    pub fn value_mut(&mut self) -> Option<&mut Vec<Value>> {
+        self.value.as_mut()
     }
 
     pub fn padded_len(&self) -> Option<usize> {

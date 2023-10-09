@@ -157,6 +157,13 @@ enum Commands {
         tracefile: String,
 
         #[arg(
+            long = "native",
+            short = 'N',
+            help = "execute computations in target Galois field"
+        )]
+        native_arithmetic: bool,
+
+        #[arg(
             short = 'F',
             long = "trace-full",
             help = "print all the module columns on error"
@@ -225,6 +232,13 @@ enum Commands {
             help = "the trace to inspect"
         )]
         tracefile: String,
+
+        #[arg(
+            long = "native",
+            short = 'N',
+            help = "execute computations in target Galois field"
+        )]
+        native_arithmetic: bool,
     },
     /// Display the compiled the constraint system
     Debug {
@@ -725,6 +739,7 @@ fn main() -> Result<()> {
         }
         Commands::Check {
             tracefile,
+            native_arithmetic,
             full_trace,
             report,
             only,
@@ -746,6 +761,9 @@ fn main() -> Result<()> {
             transformer::expand_to(&mut cs, args.expand.into(), &[])?;
             compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
+            if native_arithmetic {
+                transformer::concretize(&mut cs);
+            }
             check::check(
                 &cs,
                 &only,
@@ -768,7 +786,10 @@ fn main() -> Result<()> {
             info!("{}: SUCCESS", tracefile)
         }
         #[cfg(feature = "inspector")]
-        Commands::Inspect { tracefile } => {
+        Commands::Inspect {
+            tracefile,
+            native_arithmetic,
+        } => {
             if utils::is_file_empty(&tracefile)? {
                 warn!("`{}` is empty, exiting", tracefile);
                 return Ok(());
@@ -778,6 +799,9 @@ fn main() -> Result<()> {
 
             compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
+            if native_arithmetic {
+                transformer::concretize(&mut cs);
+            }
 
             inspect::inspect(&cs)
                 .with_context(|| format!("while checking {}", tracefile.bright_white().bold()))?;

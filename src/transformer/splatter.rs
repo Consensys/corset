@@ -3,6 +3,7 @@ use std::unreachable;
 use crate::{
     column::{Column, Computation},
     compiler::{Constraint, Expression, Intrinsic, Kind, Magma, Node},
+    pretty::Base,
     structs::Handle,
     ConstraintSet,
 };
@@ -26,6 +27,7 @@ impl Node {
             Column::builder()
                 .handle(target.clone())
                 .kind(Kind::Phantom)
+                .base(Base::Hex)
                 .build(),
             Computation::ExoConstant {
                 value: value.clone(),
@@ -70,6 +72,7 @@ impl Node {
                             *self = Node::column()
                                 .handle(added_handle)
                                 .t(added_magma)
+                                .base(Base::Hex)
                                 .kind(Kind::Phantom)
                                 .build();
                         }
@@ -89,6 +92,7 @@ impl Node {
                             *self = Node::column()
                                 .handle(added_handle)
                                 .t(added_magma)
+                                .base(Base::Hex)
                                 .kind(Kind::Phantom)
                                 .build();
                         }
@@ -114,6 +118,7 @@ impl ConstraintSet {
                 Column::builder()
                     .t(Magma::Boolean)
                     .handle(Handle::new("#adder", "op"))
+                    .base(Base::Hex)
                     .kind(Kind::Phantom)
                     .build(),
             )
@@ -123,6 +128,7 @@ impl ConstraintSet {
                 Column::builder()
                     .t(Magma::Integer(adder.width))
                     .handle(Handle::new("#adder", "arg-1"))
+                    .base(Base::Hex)
                     .kind(Kind::Phantom)
                     .build(),
             )
@@ -132,6 +138,7 @@ impl ConstraintSet {
                 Column::builder()
                     .t(Magma::Integer(adder.width))
                     .handle(Handle::new("#adder", "arg-2"))
+                    .base(Base::Hex)
                     .kind(Kind::Phantom)
                     .build(),
             )
@@ -141,6 +148,7 @@ impl ConstraintSet {
                 Column::builder()
                     .t(Magma::Integer(adder.width))
                     .handle(Handle::new("#adder", "result"))
+                    .base(Base::Hex)
                     .kind(Kind::Phantom)
                     .build(),
             )
@@ -183,6 +191,7 @@ impl ConstraintSet {
                     Column::builder()
                         .handle(added_handle.to_owned())
                         .t(added_magma)
+                        .base(Base::Hex)
                         .kind(Kind::Composite(Box::new(())))
                         .build(),
                 )

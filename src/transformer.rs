@@ -1,3 +1,4 @@
+mod concretize;
 mod ifs;
 mod inverses;
 mod nhood;
@@ -10,6 +11,7 @@ mod statics;
 use anyhow::*;
 use log::*;
 
+pub use concretize::concretize;
 pub use ifs::expand_ifs;
 pub use inverses::expand_invs;
 pub use nhood::validate_nhood;
@@ -61,7 +63,7 @@ impl From<u8> for ExpansionLevel {
 }
 impl ExpansionLevel {
     pub fn all() -> u8 {
-        255
+        5
     }
 }
 
@@ -95,10 +97,6 @@ pub(crate) fn expand_to(
     if level >= ExpansionLevel::ExpandInvs {
         info!("Expanding inverses");
         expand_invs(cs)?;
-    }
-    if level >= ExpansionLevel::Concretize {
-        info!("Concretizing to field");
-        concretize::concretize(cs);
     }
 
     Ok(())
