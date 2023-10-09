@@ -251,6 +251,44 @@ impl FuncVerifier<Node> for Intrinsic {
 
 pub type PerspectiveTable = HashMap<String, HashMap<String, Node>>;
 
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct Adder {
+    ops: HashSet<(bool, BigInt, BigInt)>,
+}
+impl Adder {
+    pub fn run(&self) -> Vec<(ColumnRef, Vec<Value>)> {
+        let mut ops = Vec::<Value>::with_capacity(self.ops.len() * 16);
+        let mut args1 = Vec::<Value>::with_capacity(self.ops.len() * 16);
+        let mut args2 = Vec::with_capacity(self.ops.len() * 16);
+        let mut results = Vec::with_capacity(self.ops.len() * 16);
+        for (op, arg1, arg2) in self.ops.iter() {
+            ops.push((if *op { 1 } else { 0 }).into());
+            args1.push((arg1).into());
+            args2.push((arg2).into());
+            results.push((arg1 + arg2).into());
+        }
+
+        vec![
+            (Handle::new("adder", "op").into(), ops),
+            (Handle::new("adder", "arg1").into(), args1),
+            (Handle::new("adder", "arg2").into(), args2),
+            (Handle::new("adder", "result").into(), results),
+        ]
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct Muler {
+    ops: HashSet<(bool, BigInt, BigInt)>,
+}
+impl Muler {}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct Ancillaries {
+    adder: Adder,
+    muler: Muler,
+}
+
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct ConstraintSet {
     pub columns: ColumnSet,
@@ -258,6 +296,7 @@ pub struct ConstraintSet {
     pub constants: HashMap<Handle, BigInt>,
     pub computations: ComputationTable,
     pub perspectives: PerspectiveTable,
+    pub ancillaries: Ancillaries,
 }
 impl ConstraintSet {
     pub fn new(
@@ -273,6 +312,7 @@ impl ConstraintSet {
             constants,
             computations,
             perspectives,
+            ancillaries: Default::default(),
         };
         r.convert_refs_to_ids()?;
         r.allocate_registers();

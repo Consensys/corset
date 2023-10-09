@@ -505,12 +505,10 @@ impl Node {
             }
 
             Expression::Column { handle, .. } => set_id(handle),
+            Expression::ExoColumn { handle, .. } => set_id(handle),
             Expression::List(xs) => xs.iter_mut().for_each(|x| x.add_id_to_handles(set_id)),
 
-            Expression::ExoColumn { .. }
-            | Expression::ArrayColumn { .. }
-            | Expression::Const(_, _)
-            | Expression::Void => {}
+            Expression::ArrayColumn { .. } | Expression::Const(_, _) | Expression::Void => {}
         }
     }
 
@@ -546,7 +544,9 @@ impl Node {
         self.leaves()
             .into_iter()
             .filter_map(|e| match e.e() {
-                Expression::Column { handle, .. } => Some(handle.clone()),
+                Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
+                    Some(handle.clone())
+                }
                 _ => None,
             })
             .collect()
@@ -711,12 +711,9 @@ impl Node {
                     }
                 }
             },
-            Expression::Const(v, x) => Some(
-                x.unwrap_or_else(|| panic!("{} is not an Fr element.", v))
-                    .into(),
-            ),
+            Expression::Const(v, x) => Some(v.into()),
             Expression::Column { handle, .. } => get(handle, i, settings.wrap),
-            Expression::ExoColumn { handle, .. } => dbg!(get(dbg!(handle), i, settings.wrap)),
+            Expression::ExoColumn { handle, .. } => get(handle, i, settings.wrap),
             Expression::List(xs) => xs
                 .iter()
                 .filter_map(|x| x.eval_fold(i, get, cache, settings, f))
@@ -776,7 +773,7 @@ impl Node {
 
             match n.e() {
                 Expression::Funcall { func, args } => {
-                    let v = f(n).unwrap_or_default();
+                    let v = f(n).unwrap_or_else(Value::bi_zero);
                     let zero_context = (v.is_zero() || zero_context) && dim;
                     if v.is_zero() && unclutter && n.depth() >= 1 {
                         tty.write("...".color(Color::BrightBlack).to_string());
@@ -889,7 +886,7 @@ impl Node {
                 | Expression::ExoColumn {
                     handle: h, base, ..
                 } => {
-                    let v = f(n).unwrap_or_default();
+                    let v = f(n).unwrap_or_else(Value::bi_zero);
                     let c = if dim && zero_context {
                         Color::BrightBlack
                     } else if v.eq(faulty) {
@@ -949,7 +946,7 @@ impl Node {
         }
 
         let mut tty = Tty::new().with_guides();
-        let faulty = f(self).unwrap_or_default();
+        let faulty = f(self).unwrap_or_else(Value::fr_zero);
         _debug(
             self, &mut tty, f, &faulty, unclutter, dim, false, true, src, true,
         );

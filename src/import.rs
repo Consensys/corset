@@ -141,7 +141,7 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
             crate::utils::validate(
                 t,
                 cache
-                    .cache_get_or_set_with(s.clone(), || CValue::from_str(&s))
+                    .cache_get_or_set_with(s.clone(), || CValue::from_str(&s).unwrap())
                     .to_owned(),
             )
         })

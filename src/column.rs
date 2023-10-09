@@ -1,14 +1,14 @@
 use crate::{
     compiler::{ColumnRef, Kind, Magma, Node},
     errors,
-    pretty::{Base, Pretty},
+    pretty::{opcodes, Base, Pretty},
     structs::Handle,
 };
 use anyhow::*;
 use either::Either;
 use itertools::Itertools;
 use num_bigint::BigInt;
-use num_traits::{FromPrimitive, One, Zero};
+use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use owo_colors::OwoColorize;
 use pairing_ce::{
     bn256::{Fr, FrRepr},
@@ -48,11 +48,11 @@ impl Value {
     }
 
     pub(crate) fn zero() -> Self {
-        Value(Either::Left(Fr::zero()))
+        Value(Either::Right(BigInt::zero()))
     }
 
     pub(crate) fn one() -> Self {
-        Value(Either::Left(Fr::one()))
+        Value(Either::Right(BigInt::one()))
     }
 
     pub(crate) fn add_assign(&mut self, other: &Value) {
@@ -61,7 +61,10 @@ impl Value {
                 Either::Left(f2) => f1.add_assign(&f2),
                 Either::Right(_) => unreachable!(),
             },
-            Either::Right(_) => unreachable!(),
+            Either::Right(ref mut i1) => match &other.0 {
+                Either::Left(_) => unreachable!("{} += {}", self, other),
+                Either::Right(i2) => *i1 = i1.clone() + i2.clone(),
+            },
         }
     }
 
@@ -81,7 +84,10 @@ impl Value {
                 Either::Left(f2) => f1.mul_assign(&f2),
                 Either::Right(_) => unreachable!(),
             },
-            Either::Right(_) => unreachable!(),
+            Either::Right(ref mut i1) => match &other.0 {
+                Either::Left(_) => unreachable!(),
+                Either::Right(i2) => *i1 = i1.clone() * i2.clone(),
+            },
         }
     }
 
@@ -96,9 +102,11 @@ impl Value {
         }
     }
 
-    pub(crate) fn from_str(s: &str) -> Value {
-        let int = s.parse::<BigInt>().unwrap();
-        Value::from(&int)
+    pub(crate) fn from_str(s: &str) -> Result<Value> {
+        Ok(Value(Either::Right(
+            s.parse::<BigInt>()
+                .with_context(|| anyhow!("while parsing `{}`", s))?,
+        )))
     }
 
     pub fn exoize(&self) -> Value {
@@ -114,6 +122,18 @@ impl Value {
             Either::Right(_) => todo!(),
         };
         us.into_iter()
+    }
+
+    pub(crate) fn into_bytes(&self) -> Vec<u8> {
+        match &self.0 {
+            Either::Left(f) => f
+                .into_repr()
+                .0
+                .iter()
+                .flat_map(|x| x.to_be_bytes())
+                .collect(),
+            Either::Right(bi) => bi.to_bytes_be().1,
+        }
     }
 
     pub(crate) fn to_fr(&self) -> Vec<Fr> {
@@ -153,10 +173,23 @@ impl Value {
             })),
         }
     }
-}
-impl std::default::Default for Value {
-    fn default() -> Value {
+
+    pub(crate) fn fr_zero() -> Value {
         Value(Either::Left(Fr::zero()))
+    }
+
+    pub(crate) fn bi_zero() -> Value {
+        Value(Either::Right(BigInt::zero()))
+    }
+}
+// impl std::default::Default for Value {
+//     fn default() -> Value {
+//         Value(Either::Right(BigInt::zero()))
+//     }
+// }
+impl From<BigInt> for Value {
+    fn from(int: BigInt) -> Self {
+        Value(Either::Right(int))
     }
 }
 impl From<&BigInt> for Value {
@@ -171,12 +204,12 @@ impl From<Fr> for Value {
 }
 impl From<usize> for Value {
     fn from(x: usize) -> Self {
-        Value(Either::Left(Fr::from_str(&x.to_string()).unwrap()))
+        Value(Either::Right(BigInt::from_usize(x).unwrap()))
     }
 }
 impl From<&str> for Value {
     fn from(x: &str) -> Self {
-        Value(Either::Left(Fr::from_str(x).unwrap()))
+        Value(Either::Right(BigInt::from_str(x).unwrap()))
     }
 }
 impl Pretty for Value {
@@ -191,13 +224,19 @@ impl Pretty for Value {
             |f| f.pretty_with_base(base),
             |i| {
                 format!(
-                    "E{}",
-                    i.to_str_radix(match base {
-                        Base::Dec => 10,
-                        Base::Hex => 16,
-                        Base::Bin | Base::Bool | Base::Loob => 2,
-                        Base::Bytes | Base::OpCode => 16,
-                    })
+                    "ε{}",
+                    match base {
+                        Base::Dec => i.to_str_radix(10),
+                        Base::Hex => i.to_str_radix(16),
+                        Base::Bin | Base::Bool | Base::Loob => i.to_str_radix(2),
+                        Base::Bytes => i
+                            .to_bytes_le()
+                            .1
+                            .iter()
+                            .map(|b| format!("{b:0>2x}"))
+                            .join(" "),
+                        Base::OpCode => opcodes::to_str(i.to_usize().unwrap().try_into().unwrap()),
+                    }
                 )
             },
         )

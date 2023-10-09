@@ -152,9 +152,9 @@ impl ModuleView {
                             let x_str = x.pretty_with_base(base);
                             maxes[k + 1] = maxes[k + 1].max(x_str.len());
                             let bg_color = x
-                                .into_repr()
-                                .flat_map(|x| x.to_le_bytes())
-                                .fold(0u8, |ax, bx| ax.wrapping_add(bx));
+                                .into_bytes()
+                                .iter()
+                                .fold(0u8, |ax, bx| ax.wrapping_add(*bx));
                             // ensure that we write white on dark colors and white on dark ones
                             let corrected_fg_color = if bg_color % 36 > 18 {
                                 Color::Black

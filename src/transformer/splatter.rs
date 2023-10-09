@@ -112,6 +112,15 @@ impl ConstraintSet {
         self.columns
             .insert_column_and_register(
                 Column::builder()
+                    .t(Magma::Boolean)
+                    .handle(Handle::new("#adder", "op"))
+                    .kind(Kind::Phantom)
+                    .build(),
+            )
+            .unwrap();
+        self.columns
+            .insert_column_and_register(
+                Column::builder()
                     .t(Magma::Integer(adder.width))
                     .handle(Handle::new("#adder", "arg-1"))
                     .kind(Kind::Phantom)

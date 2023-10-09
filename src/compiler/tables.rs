@@ -96,6 +96,7 @@ lazy_static::lazy_static! {
     };
 }
 
+type ComputationID = usize;
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct ComputationTable {
     pub(crate) dependencies: HashMap<ColumnRef, usize>,
@@ -123,14 +124,18 @@ impl ComputationTable {
     }
 
     /// Insert the computation defining `target`. Will fail if `target` is already defined by an existing computation.
-    pub fn insert(&mut self, target: &ColumnRef, computation: Computation) -> Result<()> {
+    pub fn insert(
+        &mut self,
+        target: &ColumnRef,
+        computation: Computation,
+    ) -> Result<ComputationID> {
         if self.dependencies.contains_key(target) {
             panic!("`{}` already present as a computation target", target);
         }
         self.computations.push(computation);
-        self.dependencies
-            .insert(target.to_owned(), self.computations.len() - 1);
-        Ok(())
+        let id = self.computations.len() - 1;
+        self.dependencies.insert(target.to_owned(), id);
+        Ok(id)
     }
 
     /// Insert a computation defining multiple columns at once (e.g. permutations).
@@ -414,7 +419,11 @@ impl Scope {
             .insert_many(targets, computation)
     }
 
-    pub fn insert_computation(&self, target: &ColumnRef, computation: Computation) -> Result<()> {
+    pub fn insert_computation(
+        &self,
+        target: &ColumnRef,
+        computation: Computation,
+    ) -> Result<ComputationID> {
         self.tree
             .borrow_mut()
             .metadata_mut()

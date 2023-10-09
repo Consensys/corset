@@ -47,6 +47,9 @@ pub struct Args {
     )]
     source: Vec<String>,
 
+    #[arg(short='e', action = clap::ArgAction::Count, global=true)]
+    expand: u8,
+
     #[arg(long = "debug", help = "Compile code in debug mode", global = true)]
     debug: bool,
 
@@ -161,13 +164,6 @@ enum Commands {
         full_trace: bool,
 
         #[arg(
-            short = 'E',
-            long = "expand",
-            help = "perform all expansion operations before checking"
-        )]
-        expand: bool,
-
-        #[arg(
             long = "only",
             help = "only check these constraints",
             value_delimiter = ','
@@ -232,14 +228,6 @@ enum Commands {
     },
     /// Display the compiled the constraint system
     Debug {
-        #[arg(short = 'e', long = "expand", value_parser=["nhood", "lower-shifts", "ifs", "constraints", "permutations", "inverses", "splatter"], value_delimiter=',')]
-        expand: Vec<String>,
-        #[arg(
-            short = 'E',
-            long = "expand-all",
-            help = "perform all expansion operations before checking"
-        )]
-        expand_all: bool,
         #[arg(
             short = 'm',
             long = "modules",
@@ -521,6 +509,10 @@ impl ConstraintSetBuilder {
 
 #[cfg(feature = "cli")]
 fn main() -> Result<()> {
+    use std::collections::HashSet;
+
+    use crate::transformer::ExpansionLevel;
+
     let args = Args::parse();
     buche::new()
         .verbosity(args.verbose.log_level_filter())
@@ -607,16 +599,9 @@ fn main() -> Result<()> {
         }
         #[cfg(feature = "exporters")]
         Commands::WizardIOP { out_filename } => {
-            let mut constraints = builder.to_constraint_set()?;
-            // transformer::validate_nhood(&mut constraints)?;
-            transformer::lower_shifts(&mut constraints);
-            transformer::expand_ifs(&mut constraints);
-            transformer::sorts(&mut constraints)?;
-            transformer::splatter(&mut constraints)?;
-            transformer::expand_constraints(&mut constraints)?;
-            transformer::expand_invs(&mut constraints)?;
-
-            exporters::wizardiop::render(&constraints, &out_filename)?;
+            let mut cs = builder.to_constraint_set()?;
+            transformer::expand_to(&mut cs, ExpansionLevel::all(), &[])?;
+            exporters::wizardiop::render(&cs, &out_filename)?;
         }
         #[cfg(all(feature = "parser", feature = "exporters"))]
         Commands::Latex {
@@ -741,7 +726,6 @@ fn main() -> Result<()> {
         Commands::Check {
             tracefile,
             full_trace,
-            expand,
             report,
             only,
             skip,
@@ -758,31 +742,17 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
-            let mut constraints = builder.to_constraint_set()?;
-            if expand {
-                transformer::validate_nhood(&mut constraints)
-                    .with_context(|| anyhow!("while creating nhood constraints"))?;
-                transformer::lower_shifts(&mut constraints);
-                transformer::expand_ifs(&mut constraints);
-                transformer::sorts(&mut constraints)
-                    .with_context(|| anyhow!("while creating sorting constraints"))?;
-                transformer::splatter(&mut constraints)?;
-                transformer::expand_constraints(&mut constraints)
-                    .with_context(|| anyhow!("while expanding constraints"))?;
-                transformer::expand_invs(&mut constraints)
-                    .with_context(|| anyhow!("while expanding inverses"))?;
-            }
-
-            compute::compute_trace(&tracefile, &mut constraints, false)
+            let mut cs = builder.to_constraint_set()?;
+            transformer::expand_to(&mut cs, args.expand.into(), &[])?;
+            compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
-
             check::check(
-                &constraints,
+                &cs,
                 &only,
                 &skip,
                 args.verbose.log_level_filter() >= log::Level::Warn
                     && std::io::stdout().is_terminal(),
-                expand,
+                ExpansionLevel::from(args.expand) >= ExpansionLevel::ExpandInvs,
                 check::DebugSettings::new()
                     .unclutter(unclutter)
                     .dim(dim)
@@ -803,18 +773,17 @@ fn main() -> Result<()> {
                 warn!("`{}` is empty, exiting", tracefile);
                 return Ok(());
             }
-            let mut constraints = builder.to_constraint_set()?;
+            let mut cs = builder.to_constraint_set()?;
+            transformer::expand_to(&mut cs, args.expand.into(), &[])?;
 
-            compute::compute_trace(&tracefile, &mut constraints, false)
+            compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
 
-            inspect::inspect(&constraints)
+            inspect::inspect(&cs)
                 .with_context(|| format!("while checking {}", tracefile.bright_white().bold()))?;
             info!("{}: SUCCESS", tracefile)
         }
         Commands::Debug {
-            expand,
-            expand_all,
             show_modules,
             show_constants,
             show_columns,
@@ -825,39 +794,15 @@ fn main() -> Result<()> {
             only,
             skip,
         } => {
-            let mut constraints = builder.to_constraint_set()?;
-            if expand.contains(&"nhood".into()) || expand_all {
-                transformer::validate_nhood(&mut constraints)
-                    .with_context(|| anyhow!("while creating nhood constraints"))?;
-            }
-            if expand.contains(&"lower-shifts".into()) || expand_all {
-                transformer::lower_shifts(&mut constraints);
-            }
-            if expand.contains(&"ifs".into()) || expand_all {
-                transformer::expand_ifs(&mut constraints);
-            }
-            if expand.contains(&"permutations".into()) || expand_all {
-                transformer::sorts(&mut constraints)
-                    .with_context(|| anyhow!("while creating sorting constraints"))?;
-            }
-            if expand.contains(&"splatter".into()) || expand_all {
-                transformer::splatter(&mut constraints)
-                    .with_context(|| anyhow!("while splattering exo-operations"))?;
-            }
-            if expand.contains(&"constraints".into()) || expand_all {
-                transformer::expand_constraints(&mut constraints)
-                    .with_context(|| anyhow!("while expanding constraints"))?;
-            }
-            if expand.contains(&"inverses".into()) || expand_all {
-                transformer::expand_invs(&mut constraints)
-                    .with_context(|| anyhow!("while expanding inverses"))?;
-            }
             if !show_columns && !show_constraints {
                 error!("no elements specified to debug");
             }
 
+            let mut cs = builder.to_constraint_set()?;
+            transformer::expand_to(&mut cs, args.expand.into(), &[])?;
+
             exporters::debugger::debug(
-                &constraints,
+                &cs,
                 exporters::debugger::DebugSettings {
                     modules: show_modules,
                     constants: show_constants,
