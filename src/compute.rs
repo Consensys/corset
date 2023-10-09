@@ -13,6 +13,7 @@ use crate::{
     errors::RuntimeError,
     import,
     pretty::Pretty,
+    structs::Handle,
 };
 
 #[time("info", "Computing expanded columns")]
@@ -21,6 +22,10 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
     // to be completely computed before the next one is started, but all
     // computations within a set can be processed in parallel
     let jobs = ComputationDag::from_computations(cs.computations.iter());
+
+    let mut exo_additions = HashSet::new();
+    let mut exo_multiplications = HashSet::new();
+
     for processing_slice in jobs.job_slices() {
         trace!("Processing computation slice {:?}", processing_slice);
         let comps = processing_slice
@@ -32,8 +37,11 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
             .collect::<Vec<_>>();
 
         for r in comps
-            .into_par_iter()
-            .filter_map(|comp| apply_computation(cs, &comp))
+            .iter()
+            // .into_par_iter() // TODO: is that a bottleneck?
+            .filter_map(|comp| {
+                apply_computation(cs, &comp, &mut exo_additions, &mut exo_multiplications)
+            })
             .collect::<Vec<_>>()
             .into_iter()
         {
@@ -50,6 +58,47 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
             }
         }
     }
+
+    let mut ops = Vec::with_capacity(16 * exo_additions.len());
+    let mut args1 = Vec::with_capacity(16 * exo_additions.len());
+    let mut args2 = Vec::with_capacity(16 * exo_additions.len());
+    let mut results = Vec::with_capacity(16 * exo_additions.len());
+    for (op, arg1, arg2) in exo_additions.into_iter() {
+        let mut r = arg1.clone();
+        if op {
+            r.add_assign(&arg2);
+        } else {
+            r.add_assign(&arg2);
+        }
+
+        ops.push(if op { Value::one() } else { Value::zero() });
+        args1.push(arg1);
+        args2.push(arg2);
+        results.push(r);
+    }
+
+    let h: ColumnRef = Handle::new("#adder", "op").into();
+    trace!("Filling {}", h.pretty());
+    cs.columns
+        .set_raw_value(&h, ops, 0)
+        .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+    let h: ColumnRef = Handle::new("#adder", "arg-1").into();
+    trace!("Filling {}", h.pretty());
+    cs.columns
+        .set_raw_value(&h, args1, 0)
+        .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+
+    let h: ColumnRef = Handle::new("#adder", "arg-2").into();
+    trace!("Filling {}", h.pretty());
+    cs.columns
+        .set_raw_value(&h, args2, 0)
+        .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+
+    let h: ColumnRef = Handle::new("#adder", "result").into();
+    trace!("Filling {}", h.pretty());
+    cs.columns
+        .set_raw_value(&h, results, 0)
+        .with_context(|| anyhow!("while filling {}", h.pretty()))?;
 
     Ok(())
 }
@@ -165,6 +214,7 @@ fn compute_exoaddition(
     cs: &ConstraintSet,
     sources: &[Node; 2],
     target: &ColumnRef,
+    exo_additions: &mut HashSet<(bool, Value, Value)>,
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling_for(target).unwrap();
     let len = cs
@@ -197,6 +247,8 @@ fn compute_exoaddition(
             let r2 = sources[1]
                 .eval(i, getter, &mut cache, &EvalSettings { wrap: false })
                 .unwrap();
+            exo_additions.insert((true, r1.clone(), r2.clone()));
+
             r1.add_assign(&r2);
             r1
         })
@@ -209,6 +261,7 @@ fn compute_exomultiplication(
     cs: &ConstraintSet,
     sources: &[Node; 2],
     target: &ColumnRef,
+    exo_multiplications: &mut HashSet<(bool, Value, Value)>,
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling_for(target).unwrap();
     let len = cs
@@ -241,6 +294,8 @@ fn compute_exomultiplication(
             let r2 = sources[1]
                 .eval(i, getter, &mut cache, &EvalSettings { wrap: false })
                 .unwrap();
+            exo_multiplications.insert((true, r1.clone(), r2.clone()));
+
             r1.mul_assign(&r2);
             r1
         })
@@ -478,6 +533,8 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
 pub fn apply_computation(
     cs: &ConstraintSet,
     computation: &Computation,
+    exo_additions: &mut HashSet<(bool, Value, Value)>,
+    exo_multiplications: &mut HashSet<(bool, Value, Value)>,
 ) -> Option<Result<Vec<ComputedColumn>>> {
     trace!("Computing {}", computation.pretty_target());
     match computation {
@@ -515,7 +572,7 @@ pub fn apply_computation(
         }
         Computation::ExoAddition { sources, target } => {
             if !cs.columns.is_computed(target) {
-                let r = compute_exoaddition(cs, sources, target);
+                let r = compute_exoaddition(cs, sources, target, exo_additions);
                 Some(r)
             } else {
                 None
@@ -523,7 +580,12 @@ pub fn apply_computation(
         }
         Computation::ExoMultiplication { sources, target } => {
             if !cs.columns.is_computed(target) {
-                Some(compute_exomultiplication(cs, sources, target))
+                Some(compute_exomultiplication(
+                    cs,
+                    sources,
+                    target,
+                    exo_multiplications,
+                ))
             } else {
                 None
             }

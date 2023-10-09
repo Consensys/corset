@@ -409,12 +409,12 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
         .all(|l| l == 0);
     match (children_empty, parent_empty) {
         (true, true) | (true, false) => {
-            debug!("empty plookup found; skipping");
+            warn!("empty plookup found; skipping");
             return Ok(());
         }
         (false, true) => bail!(
             "parents ({}) are empty, but not children",
-            parents.iter().map(|p| p.to_string()).join(", ")
+            parents.iter().map(|p| p.pretty()).join(", ")
         ),
         (false, false) => {}
     }
