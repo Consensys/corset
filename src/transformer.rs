@@ -88,7 +88,7 @@ pub(crate) fn expand_to(
     }
     if level >= ExpansionLevel::Splatter {
         info!("Splattering");
-        splatter(cs)?;
+        splatter(cs);
     }
     if level >= ExpansionLevel::ExpandConstraints {
         info!("Expanding constraints");
@@ -98,8 +98,8 @@ pub(crate) fn expand_to(
         info!("Expanding inverses");
         expand_invs(cs)?;
     }
-
-    Ok(())
+    cs.convert_refs_to_ids()?;
+    cs.validate()
 }
 
 fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {

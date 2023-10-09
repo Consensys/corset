@@ -243,8 +243,6 @@ impl ConstraintSet {
     }
 }
 
-pub fn splatter(cs: &mut ConstraintSet) -> Result<()> {
+pub fn splatter(cs: &mut ConstraintSet) {
     cs.splatter();
-    cs.convert_refs_to_ids()?;
-    cs.validate()
 }

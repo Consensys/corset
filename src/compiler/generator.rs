@@ -636,7 +636,10 @@ impl ConstraintSet {
 
         for c in self.computations.iter_mut() {
             match c {
-                Computation::Composite { exp, .. } => exp.add_id_to_handles(&convert_to_id),
+                Computation::Composite { target, exp } => {
+                    convert_to_id(target);
+                    exp.add_id_to_handles(&convert_to_id);
+                }
                 Computation::Interleaved { target, froms } => std::iter::once(target)
                     .chain(froms.iter_mut())
                     .for_each(convert_to_id),
@@ -726,9 +729,12 @@ impl ConstraintSet {
         self.computations
             .computation_for(h)
             .map(|comp| match comp {
-                Computation::Composite { exp, .. } => {
-                    self.length_multiplier(exp.dependencies().iter().next().unwrap())
-                }
+                Computation::Composite { exp, .. } => exp
+                    .dependencies()
+                    .iter()
+                    .next()
+                    .map(|d| self.length_multiplier(d))
+                    .unwrap_or(1),
                 Computation::Interleaved { froms, .. } => {
                     self.length_multiplier(&froms[0]) * froms.len()
                 }
@@ -901,7 +907,7 @@ impl ConstraintSet {
                 Computation::Composite { target, exp } => {
                     if !target.is_id() || exp.dependencies().into_iter().any(|r| !r.is_id()) {
                         bail!(errors::compiler::Error::ComputationWithHandles(
-                            c.to_string()
+                            c.to_string(),
                         ))
                     }
                 }

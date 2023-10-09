@@ -205,7 +205,11 @@ fn compute_exoconstant(
         .raw_len_for(&cs.columns.column(to).unwrap().handle.module)
         .unwrap() as usize;
 
-    let value: Vec<Value> = vec![Value::from(value).exoize(); spilling as usize + len + 1];
+    // Constant columns take value 0 in the padding
+    let value: Vec<Value> = vec![Value::zero(); spilling as usize + 1] // TODO: WTF spilling off-by-one?
+        .into_iter()
+        .chain(std::iter::repeat(Value::from(value)).take(len))
+        .collect();
 
     Ok(vec![(to.to_owned(), value, spilling)])
 }
@@ -598,7 +602,8 @@ pub fn apply_computation(
             }
         }
         comp @ Computation::SortingConstraints { eq, .. } => {
-            // NOTE all are computed at once, no need to check all of them
+            // NOTE all are computed at once, checking an arbitrary one (here
+            // eq) is enough
             if !cs.columns.is_computed(eq) {
                 Some(compute_sorting_auxs(cs, comp))
             } else {

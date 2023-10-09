@@ -1,5 +1,5 @@
 use crate::{
-    compiler::{ColumnRef, Kind, Magma, Node},
+    compiler::{ColumnRef, ConstraintSet, Kind, Magma, Node},
     errors,
     pretty::{opcodes, Base, Pretty},
     structs::Handle,
@@ -233,12 +233,20 @@ impl Value {
     pub(crate) fn bi_zero() -> Value {
         Value::BigInt(BigInt::zero())
     }
+
+    pub(crate) fn bit_size(&self) -> usize {
+        match self {
+            Value::BigInt(i) => i.bits() as usize,
+            Value::Native(_) => crate::constants::FIELD_BITSIZE,
+            Value::ExoNative(fs) => fs.len() * crate::constants::FIELD_BITSIZE,
+        }
+    }
 }
-// impl std::default::Default for Value {
-//     fn default() -> Value {
-//         Value(Value::BigInt(BigInt::zero()))
-//     }
-// }
+impl std::default::Default for Value {
+    fn default() -> Value {
+        Value::BigInt(BigInt::zero())
+    }
+}
 impl From<BigInt> for Value {
     fn from(int: BigInt) -> Self {
         Value::BigInt(int)
@@ -702,7 +710,7 @@ impl ColumnSet {
 
     pub fn insert_column(&mut self, column: Column) -> Result<ColumnRef> {
         if self.cols.contains_key(&column.handle) {
-            panic!(
+            bail!(
                 "column {} already exists",
                 column.handle.to_string().red().bold()
             )

@@ -60,7 +60,7 @@ pub fn maybe_warn(t: Magma, xs: &[Value], h: &Handle) -> Result<()> {
 pub fn validate(t: Magma, x: Value) -> Result<Value> {
     match t {
         Magma::None => unreachable!(),
-        Magma::Boolean => {
+        Magma::Boolean | Magma::Loobean => {
             if x.is_zero() || x == Value::one() {
                 Ok(x)
             } else {
@@ -82,9 +82,14 @@ pub fn validate(t: Magma, x: Value) -> Result<Value> {
             }
         }
         Magma::Native => Ok(x),
-        Magma::Integer(_) => Ok(x), // TODO: FIXME:
+        Magma::Integer(b) => {
+            if x.bit_size() > b {
+                bail!(RuntimeError::InvalidValue("byte", x))
+            } else {
+                Ok(x)
+            }
+        }
         Magma::Any => unreachable!(),
-        Magma::Loobean => unreachable!(), // input should never be declared as loobeans
     }
 }
 
