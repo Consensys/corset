@@ -5,13 +5,12 @@ use crate::{
     structs::Handle,
 };
 use anyhow::*;
-use either::Either;
 use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use owo_colors::OwoColorize;
 use pairing_ce::{
-    bn256::{Fr, FrRepr},
+    bn256::Fr,
     ff::{Field, PrimeField},
 };
 use serde::{Deserialize, Serialize};
@@ -73,15 +72,6 @@ impl Value {
             (Value::ExoNative(_), Value::BigInt(_)) => todo!(),
             (Value::ExoNative(_), Value::Native(_)) => todo!(),
             (Value::ExoNative(_), Value::ExoNative(_)) => todo!(),
-            // Value::Native(_) => todo!(),
-            // Value::ExoNative(ref mut f1) => match other {
-            //     Value::ExoNative(f2) => f1.add_assign(&f2),
-            //     Value::BigInt(_) => unreachable!(),
-            // },
-            // Value::BigInt(ref mut i1) => match &other {
-            //     Value::ExoNative(_) => unreachable!("{} += {}", self, other),
-            //     Value::BigInt(i2) => *i1 = i1.clone() + i2.clone(),
-            // },
         }
     }
 
@@ -97,13 +87,6 @@ impl Value {
             (Value::ExoNative(_), Value::Native(_)) => todo!(),
             (Value::ExoNative(_), Value::ExoNative(_)) => todo!(),
         }
-        // match self {
-        //     Value::ExoNative(ref mut f1) => match other {
-        //         Value::ExoNative(f2) => f1.sub_assign(&f2),
-        //         Value::BigInt(_) => unreachable!(),
-        //     },
-        //     Value::BigInt(_) => unreachable!(),
-        // }
     }
 
     pub(crate) fn mul_assign(&mut self, other: &Value) {
@@ -118,16 +101,6 @@ impl Value {
             (Value::ExoNative(_), Value::Native(_)) => todo!(),
             (Value::ExoNative(_), Value::ExoNative(_)) => todo!(),
         }
-        // match self {
-        //     Value::ExoNative(ref mut f1) => match other {
-        //         Value::ExoNative(f2) => f1.mul_assign(&f2),
-        //         Value::BigInt(_) => unreachable!(),
-        //     },
-        //     Value::BigInt(ref mut i1) => match &other {
-        //         Value::ExoNative(_) => unreachable!(),
-        //         Value::BigInt(i2) => *i1 = i1.clone() * i2.clone(),
-        //     },
-        // }
     }
 
     pub(crate) fn negate(&mut self) {
@@ -349,20 +322,198 @@ pub struct FieldRegister {
     value: Option<Vec<Fr>>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+type ValueGetter = fn(isize, cols: &ColumnSet) -> Option<Value>;
+
+// #[derive(Debug)]
+// struct ValueBacking(Either<Vec<Value>, (ValueGetter, isize, isize)>);
+pub enum ValueBacking {
+    Vector {
+        v: Vec<Value>,
+        spilling: isize,
+    },
+    Function {
+        f: Box<dyn Fn(isize, &ColumnSet) -> Option<Value> + Sync>,
+        spilling: isize,
+        end: usize,
+    },
+}
+impl std::fmt::Debug for ValueBacking {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "XXXbackingXXX")
+    }
+}
+impl std::default::Default for ValueBacking {
+    fn default() -> Self {
+        ValueBacking::Vector {
+            v: Vec::new(),
+            spilling: 0,
+        }
+    }
+}
+impl ValueBacking {
+    pub fn from_vec(v: Vec<Value>, spilling: isize) -> Self {
+        ValueBacking::Vector { v, spilling }
+    }
+
+    pub fn from_fn<F: Fn(isize, &'_ ColumnSet) -> Option<Value> + Sync + 'static>(
+        f: Box<F>,
+    ) -> Self {
+        ValueBacking::Function {
+            f,
+            spilling: 0,
+            end: 0,
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            ValueBacking::Vector { v, spilling } => v.len() - *spilling as usize,
+            ValueBacking::Function { end, .. } => *end,
+        }
+    }
+
+    fn padded_len(&self) -> usize {
+        match self {
+            ValueBacking::Vector { v, .. } => v.len(),
+            ValueBacking::Function { spilling, end, .. } => end + *spilling as usize,
+        }
+    }
+
+    fn spilling(&self) -> isize {
+        match self {
+            ValueBacking::Vector { spilling, .. } | ValueBacking::Function { spilling, .. } => {
+                *spilling
+            }
+        }
+    }
+
+    fn update_value(&mut self, _v: Vec<Value>, _spilling: isize) -> Result<()> {
+        match self {
+            ValueBacking::Vector { v, spilling } => {
+                assert!(*spilling == _spilling);
+                assert!(v.len() == _v.len());
+                for (x, y) in v.iter_mut().zip(_v.iter()) {
+                    if !x.is_zero() {
+                        bail!("overwriting non-zero value in shared register")
+                    } else {
+                        x.add_assign(y)
+                    }
+                }
+            }
+            ValueBacking::Function { .. } => {
+                bail!("can not update value of functional register backing")
+            }
+        }
+        Ok(())
+    }
+
+    pub fn get(&self, i: isize, wrap: bool, cs: &ColumnSet) -> Option<Value> {
+        match self {
+            ValueBacking::Vector { v, spilling } => {
+                if i < 0 {
+                    if wrap {
+                        let new_i = v.len() as isize + i;
+                        if new_i < 0 || new_i >= v.len() as isize {
+                            panic!("abnormal wrapping value {}", new_i)
+                        }
+                        v.get((v.len() as isize + i) as usize)
+                    } else if i < -spilling {
+                        None
+                    } else {
+                        v.get((i + spilling) as usize)
+                    }
+                } else {
+                    v.get((i + spilling) as usize)
+                }
+            }
+            .cloned(),
+            ValueBacking::Function { f, spilling, end } => f(i + spilling, cs),
+        }
+    }
+
+    fn get_raw(&self, i: isize, wrap: bool, cs: &ColumnSet) -> Option<Value> {
+        match self {
+            ValueBacking::Vector { v, spilling } => {
+                if i < 0 {
+                    if wrap {
+                        v.get((v.len() as isize + i) as usize)
+                    } else {
+                        None
+                    }
+                } else {
+                    v.get((i + spilling) as usize)
+                }
+            }
+            .cloned(),
+            ValueBacking::Function { f, .. } => f(i, cs),
+        }
+    }
+
+    pub fn iter<'a>(&'a self, columns: &'a ColumnSet) -> ValueBackingIter<'a> {
+        ValueBackingIter {
+            value: self,
+            i: 0,
+            columns,
+        }
+    }
+
+    fn concretize(self) -> Self {
+        match self {
+            ValueBacking::Vector { mut v, spilling } => {
+                v.iter_mut().for_each(|x| x.bi_to_fr());
+                ValueBacking::Vector { v, spilling }
+            }
+            ValueBacking::Function { f, spilling, end } => ValueBacking::Function {
+                f: Box::new(move |i, columns: &ColumnSet| {
+                    let mut v = f(i, columns);
+                    v.as_mut().map(|x| x.bi_to_fr());
+                    v
+                }),
+                spilling,
+                end,
+            },
+        }
+    }
+}
+
+pub struct ValueBackingIter<'a> {
+    value: &'a ValueBacking,
+    columns: &'a ColumnSet,
+    i: isize,
+}
+
+impl<'a> Iterator for ValueBackingIter<'a> {
+    type Item = Value;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.value {
+            ValueBacking::Vector { v, .. } => {
+                let i = self.i as usize;
+                if i >= v.len() {
+                    None
+                } else {
+                    self.i += 1;
+                    v.get(self.i as usize).cloned()
+                }
+            }
+            ValueBacking::Function { f, .. } => {
+                self.i += 1;
+                f(self.i - 1, self.columns)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Register {
     pub handle: Option<Handle>,
     pub magma: Magma,
-    value: Option<Vec<Value>>,
-    spilling: Option<isize>,
+    #[serde(skip_serializing, skip_deserializing, default)]
+    value: Option<ValueBacking>,
     width: usize,
 }
 
 impl Register {
-    pub fn width(&self) -> usize {
-        self.width
-    }
-
     pub fn make_with_spilling(
         f: &mut dyn FnMut(isize) -> Value,
         len: usize,
@@ -371,101 +522,72 @@ impl Register {
         (-spilling..len as isize).map(f).collect()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.value.is_none()
+    }
+
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    pub fn spilling(&self) -> Option<isize> {
+        self.value.as_ref().map(|v| v.spilling())
+    }
+
     pub fn set_value(&mut self, v: Vec<Value>, spilling: isize) -> Result<()> {
-        assert!(self.spilling.map(|s| s == spilling).unwrap_or(true));
-        self.spilling = Some(spilling);
-        if self.value.is_some() {
-            assert!(self.value.as_ref().unwrap().len() == v.len());
-            for (x, y) in self.value.as_mut().unwrap().iter_mut().zip(v.iter()) {
-                if !x.is_zero() {
-                    bail!("overwriting non-zero value in shared register")
-                } else {
-                    x.add_assign(y)
-                }
-            }
+        if let Some(ref mut provider) = self.value.as_mut() {
+            provider.update_value(v, spilling)
         } else {
-            self.value = Some(Self::make_with_spilling(
-                &mut |i| v.get(i as usize).cloned().unwrap_or_else(Value::zero),
-                v.len(),
+            let _ = self.value.insert(ValueBacking::from_vec(
+                Self::make_with_spilling(
+                    &mut |i| v.get(i as usize).cloned().unwrap_or_else(Value::zero),
+                    v.len(),
+                    spilling,
+                ),
                 spilling,
             ));
+            Ok(())
         }
-        Ok(())
     }
 
     pub fn set_raw_value(&mut self, v: Vec<Value>, spilling: isize) -> Result<()> {
-        assert!(self.spilling.map(|s| s == spilling).unwrap_or(true));
-        if self.value.is_some() {
-            assert!(self.value.as_ref().unwrap().len() == v.len());
-            for (x, y) in self.value.as_mut().unwrap().iter_mut().zip(v.iter()) {
-                if !x.is_zero() {
-                    bail!("overwriting non-zero value in shared register")
-                } else {
-                    x.add_assign(y)
-                }
-            }
+        if let Some(ref mut provider) = self.value.as_mut() {
+            provider.update_value(v, spilling)
         } else {
-            self.value = Some(v);
+            let _ = self.value.insert(ValueBacking::from_vec(v, spilling));
+            Ok(())
         }
-        self.spilling = Some(spilling);
+    }
+
+    pub fn set_backing(&mut self, v: ValueBacking) -> Result<()> {
+        if self.value.is_some() {
+            bail!("backing already set");
+        }
+        self.value = Some(v);
         Ok(())
     }
 
-    pub fn value(&self) -> Option<&Vec<Value>> {
-        self.value.as_ref()
-    }
-
-    pub fn value_mut(&mut self) -> Option<&mut Vec<Value>> {
-        self.value.as_mut()
-    }
-
     pub fn padded_len(&self) -> Option<usize> {
-        self.value.as_ref().map(|v| v.len())
+        self.value.as_ref().map(|v| v.padded_len())
     }
 
     pub fn len(&self) -> Option<usize> {
+        self.value.as_ref().map(|v| v.len())
+    }
+
+    pub fn get(&self, i: isize, wrap: bool, columns: &ColumnSet) -> Option<Value> {
+        self.value.as_ref().and_then(|v| v.get(i, wrap, columns))
+    }
+
+    pub fn get_raw(&self, i: isize, wrap: bool, columns: &ColumnSet) -> Option<Value> {
         self.value
             .as_ref()
-            .map(|v| v.len() - self.spilling.unwrap() as usize)
+            .and_then(|v| v.get_raw(i, wrap, columns))
     }
 
-    pub fn get(&self, i: isize, wrap: bool) -> Option<&Value> {
-        if i < 0 {
-            if wrap {
-                let new_i = self.value.as_ref().map(Vec::len).unwrap() as isize + i;
-                if new_i < 0 || new_i >= self.padded_len().unwrap() as isize {
-                    panic!("abnormal wrapping value {} for {:?}", new_i, self.handle)
-                }
-                self.value
-                    .as_ref()
-                    .and_then(|v| v.get((v.len() as isize + i) as usize))
-            } else if i < -self.spilling.unwrap() {
-                None
-            } else {
-                self.value
-                    .as_ref()
-                    .and_then(|v| v.get((i + self.spilling.unwrap()) as usize))
-            }
-        } else {
-            self.value
-                .as_ref()
-                .and_then(|v| v.get((i + self.spilling.unwrap()) as usize))
-        }
-    }
-
-    pub fn get_raw(&self, i: isize, wrap: bool) -> Option<&Value> {
-        if i < 0 {
-            if wrap {
-                self.value
-                    .as_ref()
-                    .and_then(|v| v.get((v.len() as isize + i) as usize))
-            } else {
-                None
-            }
-        } else {
-            self.value
-                .as_ref()
-                .and_then(|v| v.get((i + self.spilling.unwrap()) as usize))
+    pub fn concretize(&mut self) {
+        if let Some(v) = self.value.take() {
+            let _ = self.value.insert(v.concretize());
         }
     }
 }
@@ -473,7 +595,7 @@ impl Register {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Column {
     pub register: Option<RegisterID>,
-    pub padding_value: Option<(i64, Fr)>, // TODO: convert to Value
+    pub padding_value: Option<Value>,
     pub used: bool,
     pub kind: Kind<()>,
     pub t: Magma,
@@ -487,7 +609,7 @@ impl Column {
     #[builder]
     pub fn new(
         register: Option<RegisterID>,
-        padding_value: Option<i64>,
+        padding_value: Option<i64>, // TODO: Value
         used: Option<bool>,
         kind: Kind<()>,
         t: Option<Magma>,
@@ -497,7 +619,7 @@ impl Column {
     ) -> Self {
         Column {
             register,
-            padding_value: padding_value.map(|x| (x, Fr::from_str(&x.to_string()).unwrap())),
+            padding_value: padding_value.map(|v| Value::from(v as usize)),
             used: used.unwrap_or(true),
             kind,
             t: t.unwrap_or(Magma::Native),
@@ -509,11 +631,11 @@ impl Column {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ColumnSet {
     pub _cols: Vec<Column>,
     pub cols: HashMap<Handle, usize>,
-    pub raw_len: HashMap<String, isize>,
+    pub effective_len: HashMap<String, isize>,
     /// a module may have a lower bound on its columns length if it is involved
     /// in range proofs
     pub min_len: HashMap<String, usize>,
@@ -685,7 +807,6 @@ impl ColumnSet {
             handle: Some(handle),
             magma,
             value: None,
-            spilling: None,
             width: crate::constants::col_count_magma(magma),
         });
         self.registers.len() - 1
@@ -733,7 +854,7 @@ impl ColumnSet {
         const IGNORED: &[&str] = &["shift-table", "binary-table", "instruction-decoder"];
         self.iter_cols()
             .filter(|c| !IGNORED.contains(&c.handle.module.as_str()))
-            .all(|c| self.registers[c.register.unwrap()].value().is_none())
+            .all(|c| self.registers[c.register.unwrap()].is_empty())
     }
 
     pub fn register_of_mut(&mut self, h: &ColumnRef) -> &mut Register {
@@ -746,12 +867,12 @@ impl ColumnSet {
         &self.registers[reg]
     }
 
-    pub fn get(&self, h: &ColumnRef, i: isize, wrap: bool) -> Option<&Value> {
-        self.register_of(h).get(i, wrap)
+    pub fn get(&self, h: &ColumnRef, i: isize, wrap: bool) -> Option<Value> {
+        self.register_of(h).get(i, wrap, self)
     }
 
-    pub fn get_raw(&self, h: &ColumnRef, i: isize, wrap: bool) -> Option<&Value> {
-        self.register_of(h).get_raw(i, wrap)
+    pub fn get_raw(&self, h: &ColumnRef, i: isize, wrap: bool) -> Option<Value> {
+        self.register_of(h).get_raw(i, wrap, self)
     }
 
     pub fn len(&self, h: &ColumnRef) -> Option<usize> {
@@ -762,8 +883,8 @@ impl ColumnSet {
         self.register_of(h).padded_len()
     }
 
-    pub fn value(&self, h: &ColumnRef) -> Option<&Vec<Value>> {
-        self.register_of(h).value()
+    pub fn backing(&self, h: &ColumnRef) -> Option<&ValueBacking> {
+        self.register_of(h).value.as_ref()
     }
 
     pub fn is_computed(&self, h: &ColumnRef) -> bool {
@@ -820,6 +941,11 @@ impl ColumnSet {
     pub fn set_raw_value(&mut self, h: &ColumnRef, v: Vec<Value>, spilling: isize) -> Result<()> {
         self.get_col_mut(h).unwrap().computed = true;
         self.register_of_mut(h).set_raw_value(v, spilling)
+    }
+
+    pub fn set_backing(&mut self, h: &ColumnRef, v: ValueBacking) -> Result<()> {
+        self.get_col_mut(h).unwrap().computed = true;
+        self.register_of_mut(h).set_backing(v)
     }
 }
 

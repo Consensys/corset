@@ -170,9 +170,7 @@ impl ModuleView {
                                     .unwrap()
                                     .eval(
                                         i,
-                                        |handle, i, wrap| {
-                                            cs.columns.get_raw(handle, i, wrap).cloned()
-                                        },
+                                        |handle, i, wrap| cs.columns.get_raw(handle, i, wrap),
                                         &mut None,
                                         &Default::default(),
                                     )
@@ -373,7 +371,7 @@ impl<'a> Inspector<'a> {
                             )
                             .run(
                                 &mut t,
-                                &|i, r| self.cs.columns.get_raw(r, i, false).cloned(),
+                                &|i, r| self.cs.columns.get_raw(r, i, false),
                                 self.current_module().size,
                                 self.minibuffer,
                             );

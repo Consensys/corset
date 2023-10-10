@@ -9,6 +9,9 @@ use crate::{
 };
 use anyhow::*;
 
+const ADDER_MODULE: &'static str = "#adder";
+const MULER_MODULE: &'static str = "#muler";
+
 #[derive(Default)]
 struct ProtoAdder {
     width: usize,
@@ -117,7 +120,7 @@ impl ConstraintSet {
             .insert_column_and_register(
                 Column::builder()
                     .t(Magma::Boolean)
-                    .handle(Handle::new("#adder", "op"))
+                    .handle(Handle::new(ADDER_MODULE, "op"))
                     .base(Base::Hex)
                     .kind(Kind::Phantom)
                     .build(),
@@ -127,7 +130,7 @@ impl ConstraintSet {
             .insert_column_and_register(
                 Column::builder()
                     .t(Magma::Integer(adder.width))
-                    .handle(Handle::new("#adder", "arg-1"))
+                    .handle(Handle::new(ADDER_MODULE, "arg-1"))
                     .base(Base::Hex)
                     .kind(Kind::Phantom)
                     .build(),
@@ -137,7 +140,7 @@ impl ConstraintSet {
             .insert_column_and_register(
                 Column::builder()
                     .t(Magma::Integer(adder.width))
-                    .handle(Handle::new("#adder", "arg-2"))
+                    .handle(Handle::new(ADDER_MODULE, "arg-2"))
                     .base(Base::Hex)
                     .kind(Kind::Phantom)
                     .build(),
@@ -147,7 +150,7 @@ impl ConstraintSet {
             .insert_column_and_register(
                 Column::builder()
                     .t(Magma::Integer(adder.width))
-                    .handle(Handle::new("#adder", "result"))
+                    .handle(Handle::new(ADDER_MODULE, "result"))
                     .base(Base::Hex)
                     .kind(Kind::Phantom)
                     .build(),
@@ -157,7 +160,7 @@ impl ConstraintSet {
             .insert_column_and_register(
                 Column::builder()
                     .t(Magma::Boolean)
-                    .handle(Handle::new("#adder", "done"))
+                    .handle(Handle::new(ADDER_MODULE, "done"))
                     .kind(Kind::Phantom)
                     .build(),
             )
@@ -184,61 +187,95 @@ impl ConstraintSet {
             let id = self.columns.insert_column_and_register(new_column).unwrap();
             self.computations.insert(&id, new_computation).unwrap();
         }
-        for (func, (added_handle, added_magma), args) in dbg!(new_exo_columns).into_iter() {
-            let added_ref = self
-                .columns
-                .insert_column_and_register(
-                    Column::builder()
-                        .handle(added_handle.to_owned())
-                        .t(added_magma)
-                        .base(Base::Hex)
-                        .kind(Kind::Composite(Box::new(())))
-                        .build(),
-                )
-                .unwrap();
-            self.computations
-                .insert(
-                    &added_ref,
-                    match func {
-                        Intrinsic::Add => Computation::ExoAddition {
-                            sources: args.clone().into(),
-                            target: added_ref.clone(),
-                        },
-                        Intrinsic::Sub => todo!(),
-                        Intrinsic::Mul => Computation::ExoMultiplication {
-                            sources: args.clone().into(),
-                            target: added_ref.clone(),
-                        },
+        for (func, (new_handle, new_magma), args) in dbg!(new_exo_columns).into_iter() {
+            match func {
+                Intrinsic::Add | Intrinsic::Sub => {
+                    let added_handle = new_handle;
+                    let added_magma = new_magma;
 
-                        _ => unreachable!(),
-                    },
-                )
-                .unwrap();
-            self.constraints.push(Constraint::Plookup {
-                handle: Handle::new("add", &added_handle.name),
-                including: vec![
-                    Node::column()
-                        .handle(Handle::new("#adder", "arg-1"))
-                        .kind(Kind::Phantom)
-                        .build(),
-                    Node::column()
-                        .handle(Handle::new("#adder", "arg-2"))
-                        .kind(Kind::Phantom)
-                        .build(),
-                    Node::column()
-                        .handle(Handle::new("#adder", "result"))
-                        .kind(Kind::Phantom)
-                        .build(),
-                ],
-                included: vec![
-                    args.0.clone(),
-                    args.1.clone(),
-                    Node::column()
-                        .handle(added_handle)
-                        .kind(Kind::Atomic)
-                        .build(),
-                ],
-            })
+                    let added_ref = self
+                        .columns
+                        .insert_column_and_register(
+                            Column::builder()
+                                .handle(added_handle.to_owned())
+                                .t(added_magma)
+                                .base(Base::Hex)
+                                .kind(Kind::Composite(Box::new(())))
+                                .build(),
+                        )
+                        .unwrap();
+                    self.computations
+                        .insert(
+                            &added_ref,
+                            match func {
+                                Intrinsic::Add => Computation::ExoAddition {
+                                    sources: args.clone().into(),
+                                    target: added_ref.clone(),
+                                },
+                                Intrinsic::Sub => todo!(),
+                                _ => unreachable!(),
+                            },
+                        )
+                        .unwrap();
+
+                    self.constraints.push(Constraint::Plookup {
+                        handle: Handle::new("#adder", &added_handle.name),
+                        including: vec![
+                            Node::column()
+                                .handle(Handle::new("#adder", "op"))
+                                .kind(Kind::Phantom)
+                                .build(),
+                            Node::column()
+                                .handle(Handle::new("#adder", "arg-1"))
+                                .kind(Kind::Phantom)
+                                .build(),
+                            Node::column()
+                                .handle(Handle::new("#adder", "arg-2"))
+                                .kind(Kind::Phantom)
+                                .build(),
+                            Node::column()
+                                .handle(Handle::new("#adder", "result"))
+                                .kind(Kind::Phantom)
+                                .build(),
+                        ],
+                        included: vec![
+                            Node::from_const(if func == Intrinsic::Add { 1 } else { 0 }),
+                            args.0.clone(),
+                            args.1.clone(),
+                            Node::column()
+                                .handle(added_handle)
+                                .kind(Kind::Atomic)
+                                .build(),
+                        ],
+                    })
+                }
+                Intrinsic::Mul => {
+                    let muled_handle = new_handle;
+                    let muled_magma = new_magma;
+
+                    let muled_ref = self
+                        .columns
+                        .insert_column_and_register(
+                            Column::builder()
+                                .handle(muled_handle.to_owned())
+                                .t(muled_magma)
+                                .base(Base::Hex)
+                                .kind(Kind::Composite(Box::new(())))
+                                .build(),
+                        )
+                        .unwrap();
+                    self.computations
+                        .insert(
+                            &muled_ref,
+                            Computation::ExoMultiplication {
+                                sources: args.clone().into(),
+                                target: muled_ref.clone(),
+                            },
+                        )
+                        .unwrap();
+                }
+                _ => unreachable!(),
+            }
         }
     }
 }

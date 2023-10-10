@@ -180,7 +180,7 @@ pub fn fill_traces(
                 let module = path[path.len() - 2].to_string();
                 let handle: ColumnRef = Handle::new(&module, &path[path.len() - 1]).into();
                 // The first column sets the size of its module
-                let module_raw_size = cs.raw_len_for_or_set(&module, xs.len() as isize);
+                let module_raw_size = cs.effective_len_or_set(&module, xs.len() as isize);
 
                 // The min length can be set if the module contains range
                 // proofs, that require a minimal length of a certain power of 2
@@ -222,7 +222,7 @@ pub fn fill_traces(
                     if xs.len() < module_min_len {
                         xs.reverse();
                         xs.resize_with(module_min_len, || {
-                            padding_value.map(|v| v.1).unwrap_or_default().into()
+                            padding_value.clone().unwrap_or_default().into()
                         });
                         xs.reverse();
                     }

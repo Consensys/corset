@@ -21,7 +21,7 @@ use std::sync::atomic::AtomicUsize;
 use super::node::ColumnRef;
 use super::tables::{ComputationTable, Scope};
 use super::{common::*, CompileSettings, Expression, Magma, Node, Type};
-use crate::column::{Column, ColumnSet, Computation, RegisterID, Value};
+use crate::column::{Column, ColumnSet, Computation, RegisterID, Value, ValueBacking};
 use crate::compiler::parser::*;
 use crate::dag::ComputationDag;
 use crate::errors::{self, CompileError, RuntimeError};
@@ -251,52 +251,13 @@ impl FuncVerifier<Node> for Intrinsic {
 
 pub type PerspectiveTable = HashMap<String, HashMap<String, Node>>;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct Adder {
-    ops: HashSet<(bool, BigInt, BigInt)>,
-}
-impl Adder {
-    pub fn run(&self) -> Vec<(ColumnRef, Vec<Value>)> {
-        let mut ops = Vec::<Value>::with_capacity(self.ops.len() * 16);
-        let mut args1 = Vec::<Value>::with_capacity(self.ops.len() * 16);
-        let mut args2 = Vec::with_capacity(self.ops.len() * 16);
-        let mut results = Vec::with_capacity(self.ops.len() * 16);
-        for (op, arg1, arg2) in self.ops.iter() {
-            ops.push((if *op { 1 } else { 0 }).into());
-            args1.push((arg1).into());
-            args2.push((arg2).into());
-            results.push((arg1 + arg2).into());
-        }
-
-        vec![
-            (Handle::new("adder", "op").into(), ops),
-            (Handle::new("adder", "arg1").into(), args1),
-            (Handle::new("adder", "arg2").into(), args2),
-            (Handle::new("adder", "result").into(), results),
-        ]
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct Muler {
-    ops: HashSet<(bool, BigInt, BigInt)>,
-}
-impl Muler {}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct Ancillaries {
-    adder: Adder,
-    muler: Muler,
-}
-
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct ConstraintSet {
     pub columns: ColumnSet,
     pub constraints: Vec<Constraint>,
     pub constants: HashMap<Handle, BigInt>,
     pub computations: ComputationTable,
     pub perspectives: PerspectiveTable,
-    pub ancillaries: Ancillaries,
 }
 impl ConstraintSet {
     pub fn new(
@@ -312,7 +273,6 @@ impl ConstraintSet {
             constants,
             computations,
             perspectives,
-            ancillaries: Default::default(),
         };
         r.convert_refs_to_ids()?;
         r.allocate_registers();
@@ -673,12 +633,12 @@ impl ConstraintSet {
         Ok(())
     }
 
-    pub fn raw_len_for(&self, m: &str) -> Option<isize> {
-        self.columns.raw_len.get(m).copied()
+    pub fn effective_len_for(&self, m: &str) -> Option<isize> {
+        self.columns.effective_len.get(m).copied()
     }
 
-    pub fn raw_len_for_or_set(&mut self, m: &str, x: isize) -> isize {
-        *self.columns.raw_len.entry(m.to_string()).or_insert(x)
+    pub fn effective_len_or_set(&mut self, m: &str, x: isize) -> isize {
+        *self.columns.effective_len.entry(m.to_string()).or_insert(x)
     }
 
     pub fn spilling_for(&self, h: &ColumnRef) -> Option<isize> {
@@ -779,15 +739,15 @@ impl ConstraintSet {
                 .map(|h| (h.clone(), self.columns.column(&h).unwrap()))
                 .filter(|(_, c)| c.handle.module == module)
                 .peekable();
-            let empty_vec = Vec::new();
+            let empty_backing: ValueBacking = ValueBacking::default();
             while let Some((r, column)) = current_col.next() {
                 let handle = &column.handle;
                 trace!("Writing {}", handle);
-                let value = self.columns.value(&r).unwrap_or(&empty_vec);
-                let padding = if let Some((_, fr)) = column.padding_value {
-                    fr.into()
+                let backing = self.columns.backing(&r).unwrap_or_else(|| &empty_backing);
+                let padding: Value = if let Some(v) = column.padding_value.as_ref() {
+                    v.clone()
                 } else {
-                    value.get(0).cloned().unwrap_or_else(|| {
+                    backing.get(0, false, &self.columns).unwrap_or_else(|| {
                         self.computations
                             .computation_for(&r)
                             .map(|c| match c {
@@ -814,7 +774,7 @@ impl ConstraintSet {
                 out.write_all(format!("\"{}\":{{\n", handle).as_bytes())?;
                 out.write_all("\"values\":[".as_bytes())?;
 
-                let mut value = value.iter().peekable();
+                let mut value = backing.iter(&self.columns).peekable();
                 while let Some(x) = value.next() {
                     out.write_all(
                         cache

@@ -509,14 +509,14 @@ impl ConstraintSetBuilder {
         }
     }
 
-    fn to_constraint_set(&self) -> Result<ConstraintSet> {
-        match self.source.as_ref() {
-            Either::Left(sources) => compiler::make(
+    fn to_constraint_set(self) -> Result<ConstraintSet> {
+        match self.source {
+            Either::Left(ref sources) => compiler::make(
                 &self.prepare_sources(sources),
                 &compiler::CompileSettings { debug: self.debug },
             )
             .map(|r| r.1),
-            Either::Right(cs) => Ok(cs.clone()),
+            Either::Right(cs) => Ok(cs),
         }
     }
 }

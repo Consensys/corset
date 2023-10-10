@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use std::{cmp::Ordering, collections::HashSet};
 
 use crate::{
-    column::{Computation, Value},
+    column::{ColumnSet, Computation, Value, ValueBacking},
     compiler::{ColumnRef, ConstraintSet, EvalSettings, Node},
     dag::ComputationDag,
     errors::RuntimeError,
@@ -47,10 +47,10 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
         {
             match r {
                 Ok(xs) => {
-                    for (h, v, spilling) in xs.into_iter() {
+                    for (h, backing) in xs.into_iter() {
                         trace!("Filling {}", h.pretty());
                         cs.columns
-                            .set_raw_value(&h, v, spilling)
+                            .set_backing(&h, backing)
                             .with_context(|| anyhow!("while filling {}", h.pretty()))?;
                     }
                 }
@@ -68,7 +68,7 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
         if op {
             r.add_assign(&arg2);
         } else {
-            r.add_assign(&arg2);
+            r.sub_assign(&arg2);
         }
 
         ops.push(if op { Value::one() } else { Value::zero() });
@@ -142,7 +142,7 @@ fn compute_interleaved(
         })
         .collect();
 
-    Ok(vec![(target.to_owned(), values, 0)])
+    Ok(vec![(target.to_owned(), ValueBacking::from_vec(values, 0))])
 }
 
 fn compute_sorted(
@@ -169,7 +169,7 @@ fn compute_sorted(
         for (sign, from) in signs.iter().zip(froms.iter()) {
             let x_i = cs.columns.get(from, *i as isize, false).unwrap();
             let x_j = cs.columns.get(from, *j as isize, false).unwrap();
-            if let x @ (Ordering::Greater | Ordering::Less) = x_i.cmp(x_j) {
+            if let x @ (Ordering::Greater | Ordering::Less) = x_i.cmp(&x_j) {
                 return if *sign { x } else { x.reverse() };
             }
         }
@@ -190,7 +190,7 @@ fn compute_sorted(
                 }))
                 .collect();
 
-            (tos[k].to_owned(), value, spilling)
+            (tos[k].to_owned(), ValueBacking::from_vec(value, spilling))
         })
         .collect::<Vec<_>>())
 }
@@ -202,7 +202,7 @@ fn compute_exoconstant(
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling_for(to).unwrap();
     let len = cs
-        .raw_len_for(&cs.columns.column(to).unwrap().handle.module)
+        .effective_len_for(&cs.columns.column(to).unwrap().handle.module)
         .unwrap() as usize;
 
     // Constant columns take value 0 in the padding
@@ -211,7 +211,10 @@ fn compute_exoconstant(
         .chain(std::iter::repeat(Value::from(value)).take(len))
         .collect();
 
-    Ok(vec![(to.to_owned(), value, spilling)])
+    Ok(vec![(
+        to.to_owned(),
+        ValueBacking::from_vec(value, spilling),
+    )])
 }
 
 fn compute_exoaddition(
@@ -222,7 +225,7 @@ fn compute_exoaddition(
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling_for(target).unwrap();
     let len = cs
-        .raw_len_for(&cs.columns.column(target).unwrap().handle.module)
+        .effective_len_for(&cs.columns.column(target).unwrap().handle.module)
         .unwrap();
 
     let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
@@ -230,14 +233,13 @@ fn compute_exoaddition(
         Some(
             cs.columns
                 .get(handle, j, false)
-                .cloned()
                 .or_else(|| {
                     cs.columns
                         .column(handle)
                         .unwrap()
                         .padding_value
                         .as_ref()
-                        .map(|x| x.1.into())
+                        .map(|x| x.clone())
                 })
                 .unwrap_or_else(Value::zero),
         )
@@ -258,7 +260,10 @@ fn compute_exoaddition(
         })
         .collect();
 
-    Ok(vec![(target.to_owned(), value, spilling)])
+    Ok(vec![(
+        target.to_owned(),
+        ValueBacking::from_vec(value, spilling),
+    )])
 }
 
 fn compute_exomultiplication(
@@ -269,7 +274,7 @@ fn compute_exomultiplication(
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling_for(target).unwrap();
     let len = cs
-        .raw_len_for(&cs.columns.column(target).unwrap().handle.module)
+        .effective_len_for(&cs.columns.column(target).unwrap().handle.module)
         .unwrap();
 
     let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
@@ -277,14 +282,13 @@ fn compute_exomultiplication(
         Some(
             cs.columns
                 .get(handle, j, false)
-                .cloned()
                 .or_else(|| {
                     cs.columns
                         .column(handle)
                         .unwrap()
                         .padding_value
                         .as_ref()
-                        .map(|x| x.1.into())
+                        .map(|x| x.clone())
                 })
                 .unwrap_or_else(Value::zero),
         )
@@ -305,7 +309,10 @@ fn compute_exomultiplication(
         })
         .collect();
 
-    Ok(vec![(target.to_owned(), value, spilling)])
+    Ok(vec![(
+        target.to_owned(),
+        ValueBacking::from_vec(value, spilling),
+    )])
 }
 
 fn compute_cyclic(
@@ -333,64 +340,60 @@ fn compute_cyclic(
         .chain((0..len).map(|i| (i % modulo).into()))
         .collect();
 
-    Ok(vec![(to.to_owned(), value, spilling)])
+    // TODO: replace with generator function
+    Ok(vec![(
+        to.to_owned(),
+        ValueBacking::from_vec(value, spilling),
+    )])
 }
 
-type ComputedColumn = (ColumnRef, Vec<Value>, isize);
+type ComputedColumn = (ColumnRef, ValueBacking);
 pub fn compute_composite(
     cs: &ConstraintSet,
     exp: &Node,
     target: &ColumnRef,
 ) -> Result<Vec<ComputedColumn>> {
-    let spilling = cs.spilling_for(target).unwrap();
     let cols_in_expr = exp.dependencies();
     for from in &cols_in_expr {
         ensure_is_computed(from, cs)?;
     }
-    let length = *cols_in_expr
-        .iter()
-        .map(|handle| Ok(cs.columns.len(handle).unwrap()))
-        .collect::<Result<Vec<_>>>()?
-        .iter()
-        .max()
-        .unwrap();
 
-    let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
-    let values = (-spilling..length as isize)
-        .map(|i| {
-            let r = exp.eval(
-                i,
-                |handle, j, _| {
-                    Some(
-                        cs.columns
-                            .get(handle, j, false)
-                            .cloned()
-                            .or_else(|| {
-                                // This is triggered when filling the spilling
-                                // of an expression with past spilling. In this
-                                // case, the expression will overflow past the
-                                // past spilling, and None should be converted
-                                // to the padding value or 0.
-                                cs.columns
-                                    .column(handle)
-                                    .unwrap()
-                                    .padding_value
-                                    .as_ref()
-                                    .map(|x| x.1.into())
-                            })
-                            .unwrap_or_else(Value::zero),
-                    )
-                },
-                &mut cache,
-                &EvalSettings { wrap: false },
-            );
-            // This should never fail, as we always provide a default value for
-            // column accesses
-            r.unwrap()
-        })
-        .collect();
-
-    Ok(vec![(target.to_owned(), values, spilling)])
+    Ok(vec![(
+        target.to_owned(),
+        if let Result::Ok(cst) = exp.pure_eval() {
+            let v = Value::from(cst);
+            ValueBacking::from_fn(Box::new(move |_, _: &ColumnSet| Some(v.clone())))
+        } else {
+            let captured_exp = exp.clone();
+            ValueBacking::from_fn(Box::new(move |i, columns: &ColumnSet| {
+                captured_exp.eval(
+                    i,
+                    |handle, j, _| {
+                        Some(
+                            columns
+                                .get(handle, j, false)
+                                .or_else(|| {
+                                    // This is triggered when filling the spilling
+                                    // of an expression with past spilling. In this
+                                    // case, the expression will overflow past the
+                                    // past spilling, and None should be converted
+                                    // to the padding value or 0.
+                                    columns
+                                        .column(handle)
+                                        .unwrap()
+                                        .padding_value
+                                        .as_ref()
+                                        .map(|x| x.clone())
+                                })
+                                .unwrap_or_else(Value::zero),
+                        )
+                    },
+                    &mut None,
+                    &EvalSettings { wrap: false },
+                )
+            }))
+        },
+    )])
 }
 
 /// Compared to `compute_composite`, this function directly return the compute values without any other informations
@@ -420,7 +423,7 @@ pub fn compute_composite_static(cs: &ConstraintSet, exp: &Node) -> Result<Vec<Va
         .map(|i| {
             exp.eval(
                 i,
-                |handle, j, _| cs.columns.get(handle, j, false).cloned(),
+                |handle, j, _| cs.columns.get(handle, j, false),
                 &mut cache,
                 &EvalSettings { wrap: false },
             )
@@ -468,7 +471,7 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
                     .columns
                     .get(&sorted[l], i, false)
                     .zip(cs.columns.get(&sorted[l], i - 1, false)) // may fail @0 if no padding; in this case, @ = 0
-                    .map(|(v1, v2)| v1.eq(v2))
+                    .map(|(v1, v2)| v1.eq(&v2))
                     .unwrap_or(true);
 
                 let v = if !eq {
@@ -493,7 +496,7 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
             if eq_values.last().unwrap().is_zero() {
                 for l in 0..ats.len() {
                     let mut term = cs.columns.get(&sorted[l], i, false).unwrap().clone();
-                    term.sub_assign(cs.columns.get(&sorted[l], i - 1, false).unwrap());
+                    term.sub_assign(&cs.columns.get(&sorted[l], i - 1, false).unwrap());
                     term.mul_assign(at_values[l].last().unwrap());
                     if !signs[l] {
                         term.negate();
@@ -513,20 +516,28 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
         }
 
         Ok(vec![
-            (eq.to_owned(), eq_values, spilling),
-            (delta.to_owned(), delta_values, spilling),
+            (eq.to_owned(), ValueBacking::from_vec(eq_values, spilling)),
+            (
+                delta.to_owned(),
+                ValueBacking::from_vec(delta_values, spilling),
+            ),
         ]
         .into_iter()
         .chain(
             ats.iter()
                 .zip(at_values.into_iter())
-                .map(|(at, value)| (at.to_owned(), value, spilling)),
+                .map(|(at, value)| (at.to_owned(), ValueBacking::from_vec(value, spilling))),
         )
         .chain(
             delta_bytes
                 .iter()
                 .zip(delta_bytes_values.into_iter())
-                .map(|(delta_byte, value)| (delta_byte.to_owned(), value, spilling)),
+                .map(|(delta_byte, value)| {
+                    (
+                        delta_byte.to_owned(),
+                        ValueBacking::from_vec(value, spilling),
+                    )
+                }),
         )
         .collect())
     } else {
