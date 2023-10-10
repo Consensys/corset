@@ -206,8 +206,8 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
                             .build();
                         columns.insert_column(column)?;
                     }
-                    Expression::Const(ref x, _) => {
-                        constants.insert(handle, x.clone());
+                    Expression::Const(ref x) => {
+                        constants.insert(handle, x.clone().into());
                     }
                     _ => {}
                 }

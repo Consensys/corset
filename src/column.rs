@@ -1,13 +1,13 @@
 use crate::{
-    compiler::{ColumnRef, ConstraintSet, Kind, Magma, Node},
+    compiler::{ColumnRef, Intrinsic, Kind, Magma, Node},
     errors,
     pretty::{opcodes, Base, Pretty},
     structs::Handle,
 };
 use anyhow::*;
 use itertools::Itertools;
-use num_bigint::BigInt;
-use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use num_bigint::{BigInt, Sign};
+use num_traits::{Euclid, FromPrimitive, Num, One, ToPrimitive, Zero};
 use owo_colors::OwoColorize;
 use pairing_ce::{
     bn256::Fr,
@@ -15,12 +15,25 @@ use pairing_ce::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    cell::OnceCell,
     collections::{HashMap, HashSet},
     str::FromStr,
 };
 
 pub type RegisterID = usize;
 pub type ColumnID = usize;
+
+const POW_2_256: OnceCell<BigInt> = OnceCell::new();
+fn clamp_bi(bi: &mut BigInt) {
+    *bi = bi.rem_euclid(POW_2_256.get_or_init(|| {
+        BigInt::from_str_radix(
+            "10000000000000000000000000000000000000000000000000000000000000000",
+            16,
+        )
+        .unwrap()
+    }));
+    assert!(bi.sign() != Sign::Minus);
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, Ord, Hash)]
 pub enum Value {
@@ -78,7 +91,7 @@ impl Value {
     pub(crate) fn sub_assign(&mut self, other: &Value) {
         match (self, other) {
             (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 -= i2,
-            (Value::BigInt(_), Value::Native(_)) => todo!(),
+            (Value::BigInt(i), Value::Native(n)) => todo!("{} -= {}", i, n),
             (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
             (Value::Native(_), Value::BigInt(_)) => todo!(),
             (Value::Native(ref mut f1), Value::Native(ref f2)) => f1.sub_assign(f2),
@@ -158,26 +171,32 @@ impl Value {
         }
     }
 
-    pub(crate) fn bi_to_fr(&mut self) {
+    pub(crate) fn to_native(&mut self) {
         match self {
             Value::BigInt(i) => {
-                *self = if i.bits() <= crate::constants::FIELD_BITSIZE as u64 {
-                    Value::Native(Fr::from_str(&i.to_string()).unwrap())
-                } else {
-                    assert!(i.sign() != num_bigint::Sign::Minus);
+                clamp_bi(i);
+                *self = if i.bits() as usize > crate::constants::FIELD_BITSIZE {
                     let bs = i.to_bytes_le();
                     let mut r = Vec::new();
                     for bytes in &bs.1.iter().chunks(crate::constants::FIELD_BITSIZE / 8) {
                         let bb = bytes.cloned().collect_vec();
-                        dbg!(&bb);
-                        let small_big_int = BigInt::from_bytes_le(num_bigint::Sign::Plus, &bb);
+                        let small_big_int = BigInt::from_bytes_le(Sign::Plus, &bb);
                         r.push(Fr::from_str(&small_big_int.to_string()).unwrap());
                     }
                     r.reverse();
                     Value::ExoNative(r)
+                } else {
+                    Value::Native(Fr::from_str(&i.to_string()).unwrap())
                 };
             }
             _ => {}
+        }
+    }
+
+    pub(crate) fn to_bi(&mut self) {
+        match self {
+            Value::BigInt(_) => {}
+            _ => *self = Value::BigInt(BigInt::from_bytes_le(Sign::Plus, &self.into_bytes())),
         }
     }
 
@@ -214,6 +233,18 @@ impl Value {
             Value::ExoNative(fs) => fs.len() * crate::constants::FIELD_BITSIZE,
         }
     }
+
+    pub(crate) fn is_fr(&self) -> bool {
+        matches!(self, Value::Native(_))
+    }
+
+    pub(crate) fn is_bi(&self) -> bool {
+        matches!(self, Value::BigInt(_))
+    }
+
+    pub(crate) fn is_exo(&self) -> bool {
+        matches!(self, Value::ExoNative(_))
+    }
 }
 impl std::default::Default for Value {
     fn default() -> Value {
@@ -240,9 +271,41 @@ impl From<usize> for Value {
         Value::BigInt(BigInt::from_usize(x).unwrap())
     }
 }
+impl From<isize> for Value {
+    fn from(x: isize) -> Self {
+        let mut bi = BigInt::from_isize(x).unwrap();
+        clamp_bi(&mut bi);
+        Value::BigInt(bi)
+    }
+}
+impl From<i32> for Value {
+    fn from(x: i32) -> Self {
+        let mut bi = BigInt::from_i32(x).unwrap();
+        clamp_bi(&mut bi);
+        Value::BigInt(bi)
+    }
+}
 impl From<&str> for Value {
     fn from(x: &str) -> Self {
         Value::BigInt(BigInt::from_str(x).unwrap())
+    }
+}
+impl From<&Value> for BigInt {
+    fn from(v: &Value) -> Self {
+        match v {
+            Value::BigInt(bi) => bi.clone(),
+            Value::Native(_) => todo!(),
+            Value::ExoNative(_) => todo!(),
+        }
+    }
+}
+impl From<Value> for BigInt {
+    fn from(v: Value) -> Self {
+        match v {
+            Value::BigInt(bi) => bi.clone(),
+            Value::Native(_) => todo!(),
+            Value::ExoNative(_) => todo!(),
+        }
     }
 }
 impl Pretty for Value {
@@ -361,11 +424,11 @@ impl ValueBacking {
         ValueBacking::Function {
             f,
             spilling: 0,
-            end: 0,
+            end: 32,
         }
     }
 
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         match self {
             ValueBacking::Vector { v, spilling } => v.len() - *spilling as usize,
             ValueBacking::Function { end, .. } => *end,
@@ -460,13 +523,13 @@ impl ValueBacking {
     fn concretize(self) -> Self {
         match self {
             ValueBacking::Vector { mut v, spilling } => {
-                v.iter_mut().for_each(|x| x.bi_to_fr());
+                v.iter_mut().for_each(|x| x.to_native());
                 ValueBacking::Vector { v, spilling }
             }
             ValueBacking::Function { f, spilling, end } => ValueBacking::Function {
                 f: Box::new(move |i, columns: &ColumnSet| {
                     let mut v = f(i, columns);
-                    v.as_mut().map(|x| x.bi_to_fr());
+                    v.as_mut().map(|x| x.to_native());
                     v
                 }),
                 spilling,
@@ -611,7 +674,7 @@ impl Column {
         register: Option<RegisterID>,
         padding_value: Option<i64>, // TODO: Value
         used: Option<bool>,
-        kind: Kind<()>,
+        kind: Option<Kind<()>>,
         t: Option<Magma>,
         intrinsic_size_factor: Option<usize>,
         base: Option<Base>,
@@ -621,7 +684,7 @@ impl Column {
             register,
             padding_value: padding_value.map(|v| Value::from(v as usize)),
             used: used.unwrap_or(true),
-            kind,
+            kind: kind.unwrap_or(Kind::Phantom),
             t: t.unwrap_or(Magma::Native),
             intrinsic_size_factor,
             base: base.unwrap_or(Base::Dec),
@@ -781,7 +844,7 @@ impl ColumnSet {
         if h.is_id() {
             h.as_id()
         } else if h.is_handle() {
-            *self.cols.get(h.as_handle()).unwrap()
+            *self.cols.get(h.as_handle()).expect(&h.to_string())
         } else {
             unreachable!()
         }
@@ -951,6 +1014,32 @@ impl ColumnSet {
 
 type RegisterRef = ColumnRef;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum ExoOperation {
+    Add,
+    Sub,
+    Mul,
+}
+impl From<Intrinsic> for ExoOperation {
+    fn from(op: Intrinsic) -> Self {
+        match op {
+            Intrinsic::Add => ExoOperation::Add,
+            Intrinsic::Sub => ExoOperation::Sub,
+            Intrinsic::Mul => ExoOperation::Mul,
+            _ => unreachable!(),
+        }
+    }
+}
+impl std::fmt::Display for ExoOperation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExoOperation::Add => write!(f, "⊕"),
+            ExoOperation::Sub => write!(f, "⊖"),
+            ExoOperation::Mul => write!(f, "⊗"),
+        }
+    }
+}
+
 // TODO: add a targets() function to automatize computation insertion
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Computation {
@@ -958,16 +1047,13 @@ pub enum Computation {
         target: ColumnRef,
         exp: Node,
     },
-    ExoAddition {
-        sources: [Node; 2],
-        target: ColumnRef,
-    },
-    ExoMultiplication {
+    ExoOperation {
+        op: ExoOperation,
         sources: [Node; 2],
         target: ColumnRef,
     },
     ExoConstant {
-        value: BigInt,
+        value: Value,
         target: ColumnRef,
     },
     Interleaved {
@@ -1008,11 +1094,12 @@ impl std::fmt::Display for Computation {
                     froms.iter().map(|c| c.pretty()).join(", ")
                 )
             }
-            Computation::ExoAddition { sources, target } => {
-                write!(f, "+ {:?} -> {}", sources, target)
-            }
-            Computation::ExoMultiplication { sources, target } => {
-                write!(f, "× {:?} -> {}", sources, target)
+            Computation::ExoOperation {
+                op,
+                sources,
+                target,
+            } => {
+                write!(f, "{} {:?} -> {}", op, sources, target)
             }
             Computation::ExoConstant { value, target } => {
                 write!(f, "{} := {}", target, value)
@@ -1046,8 +1133,7 @@ impl Computation {
         match self {
             Computation::Composite { target, .. }
             | Computation::Interleaved { target, .. }
-            | Computation::ExoAddition { target, .. }
-            | Computation::ExoMultiplication { target, .. }
+            | Computation::ExoOperation { target, .. }
             | Computation::ExoConstant { target, .. } => target.to_string(),
             Computation::Sorted { tos, .. } => tos
                 .iter()

@@ -1,16 +1,19 @@
 use handlebars::Handlebars;
 use itertools::Itertools;
 use log::*;
-use num_bigint::BigInt;
 use num_traits::ToPrimitive;
-use pairing_ce::{bn256::Fr, ff::PrimeField};
 use serde::Serialize;
 use std::{collections::HashSet, io::Write, unreachable};
 
 use anyhow::*;
 use convert_case::{Case, Casing};
 
-use crate::{column::Computation, compiler::*, pretty::Pretty, structs::Handle};
+use crate::{
+    column::{Computation, Value},
+    compiler::*,
+    pretty::Pretty,
+    structs::Handle,
+};
 
 const TEMPLATE: &str = include_str!("wizardiop.go");
 
@@ -27,8 +30,7 @@ fn shift(e: &Node, i: isize) -> Node {
                     Intrinsic::Shift
                         .call(&[
                             args[0].clone(),
-                            Expression::Const(value.clone(), Fr::from_str(&value.to_string()))
-                                .into(),
+                            Expression::Const(value.clone().into()).into(),
                         ])
                         .unwrap()
                 }
@@ -40,10 +42,7 @@ fn shift(e: &Node, i: isize) -> Node {
             },
             Expression::Const(..) => e.clone(),
             Expression::Column { .. } => Intrinsic::Shift
-                .call(&[
-                    e.clone(),
-                    Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
-                ])
+                .call(&[e.clone(), Expression::Const(Value::from(i)).into()])
                 .unwrap(),
             Expression::List(xs) => {
                 Expression::List(xs.iter().map(|x| shift(x, i)).collect()).into()
@@ -110,7 +109,7 @@ fn render_maybe_exo_handle(cs: &ConstraintSet, e: &Node) -> String {
 fn render_expression(cs: &ConstraintSet, e: &Node) -> String {
     match e.e() {
         Expression::ArrayColumn { .. } => unreachable!(),
-        Expression::Const(x, _) => format!("symbolic.NewConstant(\"{}\")", x),
+        Expression::Const(x) => format!("symbolic.NewConstant(\"{}\")", x),
         Expression::Column { handle, .. } => {
             format!("{}.AsVariable()", reg_mangle(cs, handle).unwrap())
         }
@@ -412,10 +411,8 @@ fn render_constraint(
             .enumerate()
             .flat_map(|(i, x)| render_constraint(cs, &format!("{}#{}", name, i), domain.clone(), x))
             .collect(),
-        Expression::ExoColumn { handle, .. }
-            if cs.columns.register(handle).unwrap().width() > 1 =>
-        {
-            let register = cs.columns.register(handle).unwrap();
+        Expression::ExoColumn { handle, .. } => {
+            let register = cs.columns.register_of(handle);
 
             (0..register.width())
                 .map(|i| {

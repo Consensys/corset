@@ -75,8 +75,9 @@ impl ComputationDag {
                     self.depends(from, target);
                 }
             }
-            Computation::ExoAddition { sources, target }
-            | Computation::ExoMultiplication { sources, target } => {
+            Computation::ExoOperation {
+                sources, target, ..
+            } => {
                 for source in sources.iter().flat_map(|s| s.dependencies()) {
                     self.depends(&source, target);
                 }

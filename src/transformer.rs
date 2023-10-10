@@ -12,13 +12,13 @@ use anyhow::*;
 use log::*;
 
 pub use concretize::concretize;
-pub use ifs::expand_ifs;
-pub use inverses::expand_invs;
-pub use nhood::validate_nhood;
-pub use selectors::expand_constraints;
-pub use shifter::lower_shifts;
-pub use sort::sorts;
-pub use splatter::splatter;
+use ifs::expand_ifs;
+use inverses::expand_invs;
+use nhood::validate_nhood;
+use selectors::expand_constraints;
+use shifter::lower_shifts;
+use sort::sorts;
+use splatter::splatter;
 pub use statics::precompute;
 
 use crate::{
@@ -28,26 +28,31 @@ use crate::{
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum AutoConstraint {
-    Sorts,
-    Nhood,
+    Sorts = 1,
+    Nhood = 2,
 }
 impl AutoConstraint {
     fn apply(&self, cs: &mut ConstraintSet) -> Result<()> {
-        match self {
-            AutoConstraint::Sorts => sorts(cs),
-            AutoConstraint::Nhood => validate_nhood(cs),
+        if (cs.transformations & *self as u32) == 0 {
+            info!("Applying {:?}", self);
+            match self {
+                AutoConstraint::Sorts => sorts(cs)?,
+                AutoConstraint::Nhood => validate_nhood(cs)?,
+            }
+            cs.auto_constraints |= *self as u32;
         }
+        Ok(())
     }
 }
 
-#[derive(Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Copy, Clone)]
 pub(crate) enum ExpansionLevel {
-    None,
-    LowerShifts,
-    ExpandsIfs,
-    Splatter,
-    ExpandConstraints,
-    ExpandInvs,
+    None = 0,
+    LowerShifts = 1,
+    ExpandsIfs = 2,
+    Splatter = 4,
+    ColumnizeExpressions = 8,
+    ExpandInvs = 16,
 }
 impl From<u8> for ExpansionLevel {
     fn from(x: u8) -> Self {
@@ -56,7 +61,7 @@ impl From<u8> for ExpansionLevel {
             1 => ExpansionLevel::LowerShifts,
             2 => ExpansionLevel::ExpandsIfs,
             3 => ExpansionLevel::Splatter,
-            4 => ExpansionLevel::ExpandConstraints,
+            4 => ExpansionLevel::ColumnizeExpressions,
             5 | _ => ExpansionLevel::ExpandInvs,
         }
     }
@@ -64,6 +69,23 @@ impl From<u8> for ExpansionLevel {
 impl ExpansionLevel {
     pub fn all() -> u8 {
         5
+    }
+
+    pub fn apply(&self, cs: &mut ConstraintSet) -> Result<()> {
+        if (cs.transformations & *self as u32) == 0 {
+            info!("Applying {:?}", self);
+            match self {
+                ExpansionLevel::None => {}
+                ExpansionLevel::LowerShifts => lower_shifts(cs),
+                ExpansionLevel::ExpandsIfs => expand_ifs(cs),
+                ExpansionLevel::Splatter => splatter(cs),
+                ExpansionLevel::ColumnizeExpressions => expand_constraints(cs)?,
+                ExpansionLevel::ExpandInvs => expand_invs(cs)?,
+            }
+            cs.transformations |= *self as u32;
+        }
+
+        Ok(())
     }
 }
 
@@ -78,26 +100,18 @@ pub(crate) fn expand_to(
         c.apply(cs)?;
     }
 
-    if level >= ExpansionLevel::LowerShifts {
-        info!("Lowering shifts");
-        lower_shifts(cs);
+    for transformation in [
+        ExpansionLevel::LowerShifts,
+        ExpansionLevel::ExpandsIfs,
+        ExpansionLevel::Splatter,
+        ExpansionLevel::ColumnizeExpressions,
+        ExpansionLevel::ExpandInvs,
+    ] {
+        if level >= transformation {
+            transformation.apply(cs)?;
+        }
     }
-    if level >= ExpansionLevel::ExpandsIfs {
-        info!("Expanding Ifs");
-        expand_ifs(cs);
-    }
-    if level >= ExpansionLevel::Splatter {
-        info!("Splattering");
-        splatter(cs);
-    }
-    if level >= ExpansionLevel::ExpandConstraints {
-        info!("Expanding constraints");
-        expand_constraints(cs)?;
-    }
-    if level >= ExpansionLevel::ExpandInvs {
-        info!("Expanding inverses");
-        expand_invs(cs)?;
-    }
+
     cs.convert_refs_to_ids()?;
     cs.validate()
 }

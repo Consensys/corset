@@ -19,7 +19,6 @@ fn do_expand_expr(
         Expression::Column { .. } | Expression::ExoColumn { .. } => Ok(e.clone()),
         _ => {
             let new_handle = Handle::new(module, expression_to_name(e, "#EXPAND"));
-            validate_computation(new_cs, e, &new_handle);
             // TODO: replace name with exprs hash to 100% ensure bijectivity handle/expression
             // Only insert the computation if a column matching the expression has not already been created
             if let Result::Ok(_) = cols.insert_column_and_register(
@@ -28,6 +27,7 @@ fn do_expand_expr(
                     .kind(Kind::Phantom)
                     .build(),
             ) {
+                validate_computation(new_cs, e, &new_handle);
                 let _ = comps.insert(
                     &new_handle.clone().into(),
                     Computation::Composite {

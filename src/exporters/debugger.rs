@@ -124,7 +124,7 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
                 tty.write("endif".color(c).bold().to_string());
             }
         },
-        Expression::Const(x, _) => tty.write(x.to_string()),
+        Expression::Const(x) => tty.write(x.to_string()),
         Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
             let color = handle.to_string().chars().fold(0, |ax, c| ax + c as usize) % 255 + 1;
             tty.write(
@@ -295,16 +295,15 @@ fn render_computations(cs: &ConstraintSet) {
                 "Sorting constraints for {}",
                 sorted.iter().map(|c| cs.handle(c).pretty()).join(", ")
             ),
-            Computation::ExoAddition { sources, target } => println!(
-                "{} ≜ {} ⊕ {}",
+            Computation::ExoOperation {
+                op,
+                sources,
+                target,
+            } => println!(
+                "{} ≜ {} {} {}",
                 target.pretty(),
                 sources[0].pretty(),
-                sources[1].pretty(),
-            ),
-            Computation::ExoMultiplication { sources, target } => println!(
-                "{} ≜ {} ⊗ {}",
-                target.pretty(),
-                sources[0].pretty(),
+                op,
                 sources[1].pretty(),
             ),
             Computation::ExoConstant { value, target } => {

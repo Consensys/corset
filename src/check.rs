@@ -10,7 +10,7 @@ use anyhow::*;
 use log::*;
 
 use crate::{
-    column::{ColumnSet, Value},
+    column::{ColumnSet, Value, ValueBacking},
     compiler::{Constraint, ConstraintSet, Domain, Expression, Node},
     pretty::*,
     structs::Handle,
@@ -367,28 +367,18 @@ fn check_constraint(
 
 fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Result<()> {
     // Compute the LC \sum_k (k+1) × x_k[i]
-    fn pseudo_rlc(cols: &[Vec<Value>], i: usize) -> Value {
+    fn pseudo_rlc(cols: &[&ValueBacking], i: usize, columns: &ColumnSet) -> Value {
         let mut ax = Value::zero();
+
         for (j, col) in cols.iter().enumerate() {
             let mut x = Value::from(j + 2);
-            x.mul_assign(&col[i]);
+            let mut col_value = col.get(i as isize, false, columns).unwrap();
+            col_value.to_bi();
+
+            x.mul_assign(&col_value);
             ax.add_assign(&x);
         }
         ax
-    }
-
-    // Given a list of column expression to PLookup, retrieve the corresponding values
-    fn compute_cols(exps: &[Node], cs: &ConstraintSet) -> Result<Vec<Vec<Value>>> {
-        let cols = exps
-            .iter()
-            .map(|e| crate::compute::compute_composite_static(cs, e))
-            .collect::<Result<Vec<_>>>()
-            .with_context(|| anyhow!("while computing {:?}", exps))?;
-        if !cols.iter().all(|p| p.len() == cols[0].len()) {
-            bail!("all columns should be of the same length")
-        }
-
-        Ok(cols)
     }
 
     // Check that we have the same number of columns; should be guaranteed by the com
@@ -419,34 +409,73 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
         (false, false) => {}
     }
 
-    // Compute the final columns
-    let parent_cols = compute_cols(parents, cs)?;
-    let child_cols = compute_cols(children, cs)?;
-    if parent_cols.get(0).map(|c| c.len()).unwrap_or(0) == 0
-        || child_cols.get(0).map(|c| c.len()).unwrap_or(0) == 0
+    let parent_cols = parents
+        .iter()
+        .map(|n| {
+            if let Expression::Column { handle, .. } = n.e() {
+                handle
+            } else {
+                unreachable!()
+            }
+        })
+        .collect::<Vec<_>>();
+    let child_cols = parents
+        .iter()
+        .map(|n| {
+            if let Expression::Column { handle, .. } = n.e() {
+                handle
+            } else {
+                unreachable!()
+            }
+        })
+        .collect::<Vec<_>>();
+    if parent_cols
+        .get(0)
+        .map(|p| cs.columns.register_of(p).len().unwrap())
+        .unwrap_or(0)
+        == 0
+        || child_cols
+            .get(0)
+            .map(|c| cs.columns.register_of(c).len().unwrap())
+            .unwrap_or(0)
+            == 0
     {
         debug!("empty plookup; skipping");
         return Ok(());
     }
 
-    let hashes: HashSet<_> = (0..parent_cols[0].len())
-        .map(|i| pseudo_rlc(&parent_cols, i))
+    let parent_backings = parent_cols
+        .iter()
+        .map(|h| cs.columns.backing(h).unwrap())
+        .collect::<Vec<_>>();
+
+    let child_backings = child_cols
+        .iter()
+        .map(|h| cs.columns.backing(h).unwrap())
+        .collect::<Vec<_>>();
+
+    let hashes: HashSet<_> = (0..parent_backings[0].len())
+        .map(|i| pseudo_rlc(&parent_backings, i, &cs.columns))
         .collect();
 
-    for i in 0..child_cols[0].len() {
-        if !hashes.contains(&pseudo_rlc(&child_cols, i)) {
+    for i in 0..child_backings[0].len() {
+        if !hashes.contains(&pseudo_rlc(&child_backings, i, &cs.columns)) {
             bail!(
                 "@{}: {{\n{}\n}} not found in {{{}}}",
                 i,
                 children
                     .iter()
-                    .zip(child_cols.iter().map(|c| &c[i]))
-                    .map(|(k, v)| format!("{}: {}", k, v.pretty()))
+                    .zip(
+                        child_backings
+                            .iter()
+                            .map(|v| v.get(i as isize, false, &cs.columns).unwrap())
+                    )
+                    .map(|(k, v)| format!("{}: {}", k.pretty(), v.pretty()))
                     .collect::<Vec<_>>()
                     .join("\n"),
                 parents
                     .iter()
-                    .map(|k| format!("{}", k))
+                    .map(|k| k.pretty())
                     .collect::<Vec<_>>()
                     .join(", ")
             );

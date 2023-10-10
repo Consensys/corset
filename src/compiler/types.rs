@@ -272,7 +272,7 @@ impl std::convert::TryFrom<&str> for Magma {
             ":byte" => Ok(Magma::Byte),
             ":native" | ":natural" => Ok(Magma::Native),
             s => match re.captures(s).and_then(|cs| cs.get(1)) {
-                Some(x) => Ok(Magma::Integer(dbg!(x.as_str()).parse::<usize>().unwrap())),
+                Some(x) => Ok(Magma::Integer(x.as_str().parse::<usize>().unwrap())),
                 None => bail!("unknown type: `{}`", s),
             },
         }

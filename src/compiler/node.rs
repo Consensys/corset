@@ -3,10 +3,8 @@ use crate::compiler::Domain;
 use anyhow::*;
 use cached::Cached;
 use num_bigint::BigInt;
-use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use num_traits::{One, ToPrimitive, Zero};
 use owo_colors::{colored::Color, OwoColorize};
-use pairing_ce::ff::Field;
-use pairing_ce::{bn256::Fr, ff::PrimeField};
 use serde::{Deserialize, Serialize};
 use std::write;
 use std::{
@@ -162,7 +160,7 @@ pub enum Expression {
         func: Intrinsic,
         args: Vec<Node>,
     },
-    Const(BigInt, Option<Fr>), // TODO: see non-native constants
+    Const(Value),
     Column {
         handle: ColumnRef,
         kind: Kind<Node>,
@@ -210,7 +208,7 @@ impl Node {
     }
     pub fn from_const(x: isize) -> Node {
         Node {
-            _e: Expression::Const(BigInt::from_isize(x).unwrap(), Fr::from_str(&x.to_string())),
+            _e: Expression::Const(x.into()),
             _t: Some(Type::Scalar(match x {
                 0 | 1 => Magma::Boolean,
                 _ => Magma::Native,
@@ -219,13 +217,14 @@ impl Node {
         }
     }
     pub fn from_bigint(x: BigInt) -> Node {
+        let magma = if x.is_one() || x.is_zero() {
+            Magma::Boolean
+        } else {
+            Magma::Native
+        };
         Node {
-            _e: Expression::Const(x.to_owned(), Fr::from_str(&x.to_string())),
-            _t: Some(Type::Scalar(if x.is_one() || x.is_zero() {
-                Magma::Boolean
-            } else {
-                Magma::Native
-            })),
+            _e: Expression::Const(x.into()),
+            _t: Some(Type::Scalar(magma)),
             dbg: None,
         }
     }
@@ -300,10 +299,10 @@ impl Node {
         }
     }
     pub fn one() -> Node {
-        Self::from_expr(Expression::Const(One::one(), Some(Fr::one())))
+        Self::from_expr(Expression::Const(Value::one()))
     }
     pub fn zero() -> Node {
-        Self::from_expr(Expression::Const(Zero::zero(), Some(Fr::zero())))
+        Self::from_expr(Expression::Const(Value::zero()))
     }
     pub fn is_constant(&self) -> bool {
         matches!(self.e(), Expression::Const(..))
@@ -322,8 +321,8 @@ impl Node {
             Expression::Funcall { func, args } => {
                 func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
             }
-            Expression::Const(ref x, _) => {
-                if Zero::is_zero(x) || One::is_one(x) {
+            Expression::Const(ref x) => {
+                if x.is_zero() || x.is_one() {
                     Type::Scalar(Magma::Boolean)
                 } else {
                     Type::Scalar(Magma::Native)
@@ -351,7 +350,7 @@ impl Node {
         fn rec_pretty(s: &Node, depth: usize, cs: &ConstraintSet) -> String {
             let c = &COLORS[depth % COLORS.len()];
             match s.e() {
-                Expression::Const(x, _) => format!("{}", x).color(*c).to_string(),
+                Expression::Const(x) => format!("{}", x).color(*c).to_string(),
                 Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
                     cs.handle(handle).to_string().color(*c).to_string()
                 }
@@ -417,7 +416,7 @@ impl Node {
                     args[1].may_overflow() || args.get(2).map(|a| a.may_overflow()).unwrap_or(false)
                 }
             },
-            Expression::Const(_, _) => false,
+            Expression::Const(_) => false,
             Expression::Column { .. } => false,
             Expression::ExoColumn { .. } => false,
             Expression::ArrayColumn { .. } => false,
@@ -508,7 +507,7 @@ impl Node {
             Expression::ExoColumn { handle, .. } => set_id(handle),
             Expression::List(xs) => xs.iter_mut().for_each(|x| x.add_id_to_handles(set_id)),
 
-            Expression::ArrayColumn { .. } | Expression::Const(_, _) | Expression::Void => {}
+            Expression::ArrayColumn { .. } | Expression::Const(_) | Expression::Void => {}
         }
     }
 
@@ -593,27 +592,10 @@ impl Node {
                 }
                 x => bail!("{} is not known at compile-time", x.to_string().red()),
             },
-            Expression::Const(v, _) => Ok(v.to_owned()),
+            Expression::Const(v) => Ok(v.into()),
             _ => bail!("{} is not known at compile-time", self.to_string().red()),
         }
     }
-
-    // #[allow(dead_code)]
-    // pub fn eval_trace(
-    //     &self,
-    //     i: isize,
-    //     get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-    //     cache: &mut Option<cached::SizedCache<Fr, Fr>>,
-    //     settings: &EvalSettings,
-    // ) -> (Option<Value>, HashMap<String, Option<Value>>) {
-    //     let mut trace = HashMap::new();
-    //     let r = self.eval_fold(i, get, cache, settings, &mut |n, v| {
-    //         if !matches!(n.e(), Expression::List(_) | Expression::Const(..)) {
-    //             trace.insert(n.to_string(), *v);
-    //         }
-    //     });
-    //     (r, trace)
-    // }
 
     pub fn eval<F: Fn(&ColumnRef, isize, bool) -> Option<Value>>(
         &self,
@@ -711,7 +693,7 @@ impl Node {
                     }
                 }
             },
-            Expression::Const(v, x) => Some(v.into()),
+            Expression::Const(v) => Some(v.clone().into()),
             Expression::Column { handle, .. } => get(handle, i, settings.wrap),
             Expression::ExoColumn { handle, .. } => get(handle, i, settings.wrap),
             Expression::List(xs) => xs
@@ -872,7 +854,7 @@ impl Node {
                         ));
                     }
                 }
-                Expression::Const(x, _) => {
+                Expression::Const(x) => {
                     let c = if dim && zero_context {
                         Color::BrightBlack
                     } else {
@@ -976,7 +958,7 @@ impl Display for Node {
         }
 
         match self.e() {
-            Expression::Const(x, _) => write!(f, "{}", x),
+            Expression::Const(x) => write!(f, "{}", x),
             Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
                 write!(f, "{}", handle)
             }
@@ -1002,7 +984,7 @@ impl Debug for Node {
         }
 
         match self.e() {
-            Expression::Const(x, _) => write!(f, "{}", x)?,
+            Expression::Const(x) => write!(f, "{}", x)?,
             Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
                 write!(f, "{}", handle,)?
             }

@@ -1,21 +1,47 @@
-use crate::{
-    column::Column,
-    compiler::{Constraint, ConstraintSet, Expression, Kind, Magma},
-    pretty::Pretty,
-    structs::Handle,
-};
-use log::*;
+use crate::compiler::{Constraint, ConstraintSet, Expression, Node};
 
-fn iotaize(h: &Handle, i: usize) -> Vec<Handle> {
-    (0..i).map(|i| h.iota(i)).collect()
+impl Node {
+    fn concretize(&mut self) {
+        match self.e_mut() {
+            Expression::Funcall { func, args } => {
+                for a in args {
+                    a.concretize()
+                }
+            }
+            Expression::Const(ref mut x) => x.to_native(),
+            Expression::Column { .. } => {}
+            Expression::ArrayColumn { .. } => {}
+            Expression::ExoColumn { .. } => {}
+            Expression::List(ls) => {
+                for l in ls {
+                    l.concretize()
+                }
+            }
+            Expression::Void => {}
+        }
+    }
 }
 
-fn concretize_registers(cs: &mut ConstraintSet) {
-    for r in cs.columns.registers.iter_mut() {
-        r.concretize();
+impl ConstraintSet {
+    fn concretize_constraints(&mut self) {
+        for c in self.constraints.iter_mut() {
+            match c {
+                Constraint::Vanishes { expr, .. } => expr.concretize(),
+                Constraint::Plookup { .. } => {}
+                Constraint::Permutation { .. } => {}
+                Constraint::InRange { ref mut exp, .. } => exp.concretize(),
+            }
+        }
+    }
+
+    fn concretize_registers(&mut self) {
+        for r in self.columns.registers.iter_mut() {
+            r.concretize();
+        }
     }
 }
 
 pub fn concretize(cs: &mut ConstraintSet) {
-    concretize_registers(cs);
+    cs.concretize_constraints();
+    cs.concretize_registers();
 }

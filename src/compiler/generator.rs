@@ -251,6 +251,9 @@ impl FuncVerifier<Node> for Intrinsic {
 
 pub type PerspectiveTable = HashMap<String, HashMap<String, Node>>;
 
+pub const ADDER_MODULE: &'static str = "#adder";
+pub const MULER_MODULE: &'static str = "#muler";
+
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct ConstraintSet {
     pub columns: ColumnSet,
@@ -258,6 +261,8 @@ pub struct ConstraintSet {
     pub constants: HashMap<Handle, BigInt>,
     pub computations: ComputationTable,
     pub perspectives: PerspectiveTable,
+    pub transformations: u32,
+    pub auto_constraints: u32,
 }
 impl ConstraintSet {
     pub fn new(
@@ -273,6 +278,8 @@ impl ConstraintSet {
             constants,
             computations,
             perspectives,
+            transformations: 0,
+            auto_constraints: 0,
         };
         r.convert_refs_to_ids()?;
         r.allocate_registers();
@@ -613,8 +620,9 @@ impl ConstraintSet {
                 Computation::SortingConstraints { .. } => {
                     // These computations are built with IDs from the very start
                 }
-                Computation::ExoAddition { sources, target }
-                | Computation::ExoMultiplication { sources, target } => {
+                Computation::ExoOperation {
+                    sources, target, ..
+                } => {
                     for source in sources.iter_mut() {
                         source.add_id_to_handles(&convert_to_id);
                     }
@@ -702,8 +710,7 @@ impl ConstraintSet {
                     self.length_multiplier(&froms[0])
                 }
                 Computation::SortingConstraints { .. } => 1,
-                Computation::ExoAddition { sources, .. }
-                | Computation::ExoMultiplication { sources, .. } => sources
+                Computation::ExoOperation { sources, .. } => sources
                     .iter()
                     .flat_map(|s| s.dependencies())
                     .next()
@@ -763,9 +770,8 @@ impl ConstraintSet {
                                 Computation::Sorted { .. } => Value::zero(),
                                 Computation::CyclicFrom { .. } => Value::zero(),
                                 Computation::SortingConstraints { .. } => Value::zero(),
-                                Computation::ExoAddition { .. } => Value::zero(), // TODO: FIXME:
-                                Computation::ExoMultiplication { .. } => Value::zero(), // TODO: FIXME:
-                                Computation::ExoConstant { .. } => Value::zero(), // TODO: FIXME:
+                                Computation::ExoOperation { .. } => Value::zero(), // TODO: FIXME:
+                                Computation::ExoConstant { .. } => Value::zero(),  // TODO: FIXME:
                             })
                             .unwrap_or_else(Value::zero)
                     })
@@ -908,8 +914,9 @@ impl ConstraintSet {
                         ))
                     }
                 }
-                Computation::ExoAddition { sources, target }
-                | Computation::ExoMultiplication { sources, target } => {
+                Computation::ExoOperation {
+                    sources, target, ..
+                } => {
                     if std::iter::once(target.clone())
                         .chain(sources.iter().flat_map(|s| s.dependencies()))
                         .any(|r| !r.is_id())
@@ -1010,10 +1017,7 @@ fn apply_form(
                 for i in is.iter() {
                     let mut for_ctx = ctx.derive(&uniquify(format!("{}-for-{}", ctx.name(), i)))?;
 
-                    for_ctx.insert_symbol(
-                        i_name,
-                        Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
-                    )?;
+                    for_ctx.insert_symbol(i_name, Expression::Const(Value::from(i)).into())?;
 
                     if let Some(r) = reduce(&body.clone(), &mut for_ctx, settings)? {
                         t = t.max(r.t());
@@ -1078,7 +1082,7 @@ fn apply_form(
                 | Expression::Void
                 | Expression::ArrayColumn { .. }
                 | Expression::Funcall { .. }
-                | Expression::Const(_, _) => panic!(),
+                | Expression::Const(_) => panic!(),
                 Expression::List(xs) => {
                     if xs.len() < 2 {
                         Ok(Some(body))
@@ -1256,15 +1260,13 @@ fn apply(
 pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<Option<Node>> {
     match &e.class {
         Token::Keyword(_) | Token::Domain(_) => Ok(None),
-        Token::Value(x) => Ok(Some(
-            Node::from(Expression::Const(x.clone(), Fr::from_str(&x.to_string()))).with_type(
-                if *x >= Zero::zero() && *x <= One::one() {
-                    Type::Scalar(Magma::Boolean)
-                } else {
-                    Type::Scalar(Magma::Native)
-                },
-            ),
-        )),
+        Token::Value(x) => Ok(Some(Node::from(Expression::Const(x.into())).with_type(
+            if *x >= Zero::zero() && *x <= One::one() {
+                Type::Scalar(Magma::Boolean)
+            } else {
+                Type::Scalar(Magma::Native)
+            },
+        ))),
         Token::Symbol(name) => Ok(Some(
             ctx.resolve_symbol(name)
                 .with_context(|| make_ast_error(e))?,

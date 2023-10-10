@@ -21,9 +21,6 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
         Token::IndexedSymbol { name: _, index } => reduce(index, ctx),
         Token::DefConstraint { name, .. } => ctx.insert_constraint(name),
         Token::DefModule(name) => {
-            if name.starts_with("#") {
-                bail!("module names starting with # are reserved");
-            }
             *ctx = ctx.switch_to_module(name)?.public(true);
             Ok(())
         }
@@ -40,7 +37,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                 .fold(Ok(()), |ax, col| ax.and(reduce(col, &mut new_ctx)))
         }
         Token::DefColumn {
-            name: col,
+            name,
             t,
             kind,
             padding_value,
@@ -50,7 +47,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             let symbol = Node::column()
                 .handle(Handle::maybe_with_perspective(
                     module_name,
-                    col,
+                    name,
                     ctx.perspective(),
                 ))
                 .base(*base)
@@ -63,7 +60,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                 .and_padding_value(*padding_value)
                 .t(t.magma())
                 .build();
-            ctx.insert_symbol(col, symbol)
+            ctx.insert_symbol(name, symbol)
         }
         Token::DefInterleaving { target, froms: _ } => {
             let node = Node::column()
@@ -80,12 +77,12 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             ctx.insert_symbol(&target.name, node)
         }
         Token::DefArrayColumn {
-            name: col,
+            name,
             domain: range,
             t,
             base,
         } => {
-            let handle = Handle::maybe_with_perspective(ctx.module(), col, ctx.perspective());
+            let handle = Handle::maybe_with_perspective(ctx.module(), name, ctx.perspective());
             // those are inserted for symbol lookups
             for i in range.iter() {
                 let ith_handle = handle.ith(i.try_into().unwrap());
@@ -102,7 +99,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
 
             // and this one for validating calls to `nth`
             ctx.insert_symbol(
-                col,
+                name,
                 Node::array_column()
                     .handle(handle)
                     .domain(range.to_owned())

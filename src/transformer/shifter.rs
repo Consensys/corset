@@ -1,4 +1,3 @@
-use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 
 use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
@@ -16,15 +15,12 @@ fn do_lower_shifts(e: &mut Node, depth: isize) {
                 }
             }
         }
-        Expression::Const(_, _) => (),
+        Expression::Const(_) => (),
         Expression::Column { .. } | Expression::ExoColumn { .. } => {
             if depth != 0 {
                 let column = e.clone();
                 *e = Intrinsic::Shift
-                    .call(&[
-                        column,
-                        Node::from_expr(Expression::Const(BigInt::from(depth), None)),
-                    ])
+                    .call(&[column, Expression::Const(depth.into()).into()])
                     .unwrap();
             }
         }

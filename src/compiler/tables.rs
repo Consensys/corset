@@ -310,6 +310,9 @@ impl Scope {
     }
 
     pub fn switch_to_module(&mut self, name: &str) -> Result<Scope> {
+        if name.starts_with('#') {
+            bail!("names starting with `#` are reserved for internal usage")
+        }
         let root = self.tree.borrow().root();
         let maybe_child = self.tree.borrow().find_child(root, |n| n.name == name);
         match maybe_child {
@@ -685,6 +688,9 @@ impl Scope {
     }
 
     pub fn insert_symbol(&mut self, name: &str, e: Node) -> Result<()> {
+        if name.starts_with('#') {
+            bail!("names starting with `#` are reserved for intenal usage")
+        }
         if data!(self).symbols.contains_key(name) {
             bail!(symbols::Error::SymbolAlreadyExists(
                 name.to_owned(),
@@ -802,17 +808,15 @@ impl Scope {
                 name.to_owned(),
                 data!(self).name.to_owned()
             ))
-        } else if let Some(fr) = pairing_ce::bn256::Fr::from_str(&value.to_string()) {
+        } else {
             data_mut!(self).symbols.insert(
                 name.to_owned(),
                 Symbol::Final(
-                    Node::from_expr(Expression::Const(value, Some(fr))).with_type(t),
+                    Node::from_expr(Expression::Const(value.into())).with_type(t),
                     false,
                 ),
             );
             Ok(())
-        } else {
-            bail!("{} is not an Fr element", value.to_string().red().bold())
         }
     }
 

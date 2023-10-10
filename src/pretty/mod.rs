@@ -139,7 +139,7 @@ impl Pretty for Node {
         fn rec_pretty(s: &Node, depth: usize) -> String {
             let c = &COLORS[depth % COLORS.len()];
             match s.e() {
-                Expression::Const(x, _) => format!("{}", x).color(*c).to_string(),
+                Expression::Const(x) => format!("{}", x).color(*c).to_string(),
                 Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
                     handle.to_string().color(*c).to_string()
                 }

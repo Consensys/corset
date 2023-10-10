@@ -1,13 +1,12 @@
 use anyhow::{anyhow, bail, Context, Result};
 use log::*;
 use logging_timer::time;
-use num_bigint::BigInt;
 use owo_colors::OwoColorize;
 use rayon::prelude::*;
 use std::{cmp::Ordering, collections::HashSet};
 
 use crate::{
-    column::{ColumnSet, Computation, Value, ValueBacking},
+    column::{ColumnSet, Computation, ExoOperation, Value, ValueBacking},
     compiler::{ColumnRef, ConstraintSet, EvalSettings, Node},
     dag::ComputationDag,
     errors::RuntimeError,
@@ -16,6 +15,113 @@ use crate::{
     structs::Handle,
 };
 
+/// Given a set of operation and their arguments, generate the traces required
+/// to prove the operation and its results.
+fn compute_ancillaries(
+    cs: &mut ConstraintSet,
+    exo_operations: HashSet<(ExoOperation, Value, Value)>,
+) -> Result<()> {
+    let mut add_ops = Vec::with_capacity(16 * exo_operations.len());
+    let mut add_args1 = Vec::with_capacity(16 * exo_operations.len());
+    let mut add_args2 = Vec::with_capacity(16 * exo_operations.len());
+    let mut add_results = Vec::with_capacity(16 * exo_operations.len());
+    let mut add_done = Vec::with_capacity(16 * exo_operations.len());
+
+    let mut mul_args1 = Vec::with_capacity(16 * exo_operations.len());
+    let mut mul_args2 = Vec::with_capacity(16 * exo_operations.len());
+    let mut mul_results = Vec::with_capacity(16 * exo_operations.len());
+    let mut mul_done = Vec::with_capacity(16 * exo_operations.len());
+    let do_it = !exo_operations.is_empty();
+    for (op, arg1, arg2) in exo_operations.into_iter() {
+        // TODO: actually compute the trace
+        // TODO: incorporate the constraints
+        let mut r = arg1.clone();
+        match op {
+            ExoOperation::Add => {
+                r.add_assign(&arg2);
+            }
+            ExoOperation::Sub => {
+                r.sub_assign(&arg2);
+            }
+            ExoOperation::Mul => {
+                r.mul_assign(&arg2);
+            }
+        }
+
+        match op {
+            ExoOperation::Add | ExoOperation::Sub => {
+                add_ops.push(if op == ExoOperation::Add {
+                    Value::one()
+                } else {
+                    Value::zero()
+                });
+                add_args1.push(arg1);
+                add_args2.push(arg2);
+                add_results.push(r);
+                add_done.push(Value::one());
+            }
+            ExoOperation::Mul => {
+                mul_args1.push(arg1);
+                mul_args2.push(arg2);
+                mul_results.push(r);
+                mul_done.push(Value::one());
+            }
+        }
+    }
+
+    if do_it {
+        use crate::compiler::generator::{ADDER_MODULE, MULER_MODULE};
+        let h: ColumnRef = Handle::new(ADDER_MODULE, "op").into();
+        trace!("Filling {}", h.pretty());
+        cs.columns
+            .set_raw_value(&h, add_ops, 0)
+            .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+        let h: ColumnRef = Handle::new(ADDER_MODULE, "arg-1").into();
+        trace!("Filling {}", h.pretty());
+        cs.columns
+            .set_raw_value(&h, add_args1, 0)
+            .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+        let h: ColumnRef = Handle::new(ADDER_MODULE, "arg-2").into();
+        trace!("Filling {}", h.pretty());
+        cs.columns
+            .set_raw_value(&h, add_args2, 0)
+            .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+        let h: ColumnRef = Handle::new(ADDER_MODULE, "result").into();
+        trace!("Filling {}", h.pretty());
+        cs.columns
+            .set_raw_value(&h, add_results, 0)
+            .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+        let h: ColumnRef = Handle::new(ADDER_MODULE, "done").into();
+        trace!("Filling {}", h.pretty());
+        cs.columns
+            .set_raw_value(&h, add_done, 0)
+            .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+
+        let h: ColumnRef = Handle::new(MULER_MODULE, "arg-1").into();
+        trace!("Filling {}", h.pretty());
+        cs.columns
+            .set_raw_value(&h, mul_args1, 0)
+            .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+        let h: ColumnRef = Handle::new(MULER_MODULE, "arg-2").into();
+        trace!("Filling {}", h.pretty());
+        cs.columns
+            .set_raw_value(&h, mul_args2, 0)
+            .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+        let h: ColumnRef = Handle::new(MULER_MODULE, "result").into();
+        trace!("Filling {}", h.pretty());
+        cs.columns
+            .set_raw_value(&h, mul_results, 0)
+            .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+        let h: ColumnRef = Handle::new(MULER_MODULE, "done").into();
+        trace!("Filling {}", h.pretty());
+        cs.columns
+            .set_raw_value(&h, mul_done, 0)
+            .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+    }
+
+    Ok(())
+}
+
 #[time("info", "Computing expanded columns")]
 fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
     // Computations are split in sequentially dependent sets, where each set as
@@ -23,8 +129,7 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
     // computations within a set can be processed in parallel
     let jobs = ComputationDag::from_computations(cs.computations.iter());
 
-    let mut exo_additions = HashSet::new();
-    let mut exo_multiplications = HashSet::new();
+    let mut exo_operations = HashSet::new();
 
     for processing_slice in jobs.job_slices() {
         trace!("Processing computation slice {:?}", processing_slice);
@@ -39,9 +144,7 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
         for r in comps
             .iter()
             // .into_par_iter() // TODO: is that a bottleneck?
-            .filter_map(|comp| {
-                apply_computation(cs, &comp, &mut exo_additions, &mut exo_multiplications)
-            })
+            .filter_map(|comp| apply_computation(cs, &comp, &mut exo_operations))
             .collect::<Vec<_>>()
             .into_iter()
         {
@@ -59,46 +162,7 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
         }
     }
 
-    let mut ops = Vec::with_capacity(16 * exo_additions.len());
-    let mut args1 = Vec::with_capacity(16 * exo_additions.len());
-    let mut args2 = Vec::with_capacity(16 * exo_additions.len());
-    let mut results = Vec::with_capacity(16 * exo_additions.len());
-    for (op, arg1, arg2) in exo_additions.into_iter() {
-        let mut r = arg1.clone();
-        if op {
-            r.add_assign(&arg2);
-        } else {
-            r.sub_assign(&arg2);
-        }
-
-        ops.push(if op { Value::one() } else { Value::zero() });
-        args1.push(arg1);
-        args2.push(arg2);
-        results.push(r);
-    }
-
-    let h: ColumnRef = Handle::new("#adder", "op").into();
-    trace!("Filling {}", h.pretty());
-    cs.columns
-        .set_raw_value(&h, ops, 0)
-        .with_context(|| anyhow!("while filling {}", h.pretty()))?;
-    let h: ColumnRef = Handle::new("#adder", "arg-1").into();
-    trace!("Filling {}", h.pretty());
-    cs.columns
-        .set_raw_value(&h, args1, 0)
-        .with_context(|| anyhow!("while filling {}", h.pretty()))?;
-
-    let h: ColumnRef = Handle::new("#adder", "arg-2").into();
-    trace!("Filling {}", h.pretty());
-    cs.columns
-        .set_raw_value(&h, args2, 0)
-        .with_context(|| anyhow!("while filling {}", h.pretty()))?;
-
-    let h: ColumnRef = Handle::new("#adder", "result").into();
-    trace!("Filling {}", h.pretty());
-    cs.columns
-        .set_raw_value(&h, results, 0)
-        .with_context(|| anyhow!("while filling {}", h.pretty()))?;
+    compute_ancillaries(cs, exo_operations)?;
 
     Ok(())
 }
@@ -198,7 +262,7 @@ fn compute_sorted(
 fn compute_exoconstant(
     cs: &ConstraintSet,
     to: &ColumnRef,
-    value: &BigInt,
+    value: &Value,
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling_for(to).unwrap();
     let len = cs
@@ -208,7 +272,7 @@ fn compute_exoconstant(
     // Constant columns take value 0 in the padding
     let value: Vec<Value> = vec![Value::zero(); spilling as usize + 1] // TODO: WTF spilling off-by-one?
         .into_iter()
-        .chain(std::iter::repeat(Value::from(value)).take(len))
+        .chain(std::iter::repeat(value.clone()).take(len))
         .collect();
 
     Ok(vec![(
@@ -217,11 +281,12 @@ fn compute_exoconstant(
     )])
 }
 
-fn compute_exoaddition(
+fn compute_exooperation(
     cs: &ConstraintSet,
+    op: ExoOperation,
     sources: &[Node; 2],
     target: &ColumnRef,
-    exo_additions: &mut HashSet<(bool, Value, Value)>,
+    exo_operations: &mut HashSet<(ExoOperation, Value, Value)>,
 ) -> Result<Vec<ComputedColumn>> {
     let spilling = cs.spilling_for(target).unwrap();
     let len = cs
@@ -253,58 +318,19 @@ fn compute_exoaddition(
             let r2 = sources[1]
                 .eval(i, getter, &mut cache, &EvalSettings { wrap: false })
                 .unwrap();
-            exo_additions.insert((true, r1.clone(), r2.clone()));
+            exo_operations.insert((op, r1.clone(), r2.clone()));
 
-            r1.add_assign(&r2);
-            r1
-        })
-        .collect();
-
-    Ok(vec![(
-        target.to_owned(),
-        ValueBacking::from_vec(value, spilling),
-    )])
-}
-
-fn compute_exomultiplication(
-    cs: &ConstraintSet,
-    sources: &[Node; 2],
-    target: &ColumnRef,
-    exo_multiplications: &mut HashSet<(bool, Value, Value)>,
-) -> Result<Vec<ComputedColumn>> {
-    let spilling = cs.spilling_for(target).unwrap();
-    let len = cs
-        .effective_len_for(&cs.columns.column(target).unwrap().handle.module)
-        .unwrap();
-
-    let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
-    let getter = |handle: &ColumnRef, j, _| {
-        Some(
-            cs.columns
-                .get(handle, j, false)
-                .or_else(|| {
-                    cs.columns
-                        .column(handle)
-                        .unwrap()
-                        .padding_value
-                        .as_ref()
-                        .map(|x| x.clone())
-                })
-                .unwrap_or_else(Value::zero),
-        )
-    };
-
-    let value: Vec<Value> = (-spilling..=len)
-        .map(|i| {
-            let mut r1 = sources[0]
-                .eval(i, getter, &mut cache, &EvalSettings { wrap: false })
-                .unwrap();
-            let r2 = sources[1]
-                .eval(i, getter, &mut cache, &EvalSettings { wrap: false })
-                .unwrap();
-            exo_multiplications.insert((true, r1.clone(), r2.clone()));
-
-            r1.mul_assign(&r2);
+            match op {
+                ExoOperation::Add => {
+                    r1.add_assign(&r2);
+                }
+                ExoOperation::Sub => {
+                    r1.sub_assign(&r2);
+                }
+                ExoOperation::Mul => {
+                    r1.mul_assign(&r2);
+                }
+            }
             r1
         })
         .collect();
@@ -548,8 +574,7 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
 pub fn apply_computation(
     cs: &ConstraintSet,
     computation: &Computation,
-    exo_additions: &mut HashSet<(bool, Value, Value)>,
-    exo_multiplications: &mut HashSet<(bool, Value, Value)>,
+    exo_operations: &mut HashSet<(ExoOperation, Value, Value)>,
 ) -> Option<Result<Vec<ComputedColumn>>> {
     trace!("Computing {}", computation.pretty_target());
     match computation {
@@ -585,22 +610,14 @@ pub fn apply_computation(
                 None
             }
         }
-        Computation::ExoAddition { sources, target } => {
+        Computation::ExoOperation {
+            op,
+            sources,
+            target,
+        } => {
             if !cs.columns.is_computed(target) {
-                let r = compute_exoaddition(cs, sources, target, exo_additions);
+                let r = compute_exooperation(cs, *op, sources, target, exo_operations);
                 Some(r)
-            } else {
-                None
-            }
-        }
-        Computation::ExoMultiplication { sources, target } => {
-            if !cs.columns.is_computed(target) {
-                Some(compute_exomultiplication(
-                    cs,
-                    sources,
-                    target,
-                    exo_multiplications,
-                ))
             } else {
                 None
             }

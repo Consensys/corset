@@ -523,8 +523,6 @@ impl ConstraintSetBuilder {
 
 #[cfg(feature = "cli")]
 fn main() -> Result<()> {
-    use std::collections::HashSet;
-
     use crate::transformer::ExpansionLevel;
 
     let args = Args::parse();
@@ -636,15 +634,9 @@ fn main() -> Result<()> {
             outfile,
             fail_on_missing,
         } => {
-            let mut constraints = builder.to_constraint_set()?;
-            transformer::validate_nhood(&mut constraints)?;
-            transformer::lower_shifts(&mut constraints);
-            transformer::expand_ifs(&mut constraints);
-            transformer::expand_constraints(&mut constraints)?;
-            transformer::sorts(&mut constraints)?;
-            transformer::expand_invs(&mut constraints)?;
-
-            compute::compute_trace(&tracefile, &mut constraints, fail_on_missing)
+            let mut cs = builder.to_constraint_set()?;
+            transformer::expand_to(&mut cs, ExpansionLevel::all(), &[])?;
+            compute::compute_trace(&tracefile, &mut cs, fail_on_missing)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let outfile = outfile.as_ref().unwrap();
@@ -652,8 +644,7 @@ fn main() -> Result<()> {
                 .with_context(|| format!("while creating `{}`", &outfile))?;
 
             let mut out = std::io::BufWriter::with_capacity(10_000_000, &mut f);
-            constraints
-                .write(&mut out)
+            cs.write(&mut out)
                 .with_context(|| format!("while writing to `{}`", &outfile))?;
             out.flush()?;
         }
@@ -759,6 +750,7 @@ fn main() -> Result<()> {
 
             let mut cs = builder.to_constraint_set()?;
             transformer::expand_to(&mut cs, args.expand.into(), &[])?;
+
             compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
             if native_arithmetic {
