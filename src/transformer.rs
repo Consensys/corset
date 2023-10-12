@@ -30,7 +30,7 @@ pub(crate) enum AutoConstraint {
     Nhood = 2,
 }
 impl AutoConstraint {
-    fn apply(&self, cs: &mut ConstraintSet) -> Result<()> {
+    pub fn apply(&self, cs: &mut ConstraintSet) -> Result<()> {
         if (cs.transformations & *self as u32) == 0 {
             info!("Applying {:?}", self);
             match self {
@@ -41,6 +41,25 @@ impl AutoConstraint {
         }
         Ok(())
     }
+
+    pub fn parse(args: &[String]) -> Vec<AutoConstraint> {
+        args.iter()
+            .map(|s| AutoConstraint::from(s.as_str()))
+            .collect()
+    }
+
+    pub fn all() -> &'static [AutoConstraint] {
+        &[AutoConstraint::Sorts, AutoConstraint::Nhood]
+    }
+}
+impl From<&str> for AutoConstraint {
+    fn from(s: &str) -> Self {
+        match s {
+            "sorts" => AutoConstraint::Sorts,
+            "nhood" => AutoConstraint::Nhood,
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Copy, Clone)]
@@ -50,6 +69,11 @@ pub(crate) enum ExpansionLevel {
     Splatter = 2,
     ColumnizeExpressions = 4,
     ExpandInvs = 8,
+}
+impl Default for ExpansionLevel {
+    fn default() -> Self {
+        ExpansionLevel::None
+    }
 }
 impl From<u8> for ExpansionLevel {
     fn from(x: u8) -> Self {
@@ -65,6 +89,10 @@ impl From<u8> for ExpansionLevel {
 impl ExpansionLevel {
     pub fn all() -> u8 {
         5
+    }
+
+    pub fn top() -> ExpansionLevel {
+        u8::MAX.into()
     }
 
     pub fn apply(&self, cs: &mut ConstraintSet) -> Result<()> {
@@ -86,11 +114,9 @@ impl ExpansionLevel {
 
 pub(crate) fn expand_to(
     cs: &mut ConstraintSet,
-    level: u8,
+    level: ExpansionLevel,
     auto_constraints: &[AutoConstraint],
 ) -> Result<()> {
-    let level: ExpansionLevel = level.into();
-
     for c in auto_constraints.iter() {
         c.apply(cs)?;
     }

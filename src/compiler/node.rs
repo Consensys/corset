@@ -870,7 +870,7 @@ impl Node {
                     let v = f(n).unwrap_or_else(Value::bi_zero);
                     let c = if dim && zero_context {
                         Color::BrightBlack
-                    } else if dbg!(&v).eq(dbg!(faulty)) {
+                    } else if v.eq(faulty) {
                         Color::Red
                     } else {
                         Color::White

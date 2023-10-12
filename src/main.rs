@@ -12,6 +12,7 @@ use std::{
     io::{Read, Write},
     path::Path,
 };
+use transformer::{AutoConstraint, ExpansionLevel};
 
 use clap::{Parser, Subcommand};
 
@@ -47,8 +48,11 @@ pub struct Args {
     )]
     source: Vec<String>,
 
-    #[arg(short='e', action = clap::ArgAction::Count, global=true)]
+    #[arg(short='e', action = clap::ArgAction::Count, help="perform various levels of expansion", global=true)]
     expand: u8,
+
+    #[arg(long="auto-constraints", value_parser=["sorts", "nhood"], value_delimiter=',', global=true)]
+    auto_constraints: Vec<String>,
 
     #[arg(long = "debug", help = "Compile code in debug mode", global = true)]
     debug: bool,
@@ -349,6 +353,8 @@ struct ConstraintSetBuilder {
     debug: bool,
     no_stdlib: bool,
     source: Either<SourceMapping, ConstraintSet>,
+    expand_to: ExpansionLevel,
+    auto_constraints: Vec<AutoConstraint>,
 }
 impl ConstraintSetBuilder {
     fn from_sources(no_stdlib: bool, debug: bool) -> ConstraintSetBuilder {
@@ -356,6 +362,8 @@ impl ConstraintSetBuilder {
             debug,
             no_stdlib,
             source: Either::Left(Vec::new()),
+            expand_to: Default::default(),
+            auto_constraints: Default::default(),
         }
     }
 
@@ -370,7 +378,17 @@ impl ConstraintSetBuilder {
                 )
                 .with_context(|| anyhow!("while parsing `{}`", filename))?,
             ),
+            expand_to: Default::default(),
+            auto_constraints: Default::default(),
         })
+    }
+
+    fn expand_to(&mut self, to: ExpansionLevel) {
+        self.expand_to = to;
+    }
+
+    fn auto_constraints(&mut self, auto: &[AutoConstraint]) {
+        self.auto_constraints = auto.to_vec();
     }
 
     fn find_section(root: &Path, section: &str) -> Result<Option<SourceMapping>> {
@@ -510,21 +528,22 @@ impl ConstraintSetBuilder {
     }
 
     fn to_constraint_set(self) -> Result<ConstraintSet> {
-        match self.source {
+        let mut cs = match self.source {
             Either::Left(ref sources) => compiler::make(
                 &self.prepare_sources(sources),
                 &compiler::CompileSettings { debug: self.debug },
             )
             .map(|r| r.1),
             Either::Right(cs) => Ok(cs),
-        }
+        }?;
+
+        transformer::expand_to(&mut cs, self.expand_to, &self.auto_constraints)?;
+        Ok(cs)
     }
 }
 
 #[cfg(feature = "cli")]
 fn main() -> Result<()> {
-    use crate::transformer::ExpansionLevel;
-
     let args = Args::parse();
     buche::new()
         .verbosity(args.verbose.log_level_filter())
@@ -589,6 +608,9 @@ fn main() -> Result<()> {
         panic!("Compile Corset with the `parser` feature to enable the compiler")
     };
 
+    builder.expand_to(args.expand.into());
+    builder.auto_constraints(&AutoConstraint::parse(&args.auto_constraints));
+
     match args.command {
         #[cfg(feature = "exporters")]
         Commands::Go { package, filename } => {
@@ -611,8 +633,10 @@ fn main() -> Result<()> {
         }
         #[cfg(feature = "exporters")]
         Commands::WizardIOP { out_filename } => {
-            let mut cs = builder.to_constraint_set()?;
-            transformer::expand_to(&mut cs, ExpansionLevel::all(), &[])?;
+            builder.expand_to(ExpansionLevel::top());
+            builder.auto_constraints(AutoConstraint::all());
+            let cs = builder.to_constraint_set()?;
+
             exporters::wizardiop::render(&cs, &out_filename)?;
         }
         #[cfg(all(feature = "parser", feature = "exporters"))]
@@ -634,8 +658,10 @@ fn main() -> Result<()> {
             outfile,
             fail_on_missing,
         } => {
+            builder.expand_to(ExpansionLevel::top());
+            builder.auto_constraints(AutoConstraint::all());
             let mut cs = builder.to_constraint_set()?;
-            transformer::expand_to(&mut cs, ExpansionLevel::all(), &[])?;
+
             compute::compute_trace(&tracefile, &mut cs, fail_on_missing)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
 
@@ -749,7 +775,6 @@ fn main() -> Result<()> {
             }
 
             let mut cs = builder.to_constraint_set()?;
-            transformer::expand_to(&mut cs, args.expand.into(), &[])?;
 
             compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
@@ -787,7 +812,6 @@ fn main() -> Result<()> {
                 return Ok(());
             }
             let mut cs = builder.to_constraint_set()?;
-            transformer::expand_to(&mut cs, args.expand.into(), &[])?;
 
             compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
@@ -814,8 +838,7 @@ fn main() -> Result<()> {
                 error!("no elements specified to debug");
             }
 
-            let mut cs = builder.to_constraint_set()?;
-            transformer::expand_to(&mut cs, args.expand.into(), &[])?;
+            let cs = builder.to_constraint_set()?;
 
             exporters::debugger::debug(
                 &cs,
