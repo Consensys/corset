@@ -3,7 +3,6 @@ mod ifs;
 mod inverses;
 mod nhood;
 mod selectors;
-mod shifter;
 mod sort;
 mod splatter;
 mod statics;
@@ -16,7 +15,6 @@ use ifs::expand_ifs;
 use inverses::expand_invs;
 use nhood::validate_nhood;
 use selectors::expand_constraints;
-use shifter::lower_shifts;
 use sort::sorts;
 use splatter::splatter;
 pub use statics::precompute;
@@ -48,21 +46,19 @@ impl AutoConstraint {
 #[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Copy, Clone)]
 pub(crate) enum ExpansionLevel {
     None = 0,
-    LowerShifts = 1,
-    ExpandsIfs = 2,
-    Splatter = 4,
-    ColumnizeExpressions = 8,
-    ExpandInvs = 16,
+    ExpandsIfs = 1,
+    Splatter = 2,
+    ColumnizeExpressions = 4,
+    ExpandInvs = 8,
 }
 impl From<u8> for ExpansionLevel {
     fn from(x: u8) -> Self {
         match x {
             0 => ExpansionLevel::None,
-            1 => ExpansionLevel::LowerShifts,
-            2 => ExpansionLevel::ExpandsIfs,
-            3 => ExpansionLevel::Splatter,
-            4 => ExpansionLevel::ColumnizeExpressions,
-            5 | _ => ExpansionLevel::ExpandInvs,
+            1 => ExpansionLevel::ExpandsIfs,
+            2 => ExpansionLevel::Splatter,
+            3 => ExpansionLevel::ColumnizeExpressions,
+            4 | _ => ExpansionLevel::ExpandInvs,
         }
     }
 }
@@ -76,7 +72,6 @@ impl ExpansionLevel {
             info!("Applying {:?}", self);
             match self {
                 ExpansionLevel::None => {}
-                ExpansionLevel::LowerShifts => lower_shifts(cs),
                 ExpansionLevel::ExpandsIfs => expand_ifs(cs),
                 ExpansionLevel::Splatter => splatter(cs),
                 ExpansionLevel::ColumnizeExpressions => expand_constraints(cs)?,
@@ -101,7 +96,6 @@ pub(crate) fn expand_to(
     }
 
     for transformation in [
-        ExpansionLevel::LowerShifts,
         ExpansionLevel::ExpandsIfs,
         ExpansionLevel::Splatter,
         ExpansionLevel::ColumnizeExpressions,

@@ -21,6 +21,7 @@ pub enum Form {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Builtin {
     Len,
+    Shift,
 }
 impl std::fmt::Display for Builtin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -29,6 +30,7 @@ impl std::fmt::Display for Builtin {
             "{}",
             match self {
                 Builtin::Len => "len",
+                Builtin::Shift => "shift",
             }
         )
     }
@@ -42,7 +44,6 @@ pub enum Intrinsic {
     Sub,
     Mul,
     Exp,
-    Shift,
     Neg,
     Inv,
     Normalize,
@@ -83,7 +84,6 @@ impl Intrinsic {
                 argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
             }
             Intrinsic::Begin => Type::List(max_type(argtype).magma()),
-            Intrinsic::Shift => argtype[0],
         }
     }
 }
@@ -97,7 +97,6 @@ impl std::fmt::Display for Intrinsic {
                 Intrinsic::Sub => "-",
                 Intrinsic::Mul => "*",
                 Intrinsic::Exp => "^",
-                Intrinsic::Shift => "shift",
                 Intrinsic::Neg => "-",
                 Intrinsic::Inv => "inv",
                 Intrinsic::Normalize => "~",
@@ -174,6 +173,7 @@ impl FuncVerifier<Node> for Builtin {
     fn arity(&self) -> Arity {
         match self {
             Builtin::Len => Arity::Monadic,
+            Builtin::Shift => Arity::Dyadic,
         }
     }
 
@@ -181,6 +181,7 @@ impl FuncVerifier<Node> for Builtin {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
         let expected_t: &[&[Type]] = match self {
             Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
+            Builtin::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
         };
 
         if super::compatible_with_repeating(expected_t, &args_t) {

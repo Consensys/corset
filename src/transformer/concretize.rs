@@ -3,7 +3,7 @@ use crate::compiler::{Constraint, ConstraintSet, Expression, Node};
 impl Node {
     fn concretize(&mut self) {
         match self.e_mut() {
-            Expression::Funcall { func, args } => {
+            Expression::Funcall { args, .. } => {
                 for a in args {
                     a.concretize()
                 }

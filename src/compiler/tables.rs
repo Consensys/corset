@@ -11,7 +11,6 @@ use log::*;
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use owo_colors::OwoColorize;
-use pairing_ce::ff::PrimeField;
 use serde::{Deserialize, Serialize};
 use sorbus::{NodeID, Tree};
 use std::{
@@ -51,6 +50,10 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, Builtin::Len.to_string()),
             class: FunctionClass::Builtin(Builtin::Len),
         },
+        "shift" => Function{
+            handle: Handle::new(super::MAIN_MODULE, "shift"),
+            class: FunctionClass::Builtin(Builtin::Shift),
+        },
 
         // Intrinsics
         "~" => Function {
@@ -60,10 +63,6 @@ lazy_static::lazy_static! {
         "neg" => Function {
             handle: Handle::new(super::MAIN_MODULE, "neg"),
             class: FunctionClass::Intrinsic(Intrinsic::Neg)
-        },
-        "shift" => Function{
-            handle: Handle::new(super::MAIN_MODULE, "shift"),
-            class: FunctionClass::Intrinsic(Intrinsic::Shift),
         },
         "+" => Function {
             handle: Handle::new(super::MAIN_MODULE, "+"),

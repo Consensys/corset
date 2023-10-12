@@ -202,7 +202,6 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Neg => Arity::Monadic,
             Intrinsic::Inv => Arity::Monadic,
             Intrinsic::Normalize => Arity::Monadic,
-            Intrinsic::Shift => Arity::Dyadic,
             Intrinsic::Begin => Arity::AtLeast(1),
             Intrinsic::IfZero => Arity::Between(2, 3),
             Intrinsic::IfNotZero => Arity::Between(2, 3),
@@ -227,7 +226,6 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Exp => &[&[Type::Any(Magma::Any)], &[Type::Scalar(Magma::Any)]],
             Intrinsic::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
             Intrinsic::Inv | Intrinsic::Normalize => &[&[Type::Any(Magma::Any)]],
-            Intrinsic::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
             Intrinsic::IfZero | Intrinsic::IfNotZero => &[
                 // condition type TODO: force to bool/loob
                 &[Type::Any(Magma::Any)],
@@ -1167,6 +1165,10 @@ fn apply_builtin(
                 bail!(RuntimeError::NotAnArray(traversed_args[0].e().clone()))
             }
         }
+        Builtin::Shift => {
+            let shift = traversed_args[1].pure_eval()?.to_i16().unwrap();
+            Ok(Some(traversed_args.get(0).unwrap().clone().shift(shift)))
+        }
     }
 }
 
@@ -1215,8 +1217,7 @@ fn apply_intrinsic(
         | Intrinsic::Exp
         | Intrinsic::Neg
         | Intrinsic::Inv
-        | Intrinsic::Normalize
-        | Intrinsic::Shift) => Ok(Some(b.call(&traversed_args)?)),
+        | Intrinsic::Normalize) => Ok(Some(b.call(&traversed_args)?)),
     }
 }
 

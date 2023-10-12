@@ -6,7 +6,6 @@ use crate::structs::Handle;
 use anyhow::*;
 use ellipse::Ellipse;
 use itertools::Itertools;
-use num_traits::ToPrimitive;
 use owo_colors::XtermColors;
 use owo_colors::{colored::Color, OwoColorize};
 use std::cmp::Ordering;
@@ -66,12 +65,6 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
                 tty.write("^");
                 pretty_expr(&args[1], Some(*f), tty, show_types);
             }
-            Intrinsic::Shift => {
-                pretty_expr(&args[0], None, tty, show_types);
-                let subponent = args[1].pure_eval().unwrap().to_i64().unwrap();
-                tty.write(if subponent > 0 { "₊" } else { "" });
-                tty.write(crate::pretty::subscript(&subponent.to_string()));
-            }
             Intrinsic::Neg => {
                 tty.write("-");
                 pretty_expr(&args[0], prev, tty, show_types);
@@ -125,14 +118,18 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
             }
         },
         Expression::Const(x) => tty.write(x.to_string()),
-        Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
+        Expression::Column { handle, shift, .. } | Expression::ExoColumn { handle, shift, .. } => {
             let color = handle.to_string().chars().fold(0, |ax, c| ax + c as usize) % 255 + 1;
             tty.write(
                 handle
                     .to_string()
                     .color(XtermColors::from(color as u8))
                     .to_string(),
-            )
+            );
+            if *shift != 0 {
+                tty.write(if *shift > 0 { "₊" } else { "" });
+                tty.write(crate::pretty::subscript(&shift.to_string()));
+            }
         }
         Expression::List(xs) => {
             tty.write("{".color(c).to_string());

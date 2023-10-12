@@ -177,23 +177,26 @@ fn create_sort_constraint(
         cs.constraints.push(Constraint::Vanishes {
             handle: Handle::new(&module, format!("{at}-0")),
             domain: None,
-            expr: Box::new(Intrinsic::Mul.call(&[
-                // ∑_k=0^i-1 @_k = 0...
-                sum_ats.clone(),
-                // && @ = 0 ...
-                Intrinsic::Sub.call(&[
-                    Node::from_const(1),
-                    Node::phantom_column(at, Magma::Boolean),
-                ])?,
-                // => sorted_i = sorted_i[-1]
-                Intrinsic::Sub.call(&[
-                    Node::phantom_column(&sorted[i], sorted_t),
-                    Intrinsic::Shift.call(&[
-                        Node::phantom_column(&sorted[i], sorted_t),
-                        Node::from_const(-1),
+            expr: Box::new(
+                Intrinsic::Mul.call(&[
+                    // ∑_k=0^i-1 @_k = 0...
+                    sum_ats.clone(),
+                    // && @ = 0 ...
+                    Intrinsic::Sub.call(&[
+                        Node::from_const(1),
+                        Node::phantom_column(at, Magma::Boolean),
+                    ])?,
+                    // => sorted_i = sorted_i[-1]
+                    Intrinsic::Sub.call(&[
+                        Node::column().handle(sorted[i].clone()).t(sorted_t).build(),
+                        Node::column()
+                            .handle(sorted[i].clone())
+                            .t(sorted_t)
+                            .shift(-1)
+                            .build(),
                     ])?,
                 ])?,
-            ])?),
+            ),
         });
         cs.constraints.push(Constraint::Vanishes {
             handle: Handle::new(&module, format!("{at}-1")),
@@ -206,11 +209,12 @@ fn create_sort_constraint(
                 // => sorted_i ≠ sorted_i[-1]
                 {
                     let diff = Intrinsic::Sub.call(&[
-                        Node::phantom_column(&sorted[i], sorted_t),
-                        Intrinsic::Shift.call(&[
-                            Node::phantom_column(&sorted[i], sorted_t),
-                            Node::from_const(-1),
-                        ])?,
+                        Node::column().handle(sorted[i].clone()).t(sorted_t).build(),
+                        Node::column()
+                            .handle(sorted[i].clone())
+                            .t(sorted_t)
+                            .shift(-1)
+                            .build(),
                     ])?;
                     let diff_inv = Intrinsic::Inv.call(&[diff.clone()])?;
 
@@ -260,11 +264,15 @@ fn create_sort_constraint(
                             .map(|l| {
                                 let sorted_l_t = cs.columns.column(&sorted[l])?.t;
                                 let tgt_diff = Intrinsic::Sub.call(&[
-                                    Node::phantom_column(&sorted[l], sorted_l_t),
-                                    Intrinsic::Shift.call(&[
-                                        Node::phantom_column(&sorted[l], sorted_l_t),
-                                        Node::from_const(-1),
-                                    ])?,
+                                    Node::column()
+                                        .handle(sorted[l].clone())
+                                        .t(sorted_l_t)
+                                        .build(),
+                                    Node::column()
+                                        .handle(sorted[l].clone())
+                                        .t(sorted_l_t)
+                                        .shift(-1)
+                                        .build(),
                                 ])?;
                                 Intrinsic::Mul.call(&[
                                     if !signs[l] {

@@ -151,7 +151,6 @@ fn raise_ifs(mut e: Node) -> Node {
                 }
                 Intrinsic::IfZero
                 | Intrinsic::IfNotZero
-                | Intrinsic::Shift
                 | Intrinsic::Neg
                 | Intrinsic::Inv
                 | Intrinsic::Normalize

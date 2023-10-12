@@ -63,7 +63,7 @@ impl Node {
         } else {
             unreachable!()
         };
-        let target = Handle::new(module, format!("cst_{}", value));
+        let target = Handle::new(module, format!("{}", value));
         new_constants.push((
             // TODO: add magma
             Column::builder()
@@ -84,13 +84,13 @@ impl Node {
         &mut self,
         module: &str,
         ancillaries: &mut ProtoAncillaries,
-        new_exo_columns: &mut Vec<(ExoOperation, (Handle, Magma), (Node, Node))>,
+        exo_op_columns: &mut Vec<(ExoOperation, (Handle, Magma), (Node, Node))>,
         new_constants: &mut Vec<(Column, Computation)>,
     ) {
         match self.e_mut() {
             Expression::Funcall { func, args } => {
                 for arg in args.iter_mut() {
-                    arg.do_splatter(module, ancillaries, new_exo_columns, new_constants);
+                    arg.do_splatter(module, ancillaries, exo_op_columns, new_constants);
                 }
 
                 if args.iter().any(|a| a.is_exocolumn()) {
@@ -105,13 +105,14 @@ impl Node {
                                     a.columnize_constant(module, new_constants);
                                 }
                             }
+
                             let op = (*func).into();
                             let new_magma = args.iter().map(|a| a.t().magma()).max().unwrap();
                             ancillaries.update_width(op, new_magma.bit_size());
                             let new_handle =
                                 Handle::new(module, format!("{}{}{}", args[0], op, args[1]));
 
-                            new_exo_columns.push((
+                            exo_op_columns.push((
                                 op,
                                 (new_handle.clone(), new_magma),
                                 (args[0].clone(), args[1].clone()),
@@ -123,7 +124,6 @@ impl Node {
                                 .kind(Kind::Phantom)
                                 .build();
                         }
-                        Intrinsic::Shift => todo!(),
                         Intrinsic::Inv => todo!(),
                         _ => unreachable!(),
                     }

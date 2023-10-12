@@ -98,12 +98,12 @@ fn process_nhood(
         expr: Box::new(Intrinsic::Mul.call(&[
             // SRT_ILD_[i+1] - SRT_ILD_[i]
             Intrinsic::Sub.call(&[
-                Intrinsic::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)])?,
+                srt_intrld_aux_xs_node.clone().shift(1),
                 srt_intrld_aux_xs_node.clone(),
             ])?,
             // SRT_ILD_[i+1] - (SRT_ILD_[i] + 1)
             Intrinsic::Sub.call(&[
-                Intrinsic::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)])?,
+                srt_intrld_aux_xs_node.clone().shift(1),
                 Intrinsic::Add.call(&[srt_intrld_aux_xs_node, Node::from_const(1)])?,
             ])?,
         ])?),

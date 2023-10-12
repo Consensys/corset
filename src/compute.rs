@@ -422,44 +422,6 @@ pub fn compute_composite(
     )])
 }
 
-/// Compared to `compute_composite`, this function directly return the compute values without any other informations
-pub fn compute_composite_static(cs: &ConstraintSet, exp: &Node) -> Result<Vec<Value>> {
-    let cols_in_expr = exp.dependencies();
-    for c in &cols_in_expr {
-        ensure_is_computed(c, cs)?;
-    }
-
-    let length = *cols_in_expr
-        .iter()
-        .map(|handle| {
-            Ok(cs
-                .columns
-                .len(handle)
-                .ok_or_else(|| anyhow!("{} has no len", handle.to_string().red().bold()))?
-                .to_owned())
-        })
-        .collect::<Result<Vec<_>>>()?
-        .iter()
-        .max()
-        // TODO: unwrap_or module size -- assert otherwise
-        .unwrap();
-
-    let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
-    let values = (0..length as isize)
-        .map(|i| {
-            exp.eval(
-                i,
-                |handle, j, _| cs.columns.get(handle, j, false),
-                &mut cache,
-                &EvalSettings { wrap: false },
-            )
-            .unwrap_or_else(Value::zero)
-        })
-        .collect::<Vec<_>>();
-
-    Ok(values)
-}
-
 fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<ComputedColumn>> {
     if let Computation::SortingConstraints {
         ats,

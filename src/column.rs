@@ -123,7 +123,7 @@ impl Value {
     pub(crate) fn inverse(&self) -> Option<Value> {
         match &self {
             Value::Native(f) => f.inverse().map(Value::Native),
-            Value::ExoNative(f) => unreachable!(),
+            Value::ExoNative(_) => unreachable!(),
             Value::BigInt(_) => panic!("can not inverse ExoValue"),
         }
     }
@@ -207,7 +207,7 @@ impl Value {
                 r.mul_assign(&f);
                 Value::Native(r)
             }
-            Value::ExoNative(f) => {
+            Value::ExoNative(_) => {
                 todo!()
             }
             Value::BigInt(i) => Value::BigInt(if i.is_zero() {
@@ -232,18 +232,6 @@ impl Value {
             Value::Native(_) => crate::constants::FIELD_BITSIZE,
             Value::ExoNative(fs) => fs.len() * crate::constants::FIELD_BITSIZE,
         }
-    }
-
-    pub(crate) fn is_fr(&self) -> bool {
-        matches!(self, Value::Native(_))
-    }
-
-    pub(crate) fn is_bi(&self) -> bool {
-        matches!(self, Value::BigInt(_))
-    }
-
-    pub(crate) fn is_exo(&self) -> bool {
-        matches!(self, Value::ExoNative(_))
     }
 }
 impl std::default::Default for Value {
@@ -273,15 +261,13 @@ impl From<usize> for Value {
 }
 impl From<isize> for Value {
     fn from(x: isize) -> Self {
-        let mut bi = BigInt::from_isize(x).unwrap();
-        clamp_bi(&mut bi);
+        let bi = BigInt::from_isize(x).unwrap();
         Value::BigInt(bi)
     }
 }
 impl From<i32> for Value {
     fn from(x: i32) -> Self {
-        let mut bi = BigInt::from_i32(x).unwrap();
-        clamp_bi(&mut bi);
+        let bi = BigInt::from_i32(x).unwrap();
         Value::BigInt(bi)
     }
 }
@@ -343,7 +329,17 @@ impl Pretty for Value {
 }
 impl std::cmp::PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        todo!()
+        match (self, other) {
+            (Value::BigInt(i1), Value::BigInt(i2)) => Some(i1.cmp(&i2)),
+            (Value::BigInt(_), Value::Native(_)) => todo!(),
+            (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
+            (Value::Native(_), Value::BigInt(_)) => todo!(),
+            (Value::Native(f1), Value::Native(f2)) => Some(f1.cmp(f2)),
+            (Value::Native(_), Value::ExoNative(_)) => todo!(),
+            (Value::ExoNative(_), Value::BigInt(_)) => todo!(),
+            (Value::ExoNative(_), Value::Native(_)) => todo!(),
+            (Value::ExoNative(_), Value::ExoNative(_)) => todo!(),
+        }
     }
 }
 impl std::cmp::PartialEq for Value {
@@ -385,16 +381,15 @@ pub struct FieldRegister {
     value: Option<Vec<Fr>>,
 }
 
-type ValueGetter = fn(isize, cols: &ColumnSet) -> Option<Value>;
-
 // #[derive(Debug)]
-// struct ValueBacking(Either<Vec<Value>, (ValueGetter, isize, isize)>);
 pub enum ValueBacking {
     Vector {
         v: Vec<Value>,
         spilling: isize,
     },
     Function {
+        /// if i >= 0, shall return the expected actual value; if i < 0, shall
+        /// return the adequate padding value
         f: Box<dyn Fn(isize, &ColumnSet) -> Option<Value> + Sync>,
         spilling: isize,
         end: usize,
@@ -490,7 +485,7 @@ impl ValueBacking {
                 }
             }
             .cloned(),
-            ValueBacking::Function { f, spilling, end } => f(i + spilling, cs),
+            ValueBacking::Function { f, spilling, .. } => f(i + spilling, cs),
         }
     }
 
@@ -658,6 +653,7 @@ impl Register {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Column {
     pub register: Option<RegisterID>,
+    pub shift: i16,
     pub padding_value: Option<Value>,
     pub used: bool,
     pub kind: Kind<()>,
@@ -672,6 +668,7 @@ impl Column {
     #[builder]
     pub fn new(
         register: Option<RegisterID>,
+        shift: Option<i16>,
         padding_value: Option<i64>, // TODO: Value
         used: Option<bool>,
         kind: Option<Kind<()>>,
@@ -682,6 +679,7 @@ impl Column {
     ) -> Self {
         Column {
             register,
+            shift: shift.unwrap_or(0),
             padding_value: padding_value.map(|v| Value::from(v as usize)),
             used: used.unwrap_or(true),
             kind: kind.unwrap_or(Kind::Phantom),
@@ -721,10 +719,6 @@ impl ColumnSet {
         } else {
             modules.into_iter().next()
         }
-    }
-
-    pub(crate) fn module(&self, h: &ColumnRef) -> &str {
-        &self.column(h).unwrap().handle.module
     }
 
     pub fn set_min_len(&mut self, module: &str, len: usize) {
@@ -772,10 +766,6 @@ impl ColumnSet {
         } else {
             unreachable!()
         }
-    }
-
-    pub fn register_by_id(&self, id: RegisterID) -> Option<&Register> {
-        self.registers.get(id)
     }
 
     pub fn get_col_mut(&mut self, h: &ColumnRef) -> Option<&mut Column> {

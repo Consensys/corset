@@ -163,6 +163,7 @@ pub enum Expression {
     Const(Value),
     Column {
         handle: ColumnRef,
+        shift: i16,
         kind: Kind<Node>,
         padding_value: Option<i64>,
         base: Base,
@@ -174,6 +175,7 @@ pub enum Expression {
     },
     ExoColumn {
         handle: ColumnRef,
+        shift: i16,
         padding_value: Option<i64>,
         base: Base,
     },
@@ -240,8 +242,9 @@ impl Node {
     #[builder(entry = "column", exit = "build", visibility = "pub")]
     pub fn new_column(
         handle: ColumnRef,
+        shift: Option<i16>,
         base: Option<Base>,
-        kind: Kind<Node>,
+        kind: Option<Kind<Node>>,
         padding_value: Option<i64>,
         t: Option<Magma>,
     ) -> Node {
@@ -250,6 +253,7 @@ impl Node {
             Node {
                 _e: Expression::ExoColumn {
                     handle,
+                    shift: shift.unwrap_or(0),
                     padding_value,
                     base: base.unwrap_or_else(|| t.unwrap_or(Magma::Native).into()),
                 },
@@ -260,7 +264,8 @@ impl Node {
             Node {
                 _e: Expression::Column {
                     handle,
-                    kind,
+                    shift: shift.unwrap_or(0),
+                    kind: kind.unwrap_or(Kind::Phantom),
                     padding_value,
                     base: base.unwrap_or_else(|| t.unwrap_or(Magma::Native).into()),
                 },
@@ -291,12 +296,54 @@ impl Node {
             _e: Expression::Column {
                 handle: x.to_owned(),
                 kind: Kind::Phantom,
+                shift: 0,
                 padding_value: None,
                 base: Base::Hex,
             },
             _t: Some(Type::Column(m)),
             dbg: None,
         }
+    }
+    pub fn shift_in_place(&mut self, i: i16) {
+        match self.e_mut() {
+            Expression::Funcall { args, .. } => {
+                for a in args.iter_mut() {
+                    a.shift_in_place(i);
+                }
+            }
+            Expression::Column { shift, .. } | Expression::ExoColumn { shift, .. } => {
+                *shift += i;
+            }
+            Expression::ArrayColumn { .. } => unreachable!(),
+            Expression::List(ls) => {
+                for l in ls.iter_mut() {
+                    l.shift_in_place(i);
+                }
+            }
+            Expression::Const(_) => {}
+            Expression::Void => {}
+        };
+    }
+    pub fn shift(mut self, i: i16) -> Self {
+        match self.e_mut() {
+            Expression::Funcall { args, .. } => {
+                for a in args.iter_mut() {
+                    *a = a.clone().shift(i);
+                }
+            }
+            Expression::Column { shift, .. } | Expression::ExoColumn { shift, .. } => {
+                *shift += i;
+            }
+            Expression::ArrayColumn { .. } => unreachable!(),
+            Expression::List(ls) => {
+                for l in ls.iter_mut() {
+                    *l = l.clone().shift(i);
+                }
+            }
+            Expression::Const(_) => {}
+            Expression::Void => {}
+        };
+        self
     }
     pub fn one() -> Node {
         Self::from_expr(Expression::Const(Value::one()))
@@ -407,7 +454,6 @@ impl Node {
                 Intrinsic::Mul => args.iter().any(|a| !a.t().is_bool()),
                 // exponentiation are compile-time computed, hence cannot overflow
                 Intrinsic::Exp => false,
-                Intrinsic::Shift => false,
                 Intrinsic::Neg => false,
                 Intrinsic::Inv => false,
                 Intrinsic::Normalize => false,
@@ -442,58 +488,35 @@ impl Node {
 
     /// Compute the maximum past (negative) shift coefficient in the AST rooted at `self`
     pub fn past_spill(&self) -> isize {
-        fn _past_span(e: &Expression, ax: isize) -> isize {
-            match e {
-                Expression::Funcall { func, args } => {
-                    let mut mine = ax;
-                    if let Intrinsic::Shift = func {
-                        let arg_big = args[1].pure_eval().unwrap_or_else(|_| {
-                            panic!(
-                                "{} is not a valid shift offset",
-                                args[1].to_string().as_str()
-                            )
-                        });
-                        let arg = arg_big.to_isize().unwrap_or_else(|| {
-                            panic!("{} is not an isize", arg_big.to_string().as_str())
-                        });
-                        mine = mine.min(mine + arg);
-                    }
-                    args.iter().map(|e| _past_span(e.e(), mine)).min().unwrap()
+        self.leaves()
+            .iter()
+            .filter_map(|n| match n.e() {
+                Expression::Column { shift, .. } | Expression::ExoColumn { shift, .. } => {
+                    Some(*shift as isize)
                 }
-                Expression::List(es) => es.iter().map(|e| _past_span(e.e(), ax)).min().unwrap(),
-                _ => ax,
-            }
-        }
-
-        _past_span(self.e(), 0).min(0)
+                Expression::ArrayColumn { .. } => unreachable!(),
+                _ => None,
+            })
+            .filter(|x| *x < 0)
+            .min()
+            .unwrap_or(0)
     }
 
     /// Compute the maximum future (positive) shift coefficient in the AST rooted at `self`
     pub fn future_spill(&self) -> isize {
-        fn _future_span(e: &Expression, ax: isize) -> isize {
-            match e {
-                Expression::Funcall { func, args } => {
-                    let mut mine = ax;
-                    if let Intrinsic::Shift = func {
-                        let arg_big = args[1]
-                            .pure_eval()
-                            .unwrap_or_else(|_| panic!("{}", args[1].to_string().as_str()));
-                        let arg = arg_big
-                            .to_isize()
-                            .unwrap_or_else(|| panic!("{}", arg_big.to_string().as_str()));
-                        mine = mine.max(mine + arg);
-                    }
-                    args.iter()
-                        .map(|e| _future_span(e.e(), mine))
-                        .max()
-                        .unwrap()
+        self.leaves()
+            .iter()
+            .filter_map(|n| match n.e() {
+                Expression::Column { shift, .. } | Expression::ExoColumn { shift, .. } => {
+                    Some(*shift as isize)
                 }
-                Expression::List(es) => es.iter().map(|e| _future_span(e.e(), ax)).max().unwrap(),
-                _ => ax,
-            }
-        }
-
-        _future_span(self.e(), 0).max(0)
+                Expression::ArrayColumn { .. } => unreachable!(),
+                _ => None,
+            })
+            .filter(|x| *x > 0)
+            .max()
+            .unwrap_or(0)
+            .max(0)
     }
 
     // TODO: replace with a generic map()
@@ -647,10 +670,6 @@ impl Node {
                     }
                     Some(ax)
                 }
-                Intrinsic::Shift => {
-                    let shift = args[1].pure_eval().unwrap().to_isize().unwrap();
-                    args[0].eval_fold(i + shift, get, cache, &EvalSettings { wrap: false }, f)
-                }
                 Intrinsic::Neg => args[0].eval_fold(i, get, cache, settings, f).map(|mut x| {
                     x.negate();
                     x
@@ -694,8 +713,12 @@ impl Node {
                 }
             },
             Expression::Const(v) => Some(v.clone().into()),
-            Expression::Column { handle, .. } => get(handle, i, settings.wrap),
-            Expression::ExoColumn { handle, .. } => get(handle, i, settings.wrap),
+            Expression::Column { handle, shift, .. } => {
+                get(handle, i + (*shift as isize), settings.wrap)
+            }
+            Expression::ExoColumn { handle, shift, .. } => {
+                get(handle, i + (*shift as isize), settings.wrap)
+            }
             Expression::List(xs) => xs
                 .iter()
                 .filter_map(|x| x.eval_fold(i, get, cache, settings, f))
@@ -777,82 +800,52 @@ impl Node {
                         Color::White
                     };
 
-                    if matches!(func, Intrinsic::Shift) {
-                        let subponent = args[1].pure_eval().unwrap().to_i64().unwrap();
+                    tty.write(format!("({fname} ",).color(c).to_string());
+                    if with_newlines {
+                        tty.shift(fname.len() + 2);
+                    }
+                    if let Some(a) = args.get(0) {
                         _debug(
-                            &args[0],
+                            a,
+                            tty,
+                            f,
+                            faulty,
+                            unclutter && !matches!(func, Intrinsic::IfZero | Intrinsic::IfNotZero),
+                            dim,
+                            zero_context,
+                            a.depth() > 2,
+                            with_src,
+                            show_value,
+                        );
+                        spacer(tty, with_newlines);
+                    }
+                    let mut args = args.iter().skip(1).peekable();
+                    while let Some(a) = args.next() {
+                        _debug(
+                            a,
                             tty,
                             f,
                             faulty,
                             unclutter,
                             dim,
                             zero_context,
-                            false,
+                            a.depth() > 2,
                             with_src,
-                            false,
+                            show_value,
                         );
-                        if subponent > 0 {
-                            tty.write("₊".color(c_v).to_string());
+                        if args.peek().is_some() {
+                            spacer(tty, with_newlines)
                         }
-                        tty.write(
-                            crate::pretty::subscript(&subponent.to_string())
-                                .color(c_v)
-                                .to_string(),
-                        );
-                        tty.write(
-                            format!("<{}>", v.pretty_with_base(Base::Hex))
-                                .color(c_v)
-                                .to_string(),
-                        );
-                    } else {
-                        tty.write(format!("({fname} ",).color(c).to_string());
-                        if with_newlines {
-                            tty.shift(fname.len() + 2);
-                        }
-                        if let Some(a) = args.get(0) {
-                            _debug(
-                                a,
-                                tty,
-                                f,
-                                faulty,
-                                unclutter
-                                    && !matches!(func, Intrinsic::IfZero | Intrinsic::IfNotZero),
-                                dim,
-                                zero_context,
-                                a.depth() > 2,
-                                with_src,
-                                show_value,
-                            );
-                            spacer(tty, with_newlines);
-                        }
-                        let mut args = args.iter().skip(1).peekable();
-                        while let Some(a) = args.next() {
-                            _debug(
-                                a,
-                                tty,
-                                f,
-                                faulty,
-                                unclutter,
-                                dim,
-                                zero_context,
-                                a.depth() > 2,
-                                with_src,
-                                show_value,
-                            );
-                            if args.peek().is_some() {
-                                spacer(tty, with_newlines)
-                            }
-                        }
-                        if with_newlines {
-                            tty.unshift();
-                            tty.cr();
-                        }
-                        tty.write(")".color(c).to_string());
-                        tty.annotate(format!(
-                            "→ {}",
-                            v.pretty_with_base(Base::Hex).color(c_v).bold()
-                        ));
                     }
+                    if with_newlines {
+                        tty.unshift();
+                        tty.cr();
+                    }
+                    tty.write(")".color(c).to_string());
+                    tty.annotate(format!(
+                        "→ {}",
+                        v.pretty_with_base(Base::Hex).color(c_v).bold()
+                    ));
                 }
                 Expression::Const(x) => {
                     let c = if dim && zero_context {
@@ -863,21 +856,35 @@ impl Node {
                     tty.write(x.to_string().color(c).bold().to_string());
                 }
                 Expression::Column {
-                    handle: h, base, ..
+                    handle: h,
+                    shift,
+                    base,
+                    ..
                 }
                 | Expression::ExoColumn {
-                    handle: h, base, ..
+                    handle: h,
+                    shift,
+                    base,
+                    ..
                 } => {
                     let v = f(n).unwrap_or_else(Value::bi_zero);
                     let c = if dim && zero_context {
                         Color::BrightBlack
-                    } else if v.eq(faulty) {
+                    } else if dbg!(&v).eq(dbg!(faulty)) {
                         Color::Red
                     } else {
                         Color::White
                     };
 
                     tty.write(h.as_handle().name.color(c).bold().to_string());
+                    if *shift > 0 {
+                        tty.write("₊".color(c).to_string());
+                    }
+                    tty.write(
+                        crate::pretty::subscript(&shift.to_string())
+                            .color(c)
+                            .to_string(),
+                    );
                     if show_value {
                         tty.write(
                             format!("<{}>", v.pretty_with_base(*base))

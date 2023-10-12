@@ -8,51 +8,11 @@ use std::{collections::HashSet, io::Write, unreachable};
 use anyhow::*;
 use convert_case::{Case, Casing};
 
-use crate::{
-    column::{Computation, Value},
-    compiler::*,
-    pretty::Pretty,
-    structs::Handle,
-};
+use crate::{column::Computation, compiler::*, pretty::Pretty, structs::Handle};
 
 const TEMPLATE: &str = include_str!("wizardiop.go");
 
 // const SIZE: usize = 4_194_304;
-
-fn shift(e: &Node, i: isize) -> Node {
-    if i == 0 {
-        e.to_owned()
-    } else {
-        match e.e() {
-            Expression::Funcall { func, args } => match func {
-                Intrinsic::Shift => {
-                    let value = args[1].pure_eval().unwrap() + i;
-                    Intrinsic::Shift
-                        .call(&[
-                            args[0].clone(),
-                            Expression::Const(value.clone().into()).into(),
-                        ])
-                        .unwrap()
-                }
-                _ => Expression::Funcall {
-                    func: *func,
-                    args: args.iter().map(|a| shift(a, i)).collect(),
-                }
-                .into(),
-            },
-            Expression::Const(..) => e.clone(),
-            Expression::Column { .. } => Intrinsic::Shift
-                .call(&[e.clone(), Expression::Const(Value::from(i)).into()])
-                .unwrap(),
-            Expression::List(xs) => {
-                Expression::List(xs.iter().map(|x| shift(x, i)).collect()).into()
-            }
-            Expression::ArrayColumn { .. } => unreachable!(),
-            Expression::Void => Expression::Void.into(),
-            Expression::ExoColumn { .. } => todo!(),
-        }
-    }
-}
 
 fn make_chain(cs: &ConstraintSet, xs: &[Node], operand: &str, surround: bool) -> String {
     let head = render_expression(cs, &xs[0]);
@@ -75,6 +35,14 @@ fn make_chain(cs: &ConstraintSet, xs: &[Node], operand: &str, surround: bool) ->
         }
     } else {
         head
+    }
+}
+
+fn render_shift(shift: isize) -> String {
+    if shift == 0 {
+        "".into()
+    } else {
+        format!(".Shift({})", shift)
     }
 }
 
@@ -110,8 +78,12 @@ fn render_expression(cs: &ConstraintSet, e: &Node) -> String {
     match e.e() {
         Expression::ArrayColumn { .. } => unreachable!(),
         Expression::Const(x) => format!("symbolic.NewConstant(\"{}\")", x),
-        Expression::Column { handle, .. } => {
-            format!("{}.AsVariable()", reg_mangle(cs, handle).unwrap())
+        Expression::Column { handle, shift, .. } => {
+            format!(
+                "{}{}.AsVariable()",
+                reg_mangle(cs, handle).unwrap(),
+                render_shift(*shift as isize)
+            )
         }
         Expression::Funcall { func, args } => render_funcall(cs, func, args),
         Expression::List(constraints) => constraints
@@ -162,17 +134,6 @@ fn render_funcall(cs: &ConstraintSet, func: &Intrinsic, args: &[Node]) -> String
             }
         }
         Intrinsic::Neg => format!("({}).Neg()", render_expression(cs, &args[0])),
-        Intrinsic::Shift => {
-            let leaf = match &args[0].e() {
-                Expression::Column { handle, .. } => reg_mangle(cs, handle).unwrap(),
-                _ => unreachable!(),
-            };
-            format!(
-                "({}).Shift({}).AsVariable()",
-                leaf,
-                args[1].pure_eval().unwrap(),
-            )
-        }
         x => {
             unimplemented!("{:?}", x)
         }
@@ -411,7 +372,7 @@ fn render_constraint(
             .enumerate()
             .flat_map(|(i, x)| render_constraint(cs, &format!("{}#{}", name, i), domain.clone(), x))
             .collect(),
-        Expression::ExoColumn { handle, .. } => {
+        Expression::ExoColumn { handle, shift, .. } => {
             let register = cs.columns.register_of(handle);
 
             (0..register.width())
@@ -419,14 +380,23 @@ fn render_constraint(
                     let reg_name = reg_mangle_ith(cs, handle, i).unwrap();
                     match &domain {
                         None => {
-                            format!("build.GlobalConstraint(\"{}/{}\", {})", name, i, reg_name)
+                            format!(
+                                "build.GlobalConstraint(\"{}/{}\", {}{})",
+                                name,
+                                i,
+                                reg_name,
+                                render_shift(*shift as isize)
+                            )
                         }
                         Some(domain) => domain
                             .iter()
                             .map(|x| {
                                 format!(
-                                    "build.LocalConstraint(\"{}/{}\", {}.Shift({}).AsVariable())",
-                                    name, i, reg_name, x,
+                                    "build.LocalConstraint(\"{}/{}\", {}{}.AsVariable())",
+                                    name,
+                                    i,
+                                    reg_name,
+                                    render_shift(*shift as isize + x),
                                 )
                             })
                             .collect::<Vec<_>>()
@@ -447,7 +417,7 @@ fn render_constraint(
                     format!(
                         "build.LocalConstraint(\"{}\", {})",
                         name,
-                        render_expression(cs, &shift(expr, x))
+                        render_expression(cs, &expr.clone().shift(x.try_into().unwrap()))
                     )
                 })
                 .collect::<Vec<_>>(),
