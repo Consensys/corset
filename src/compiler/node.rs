@@ -252,7 +252,7 @@ impl Node {
         if magma > Magma::Native {
             Node {
                 _e: Expression::ExoColumn {
-                    handle,
+                    handle: handle.clone(),
                     shift: shift.unwrap_or(0),
                     padding_value,
                     base: base.unwrap_or_else(|| t.unwrap_or(Magma::Native).into()),
@@ -263,7 +263,7 @@ impl Node {
         } else {
             Node {
                 _e: Expression::Column {
-                    handle,
+                    handle: handle.clone(),
                     shift: shift.unwrap_or(0),
                     kind: kind.unwrap_or(Kind::Phantom),
                     padding_value,
@@ -290,39 +290,6 @@ impl Node {
             _t: Some(Type::ArrayColumn(t.unwrap_or(Magma::Native))),
             dbg: None,
         }
-    }
-    pub fn phantom_column(x: &ColumnRef, m: Magma) -> Node {
-        Node {
-            _e: Expression::Column {
-                handle: x.to_owned(),
-                kind: Kind::Phantom,
-                shift: 0,
-                padding_value: None,
-                base: Base::Hex,
-            },
-            _t: Some(Type::Column(m)),
-            dbg: None,
-        }
-    }
-    pub fn shift_in_place(&mut self, i: i16) {
-        match self.e_mut() {
-            Expression::Funcall { args, .. } => {
-                for a in args.iter_mut() {
-                    a.shift_in_place(i);
-                }
-            }
-            Expression::Column { shift, .. } | Expression::ExoColumn { shift, .. } => {
-                *shift += i;
-            }
-            Expression::ArrayColumn { .. } => unreachable!(),
-            Expression::List(ls) => {
-                for l in ls.iter_mut() {
-                    l.shift_in_place(i);
-                }
-            }
-            Expression::Const(_) => {}
-            Expression::Void => {}
-        };
     }
     pub fn shift(mut self, i: i16) -> Self {
         match self.e_mut() {
