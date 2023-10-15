@@ -21,16 +21,16 @@ fn compute_ancillaries(
     cs: &mut ConstraintSet,
     exo_operations: HashSet<(ExoOperation, Value, Value)>,
 ) -> Result<()> {
-    let mut add_ops = Vec::with_capacity(16 * exo_operations.len());
-    let mut add_args1 = Vec::with_capacity(16 * exo_operations.len());
-    let mut add_args2 = Vec::with_capacity(16 * exo_operations.len());
-    let mut add_results = Vec::with_capacity(16 * exo_operations.len());
-    let mut add_done = Vec::with_capacity(16 * exo_operations.len());
+    let mut add_ops = vec![Value::zero()];
+    let mut add_args1 = vec![Value::zero()];
+    let mut add_args2 = vec![Value::zero()];
+    let mut add_results = vec![Value::zero()];
+    let mut add_done = vec![Value::zero()];
 
-    let mut mul_args1 = Vec::with_capacity(16 * exo_operations.len());
-    let mut mul_args2 = Vec::with_capacity(16 * exo_operations.len());
-    let mut mul_results = Vec::with_capacity(16 * exo_operations.len());
-    let mut mul_done = Vec::with_capacity(16 * exo_operations.len());
+    let mut mul_args1 = vec![Value::zero()];
+    let mut mul_args2 = vec![Value::zero()];
+    let mut mul_results = vec![Value::zero()];
+    let mut mul_done = vec![Value::zero()];
     let do_it = !exo_operations.is_empty();
     for (op, arg1, arg2) in exo_operations.into_iter() {
         // TODO: actually compute the trace
