@@ -226,11 +226,17 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Exp => &[&[Type::Any(Magma::Any)], &[Type::Scalar(Magma::Any)]],
             Intrinsic::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
             Intrinsic::Inv | Intrinsic::Normalize => &[&[Type::Any(Magma::Any)]],
-            Intrinsic::IfZero | Intrinsic::IfNotZero => &[
-                // condition type TODO: force to bool/loob
+            Intrinsic::IfZero => &[
+                // condition type
+                &[Type::Any(Magma::Loobean)],
+                // then/else arms typ
                 &[Type::Any(Magma::Any)],
+            ],
+            Intrinsic::IfNotZero => &[
+                // condition type
+                &[Type::Any(Magma::Boolean)],
                 // then/else arms type
-                &[Type::Any(Magma::Any), Type::List(Magma::Any)],
+                &[Type::Any(Magma::Any)],
             ],
             Intrinsic::Begin => &[&[Type::Any(Magma::Any)]],
         };
