@@ -1,10 +1,16 @@
-use crate::compiler::{self, CompileSettings};
+use crate::{
+    compiler::{self, CompileSettings},
+    transformer::ExpansionLevel,
+    ConstraintSetBuilder,
+};
 use anyhow::*;
 
 fn make(name: &str, source: &str) -> Result<()> {
-    let inputs = vec![("stdlib", include_str!("stdlib.lisp")), (name, source)];
+    let mut r = ConstraintSetBuilder::from_sources(false, false);
+    r.add_source(source)?;
+    r.expand_to(ExpansionLevel::top());
 
-    compiler::make(inputs.as_slice(), &CompileSettings { debug: false }).map(|_| ())
+    r.to_constraint_set().map(|_| ())
 }
 
 fn must_run(name: &str, source: &str) {
@@ -202,4 +208,17 @@ fn base_declaration() {
         "cannot redefine base",
         "(defcolumns (A :display :hex :display :dec))",
     );
+}
+
+#[test]
+fn exo_if() {
+    must_run(
+        "WiP",
+        "(module foobar) (defcolumns A B (C :bool) (D :i32)) (defconstraint pipo () (if (eq! A B) C D))",
+    );
+
+    // must_run(
+    //     "WiP 2",
+    //     "(module foobar) (defcolumns A B (C :bool) (D :i32)) (defconstraint pipo () (if (eq! A D) C D))",
+    // );
 }

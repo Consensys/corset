@@ -221,6 +221,47 @@ impl FuncVerifier<Node> for Intrinsic {
     }
     fn validate_types(&self, args: &[Node]) -> Result<()> {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
+
+        // Intrinsic-specific checks
+        match self {
+            Intrinsic::Add
+            | Intrinsic::Sub
+            | Intrinsic::Mul
+            | Intrinsic::VectorAdd
+            | Intrinsic::VectorSub
+            | Intrinsic::VectorMul => {}
+            Intrinsic::Begin => {
+                // TODO: maybe?
+                // if args_t
+                //     .iter()
+                //     .any(|t| args_t.get(0).map(|tt| tt.c() != t.c()).unwrap_or(false))
+                // {
+                //     bail!(
+                //         "can not mix multiple conditionings in if branches: {}",
+                //         args_t.iter().skip(1).map(|t| t.c().to_string()).join(" ")
+                //     )
+                // }
+            }
+            Intrinsic::IfZero => {
+                if !args_t[0].is_conditioned() {
+                    bail!(CompileError::ConditioningError(self.to_string(), args_t[0]))
+                }
+
+                // TODO: maybe?
+                // if args_t
+                //     .iter()
+                //     .skip(1)
+                //     .any(|t| args_t.get(1).map(|tt| tt.c() != t.c()).unwrap_or(false))
+                // {
+                //     bail!(
+                //         "can not mix multiple conditionings: {}",
+                //         args_t.iter().map(|t| t.to_string()).join(" ")
+                //     )
+                // }
+            }
+            _ => {}
+        }
+
         // The typing of functions is represented as a list of list.
         //
         // The elements of the first-level list represent the acceptable typing
@@ -1193,11 +1234,13 @@ fn apply_builtin(
             let shift = traversed_args[1].pure_eval()?.to_i16().unwrap();
             Ok(Some(traversed_args.get(0).unwrap().clone().shift(shift)))
         }
-        // TODO: add binary versions
-        Builtin::BEq => todo!(),
-        Builtin::BNeq => todo!(),
-        Builtin::LEq => todo!(),
-        Builtin::LNeq => todo!(),
+        Builtin::NormFlat => {
+            if traversed_args[0].is_exocolumn() {
+                todo!("{}", traversed_args[0].pretty())
+            } else {
+                Ok(Some(traversed_args[0].clone()))
+            }
+        }
     }
 }
 

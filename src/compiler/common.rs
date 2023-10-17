@@ -22,10 +22,7 @@ pub enum Form {
 pub enum Builtin {
     Len,
     Shift,
-    BEq,
-    BNeq,
-    LEq,
-    LNeq,
+    NormFlat,
 }
 impl std::fmt::Display for Builtin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -35,10 +32,7 @@ impl std::fmt::Display for Builtin {
             match self {
                 Builtin::Len => "len",
                 Builtin::Shift => "shift",
-                Builtin::BEq => "eq",
-                Builtin::BNeq => "neq",
-                Builtin::LEq => "eq!",
-                Builtin::LNeq => "neq!",
+                Builtin::NormFlat => "~>>",
             }
         )
     }
@@ -187,17 +181,16 @@ impl FuncVerifier<Node> for Builtin {
         match self {
             Builtin::Len => Arity::Monadic,
             Builtin::Shift => Arity::Dyadic,
-            Builtin::BEq | Builtin::BNeq | Builtin::LEq | Builtin::LNeq => Arity::Monadic,
+            Builtin::NormFlat => Arity::Monadic,
         }
     }
 
     fn validate_types(&self, args: &[Node]) -> Result<()> {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
         let expected_t: &[&[Type]] = match self {
-            Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
-            Builtin::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
-            Builtin::BEq | Builtin::BNeq => &[&[Type::Any(Magma::Boolean)]],
-            Builtin::LEq | Builtin::LNeq => &[&[Type::Any(Magma::Loobean)]],
+            Builtin::Len => &[&[Type::ArrayColumn(Magma::ANY)]],
+            Builtin::Shift => &[&[Type::Column(Magma::ANY)], &[Type::Scalar(Magma::ANY)]],
+            Builtin::NormFlat => &[&[Type::Column(Magma::ANY)]],
         };
 
         if super::compatible_with_repeating(expected_t, &args_t) {

@@ -1,4 +1,3 @@
-(defunalias = eq!)
 (defunalias debug-assert debug)
 
 (defunalias if-zero if!)
@@ -24,11 +23,12 @@
 
 (defpurefun ((not :boolean :nowarn) (x :boolean)) (- 1 x))
 
-(defpurefun ((eq! :loobean :nowarn) x y) (-. x y))
+(defpurefun ((eq! :loobean :nowarn) x y) (~>> (-. x y)))
+(defpurefun ((neq! :loobean :nowarn) x y) (not (~ (eq! x y))))
 
 (defpurefun ((eq :boolean :nowarn) (x :boolean) (y :boolean)) (^ (-. x y) 2))
-(defpurefun ((eq :boolean :nowarn) x y) (- 1 (~ (-. x y))))
-(defpurefun ((neq :boolean :nowarn) x y) (~ (-. x y)))
+(defpurefun ((eq :boolean :nowarn) x y) (- 1 (eq! x y)))
+(defpurefun ((neq :boolean :nowarn) x y) (eq! x y))
 
 
 ;; Variadic versions of and/or
@@ -40,7 +40,6 @@
 ;; Boolean functions
 (defpurefun (is-not-zero e0) (* e0 (inv e0)))
 (defpurefun (is-zero e0) (- 1 (* e0 (inv e0))))
-(defpurefun ((neq! :loob :nowarn) a b) (not (~ (eq! a b))))
 
 
 

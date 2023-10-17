@@ -54,6 +54,10 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "shift"),
             class: FunctionClass::Builtin(Builtin::Shift),
         },
+        "~>>" => Function{
+            handle: Handle::new(super::MAIN_MODULE, "~>>"),
+            class: FunctionClass::Builtin(Builtin::NormFlat),
+        },
 
         // Intrinsics
         "+" => Function {

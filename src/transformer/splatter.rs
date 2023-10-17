@@ -100,12 +100,7 @@ impl Node {
 
                 if args.iter().any(|a| a.is_exocolumn()) {
                     match func {
-                        Intrinsic::Add
-                        | Intrinsic::Sub
-                        | Intrinsic::Mul
-                        | Intrinsic::VectorAdd
-                        | Intrinsic::VectorSub
-                        | Intrinsic::VectorMul => {
+                        Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => {
                             assert!(args.len() == 2);
                             for a in args.iter_mut() {
                                 // TODO: probably only necessary for
@@ -133,6 +128,9 @@ impl Node {
                                 .base(Base::Hex)
                                 .kind(Kind::Phantom)
                                 .build();
+                        }
+                        Intrinsic::VectorAdd | Intrinsic::VectorSub | Intrinsic::VectorMul => {
+                            todo!()
                         }
                         Intrinsic::Inv => todo!(),
                         _ => unreachable!(),
@@ -245,11 +243,16 @@ impl ConstraintSet {
         let mut new_exo_columns = Vec::new();
         let mut new_constants = Vec::new();
         let mut adder: ProtoAncillaries = Default::default();
+        println!("{:?}", self.constraints);
         for i in 0..self.constraints.len() {
             if let Constraint::Vanishes { expr: e, .. } = self.constraints.get_mut(i).unwrap() {
                 e.dyadize();
+                println!("{e}");
                 e.do_splatter(
-                    self.columns.module_for(e.dependencies()).unwrap().as_str(),
+                    self.columns
+                        .module_for(dbg!(&e).dependencies())
+                        .unwrap()
+                        .as_str(),
                     &mut adder,
                     &mut new_exo_columns,
                     &mut new_constants,

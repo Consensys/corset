@@ -12,16 +12,34 @@ use std::cmp::Ordering;
 
 fn priority(a: Intrinsic, b: Intrinsic) -> Ordering {
     match (a, b) {
-        (Intrinsic::Add, Intrinsic::Add) => Ordering::Equal,
-        (Intrinsic::Add, Intrinsic::Sub) => Ordering::Less,
-        (Intrinsic::Add, Intrinsic::Mul) => Ordering::Less,
-        (Intrinsic::Sub, Intrinsic::Mul) => Ordering::Less,
-        (Intrinsic::Sub, Intrinsic::Add) => Ordering::Equal,
-        (Intrinsic::Mul, Intrinsic::Add) => Ordering::Greater,
-        (Intrinsic::Mul, Intrinsic::Sub) => Ordering::Greater,
-        (Intrinsic::Mul, Intrinsic::Mul) => Ordering::Equal,
-        (Intrinsic::Sub, Intrinsic::Sub) => Ordering::Equal,
-        (Intrinsic::Sub, Intrinsic::Exp) => Ordering::Less,
+        (Intrinsic::Add | Intrinsic::VectorAdd, Intrinsic::Add | Intrinsic::VectorAdd) => {
+            Ordering::Equal
+        }
+        (Intrinsic::Add | Intrinsic::VectorAdd, Intrinsic::Sub | Intrinsic::VectorSub) => {
+            Ordering::Less
+        }
+        (Intrinsic::Add | Intrinsic::VectorAdd, Intrinsic::Mul | Intrinsic::VectorMul) => {
+            Ordering::Less
+        }
+        (Intrinsic::Sub | Intrinsic::VectorSub, Intrinsic::Mul | Intrinsic::VectorMul) => {
+            Ordering::Less
+        }
+        (Intrinsic::Sub | Intrinsic::VectorSub, Intrinsic::Add | Intrinsic::VectorAdd) => {
+            Ordering::Equal
+        }
+        (Intrinsic::Mul | Intrinsic::VectorMul, Intrinsic::Add | Intrinsic::VectorAdd) => {
+            Ordering::Greater
+        }
+        (Intrinsic::Mul | Intrinsic::VectorMul, Intrinsic::Sub | Intrinsic::VectorSub) => {
+            Ordering::Greater
+        }
+        (Intrinsic::Mul | Intrinsic::VectorMul, Intrinsic::Mul | Intrinsic::VectorMul) => {
+            Ordering::Equal
+        }
+        (Intrinsic::Sub | Intrinsic::VectorSub, Intrinsic::Sub | Intrinsic::VectorSub) => {
+            Ordering::Equal
+        }
+        (Intrinsic::Sub | Intrinsic::VectorSub, Intrinsic::Exp) => Ordering::Less,
         _ => unimplemented!("{a}/{b}"),
     }
 }
