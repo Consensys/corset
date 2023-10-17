@@ -153,7 +153,7 @@ impl Defined {
             current_specialization.in_types == new_specialization.in_types
         }) {
             // TODO: better error
-            bail!("specialization {:?} already defined", new_specialization)
+            bail!("specialization {} already defined", new_specialization)
         } else {
             self.specializations.push(new_specialization.clone());
         }
@@ -190,6 +190,23 @@ pub struct Specialization {
     pub out_type: Option<Type>,
     pub body: AstNode,
     pub nowarn: bool,
+}
+impl std::fmt::Display for Specialization {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.pure {
+            write!(f, "(pure) ",)?;
+        }
+
+        for t in self.in_types.iter() {
+            write!(f, "{} ", t)?;
+        }
+
+        if let Some(t) = self.out_type {
+            write!(f, "-> {}", t)
+        } else {
+            write!(f, "-> ?")
+        }
+    }
 }
 
 impl FuncVerifier<Node> for Intrinsic {

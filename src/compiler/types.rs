@@ -19,7 +19,6 @@ pub enum Type {
     ArrayColumn(Magma),
     List(Magma),
 }
-
 impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
