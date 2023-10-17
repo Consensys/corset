@@ -16,7 +16,7 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
             for e in args.iter_mut() {
                 do_expand_ifs(e)?;
             }
-            if matches!(func, Intrinsic::IfZero | Intrinsic::IfNotZero) {
+            if matches!(func, Intrinsic::IfZero) {
                 let cond = args[0].clone();
                 // If the condition reduces to a constant, we can determine the result
                 if let Ok(constant_cond) = cond.pure_eval() {
@@ -28,13 +28,13 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                                 *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
                             }
                         }
-                        Intrinsic::IfNotZero => {
-                            if !constant_cond.is_zero() {
-                                *e = args[1].clone();
-                            } else {
-                                *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
-                            }
-                        }
+                        // Intrinsic::IfNotZero => {
+                        //     if !constant_cond.is_zero() {
+                        //         *e = args[1].clone();
+                        //     } else {
+                        //         *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
+                        //     }
+                        // }
                         _ => unreachable!(),
                     }
                 } else {
@@ -53,7 +53,7 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                         };
                         match func {
                             Intrinsic::IfZero => [cond_zero, cond_not_zero],
-                            Intrinsic::IfNotZero => [cond_not_zero, cond_zero],
+                            // Intrinsic::IfNotZero => [cond_not_zero, cond_zero],
                             _ => unreachable!(),
                         }
                     };
@@ -107,7 +107,7 @@ fn raise_ifs(mut e: Node) -> Node {
                 Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => {
                     for (i, a) in args.iter().enumerate() {
                         if let Expression::Funcall {
-                            func: func_if @ (Intrinsic::IfZero | Intrinsic::IfNotZero),
+                            func: func_if @ Intrinsic::IfZero,
                             args: args_if,
                         } = a.e()
                         {
@@ -150,7 +150,6 @@ fn raise_ifs(mut e: Node) -> Node {
                     e
                 }
                 Intrinsic::IfZero
-                | Intrinsic::IfNotZero
                 | Intrinsic::Neg
                 | Intrinsic::Inv
                 | Intrinsic::Normalize

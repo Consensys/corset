@@ -425,9 +425,10 @@ impl Node {
                 Intrinsic::Inv => false,
                 Intrinsic::Normalize => false,
                 Intrinsic::Begin => unreachable!(),
-                Intrinsic::IfZero | Intrinsic::IfNotZero => {
+                Intrinsic::IfZero => {
                     args[1].may_overflow() || args.get(2).map(|a| a.may_overflow()).unwrap_or(false)
                 }
+                _ => false,
             },
             Expression::Const(_) => false,
             Expression::Column { .. } => false,

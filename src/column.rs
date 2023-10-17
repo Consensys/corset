@@ -44,9 +44,9 @@ pub enum Value {
 impl Value {
     pub fn to_string(&self) -> String {
         match self {
-            Value::Native(f) => f.to_string(),
+            Value::Native(f) => f.pretty(),
             Value::ExoNative(fs) => fs.iter().map(|f| f.to_string()).join(" "),
-            Value::BigInt(_) => String::from("TODO:to_string"),
+            Value::BigInt(x) => x.to_str_radix(10),
         }
     }
 
@@ -200,15 +200,18 @@ impl Value {
         }
     }
 
+    /// Return the normalized version of a value, i.e.:
+    ///  * 0 or 1 for integers and field elements;
+    ///  * each element recursively normalized for exo-values
     pub(crate) fn normalize(&self) -> Value {
         match &self {
             Value::Native(f) => {
-                let mut r = f.inverse().unwrap();
+                let mut r = f.inverse().unwrap_or_else(Fr::zero);
                 r.mul_assign(&f);
                 Value::Native(r)
             }
-            Value::ExoNative(_) => {
-                todo!()
+            Value::ExoNative(fs) => {
+                Value::ExoNative(fs.iter().map(|f| f.inverse().unwrap()).collect())
             }
             Value::BigInt(i) => Value::BigInt(if i.is_zero() {
                 BigInt::zero()
@@ -346,13 +349,15 @@ impl std::cmp::PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Value::BigInt(i1), Value::BigInt(i2)) => i1.cmp(i2).is_eq(),
-            (Value::BigInt(_), Value::Native(_)) => todo!(),
+            (Value::BigInt(_), Value::Native(_)) => false,
             (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
             (Value::Native(_), Value::BigInt(_)) => todo!(),
             (Value::Native(f1), Value::Native(f2)) => f1.eq(f2),
-            (Value::Native(_), Value::ExoNative(_)) => todo!(),
             (Value::ExoNative(_), Value::BigInt(_)) => todo!(),
-            (Value::ExoNative(_), Value::Native(_)) => todo!(),
+            (Value::Native(f2), Value::ExoNative(f1s))
+            | (Value::ExoNative(f1s), Value::Native(f2)) => {
+                f1s[0].eq(f2) && f1s.iter().skip(1).all(|f2| f2.is_zero())
+            }
             (Value::ExoNative(fs1), Value::ExoNative(fs2)) => {
                 fs1.iter().zip(fs2.iter()).all(|(f1, f2)| f1.eq(f2))
             }
