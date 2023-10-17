@@ -476,17 +476,32 @@ pub enum ValueBacking {
         v: Vec<Value>,
         spilling: isize,
     },
+    Expression {
+        e: Node,
+        spilling: isize,
+    },
     Function {
         /// if i >= 0, shall return the expected actual value; if i < 0, shall
         /// return the adequate padding value
         f: Box<dyn Fn(isize, &ColumnSet) -> Option<Value> + Sync>,
         spilling: isize,
-        end: usize,
     },
 }
 impl std::fmt::Debug for ValueBacking {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "XXXbackingXXX")
+        match self {
+            ValueBacking::Vector { v, spilling } => {
+                write!(
+                    f,
+                    "Vector-backed: len = {}, spilling = {}",
+                    v.len(),
+                    spilling
+                )
+            }
+            ValueBacking::Expression { spilling, .. } | ValueBacking::Function { spilling, .. } => {
+                write!(f, "Function-backed: spilling = {}", spilling)
+            }
+        }
     }
 }
 impl std::default::Default for ValueBacking {
@@ -502,35 +517,36 @@ impl ValueBacking {
         ValueBacking::Vector { v, spilling }
     }
 
+    pub fn from_expression(e: Node, spilling: isize) -> Self {
+        ValueBacking::Expression { e, spilling }
+    }
+
     pub fn from_fn<F: Fn(isize, &'_ ColumnSet) -> Option<Value> + Sync + 'static>(
         f: Box<F>,
+        spilling: isize,
     ) -> Self {
-        ValueBacking::Function {
-            f,
-            spilling: 0,
-            end: 32,
+        ValueBacking::Function { f, spilling }
+    }
+
+    pub fn len(&self) -> Option<usize> {
+        match self {
+            ValueBacking::Vector { v, spilling } => Some(v.len() - *spilling as usize),
+            ValueBacking::Expression { .. } | ValueBacking::Function { .. } => None,
         }
     }
 
-    pub fn len(&self) -> usize {
+    fn padded_len(&self) -> Option<usize> {
         match self {
-            ValueBacking::Vector { v, spilling } => v.len() - *spilling as usize,
-            ValueBacking::Function { end, .. } => *end,
-        }
-    }
-
-    fn padded_len(&self) -> usize {
-        match self {
-            ValueBacking::Vector { v, .. } => v.len(),
-            ValueBacking::Function { spilling, end, .. } => end + *spilling as usize,
+            ValueBacking::Vector { v, .. } => Some(v.len()),
+            ValueBacking::Expression { .. } | ValueBacking::Function { .. } => None,
         }
     }
 
     fn spilling(&self) -> isize {
         match self {
-            ValueBacking::Vector { spilling, .. } | ValueBacking::Function { spilling, .. } => {
-                *spilling
-            }
+            ValueBacking::Vector { spilling, .. }
+            | ValueBacking::Expression { spilling, .. }
+            | ValueBacking::Function { spilling, .. } => *spilling,
         }
     }
 
@@ -546,6 +562,9 @@ impl ValueBacking {
                         x.add_assign(y)
                     }
                 }
+            }
+            ValueBacking::Expression { .. } => {
+                bail!("can not update value of expression-based register backing")
             }
             ValueBacking::Function { .. } => {
                 bail!("can not update value of functional register backing")
@@ -574,7 +593,21 @@ impl ValueBacking {
                 }
             }
             .cloned(),
-            ValueBacking::Function { f, spilling, .. } => f(i + spilling, cs),
+            ValueBacking::Expression { e, spilling } => e.eval(
+                i + spilling,
+                |handle, j, _| {
+                    cs.get(handle, j, false).or_else(|| {
+                        cs.column(handle)
+                            .unwrap()
+                            .padding_value
+                            .as_ref()
+                            .map(|x| x.clone())
+                    })
+                },
+                &mut None,
+                &EvalSettings { wrap: false },
+            ),
+            ValueBacking::Function { f, spilling } => f(i + spilling, cs),
         }
     }
 
@@ -592,6 +625,20 @@ impl ValueBacking {
                 }
             }
             .cloned(),
+            ValueBacking::Expression { e, .. } => e.eval(
+                i,
+                |handle, j, _| {
+                    cs.get(handle, j, false).or_else(|| {
+                        cs.column(handle)
+                            .unwrap()
+                            .padding_value
+                            .as_ref()
+                            .map(|x| x.clone())
+                    })
+                },
+                &mut None,
+                &EvalSettings { wrap: false },
+            ),
             ValueBacking::Function { f, .. } => f(i, cs),
         }
     }
@@ -604,20 +651,23 @@ impl ValueBacking {
         }
     }
 
-    fn concretize(self) -> Self {
+    fn concretize(mut self) -> Self {
         match self {
             ValueBacking::Vector { mut v, spilling } => {
                 v.iter_mut().for_each(|x| x.to_native());
                 ValueBacking::Vector { v, spilling }
             }
-            ValueBacking::Function { f, spilling, end } => ValueBacking::Function {
+            ValueBacking::Expression { ref mut e, .. } => {
+                e.concretize();
+                self
+            }
+            ValueBacking::Function { f, spilling } => ValueBacking::Function {
                 f: Box::new(move |i, columns: &ColumnSet| {
                     let mut v = f(i, columns);
                     v.as_mut().map(|x| x.to_native());
                     v
                 }),
                 spilling,
-                end,
             },
         }
     }
@@ -642,6 +692,10 @@ impl<'a> Iterator for ValueBackingIter<'a> {
                     self.i += 1;
                     v.get(self.i as usize).cloned()
                 }
+            }
+            ValueBacking::Expression { e, .. } => {
+                self.i += 1;
+                self.value.get_raw(self.i - 1, false, self.columns)
             }
             ValueBacking::Function { f, .. } => {
                 self.i += 1;
@@ -772,7 +826,7 @@ impl Column {
             padding_value: padding_value.map(|v| Value::from(v as usize)),
             used: used.unwrap_or(true),
             kind: kind.unwrap_or(Kind::Phantom),
-            t: t.unwrap_or(Magma::Native),
+            t: t.unwrap_or(Magma::native()),
             intrinsic_size_factor,
             base: base.unwrap_or(Base::Dec),
             computed: false,
