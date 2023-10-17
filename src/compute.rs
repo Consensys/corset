@@ -69,8 +69,11 @@ fn compute_ancillaries(
         }
     }
 
+    use crate::compiler::generator::{ADDER_MODULE, MULER_MODULE};
+    cs.effective_len_or_set(ADDER_MODULE, add_done.len() as isize);
+    cs.effective_len_or_set(MULER_MODULE, mul_done.len() as isize);
+
     if do_it {
-        use crate::compiler::generator::{ADDER_MODULE, MULER_MODULE};
         let h: ColumnRef = Handle::new(ADDER_MODULE, "op").into();
         trace!("Filling {}", h.pretty());
         cs.columns
@@ -215,7 +218,7 @@ fn compute_sorted(
     tos: &[ColumnRef],
     signs: &[bool],
 ) -> Result<Vec<ComputedColumn>> {
-    let spilling = cs.spilling_for(&froms[0]).unwrap();
+    let spilling = cs.spilling_for_column(&froms[0]).unwrap();
     for from in froms.iter() {
         ensure_is_computed(from, cs)?;
     }
@@ -264,7 +267,7 @@ fn compute_exoconstant(
     to: &ColumnRef,
     value: &Value,
 ) -> Result<Vec<ComputedColumn>> {
-    let spilling = cs.spilling_for(to).unwrap();
+    let spilling = cs.spilling_for_column(to).unwrap();
     let len = cs
         .effective_len_for(&cs.columns.column(to).unwrap().handle.module)
         .unwrap() as usize;
@@ -288,26 +291,22 @@ fn compute_exooperation(
     target: &ColumnRef,
     exo_operations: &mut HashSet<(ExoOperation, Value, Value)>,
 ) -> Result<Vec<ComputedColumn>> {
-    let spilling = cs.spilling_for(target).unwrap();
+    let spilling = cs.spilling_for_column(target).unwrap();
     let len = cs
         .effective_len_for(&cs.columns.column(target).unwrap().handle.module)
         .unwrap();
 
     let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
     let getter = |handle: &ColumnRef, j, _| {
-        Some(
+        let r = cs.columns.get(handle, j, false).or_else(|| {
             cs.columns
-                .get(handle, j, false)
-                .or_else(|| {
-                    cs.columns
-                        .column(handle)
-                        .unwrap()
-                        .padding_value
-                        .as_ref()
-                        .map(|x| x.clone())
-                })
-                .unwrap_or_else(Value::zero),
-        )
+                .column(handle)
+                .unwrap()
+                .padding_value
+                .as_ref()
+                .map(|x| x.clone())
+        });
+        r
     };
 
     let value: Vec<Value> = (-spilling..=len)
@@ -347,7 +346,7 @@ fn compute_cyclic(
     to: &ColumnRef,
     modulo: usize,
 ) -> Result<Vec<ComputedColumn>> {
-    let spilling = cs.spilling_for(&froms[0]).unwrap();
+    let spilling = cs.spilling_for_column(&froms[0]).unwrap();
     for from in froms.iter() {
         ensure_is_computed(from, cs)?;
     }
@@ -384,40 +383,17 @@ pub fn compute_composite(
         ensure_is_computed(from, cs)?;
     }
 
+    let module = cs.columns.module_of(target);
+    let spilling = cs.spilling_of(&module).unwrap();
+
     Ok(vec![(
         target.to_owned(),
         if let Result::Ok(cst) = exp.pure_eval() {
             let v = Value::from(cst);
-            ValueBacking::from_fn(Box::new(move |_, _: &ColumnSet| Some(v.clone())))
+            ValueBacking::from_fn(Box::new(move |_, _: &ColumnSet| Some(v.clone())), spilling)
         } else {
             let captured_exp = exp.clone();
-            ValueBacking::from_fn(Box::new(move |i, columns: &ColumnSet| {
-                captured_exp.eval(
-                    i,
-                    |handle, j, _| {
-                        Some(
-                            columns
-                                .get(handle, j, false)
-                                .or_else(|| {
-                                    // This is triggered when filling the spilling
-                                    // of an expression with past spilling. In this
-                                    // case, the expression will overflow past the
-                                    // past spilling, and None should be converted
-                                    // to the padding value or 0.
-                                    columns
-                                        .column(handle)
-                                        .unwrap()
-                                        .padding_value
-                                        .as_ref()
-                                        .map(|x| x.clone())
-                                })
-                                .unwrap_or_else(Value::zero),
-                        )
-                    },
-                    &mut None,
-                    &EvalSettings { wrap: false },
-                )
-            }))
+            ValueBacking::from_expression(captured_exp, spilling)
         },
     )])
 }
@@ -438,7 +414,7 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
             ensure_is_computed(from, cs)?;
         }
 
-        let spilling = cs.spilling_for(&froms[0]).unwrap();
+        let spilling = cs.spilling_for_column(&froms[0]).unwrap();
         let len = cs.columns.len(&froms[0]).unwrap();
 
         let mut at_values = std::iter::repeat_with(|| vec![Value::zero(); spilling as usize])

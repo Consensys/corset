@@ -3,11 +3,8 @@ use anyhow::*;
 use postgres::Client;
 #[cfg(feature = "postgres")]
 use std::io::Read;
-use std::unreachable;
 
-use crate::{
-    column::Value, compiler::Magma, errors::RuntimeError, pretty::Pretty, structs::Handle,
-};
+use crate::{column::Value, compiler::Magma, pretty::Pretty, structs::Handle};
 
 pub fn is_file_empty(f: &str) -> Result<bool> {
     std::fs::metadata(f)
@@ -38,13 +35,8 @@ pub fn connect_to_db(
     .with_context(|| format!("while connecting to {}@{}/{}", user, host, database))
 }
 
-lazy_static::lazy_static! {
-    static ref F_15: Value = Value::from(15);
-    static ref F_255: Value = Value::from(255);
-}
-
 pub fn maybe_warn(t: Magma, xs: &[Value], h: &Handle) -> Result<()> {
-    if t != Magma::Boolean
+    if !t.is_binary()
         && xs.iter().all(|x| x.is_zero() || x.is_one())
         && xs.iter().any(|x| x.is_one())
     {
@@ -55,42 +47,6 @@ pub fn maybe_warn(t: Magma, xs: &[Value], h: &Handle) -> Result<()> {
     }
 
     Ok(())
-}
-
-pub fn validate(t: Magma, x: Value) -> Result<Value> {
-    match t {
-        Magma::None => unreachable!(),
-        Magma::Boolean | Magma::Loobean => {
-            if x.is_zero() || x == Value::one() {
-                Ok(x)
-            } else {
-                bail!(RuntimeError::InvalidValue("bool", x))
-            }
-        }
-        Magma::Nibble => {
-            if x.le(&F_15) {
-                Ok(x)
-            } else {
-                bail!(RuntimeError::InvalidValue("nibble", x))
-            }
-        }
-        Magma::Byte => {
-            if x.le(&F_255) {
-                Ok(x)
-            } else {
-                bail!(RuntimeError::InvalidValue("byte", x))
-            }
-        }
-        Magma::Native => Ok(x),
-        Magma::Integer(b) => {
-            if x.bit_size() > b {
-                bail!(RuntimeError::InvalidValue("byte", x))
-            } else {
-                Ok(x)
-            }
-        }
-        Magma::Any => unreachable!(),
-    }
 }
 
 /// Remove all symbols in a symbol which are invalid in Go identifiers

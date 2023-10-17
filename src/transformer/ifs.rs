@@ -1,7 +1,7 @@
 use anyhow::Result;
 use num_traits::Zero;
 
-use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
+use crate::compiler::{Conditioning, Constraint, ConstraintSet, Expression, Intrinsic, Node};
 
 use super::{flatten_list, wrap};
 
@@ -18,43 +18,36 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
             }
             if matches!(func, Intrinsic::IfZero) {
                 let cond = args[0].clone();
+                let reverse = match cond.t().m().c() {
+                    Conditioning::Loobean => false,
+                    Conditioning::Boolean => true,
+                    _ => unreachable!("condition is {}", cond.t()),
+                };
+
                 // If the condition reduces to a constant, we can determine the result
                 if let Ok(constant_cond) = cond.pure_eval() {
-                    match func {
-                        Intrinsic::IfZero => {
-                            if constant_cond.is_zero() {
-                                *e = args[1].clone();
-                            } else {
-                                *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
-                            }
+                    if reverse {
+                        if !constant_cond.is_zero() {
+                            *e = args[1].clone();
+                        } else {
+                            *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
                         }
-                        // Intrinsic::IfNotZero => {
-                        //     if !constant_cond.is_zero() {
-                        //         *e = args[1].clone();
-                        //     } else {
-                        //         *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
-                        //     }
-                        // }
-                        _ => unreachable!(),
+                    } else {
+                        if constant_cond.is_zero() {
+                            *e = args[1].clone();
+                        } else {
+                            *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
+                        }
                     }
                 } else {
                     let conds = {
                         let cond_not_zero = cond.clone();
-                        // If the condition is binary, cond_zero = 1 - x...
-                        let cond_zero = if args[0].t().is_bool() {
-                            Intrinsic::Sub.call(&[Node::one(), cond])?
+                        let cond_zero = Intrinsic::Sub
+                            .call(&[Node::one(), Intrinsic::Normalize.call(&[cond.clone()])?])?;
+                        if reverse {
+                            [cond_zero, cond_not_zero]
                         } else {
-                            // ...otherwise, cond_zero = 1 - x.INV(x)
-                            Intrinsic::Sub.call(&[
-                                Node::one(),
-                                Intrinsic::Mul
-                                    .call(&[cond.clone(), Intrinsic::Inv.call(&[cond])?])?,
-                            ])?
-                        };
-                        match func {
-                            Intrinsic::IfZero => [cond_zero, cond_not_zero],
-                            // Intrinsic::IfNotZero => [cond_not_zero, cond_zero],
-                            _ => unreachable!(),
+                            [cond_not_zero, cond_zero]
                         }
                     };
 

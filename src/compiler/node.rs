@@ -212,17 +212,17 @@ impl Node {
         Node {
             _e: Expression::Const(x.into()),
             _t: Some(Type::Scalar(match x {
-                0 | 1 => Magma::Boolean,
-                _ => Magma::Native,
+                0 | 1 => Magma::binary(),
+                _ => Magma::native(),
             })),
             dbg: None,
         }
     }
     pub fn from_bigint(x: BigInt) -> Node {
         let magma = if x.is_one() || x.is_zero() {
-            Magma::Boolean
+            Magma::binary()
         } else {
-            Magma::Native
+            Magma::native()
         };
         Node {
             _e: Expression::Const(x.into()),
@@ -248,14 +248,14 @@ impl Node {
         padding_value: Option<i64>,
         t: Option<Magma>,
     ) -> Node {
-        let magma = t.unwrap_or(Magma::Native);
-        if magma > Magma::Native {
+        let magma = t.unwrap_or(Magma::native());
+        if magma > Magma::native() {
             Node {
                 _e: Expression::ExoColumn {
                     handle: handle.clone(),
                     shift: shift.unwrap_or(0),
                     padding_value,
-                    base: base.unwrap_or_else(|| t.unwrap_or(Magma::Native).into()),
+                    base: base.unwrap_or_else(|| t.unwrap_or(Magma::native()).into()),
                 },
                 _t: Some(Type::Column(magma)),
                 dbg: None,
@@ -267,9 +267,9 @@ impl Node {
                     shift: shift.unwrap_or(0),
                     kind: kind.unwrap_or(Kind::Phantom),
                     padding_value,
-                    base: base.unwrap_or_else(|| t.unwrap_or(Magma::Native).into()),
+                    base: base.unwrap_or_else(|| t.unwrap_or(Magma::native()).into()),
                 },
-                _t: Some(Type::Column(t.unwrap_or(Magma::Native))),
+                _t: Some(Type::Column(t.unwrap_or(Magma::native()))),
                 dbg: None,
             }
         }
@@ -287,7 +287,7 @@ impl Node {
                 domain,
                 base: base.unwrap_or(Base::Hex),
             },
-            _t: Some(Type::ArrayColumn(t.unwrap_or(Magma::Native))),
+            _t: Some(Type::ArrayColumn(t.unwrap_or(Magma::native()))),
             dbg: None,
         }
     }
@@ -331,31 +331,30 @@ impl Node {
         &mut self._e
     }
     pub fn t(&self) -> Type {
-        self._t.unwrap_or_else(|| match &self.e() {
-            Expression::Funcall { func, args } => {
-                func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
-            }
-            Expression::Const(ref x) => {
-                if x.is_zero() || x.is_one() {
-                    Type::Scalar(Magma::Boolean)
-                } else {
-                    Type::Scalar(Magma::Native)
+        self._t
+            .unwrap_or_else(|| match &self.e() {
+                Expression::Funcall { func, args } => {
+                    func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
                 }
-            }
-            Expression::Column { handle, .. } => {
-                unreachable!("COLUMN {} SHOULD BE TYPED", handle.pretty())
-            }
-            Expression::ExoColumn { .. } => unreachable!("FIELDVALUES SHOULD BE TYPED"),
-            Expression::ArrayColumn { .. } => unreachable!("ARRAYCOLUMN SHOULD BE TYPED"),
-            Expression::List(xs) => Type::List(
-                xs.iter()
-                    .map(Node::t)
-                    .max()
-                    .unwrap_or(Type::INFIMUM)
-                    .magma(),
-            ),
-            Expression::Void => Type::Void,
-        })
+                Expression::Const(ref x) => {
+                    if x.is_zero() || x.is_one() {
+                        Type::Scalar(Magma::binary())
+                    } else {
+                        Type::Scalar(Magma::native())
+                    }
+                }
+                Expression::Column { handle, .. } => {
+                    unreachable!("COLUMN {} SHOULD BE TYPED", handle.pretty())
+                }
+                Expression::ExoColumn { .. } => unreachable!("FIELDVALUES SHOULD BE TYPED"),
+                Expression::ArrayColumn { .. } => unreachable!("ARRAYCOLUMN SHOULD BE TYPED"),
+                Expression::List(xs) => {
+                    let l_types = xs.iter().map(|x| x.t()).collect::<Vec<_>>();
+                    super::max_type(l_types.iter())
+                }
+                Expression::Void => Type::Void,
+            })
+            .to_owned()
     }
     pub fn dbg(&self) -> Option<&String> {
         self.dbg.as_ref()
@@ -408,17 +407,17 @@ impl Node {
     }
 
     pub fn bit_size(&self) -> usize {
-        self.t().magma().bit_size()
+        self.t().m().bit_size()
     }
 
     /// Return whether this [`Expression`] is susceptible to overflow withtin the field
     pub fn may_overflow(&self) -> bool {
         match self.e() {
             Expression::Funcall { func, args } => match func {
-                Intrinsic::Add => args.iter().any(|a| !a.t().is_bool()),
+                Intrinsic::Add => args.iter().any(|a| !a.t().is_binary()),
                 // TODO: see with Olivier
                 Intrinsic::Sub => false,
-                Intrinsic::Mul => args.iter().any(|a| !a.t().is_bool()),
+                Intrinsic::Mul => args.iter().any(|a| !a.t().is_binary()),
                 // exponentiation are compile-time computed, hence cannot overflow
                 Intrinsic::Exp => false,
                 Intrinsic::Neg => false,

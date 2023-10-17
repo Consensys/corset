@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::errors::CompileError;
 
 use super::parser::{AstNode, Token};
-use super::{max_type, Expression, Magma, Node, Type};
+use super::{max_type, Expression, Magma, Node, RawMagma, Type};
 
 /// A form is an applicable that operates directly on the AST
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -79,20 +79,22 @@ impl Intrinsic {
     pub fn typing(&self, argtype: &[Type]) -> Type {
         match self {
             Intrinsic::Inv => argtype[0],
-            Intrinsic::Normalize => argtype[0].with_magma(Magma::Boolean),
+            Intrinsic::Normalize => argtype[0].with_raw_magma(RawMagma::Binary),
             Intrinsic::Add | Intrinsic::Sub | Intrinsic::Neg => {
                 // Boolean is a corner case, as it is not stable under these operations
-                match max_type(argtype) {
-                    Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::Native),
-                    Type::Column(Magma::Boolean) => Type::Column(Magma::Native),
-                    x => x,
+                let max_t = max_type(argtype);
+                match max_t.m().rm() {
+                    RawMagma::Binary => max_t.with_raw_magma(RawMagma::Native),
+                    _ => max_t,
                 }
             }
-            Intrinsic::VectorAdd | Intrinsic::VectorSub | Intrinsic::VectorMul => argtype[0],
+            Intrinsic::VectorAdd | Intrinsic::VectorSub | Intrinsic::VectorMul => {
+                super::max_type(argtype.iter())
+            }
             Intrinsic::Exp => argtype[0],
             Intrinsic::Mul => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
             Intrinsic::IfZero => argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM)),
-            Intrinsic::Begin => Type::List(max_type(argtype).magma()),
+            Intrinsic::Begin => Type::List(max_type(argtype).m()),
         }
     }
 }
@@ -161,7 +163,7 @@ impl Arity {
 }
 /// The `FuncVerifier` trait defines a function that can check that
 /// it is called with valid arguments
-pub trait FuncVerifier<T: Clone> {
+pub trait FuncVerifier<T> {
     /// The arity of the function
     fn arity(&self) -> Arity;
 

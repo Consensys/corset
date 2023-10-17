@@ -58,7 +58,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     Kind::Composite(_) => Kind::Phantom,
                 })
                 .and_padding_value(*padding_value)
-                .t(t.magma())
+                .t(t.m())
                 .build();
             ctx.insert_symbol(name, symbol)
         }
@@ -92,7 +92,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                         .handle(ith_handle.clone())
                         .kind(Kind::Atomic)
                         .base(*base)
-                        .t(t.magma())
+                        .t(t.m())
                         .build(),
                 )?;
             }
@@ -104,7 +104,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     .handle(handle)
                     .domain(range.to_owned())
                     .base(*base)
-                    .t(t.magma())
+                    .t(t.m())
                     .build(),
             )?;
             Ok(())
@@ -135,7 +135,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     Node::column()
                         .handle(Handle::new(ctx.module(), to.name.clone()))
                         .kind(Kind::Phantom)
-                        .t(Magma::Native) // TODO previously we took the type of the corresponding 'from' column, is that a problem?
+                        .t(Magma::native()) // TODO: previously we took the type of the corresponding 'from' column, is that a problem?
                         .base(to.base)
                         .build(),
                 )

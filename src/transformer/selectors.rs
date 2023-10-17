@@ -44,7 +44,7 @@ fn do_expand_expr(
                 .handle(new_handle)
                 .kind(Kind::Phantom)
                 .base(Base::Dec)
-                .t(Magma::Native)
+                .t(Magma::native())
                 .build())
         }
     }

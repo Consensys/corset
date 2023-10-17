@@ -13,6 +13,9 @@ pub(crate) enum CompileError<'a> {
     #[error("{}", compiler::make_type_error_msg(.0, .1, .2))]
     TypeError(String, &'a [&'a [Type]], Vec<Type>),
 
+    #[error("{} expects a condition, found {}", .0, .1.red().bold())]
+    ConditioningError(String, Type),
+
     #[error("{} is never used", .0.pretty())]
     NotUsed(Handle),
 

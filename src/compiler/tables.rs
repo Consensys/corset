@@ -806,9 +806,9 @@ impl Scope {
 
     pub fn insert_constant(&mut self, name: &str, value: BigInt, replace: bool) -> Result<()> {
         let t = if Zero::is_zero(&value) || One::is_one(&value) {
-            Type::Scalar(Magma::Boolean)
+            Type::Scalar(Magma::binary())
         } else {
-            Type::Scalar(Magma::Native)
+            Type::Scalar(Magma::native())
         };
         if data!(self).symbols.contains_key(name) && !replace {
             bail!(symbols::Error::SymbolAlreadyExists(

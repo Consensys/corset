@@ -455,11 +455,11 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
         .map(|h| cs.columns.backing(h).unwrap())
         .collect::<Vec<_>>();
 
-    let hashes: HashSet<_> = (0..parent_backings[0].len())
+    let hashes: HashSet<_> = (0..parent_backings.iter().find_map(|p| p.len()).unwrap())
         .map(|i| pseudo_rlc(&parent_backings, i, &cs.columns))
         .collect();
 
-    for i in 0..child_backings[0].len() {
+    for i in 0..child_backings.iter().find_map(|c| c.len()).unwrap() {
         if !hashes.contains(&pseudo_rlc(&child_backings, i, &cs.columns)) {
             bail!(
                 "@{}: {{\n{}\n}} not found in {{{}}}",

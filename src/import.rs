@@ -138,8 +138,7 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
                 Value::String(s) => s.to_string(),
                 _ => bail!("expected numeric value, found `{}`", x),
             };
-            crate::utils::validate(
-                t,
+            t.rm().validate(
                 cache
                     .cache_get_or_set_with(s.clone(), || CValue::from_str(&s).unwrap())
                     .to_owned(),
@@ -185,7 +184,7 @@ pub fn fill_traces(
                 // The min length can be set if the module contains range
                 // proofs, that require a minimal length of a certain power of 2
                 let module_min_len = cs.columns.min_len.get(&module).cloned().unwrap_or(0);
-                let module_spilling = cs.spilling_for(&handle);
+                let module_spilling = cs.spilling_for_column(&handle);
 
                 if let Result::Ok(Column {
                     t, padding_value, ..

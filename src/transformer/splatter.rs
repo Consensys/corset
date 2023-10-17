@@ -117,7 +117,7 @@ impl Node {
                             }
 
                             let op = (*func).into();
-                            let new_magma = args.iter().map(|a| a.t().magma()).max().unwrap();
+                            let new_magma = args.iter().map(|a| a.t().m()).max().unwrap();
                             ancillaries.update_width(op, new_magma.bit_size());
                             let new_handle =
                                 Handle::new(module, format!("{}{}{}", args[0], op, args[1]));
@@ -158,7 +158,7 @@ impl ConstraintSet {
         self.columns
             .insert_column_and_register(
                 Column::builder()
-                    .t(Magma::Boolean)
+                    .t(Magma::binary())
                     .handle(Handle::new(ADDER_MODULE, "op"))
                     .base(Base::Hex)
                     .build(),
@@ -167,7 +167,7 @@ impl ConstraintSet {
         self.columns
             .insert_column_and_register(
                 Column::builder()
-                    .t(Magma::Integer(ancillaries.adder_bit_width))
+                    .t(Magma::integer(ancillaries.adder_bit_width))
                     .handle(Handle::new(ADDER_MODULE, "arg-1"))
                     .base(Base::Hex)
                     .build(),
@@ -176,7 +176,7 @@ impl ConstraintSet {
         self.columns
             .insert_column_and_register(
                 Column::builder()
-                    .t(Magma::Integer(ancillaries.adder_bit_width))
+                    .t(Magma::integer(ancillaries.adder_bit_width))
                     .handle(Handle::new(ADDER_MODULE, "arg-2"))
                     .base(Base::Hex)
                     .build(),
@@ -185,7 +185,7 @@ impl ConstraintSet {
         self.columns
             .insert_column_and_register(
                 Column::builder()
-                    .t(Magma::Integer(ancillaries.adder_bit_width))
+                    .t(Magma::integer(ancillaries.adder_bit_width))
                     .handle(Handle::new(ADDER_MODULE, "result"))
                     .base(Base::Hex)
                     .build(),
@@ -194,7 +194,7 @@ impl ConstraintSet {
         self.columns
             .insert_column_and_register(
                 Column::builder()
-                    .t(Magma::Boolean)
+                    .t(Magma::binary())
                     .handle(Handle::new(ADDER_MODULE, "done"))
                     .kind(Kind::Phantom)
                     .build(),
@@ -204,7 +204,7 @@ impl ConstraintSet {
         self.columns
             .insert_column_and_register(
                 Column::builder()
-                    .t(Magma::Integer(ancillaries.adder_bit_width))
+                    .t(Magma::integer(ancillaries.adder_bit_width))
                     .handle(Handle::new(MULER_MODULE, "arg-1"))
                     .base(Base::Hex)
                     .build(),
@@ -213,7 +213,7 @@ impl ConstraintSet {
         self.columns
             .insert_column_and_register(
                 Column::builder()
-                    .t(Magma::Integer(ancillaries.adder_bit_width))
+                    .t(Magma::integer(ancillaries.adder_bit_width))
                     .handle(Handle::new(MULER_MODULE, "arg-2"))
                     .base(Base::Hex)
                     .build(),
@@ -222,7 +222,7 @@ impl ConstraintSet {
         self.columns
             .insert_column_and_register(
                 Column::builder()
-                    .t(Magma::Integer(ancillaries.adder_bit_width))
+                    .t(Magma::integer(ancillaries.adder_bit_width))
                     .handle(Handle::new(MULER_MODULE, "result"))
                     .base(Base::Hex)
                     .build(),
@@ -231,7 +231,7 @@ impl ConstraintSet {
         self.columns
             .insert_column_and_register(
                 Column::builder()
-                    .t(Magma::Boolean)
+                    .t(Magma::binary())
                     .handle(Handle::new(MULER_MODULE, "done"))
                     .kind(Kind::Phantom)
                     .build(),
@@ -249,7 +249,7 @@ impl ConstraintSet {
             if let Constraint::Vanishes { expr: e, .. } = self.constraints.get_mut(i).unwrap() {
                 e.dyadize();
                 e.do_splatter(
-                    self.columns.module_of(e.dependencies()).unwrap().as_str(),
+                    self.columns.module_for(e.dependencies()).unwrap().as_str(),
                     &mut adder,
                     &mut new_exo_columns,
                     &mut new_constants,

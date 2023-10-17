@@ -144,7 +144,7 @@ fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
                 Node::column()
                     .handle(x_col.to_owned())
                     .kind(Kind::Composite(Box::new(x_expr.clone())))
-                    .t(Magma::Native)
+                    .t(Magma::native())
                     .build(),
             ])
             .unwrap(),

@@ -173,7 +173,7 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
                             .handle(handle.as_handle().clone())
                             .used(*used)
                             .kind(k.to_nil())
-                            .t(symbol.t().magma())
+                            .t(symbol.t().m())
                             .base(*base)
                             .build();
                         let id = columns.insert_column(column)?;
@@ -201,7 +201,7 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
                             .handle(handle.as_handle().clone())
                             .used(*used)
                             .kind(Kind::Atomic)
-                            .t(symbol.t().magma())
+                            .t(symbol.t().m())
                             .base(*base)
                             .build();
                         columns.insert_column(column)?;

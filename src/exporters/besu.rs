@@ -3,6 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::println;
 
+use crate::compiler::RawMagma;
 use crate::{
     compiler::{ConstraintSet, Kind, Magma},
     structs::Handle,
@@ -53,29 +54,27 @@ struct TemplateData {
 }
 
 fn magma_to_java_type(m: Magma) -> String {
-    match m {
-        Magma::None => unreachable!(),
-        Magma::Boolean => "Boolean",
-        Magma::Nibble => "UnsignedByte",
-        Magma::Byte => "UnsignedByte",
-        Magma::Native => "BigInteger",
-        Magma::Integer(_) => "BigInteger",
-        Magma::Any => unreachable!(),
-        Magma::Loobean => unreachable!(),
+    match m.rm() {
+        RawMagma::None => unreachable!(),
+        RawMagma::Binary => "Boolean",
+        RawMagma::Nibble => "UnsignedByte",
+        RawMagma::Byte => "UnsignedByte",
+        RawMagma::Native => "BigInteger",
+        RawMagma::Integer(_) => "BigInteger",
+        RawMagma::Any => unreachable!(),
     }
     .to_string()
 }
 
 fn magma_to_java_zero(m: Magma) -> String {
-    match m {
-        Magma::None => unreachable!(),
-        Magma::Boolean => "false",
-        Magma::Nibble => "UnsignedByte.of(0)",
-        Magma::Byte => "UnsignedByte.of(0)",
-        Magma::Native => "BigInteger.ZERO",
-        Magma::Integer(_) => "BigInteger.ZERO",
-        Magma::Any => unreachable!(),
-        Magma::Loobean => unreachable!(),
+    match m.rm() {
+        RawMagma::None => unreachable!(),
+        RawMagma::Binary => "false",
+        RawMagma::Nibble => "UnsignedByte.of(0)",
+        RawMagma::Byte => "UnsignedByte.of(0)",
+        RawMagma::Native => "BigInteger.ZERO",
+        RawMagma::Integer(_) => "BigInteger.ZERO",
+        RawMagma::Any => unreachable!(),
     }
     .to_string()
 }

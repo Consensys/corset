@@ -239,17 +239,17 @@ impl FuncVerifier<Node> for Intrinsic {
             | Intrinsic::Mul
             | Intrinsic::VectorAdd
             | Intrinsic::VectorSub
-            | Intrinsic::VectorMul => &[&[Type::Any(Magma::Any)]],
-            Intrinsic::Exp => &[&[Type::Any(Magma::Any)], &[Type::Scalar(Magma::Any)]],
-            Intrinsic::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
-            Intrinsic::Inv | Intrinsic::Normalize => &[&[Type::Any(Magma::Any)]],
+            | Intrinsic::VectorMul => &[&[Type::Any(Magma::ANY)]],
+            Intrinsic::Exp => &[&[Type::Any(Magma::ANY)], &[Type::Scalar(Magma::ANY)]],
+            Intrinsic::Neg => &[&[Type::Scalar(Magma::ANY), Type::Column(Magma::ANY)]],
+            Intrinsic::Inv | Intrinsic::Normalize => &[&[Type::Any(Magma::ANY)]],
             Intrinsic::IfZero => &[
                 // condition type
-                &[Type::Any(Magma::Boolean), Type::Any(Magma::Loobean)],
+                &[Type::Any(Magma::ANY)],
                 // then/else arms typ
-                &[Type::Any(Magma::Any)],
+                &[Type::Any(Magma::ANY)],
             ],
-            Intrinsic::Begin => &[&[Type::Any(Magma::Any)]],
+            Intrinsic::Begin => &[&[Type::Any(Magma::ANY)]],
         };
 
         if super::compatible_with_repeating(expected_t, &args_t) {
@@ -702,7 +702,9 @@ impl ConstraintSet {
                 _ => None,
             }))
             .max()
-            .unwrap_or(0)
+            .unwrap_or(0);
+        self.columns.spilling.insert(m.to_owned(), spilling);
+        spilling
     }
 
     fn fill_spilling(&mut self) {
@@ -1293,9 +1295,9 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
         Token::Keyword(_) | Token::Domain(_) => Ok(None),
         Token::Value(x) => Ok(Some(Node::from(Expression::Const(x.into())).with_type(
             if *x >= Zero::zero() && *x <= One::one() {
-                Type::Scalar(Magma::Boolean)
+                Type::Scalar(Magma::binary())
             } else {
-                Type::Scalar(Magma::Native)
+                Type::Scalar(Magma::native())
             },
         ))),
         Token::Symbol(name) => Ok(Some(
@@ -1321,7 +1323,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                                     .handle(handle.as_handle().ith(i))
                                     .kind(Kind::Atomic)
                                     .base(*base)
-                                    .t(array.t().magma())
+                                    .t(array.t().m())
                                     .build(),
                             ))
                         } else {
@@ -1485,19 +1487,19 @@ fn reduce_toplevel(
 
             if body.t() == Type::Void {
                 error!(
-                    "constraint {} should be of type {}, found {:?}",
+                    "constraint {} should be of type {}, found {}",
                     handle.pretty(),
                     "Loobean".yellow().bold(),
                     body.t().red().bold()
                 );
                 Ok(None)
             } else {
-                if body.t().magma() != Magma::Loobean {
+                if !body.t().m().is_loobean() {
                     error!(
-                        "constraint {} should be of type {}, found {:?}",
+                        "constraint {} should be {}, found {}",
                         handle.pretty(),
-                        "Loobean".yellow().bold(),
-                        body.t().magma().red().bold()
+                        "loobean".yellow().bold(),
+                        body.t().red().bold()
                     )
                 }
                 Ok(Some(Constraint::Vanishes {

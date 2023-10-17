@@ -6,7 +6,7 @@ use pairing_ce::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    compiler::{ColumnRef, Expression, Magma, Node},
+    compiler::{ColumnRef, Conditioning, Expression, Magma, Node},
     structs::Handle,
 };
 
@@ -54,9 +54,9 @@ impl std::convert::TryFrom<&str> for Base {
 
 impl std::convert::From<Magma> for Base {
     fn from(m: Magma) -> Self {
-        match m {
-            Magma::Boolean => Base::Bool,
-            Magma::Loobean => Base::Loob,
+        match m.c() {
+            Conditioning::Boolean => Base::Bool,
+            Conditioning::Loobean => Base::Loob,
             _ => Base::Hex,
         }
     }

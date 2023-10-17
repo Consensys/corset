@@ -61,7 +61,7 @@ fn create_sort_constraint(
                 Column::builder()
                     .handle(Handle::new(&module, format!("__SRT__at_{i}_{suffix}")))
                     .kind(Kind::Phantom)
-                    .t(Magma::Boolean)
+                    .t(Magma::binary())
                     .intrinsic_size_factor(size)
                     .build(),
             )
@@ -71,7 +71,7 @@ fn create_sort_constraint(
     let eq = cs.columns.insert_column_and_register(
         Column::builder()
             .handle(Handle::new(&module, format!("__SRT__Eq_{suffix}")))
-            .t(Magma::Boolean)
+            .t(Magma::binary())
             .intrinsic_size_factor(eq_size)
             .kind(Kind::Phantom)
             .padding_value(1)
@@ -91,7 +91,7 @@ fn create_sort_constraint(
                 Column::builder()
                     .handle(Handle::new(&module, format!("__SRT__Delta_{i}_{suffix}")))
                     .kind(Kind::Phantom)
-                    .t(Magma::Byte)
+                    .t(Magma::byte())
                     .intrinsic_size_factor(cs.length_multiplier(&froms[0]))
                     .build(),
             )
@@ -103,10 +103,10 @@ fn create_sort_constraint(
         handle: Handle::new(&module, format!("{}-is-binary", cs.handle(&eq).name)),
         domain: None,
         expr: Box::new(Intrinsic::Mul.call(&[
-            Node::column().handle(eq.clone()).t(Magma::Boolean).build(),
+            Node::column().handle(eq.clone()).t(Magma::binary()).build(),
             Intrinsic::Sub.call(&[
                 Node::from_const(1),
-                Node::column().handle(eq.clone()).t(Magma::Boolean).build(),
+                Node::column().handle(eq.clone()).t(Magma::binary()).build(),
             ])?,
         ])?),
     });
@@ -115,10 +115,10 @@ fn create_sort_constraint(
             handle: Handle::new(&module, format!("{}-is-binary", cs.handle(at).name)),
             domain: None,
             expr: Box::new(Intrinsic::Mul.call(&[
-                Node::column().handle(at.clone()).t(Magma::Boolean).build(),
+                Node::column().handle(at.clone()).t(Magma::binary()).build(),
                 Intrinsic::Sub.call(&[
                     Node::from_const(1),
-                    Node::column().handle(at.clone()).t(Magma::Boolean).build(),
+                    Node::column().handle(at.clone()).t(Magma::binary()).build(),
                 ])?,
             ])?),
         });
@@ -132,7 +132,7 @@ fn create_sort_constraint(
             Intrinsic::Sub.call(&[
                 Node::column()
                     .handle(delta.clone())
-                    .t(Magma::Native)
+                    .t(Magma::native())
                     .build(),
                 Intrinsic::Add.call(
                     &delta_bytes
@@ -141,7 +141,7 @@ fn create_sort_constraint(
                         .map(|(i, byte)| {
                             Intrinsic::Mul.call(&[
                                 Node::from_bigint(BigInt::from(256).pow(i as u32)),
-                                Node::column().handle(byte.clone()).t(Magma::Byte).build(),
+                                Node::column().handle(byte.clone()).t(Magma::byte()).build(),
                             ])
                         })
                         .collect::<Result<Vec<_>>>()?,
@@ -156,7 +156,7 @@ fn create_sort_constraint(
             handle: Handle::new(&module, format!("{}-is-byte", cs.handle(delta_byte).name)),
             exp: Node::column()
                 .handle(delta_byte.clone())
-                .t(Magma::Byte)
+                .t(Magma::byte())
                 .build(),
             max: Value::from(256),
         })
@@ -173,7 +173,7 @@ fn create_sort_constraint(
                         .map(|j| {
                             Node::column()
                                 .handle(ats[j].clone())
-                                .t(Magma::Boolean)
+                                .t(Magma::binary())
                                 .build()
                         })
                         .collect::<Vec<_>>(),
@@ -195,7 +195,7 @@ fn create_sort_constraint(
                     // && @ = 0 ...
                     Intrinsic::Sub.call(&[
                         Node::from_const(1),
-                        Node::column().handle(at.clone()).t(Magma::Boolean).build(),
+                        Node::column().handle(at.clone()).t(Magma::binary()).build(),
                     ])?,
                     // => sorted_i = sorted_i[-1]
                     Intrinsic::Sub.call(&[
@@ -216,7 +216,7 @@ fn create_sort_constraint(
                 // ∑_k=0^i-1 @_k = 0...
                 sum_ats.clone(),
                 // && @ ≠ 0
-                Node::column().handle(at.clone()).t(Magma::Boolean).build(),
+                Node::column().handle(at.clone()).t(Magma::binary()).build(),
                 // => sorted_i ≠ sorted_i[-1]
                 {
                     let diff = Intrinsic::Sub.call(&[
@@ -244,11 +244,11 @@ fn create_sort_constraint(
             Intrinsic::Sub.call(&[
                 Node::from_const(1),
                 Intrinsic::Add.call(
-                    &std::iter::once(Node::column().handle(eq.clone()).t(Magma::Boolean).build())
+                    &std::iter::once(Node::column().handle(eq.clone()).t(Magma::binary()).build())
                         .chain(
                             ats.iter()
                                 .cloned()
-                                .map(|at| Node::column().handle(at).t(Magma::Boolean).build()),
+                                .map(|at| Node::column().handle(at).t(Magma::binary()).build()),
                         )
                         .collect::<Vec<_>>(),
                 )?,
@@ -265,13 +265,13 @@ fn create_sort_constraint(
                 // Eq = 0
                 Intrinsic::Sub.call(&[
                     Node::from_const(1),
-                    Node::column().handle(eq.clone()).t(Magma::Boolean).build(),
+                    Node::column().handle(eq.clone()).t(Magma::binary()).build(),
                 ])?,
                 // Δ = ∑ ε_i × @_i × δSorted_i
                 Intrinsic::Sub.call(&[
                     Node::column()
                         .handle(delta.clone())
-                        .t(Magma::Native)
+                        .t(Magma::native())
                         .build(),
                     Intrinsic::Add.call(
                         (0..signs.len())
@@ -296,7 +296,7 @@ fn create_sort_constraint(
                                     },
                                     Node::column()
                                         .handle(ats[l].clone())
-                                        .t(Magma::Boolean)
+                                        .t(Magma::binary())
                                         .build(),
                                     tgt_diff,
                                 ])
