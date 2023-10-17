@@ -56,14 +56,6 @@ lazy_static::lazy_static! {
         },
 
         // Intrinsics
-        "~" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "~"),
-            class: FunctionClass::Intrinsic(Intrinsic::Normalize)
-        },
-        "neg" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "neg"),
-            class: FunctionClass::Intrinsic(Intrinsic::Neg)
-        },
         "+" => Function {
             handle: Handle::new(super::MAIN_MODULE, "+"),
             class: FunctionClass::Intrinsic(Intrinsic::Add)
@@ -72,13 +64,33 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "*"),
             class: FunctionClass::Intrinsic(Intrinsic::Mul)
         },
-        "^" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "^"),
-            class: FunctionClass::Intrinsic(Intrinsic::Exp)
-        },
         "-" => Function {
             handle: Handle::new(super::MAIN_MODULE, "-"),
             class: FunctionClass::Intrinsic(Intrinsic::Sub)
+        },
+        "+." => Function {
+            handle: Handle::new(super::MAIN_MODULE, "+"),
+            class: FunctionClass::Intrinsic(Intrinsic::VectorAdd)
+        },
+        "*." => Function {
+            handle: Handle::new(super::MAIN_MODULE, "*"),
+            class: FunctionClass::Intrinsic(Intrinsic::VectorMul)
+        },
+        "-." => Function {
+            handle: Handle::new(super::MAIN_MODULE, "-"),
+            class: FunctionClass::Intrinsic(Intrinsic::VectorSub)
+        },
+        "~" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "~"),
+            class: FunctionClass::Intrinsic(Intrinsic::Normalize)
+        },
+        "neg" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "neg"),
+            class: FunctionClass::Intrinsic(Intrinsic::Neg)
+        },
+        "^" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "^"),
+            class: FunctionClass::Intrinsic(Intrinsic::Exp)
         },
         "begin" => Function{
             handle: Handle::new(super::MAIN_MODULE, "begin"),

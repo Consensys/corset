@@ -104,7 +104,12 @@ fn raise_ifs(mut e: Node) -> Node {
             *args = args.iter_mut().map(|a| raise_ifs(a.clone())).collect();
 
             match func {
-                Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => {
+                Intrinsic::Add
+                | Intrinsic::Sub
+                | Intrinsic::Mul
+                | Intrinsic::VectorAdd
+                | Intrinsic::VectorSub
+                | Intrinsic::VectorMul => {
                     for (i, a) in args.iter().enumerate() {
                         if let Expression::Funcall {
                             func: func_if @ Intrinsic::IfZero,

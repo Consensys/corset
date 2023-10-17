@@ -198,13 +198,15 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Add => Arity::AtLeast(1),
             Intrinsic::Sub => Arity::AtLeast(1),
             Intrinsic::Mul => Arity::AtLeast(1),
+            Intrinsic::VectorAdd => Arity::AtLeast(1),
+            Intrinsic::VectorSub => Arity::AtLeast(1),
+            Intrinsic::VectorMul => Arity::AtLeast(1),
             Intrinsic::Exp => Arity::Dyadic,
             Intrinsic::Neg => Arity::Monadic,
             Intrinsic::Inv => Arity::Monadic,
             Intrinsic::Normalize => Arity::Monadic,
             Intrinsic::Begin => Arity::AtLeast(1),
             Intrinsic::IfZero => Arity::Between(2, 3),
-            Intrinsic::IfNotZero => Arity::Between(2, 3),
         }
     }
     fn validate_types(&self, args: &[Node]) -> Result<()> {
@@ -222,20 +224,19 @@ impl FuncVerifier<Node> for Intrinsic {
         // homogeneous arguments (e.g. Add), a single second-level list is
         // enough.
         let expected_t: &[&[Type]] = match self {
-            Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => &[&[Type::Any(Magma::Any)]],
+            Intrinsic::Add
+            | Intrinsic::Sub
+            | Intrinsic::Mul
+            | Intrinsic::VectorAdd
+            | Intrinsic::VectorSub
+            | Intrinsic::VectorMul => &[&[Type::Any(Magma::Any)]],
             Intrinsic::Exp => &[&[Type::Any(Magma::Any)], &[Type::Scalar(Magma::Any)]],
             Intrinsic::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
             Intrinsic::Inv | Intrinsic::Normalize => &[&[Type::Any(Magma::Any)]],
             Intrinsic::IfZero => &[
                 // condition type
-                &[Type::Any(Magma::Loobean)],
+                &[Type::Any(Magma::Boolean), Type::Any(Magma::Loobean)],
                 // then/else arms typ
-                &[Type::Any(Magma::Any)],
-            ],
-            Intrinsic::IfNotZero => &[
-                // condition type
-                &[Type::Any(Magma::Boolean)],
-                // then/else arms type
                 &[Type::Any(Magma::Any)],
             ],
             Intrinsic::Begin => &[&[Type::Any(Magma::Any)]],
@@ -1175,6 +1176,11 @@ fn apply_builtin(
             let shift = traversed_args[1].pure_eval()?.to_i16().unwrap();
             Ok(Some(traversed_args.get(0).unwrap().clone().shift(shift)))
         }
+        // TODO: add binary versions
+        Builtin::BEq => todo!(),
+        Builtin::BNeq => todo!(),
+        Builtin::LEq => todo!(),
+        Builtin::LNeq => todo!(),
     }
 }
 
@@ -1204,7 +1210,7 @@ fn apply_intrinsic(
             .with_type(super::max_type(&traversed_args_t)),
         )),
 
-        b @ (Intrinsic::IfZero | Intrinsic::IfNotZero) => {
+        b @ Intrinsic::IfZero => {
             let r = b.call(&traversed_args)?;
             if traversed_args[0].may_overflow() {
                 let pretty = if let Some(d) = traversed_args[0].dbg() {
@@ -1220,6 +1226,9 @@ fn apply_intrinsic(
         b @ (Intrinsic::Add
         | Intrinsic::Sub
         | Intrinsic::Mul
+        | Intrinsic::VectorAdd
+        | Intrinsic::VectorSub
+        | Intrinsic::VectorMul
         | Intrinsic::Exp
         | Intrinsic::Neg
         | Intrinsic::Inv
@@ -1439,7 +1448,7 @@ fn reduce_toplevel(
             let body = if let Some(guard) = guard {
                 let guard_expr = reduce(guard, &mut ctx, settings)?
                     .with_context(|| anyhow!("guard `{:?}` is empty", guard))?;
-                Intrinsic::IfNotZero.call(&[guard_expr, body])?
+                Intrinsic::Mul.call(&[guard_expr, body])?
             } else {
                 body
             };

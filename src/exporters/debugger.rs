@@ -45,7 +45,12 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
     let c = colors[tty.depth() % colors.len()];
     match n.e() {
         Expression::Funcall { func: f, args } => match f {
-            Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => {
+            Intrinsic::Add
+            | Intrinsic::Sub
+            | Intrinsic::Mul
+            | Intrinsic::VectorAdd
+            | Intrinsic::VectorSub
+            | Intrinsic::VectorMul => {
                 if prev.map(|p| priority(*f, p)).unwrap_or(Ordering::Equal) == Ordering::Less {
                     tty.write("(");
                 }

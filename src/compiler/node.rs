@@ -629,6 +629,27 @@ impl Node {
                     }
                     Some(ax)
                 }
+                Intrinsic::VectorAdd => {
+                    let mut ax = Value::zero();
+                    for arg in args.iter() {
+                        ax.vector_add_assign(&arg.eval_fold(i, get, cache, settings, f)?)
+                    }
+                    Some(ax)
+                }
+                Intrinsic::VectorSub => {
+                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
+                    for arg in args.iter().skip(1) {
+                        ax.vector_sub_assign(&arg.eval_fold(i, get, cache, settings, f)?)
+                    }
+                    Some(ax)
+                }
+                Intrinsic::VectorMul => {
+                    let mut ax = Value::one();
+                    for arg in args.iter() {
+                        ax.vector_mul_assign(&arg.eval_fold(i, get, cache, settings, f)?)
+                    }
+                    Some(ax)
+                }
                 Intrinsic::Exp => {
                     let mut ax = Value::one();
                     let mantissa = args[0].eval_fold(i, get, cache, settings, f)?;
@@ -663,15 +684,6 @@ impl Node {
                 Intrinsic::Begin => unreachable!(),
                 Intrinsic::IfZero => {
                     if args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
-                        args[1].eval_fold(i, get, cache, settings, f)
-                    } else {
-                        args.get(2)
-                            .map(|x| x.eval_fold(i, get, cache, settings, f))
-                            .unwrap_or_else(|| Some(Value::zero()))
-                    }
-                }
-                Intrinsic::IfNotZero => {
-                    if !args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
                         args[1].eval_fold(i, get, cache, settings, f)
                     } else {
                         args.get(2)
@@ -778,7 +790,7 @@ impl Node {
                             tty,
                             f,
                             faulty,
-                            unclutter && !matches!(func, Intrinsic::IfZero | Intrinsic::IfNotZero),
+                            unclutter && !matches!(func, Intrinsic::IfZero),
                             dim,
                             zero_context,
                             a.depth() > 2,

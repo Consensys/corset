@@ -120,6 +120,57 @@ impl Value {
         todo!()
     }
 
+    pub(crate) fn vector_add_assign(&mut self, other: &Value) {
+        match (self, other) {
+            (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 += i2,
+            (Value::BigInt(_), Value::Native(_)) => todo!(),
+            (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
+            (Value::Native(_), Value::BigInt(_)) => todo!(),
+            (Value::Native(ref mut f1), Value::Native(ref f2)) => f1.add_assign(f2),
+            (Value::Native(_), Value::ExoNative(_)) => todo!(),
+            (Value::ExoNative(_), Value::BigInt(_)) => todo!(),
+            (Value::ExoNative(_), Value::Native(_)) => todo!(),
+            (Value::ExoNative(f1s), Value::ExoNative(f2s)) => f1s
+                .iter_mut()
+                .zip(f2s.iter())
+                .for_each(|(f1, f2)| f1.add_assign(f2)),
+        }
+    }
+
+    pub(crate) fn vector_sub_assign(&mut self, other: &Value) {
+        match (self, other) {
+            (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 += i2,
+            (Value::BigInt(_), Value::Native(_)) => todo!(),
+            (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
+            (Value::Native(_), Value::BigInt(_)) => todo!(),
+            (Value::Native(ref mut f1), Value::Native(ref f2)) => f1.sub_assign(f2),
+            (Value::Native(_), Value::ExoNative(_)) => todo!(),
+            (Value::ExoNative(_), Value::BigInt(_)) => todo!(),
+            (Value::ExoNative(_), Value::Native(_)) => todo!(),
+            (Value::ExoNative(f1s), Value::ExoNative(f2s)) => f1s
+                .iter_mut()
+                .zip(f2s.iter())
+                .for_each(|(f1, f2)| f1.sub_assign(f2)),
+        }
+    }
+
+    pub(crate) fn vector_mul_assign(&mut self, other: &Value) {
+        match (self, other) {
+            (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 += i2,
+            (Value::BigInt(_), Value::Native(_)) => todo!(),
+            (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
+            (Value::Native(_), Value::BigInt(_)) => todo!(),
+            (Value::Native(ref mut f1), Value::Native(ref f2)) => f1.mul_assign(f2),
+            (Value::Native(_), Value::ExoNative(_)) => todo!(),
+            (Value::ExoNative(_), Value::BigInt(_)) => todo!(),
+            (Value::ExoNative(_), Value::Native(_)) => todo!(),
+            (Value::ExoNative(f1s), Value::ExoNative(f2s)) => f1s
+                .iter_mut()
+                .zip(f2s.iter())
+                .for_each(|(f1, f2)| f1.mul_assign(f2)),
+        }
+    }
+
     pub(crate) fn inverse(&self) -> Option<Value> {
         match &self {
             Value::Native(f) => f.inverse().map(Value::Native),

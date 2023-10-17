@@ -22,6 +22,10 @@ pub enum Form {
 pub enum Builtin {
     Len,
     Shift,
+    BEq,
+    BNeq,
+    LEq,
+    LNeq,
 }
 impl std::fmt::Display for Builtin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -31,6 +35,10 @@ impl std::fmt::Display for Builtin {
             match self {
                 Builtin::Len => "len",
                 Builtin::Shift => "shift",
+                Builtin::BEq => "eq",
+                Builtin::BNeq => "neq",
+                Builtin::LEq => "eq!",
+                Builtin::LNeq => "neq!",
             }
         )
     }
@@ -43,6 +51,9 @@ pub enum Intrinsic {
     Add,
     Sub,
     Mul,
+    VectorAdd,
+    VectorSub,
+    VectorMul,
     Exp,
     Neg,
     Inv,
@@ -51,7 +62,6 @@ pub enum Intrinsic {
     Begin,
 
     IfZero,
-    IfNotZero,
 }
 impl Intrinsic {
     pub fn call(self, args: &[Node]) -> Result<Node> {
@@ -78,11 +88,10 @@ impl Intrinsic {
                     x => x,
                 }
             }
+            Intrinsic::VectorAdd | Intrinsic::VectorSub | Intrinsic::VectorMul => argtype[0],
             Intrinsic::Exp => argtype[0],
             Intrinsic::Mul => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
-            Intrinsic::IfZero | Intrinsic::IfNotZero => {
-                argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
-            }
+            Intrinsic::IfZero => argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM)),
             Intrinsic::Begin => Type::List(max_type(argtype).magma()),
         }
     }
@@ -96,13 +105,15 @@ impl std::fmt::Display for Intrinsic {
                 Intrinsic::Add => "+",
                 Intrinsic::Sub => "-",
                 Intrinsic::Mul => "*",
+                Intrinsic::VectorAdd => ".+",
+                Intrinsic::VectorSub => ".-",
+                Intrinsic::VectorMul => ".*",
                 Intrinsic::Exp => "^",
                 Intrinsic::Neg => "-",
                 Intrinsic::Inv => "inv",
                 Intrinsic::Normalize => "~",
                 Intrinsic::Begin => "begin",
                 Intrinsic::IfZero => "if-zero",
-                Intrinsic::IfNotZero => "if-not-zero",
             }
         )
     }
@@ -174,6 +185,7 @@ impl FuncVerifier<Node> for Builtin {
         match self {
             Builtin::Len => Arity::Monadic,
             Builtin::Shift => Arity::Dyadic,
+            Builtin::BEq | Builtin::BNeq | Builtin::LEq | Builtin::LNeq => Arity::Monadic,
         }
     }
 
@@ -182,6 +194,8 @@ impl FuncVerifier<Node> for Builtin {
         let expected_t: &[&[Type]] = match self {
             Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
             Builtin::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
+            Builtin::BEq | Builtin::BNeq => &[&[Type::Any(Magma::Boolean)]],
+            Builtin::LEq | Builtin::LNeq => &[&[Type::Any(Magma::Loobean)]],
         };
 
         if super::compatible_with_repeating(expected_t, &args_t) {

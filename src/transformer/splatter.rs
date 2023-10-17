@@ -35,7 +35,12 @@ impl Node {
                     a.dyadize();
                 }
                 match func {
-                    Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => match args.len() {
+                    Intrinsic::Add
+                    | Intrinsic::Sub
+                    | Intrinsic::Mul
+                    | Intrinsic::VectorAdd
+                    | Intrinsic::VectorSub
+                    | Intrinsic::VectorMul => match args.len() {
                         1 => {
                             *self = args[0].clone();
                         }
@@ -95,7 +100,12 @@ impl Node {
 
                 if args.iter().any(|a| a.is_exocolumn()) {
                     match func {
-                        Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => {
+                        Intrinsic::Add
+                        | Intrinsic::Sub
+                        | Intrinsic::Mul
+                        | Intrinsic::VectorAdd
+                        | Intrinsic::VectorSub
+                        | Intrinsic::VectorMul => {
                             assert!(args.len() == 2);
                             for a in args.iter_mut() {
                                 // TODO: probably only necessary for
