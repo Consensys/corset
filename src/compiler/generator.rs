@@ -78,24 +78,17 @@ impl Constraint {
         match self {
             Constraint::Vanishes { expr, .. } => expr.add_id_to_handles(set_id),
             Constraint::Plookup {
-                handle: _,
                 including: xs,
                 included: ys,
+                ..
             } => xs
                 .iter_mut()
                 .chain(ys.iter_mut())
                 .for_each(|e| e.add_id_to_handles(set_id)),
             Constraint::Permutation {
-                handle: _,
-                from: hs1,
-                to: hs2,
-                signs: _,
+                from: hs1, to: hs2, ..
             } => hs1.iter_mut().chain(hs2.iter_mut()).for_each(|h| set_id(h)),
-            Constraint::InRange {
-                handle: _,
-                exp,
-                max: _,
-            } => exp.add_id_to_handles(set_id),
+            Constraint::InRange { exp, .. } => exp.add_id_to_handles(set_id),
         }
     }
 
@@ -671,17 +664,22 @@ impl ConstraintSet {
         *self.columns.effective_len.entry(m.to_string()).or_insert(x)
     }
 
-    pub fn spilling_for(&self, h: &ColumnRef) -> Option<isize> {
+    pub fn spilling_of(&self, m: &str) -> Option<isize> {
+        self.columns.spilling.get(m).cloned()
+    }
+
+    pub fn spilling_for_column(&self, h: &ColumnRef) -> Option<isize> {
         let module = if h.is_handle() {
             &h.as_handle().module
         } else {
             &self.columns.column(h).ok()?.handle.module
         };
-        self.columns.spilling.get(module).cloned()
+        self.spilling_of(module)
     }
 
-    fn compute_spilling(&mut self, m: &str) -> isize {
-        self.computations
+    pub(crate) fn compute_spilling(&mut self, m: &str) -> isize {
+        let spilling = self
+            .computations
             .iter()
             .filter_map(|c| match c {
                 Computation::Composite { target, exp } => {

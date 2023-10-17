@@ -609,8 +609,8 @@ impl Node {
         let r = match self.e() {
             Expression::Funcall { func, args } => match func {
                 Intrinsic::Add => {
-                    let mut ax = Value::zero();
-                    for arg in args.iter() {
+                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
+                    for arg in args.iter().skip(1) {
                         ax.add_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
@@ -623,15 +623,15 @@ impl Node {
                     Some(ax)
                 }
                 Intrinsic::Mul => {
-                    let mut ax = Value::one();
-                    for arg in args.iter() {
+                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
+                    for arg in args.iter().skip(1) {
                         ax.mul_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
                 }
                 Intrinsic::VectorAdd => {
-                    let mut ax = Value::zero();
-                    for arg in args.iter() {
+                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
+                    for arg in args.iter().skip(1) {
                         ax.vector_add_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
@@ -644,8 +644,8 @@ impl Node {
                     Some(ax)
                 }
                 Intrinsic::VectorMul => {
-                    let mut ax = Value::one();
-                    for arg in args.iter() {
+                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
+                    for arg in args.iter().skip(1) {
                         ax.vector_mul_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
@@ -857,14 +857,16 @@ impl Node {
                     };
 
                     tty.write(h.as_handle().name.color(c).bold().to_string());
-                    if *shift > 0 {
-                        tty.write("₊".color(c).to_string());
+                    if *shift != 0 {
+                        if *shift > 0 {
+                            tty.write("₊".color(c).to_string());
+                        }
+                        tty.write(
+                            crate::pretty::subscript(&shift.to_string())
+                                .color(c)
+                                .to_string(),
+                        );
                     }
-                    tty.write(
-                        crate::pretty::subscript(&shift.to_string())
-                            .color(c)
-                            .to_string(),
-                    );
                     if show_value {
                         tty.write(
                             format!("<{}>", v.pretty_with_base(*base))

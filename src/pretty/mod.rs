@@ -137,6 +137,11 @@ impl Pretty for Fr {
 impl Pretty for Node {
     fn pretty(&self) -> String {
         fn rec_pretty(s: &Node, depth: usize) -> String {
+            let depth = depth
+                + match s.e() {
+                    Expression::Funcall { .. } | Expression::List(_) => 1,
+                    _ => 0,
+                };
             let c = &COLORS[depth % COLORS.len()];
             match s.e() {
                 Expression::Const(x) => format!("{}", x).color(*c).to_string(),
@@ -148,11 +153,11 @@ impl Pretty for Node {
                         .color(*c)
                         .to_string()
                 }
-                Expression::List(cs) => format!("{{{}}}", format_list(cs, depth + 1))
+                Expression::List(cs) => format!("{{{}}}", format_list(cs, depth))
                     .color(*c)
                     .to_string(),
                 Expression::Funcall { func, args } => {
-                    format!("({:?} {})", func, format_list(args, depth + 1))
+                    format!("({} {})", func, format_list(args, depth))
                         .color(*c)
                         .to_string()
                 }

@@ -57,7 +57,7 @@ impl Node {
 impl ConstraintSet {
     pub fn expand_invs(&mut self) -> Result<()> {
         let mut new_cols = vec![];
-        let get_module = |rs: &HashSet<ColumnRef>| self.columns.module_of(rs.iter()).unwrap();
+        let get_module = |rs: &HashSet<ColumnRef>| self.columns.module_for(rs.iter()).unwrap();
         for i in 0..self.constraints.len() {
             if let Constraint::Vanishes { expr: e, .. } = self.constraints.get_mut(i).unwrap() {
                 e.do_expand_inv(&get_module, &mut new_cols)

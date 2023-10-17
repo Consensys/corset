@@ -1,7 +1,7 @@
 use crate::compiler::{Constraint, ConstraintSet, Expression, Node};
 
 impl Node {
-    fn concretize(&mut self) {
+    pub(crate) fn concretize(&mut self) {
         match self.e_mut() {
             Expression::Funcall { args, .. } => {
                 for a in args {
@@ -29,7 +29,7 @@ impl ConstraintSet {
                 Constraint::Vanishes { expr, .. } => expr.concretize(),
                 Constraint::Plookup { .. } => {}
                 Constraint::Permutation { .. } => {}
-                Constraint::InRange { ref mut exp, .. } => exp.concretize(),
+                Constraint::InRange { exp, .. } => exp.concretize(),
             }
         }
     }

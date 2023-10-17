@@ -136,7 +136,8 @@ fn columns_len(
         .all(|&l| l.unwrap_or_default() == cols_lens[0].unwrap_or_default())
     {
         error!(
-            "all columns are not of the same length:\n{}",
+            "all columns in {} are not of the same length:\n{}",
+            expr,
             expr.dependencies()
                 .iter()
                 .map(|handle| format!(

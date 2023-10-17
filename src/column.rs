@@ -1,5 +1,5 @@
 use crate::{
-    compiler::{ColumnRef, Intrinsic, Kind, Magma, Node},
+    compiler::{ColumnRef, EvalSettings, Intrinsic, Kind, Magma, Node},
     errors,
     pretty::{opcodes, Base, Pretty},
     structs::Handle,
@@ -105,7 +105,7 @@ impl Value {
     pub(crate) fn mul_assign(&mut self, other: &Value) {
         match (self, other) {
             (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 *= i2,
-            (Value::BigInt(_), Value::Native(_)) => todo!(),
+            (Value::BigInt(x), Value::Native(y)) => todo!("{} *= {}", x, y),
             (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
             (Value::Native(_), Value::BigInt(_)) => todo!(),
             (Value::Native(ref mut f1), Value::Native(ref f2)) => f1.mul_assign(f2),
@@ -139,7 +139,7 @@ impl Value {
 
     pub(crate) fn vector_sub_assign(&mut self, other: &Value) {
         match (self, other) {
-            (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 += i2,
+            (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 -= i2,
             (Value::BigInt(_), Value::Native(_)) => todo!(),
             (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
             (Value::Native(_), Value::BigInt(_)) => todo!(),
@@ -156,7 +156,7 @@ impl Value {
 
     pub(crate) fn vector_mul_assign(&mut self, other: &Value) {
         match (self, other) {
-            (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 += i2,
+            (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 *= i2,
             (Value::BigInt(_), Value::Native(_)) => todo!(),
             (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
             (Value::Native(_), Value::BigInt(_)) => todo!(),
@@ -248,6 +248,43 @@ impl Value {
         match self {
             Value::BigInt(_) => {}
             _ => *self = Value::BigInt(BigInt::from_bytes_le(Sign::Plus, &self.into_bytes())),
+        }
+    }
+
+    pub(crate) fn into_bi(self) -> Value {
+        match self {
+            Value::BigInt(_) => self,
+            _ => Value::BigInt(BigInt::from_bytes_le(Sign::Plus, &self.into_bytes())),
+        }
+    }
+
+    pub(crate) fn into_native(self) -> Value {
+        match self {
+            Value::BigInt(mut i) => {
+                clamp_bi(&mut i);
+                if i.bits() as usize > crate::constants::FIELD_BITSIZE {
+                    let bs = i.to_bytes_le();
+                    let mut r = Vec::new();
+                    for bytes in &bs.1.iter().chunks(crate::constants::FIELD_BITSIZE / 8) {
+                        let bb = bytes.cloned().collect_vec();
+                        let small_big_int = BigInt::from_bytes_le(Sign::Plus, &bb);
+                        r.push(Fr::from_str(&small_big_int.to_string()).unwrap());
+                    }
+                    r.reverse();
+                    Value::ExoNative(r)
+                } else {
+                    Value::Native(Fr::from_str(&i.to_string()).unwrap())
+                }
+            }
+            _ => self,
+        }
+    }
+
+    pub(crate) fn same_as(self, other: &Value) -> Value {
+        match other {
+            Value::BigInt(_) => self.into_bi(),
+            Value::Native(_) => self.into_native(),
+            Value::ExoNative(_) => unreachable!(),
         }
     }
 
@@ -419,13 +456,9 @@ impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             Value::BigInt(i) => write!(f, "ε{}", i),
-            Value::Native(fr) => write!(f, "{}", fr),
+            Value::Native(fr) => write!(f, "{}", fr.pretty()),
             Value::ExoNative(fs) => {
-                write!(
-                    f,
-                    "{:?}",
-                    fs.iter().map(|f| f.to_string()).collect::<Vec<_>>()
-                )
+                write!(f, "{:?}", fs.iter().map(|f| f.pretty()).collect::<Vec<_>>())
             }
         }
     }
@@ -682,11 +715,11 @@ impl Register {
     }
 
     pub fn padded_len(&self) -> Option<usize> {
-        self.value.as_ref().map(|v| v.padded_len())
+        self.value.as_ref().and_then(|v| v.padded_len())
     }
 
     pub fn len(&self) -> Option<usize> {
-        self.value.as_ref().map(|v| v.len())
+        self.value.as_ref().and_then(|v| v.len())
     }
 
     pub fn get(&self, i: isize, wrap: bool, columns: &ColumnSet) -> Option<Value> {
@@ -762,7 +795,11 @@ pub struct ColumnSet {
 }
 
 impl ColumnSet {
-    pub(crate) fn module_of<'a, I: std::borrow::Borrow<ColumnRef>, C: IntoIterator<Item = I>>(
+    pub(crate) fn module_of(&self, c: &ColumnRef) -> String {
+        self.column(c).unwrap().handle.module.clone()
+    }
+
+    pub(crate) fn module_for<'a, I: std::borrow::Borrow<ColumnRef>, C: IntoIterator<Item = I>>(
         &self,
         cols: C,
     ) -> Option<String> {
@@ -1192,6 +1229,34 @@ impl Computation {
                 .map(|t| t.to_string())
                 .collect::<Vec<_>>()
                 .join(", "),
+        }
+    }
+
+    pub(crate) fn module(&self, cs: &ColumnSet) -> String {
+        match self {
+            Computation::Composite { target, exp } => cs.module_of(target),
+            Computation::ExoOperation {
+                op,
+                sources,
+                target,
+            } => cs.module_of(target),
+            Computation::ExoConstant { value, target } => cs.module_of(target),
+            Computation::Interleaved { target, froms } => cs.module_of(target),
+            Computation::Sorted { froms, tos, signs } => cs.module_for(tos).unwrap(),
+            Computation::CyclicFrom {
+                target,
+                froms,
+                modulo,
+            } => cs.module_of(target),
+            Computation::SortingConstraints {
+                ats,
+                eq,
+                delta,
+                delta_bytes,
+                signs,
+                froms,
+                sorted,
+            } => cs.module_for(sorted).unwrap(),
         }
     }
 

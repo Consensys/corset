@@ -142,6 +142,11 @@ impl Node {
 
             Expression::Column { .. } => {}
             Expression::ArrayColumn { .. } => todo!(),
+            Expression::List(ls) => {
+                for l in ls.iter_mut() {
+                    l.do_splatter(module, ancillaries, exo_op_columns, new_constants);
+                }
+            }
 
             _ => {}
         }
@@ -232,6 +237,8 @@ impl ConstraintSet {
                     .build(),
             )
             .unwrap();
+        self.compute_spilling(ADDER_MODULE);
+        self.compute_spilling(MULER_MODULE);
     }
 
     pub(crate) fn splatter(&mut self) {

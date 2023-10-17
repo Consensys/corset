@@ -96,8 +96,8 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "begin"),
             class: FunctionClass::Intrinsic(Intrinsic::Begin)
         },
-        "if!" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "if!"),
+        "if" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "if"),
             class: FunctionClass::Intrinsic(Intrinsic::IfZero)
         },
     };

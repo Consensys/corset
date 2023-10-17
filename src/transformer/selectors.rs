@@ -18,7 +18,10 @@ fn do_expand_expr(
     match e.e() {
         Expression::Column { .. } | Expression::ExoColumn { .. } => Ok(e.clone()),
         _ => {
-            let new_handle = Handle::new(module, expression_to_name(e, "#EXPAND"));
+            let module = cols
+                .module_for(e.dependencies())
+                .unwrap_or(module.to_owned());
+            let new_handle = Handle::new(&module, expression_to_name(e, "#EXPAND"));
             // TODO: replace name with exprs hash to 100% ensure bijectivity handle/expression
             // Only insert the computation if a column matching the expression has not already been created
             if let Result::Ok(_) = cols.insert_column_and_register(
