@@ -18,14 +18,20 @@ package net.consensys.linea.zktracer.module.{{ module }};
 import java.math.BigInteger;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import net.consensys.linea.zktracer.module.ModuleTrace;
 
 /**
  * WARNING: This code is generated automatically.
  * Any modifications to this code may be overwritten and could lead to unexpected behavior.
  * Please DO NOT ATTEMPT TO MODIFY this code directly.
  */
-record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace) {
+record {{ module_prefix }}Trace(@JsonProperty("Trace") Trace trace) implements ModuleTrace {
   {{#each constants}}
   static final {{ this.tupe }} {{ this.name }} = {{ this.value }};
   {{/each}}
+
+  @Override
+  public int length() {
+      return this.trace.size();
+  }
 }

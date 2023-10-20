@@ -36,6 +36,10 @@ public record Trace(
     return new TraceBuilder();
   }
 
+  public int size() {
+      return this.{{ registers.0.java_name }}.size();
+  }
+
   static class TraceBuilder {
     private final BitSet filled = new BitSet();
 
