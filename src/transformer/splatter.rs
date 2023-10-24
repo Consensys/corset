@@ -132,7 +132,12 @@ impl Node {
                         Intrinsic::VectorAdd | Intrinsic::VectorSub | Intrinsic::VectorMul => {
                             todo!()
                         }
-                        Intrinsic::Inv => todo!(),
+                        Intrinsic::Inv => {
+                            dbg!(&args);
+                        }
+                        Intrinsic::Normalize => {
+                            println!("Maybe TODO: ?");
+                        }
                         _ => unreachable!(),
                     }
                 }
@@ -266,27 +271,33 @@ impl ConstraintSet {
             self.computations.insert(&id, new_computation).unwrap();
         }
         for (func, (new_handle, new_magma), args) in new_exo_columns.into_iter() {
-            let new_ref = self
-                .columns
-                .insert_column_and_register(
-                    Column::builder()
-                        .handle(new_handle.to_owned())
-                        .t(new_magma)
-                        .base(Base::Hex)
-                        .kind(Kind::Composite(Box::new(())))
-                        .build(),
-                )
-                .unwrap();
-            self.computations
-                .insert(
-                    &new_ref,
-                    Computation::ExoOperation {
-                        op: func.into(),
-                        sources: args.clone().into(),
-                        target: new_ref.clone(),
-                    },
-                )
-                .unwrap();
+            let new_ref = if self.columns.by_handle(&new_handle).is_ok() {
+                new_handle.clone().into()
+            } else {
+                // TODO: make a maybe_create of this
+                let r = self
+                    .columns
+                    .insert_column_and_register(
+                        Column::builder()
+                            .handle(new_handle.to_owned())
+                            .t(new_magma)
+                            .base(Base::Hex)
+                            .kind(Kind::Composite(Box::new(())))
+                            .build(),
+                    )
+                    .unwrap();
+                self.computations
+                    .insert(
+                        &r,
+                        Computation::ExoOperation {
+                            op: func.into(),
+                            sources: args.clone().into(),
+                            target: r.clone(),
+                        },
+                    )
+                    .unwrap();
+                r
+            };
 
             match func {
                 ExoOperation::Add | ExoOperation::Sub => {

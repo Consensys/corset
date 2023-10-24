@@ -191,6 +191,12 @@ fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
                 render_handle(cs, exp),
                 max.pretty()
             )],
+            Constraint::Normalization {
+                handle,
+                reference,
+                inverted,
+                normalized,
+            } => todo!(),
         })
         .collect()
 }

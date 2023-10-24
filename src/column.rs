@@ -1288,29 +1288,13 @@ impl Computation {
 
     pub(crate) fn module(&self, cs: &ColumnSet) -> String {
         match self {
-            Computation::Composite { target, exp } => cs.module_of(target),
-            Computation::ExoOperation {
-                op,
-                sources,
-                target,
-            } => cs.module_of(target),
-            Computation::ExoConstant { value, target } => cs.module_of(target),
-            Computation::Interleaved { target, froms } => cs.module_of(target),
-            Computation::Sorted { froms, tos, signs } => cs.module_for(tos).unwrap(),
-            Computation::CyclicFrom {
-                target,
-                froms,
-                modulo,
-            } => cs.module_of(target),
-            Computation::SortingConstraints {
-                ats,
-                eq,
-                delta,
-                delta_bytes,
-                signs,
-                froms,
-                sorted,
-            } => cs.module_for(sorted).unwrap(),
+            Computation::Composite { target, .. } => cs.module_of(target),
+            Computation::ExoOperation { target, .. } => cs.module_of(target),
+            Computation::ExoConstant { target, .. } => cs.module_of(target),
+            Computation::Interleaved { target, .. } => cs.module_of(target),
+            Computation::Sorted { tos, .. } => cs.module_for(tos).unwrap(),
+            Computation::CyclicFrom { target, .. } => cs.module_of(target),
+            Computation::SortingConstraints { sorted, .. } => cs.module_for(sorted).unwrap(),
         }
     }
 

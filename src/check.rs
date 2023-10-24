@@ -616,6 +616,14 @@ pub fn check(
                         None
                     }
                 }
+                Constraint::Normalization {
+                    normalized,
+                    reference,
+                    inverted,
+                    ..
+                } => {
+                    todo!()
+                }
             }
         })
         .collect::<HashSet<_>>();

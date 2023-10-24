@@ -34,12 +34,13 @@ impl Node {
                 for e in args.iter_mut() {
                     e.do_expand_inv(get_module, new_cols)?;
                 }
-                if matches!(func, Intrinsic::Inv) {
+                if matches!(func, Intrinsic::Normalize) {
                     let module = get_module(&args[0].dependencies());
-                    let inverted_handle = Handle::new(module, expression_to_name(&args[0], "INV"));
-                    new_cols.push((inverted_handle.clone(), args[0].to_owned()));
+                    let normalized_handle =
+                        Handle::new(module, expression_to_name(&args[0], "NORM"));
+                    new_cols.push((normalized_handle.clone(), args[0].to_owned()));
                     *self = Node::column()
-                        .handle(inverted_handle)
+                        .handle(normalized_handle)
                         .kind(Kind::Phantom)
                         .t(self.t().m().invert())
                         .build();
@@ -54,6 +55,7 @@ impl Node {
 impl ConstraintSet {
     pub fn expand_invs(&mut self) -> Result<()> {
         let mut new_cols = vec![];
+
         let get_module = |rs: &HashSet<ColumnRef>| self.columns.module_for(rs.iter()).unwrap();
         for i in 0..self.constraints.len() {
             if let Constraint::Vanishes { expr: e, .. } = self.constraints.get_mut(i).unwrap() {
@@ -62,37 +64,47 @@ impl ConstraintSet {
             }
         }
 
-        let mut inversion_constraints = vec![];
-        for (inverted_handle, inverted_expr) in new_cols.into_iter() {
-            if self.columns.by_handle(&inverted_handle).is_err() {
+        for (normalized_handle, normalized_expr) in new_cols.into_iter() {
+            if self.columns.by_handle(&normalized_handle).is_err() {
+                let normalized_id = self.columns.insert_column_and_register(
+                    Column::builder()
+                        .handle(normalized_handle.clone())
+                        .kind(Kind::Composite(Box::new(())))
+                        .build(),
+                )?;
+
+                let inverted_handle = Handle::new(
+                    &normalized_handle.module,
+                    expression_to_name(&normalized_expr, "INV"),
+                );
                 let inverted_id = self.columns.insert_column_and_register(
                     Column::builder()
                         .handle(inverted_handle.to_owned())
                         .kind(Kind::Composite(Box::new(())))
                         .build(),
                 )?;
+
                 self.computations.insert(
                     &inverted_id,
                     Computation::Composite {
                         target: inverted_id.clone(),
-                        exp: invert_expr(&inverted_expr),
+                        exp: invert_expr(&normalized_expr),
                     },
                 )?;
-                validate_inv(&mut inversion_constraints, &inverted_expr, &inverted_id)?;
+                self.constraints.push(Constraint::Normalization {
+                    handle: normalized_handle.clone(),
+                    reference: normalized_expr.to_owned(),
+                    inverted: inverted_id,
+                    normalized: normalized_id,
+                })
             }
-        }
-        if !inversion_constraints.is_empty() {
-            self.constraints.push(Constraint::Vanishes {
-                handle: Handle::new("RESERVED", "INV_CONSTRAINTS"),
-                domain: None,
-                expr: Box::new(Expression::List(inversion_constraints).into()),
-            });
         }
 
         Ok(())
     }
 }
 
+// TODO: move that into the Wizard
 fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Result<()> {
     // X × (X × /X - 1)
     cs.push(

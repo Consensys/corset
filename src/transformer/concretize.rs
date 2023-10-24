@@ -30,6 +30,7 @@ impl ConstraintSet {
                 Constraint::Plookup { .. } => {}
                 Constraint::Permutation { .. } => {}
                 Constraint::InRange { exp, .. } => exp.concretize(),
+                Constraint::Normalization { .. } => {}
             }
         }
     }

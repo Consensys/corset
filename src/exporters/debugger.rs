@@ -175,8 +175,8 @@ fn render_constraints(
                     expr,
                 } => {
                     let mut tty = Tty::new().with_guides();
-                    pretty_expr(expr, None, &mut tty, show_types);
                     println!("\n{} :=", handle.pretty());
+                    pretty_expr(expr, None, &mut tty, show_types);
                     println!("{}", tty.page_feed());
                 }
                 Constraint::Plookup {
@@ -205,6 +205,21 @@ fn render_constraints(
                     pretty_expr(exp, None, &mut tty, false);
                     println!("\n{}", handle.pretty());
                     println!("{} < {}", tty.page_feed(), max);
+                }
+                Constraint::Normalization {
+                    handle,
+                    reference,
+                    inverted,
+                    normalized,
+                } => {
+                    println!("\n{}", handle.pretty());
+                    println!(
+                        "{} := |{}| == {} × {}",
+                        normalized.pretty(),
+                        reference.pretty(),
+                        reference.pretty(),
+                        inverted.pretty()
+                    )
                 }
             }
         }

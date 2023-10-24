@@ -63,6 +63,13 @@ pub enum Constraint {
         exp: Node,
         max: Value,
     },
+    // Ensures that normalized = reference × invert
+    Normalization {
+        handle: Handle,
+        reference: Node,
+        inverted: ColumnRef,
+        normalized: ColumnRef,
+    },
 }
 impl Constraint {
     pub fn name(&self) -> String {
@@ -71,6 +78,7 @@ impl Constraint {
             Constraint::Plookup { handle, .. } => handle.to_string(),
             Constraint::Permutation { handle, .. } => handle.to_string(),
             Constraint::InRange { handle, .. } => handle.to_string(),
+            Constraint::Normalization { handle, .. } => handle.to_string(),
         }
     }
 
@@ -89,6 +97,16 @@ impl Constraint {
                 from: hs1, to: hs2, ..
             } => hs1.iter_mut().chain(hs2.iter_mut()).for_each(|h| set_id(h)),
             Constraint::InRange { exp, .. } => exp.add_id_to_handles(set_id),
+            Constraint::Normalization {
+                reference,
+                inverted,
+                normalized,
+                ..
+            } => {
+                reference.add_id_to_handles(set_id);
+                set_id(inverted);
+                set_id(normalized);
+            }
         }
     }
 
@@ -98,6 +116,7 @@ impl Constraint {
             Constraint::Plookup { .. } => 1,
             Constraint::Permutation { .. } => 1,
             Constraint::InRange { .. } => 1,
+            Constraint::Normalization { .. } => 1,
         }
     }
 }
@@ -922,6 +941,21 @@ impl ConstraintSet {
                         ))
                     }
                 }
+                Constraint::Normalization {
+                    handle,
+                    reference,
+                    inverted,
+                    normalized,
+                } => {
+                    if !(reference.dependencies().into_iter().any(|h| h.is_id())
+                        && inverted.is_id()
+                        && normalized.is_id())
+                    {
+                        bail!(errors::compiler::Error::ConstraintWithHandles(
+                            handle.to_string()
+                        ))
+                    }
+                }
             }
         }
 
@@ -1001,26 +1035,34 @@ impl ConstraintSet {
 
         // Check that no constraint mixes cardinalities
         for c in self.constraints.iter() {
-            if let Constraint::Vanishes {
-                handle,
-                domain: _,
-                expr,
-            } = c
-            {
-                let mut sizes = expr.dependencies().into_iter();
-                if let Some(first) = sizes.next() {
-                    let first_size = self.length_multiplier(&first);
-                    for other in sizes {
-                        let other_size = self.length_multiplier(&other);
-                        if first_size != other_size {
-                            bail!(
-                                    "constraint {} mixes columns {} (×{}) and {} (×{}) of different size factors ",
-                                    handle.pretty(), first.pretty(), first_size,
-                                    other.pretty(), other_size,
-                                );
+            match c {
+                Constraint::Vanishes {
+                    handle,
+                    domain: _,
+                    expr,
+                } => {
+                    let mut sizes = expr.dependencies().into_iter();
+                    if let Some(first) = sizes.next() {
+                        let first_size = self.length_multiplier(&first);
+                        for other in sizes {
+                            let other_size = self.length_multiplier(&other);
+                            if first_size != other_size {
+                                bail!(
+                                        "constraint {} mixes columns {} (×{}) and {} (×{}) of different size factors ",
+                                        handle.pretty(), first.pretty(), first_size,
+                                        other.pretty(), other_size,
+                                    );
+                            }
                         }
                     }
                 }
+                Constraint::Normalization {
+                    handle,
+                    reference,
+                    inverted,
+                    normalized,
+                } => {}
+                _ => {}
             }
         }
 
