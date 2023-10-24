@@ -96,15 +96,12 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
     let xs = xs
         .iter()
         .map(|x| match x {
-            Value::Number(n) => crate::utils::validate(
-                t,
+            Value::Number(n) => t.rm().validate(
                 cache_num
                     .cache_get_or_set_with(n, || CValue::from_str(&n.to_string()).unwrap())
                     .to_owned(),
             ),
-
-            Value::String(s) => crate::utils::validate(
-                t,
+            Value::String(s) => t.rm().validate(
                 cache_str
                     .cache_get_or_set_with(s.clone(), || CValue::from_str(&s).unwrap())
                     .to_owned(),
