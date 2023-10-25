@@ -663,19 +663,16 @@ impl Node {
                     x
                 }),
                 Intrinsic::Inv => {
-                    unreachable!()
-                    // let x = args[0].eval_fold(i, get, cache, settings, f);
-                    // if let Some(ref mut rcache) = cache {
-                    //     x.map(|x| {
-                    //         rcache
-                    //             .cache_get_or_set_with(x.clone(), || {
-                    //                 x.inverse().unwrap_or_else(Value::zero)
-                    //             })
-                    //             .to_owned()
-                    //     })
-                    // } else {
-                    //     x.and_then(|x| x.inverse()).or_else(|| Some(Value::zero()))
-                    // }
+                    let x = args[0].eval_fold(i, get, cache, settings, f);
+                    if let Some(ref mut rcache) = cache {
+                        x.map(|x| {
+                            rcache
+                                .cache_get_or_set_with(x.clone(), || x.inverse())
+                                .to_owned()
+                        })
+                    } else {
+                        x.map(|x| x.inverse())
+                    }
                 }
                 Intrinsic::Normalize => args[0]
                     .eval_fold(i, get, cache, settings, f)

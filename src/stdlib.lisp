@@ -23,7 +23,7 @@
 
 (defpurefun ((not :boolean :nowarn) (x :boolean)) (- 1 x))
 
-(defpurefun ((eq! :loobean :nowarn) x y) (~>> (- x y)))
+(defpurefun ((eq! :loobean :nowarn) x y) (~>> (-. x y)))
 (defpurefun ((neq! :loobean :nowarn) x y) (not (~ (eq! x y))))
 
 (defpurefun ((eq :boolean :nowarn) (x :boolean) (y :boolean)) (^ (- x y) 2))

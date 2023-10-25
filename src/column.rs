@@ -138,13 +138,14 @@ impl Value {
     }
 
     pub(crate) fn vector_sub_assign(&mut self, other: &Value) {
+        let msg = format!("{} .- {}", self, other);
         match (self, other) {
             (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 -= i2,
             (Value::BigInt(_), Value::Native(_)) => todo!(),
             (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
             (Value::Native(_), Value::BigInt(_)) => todo!(),
             (Value::Native(ref mut f1), Value::Native(ref f2)) => f1.sub_assign(f2),
-            (Value::Native(_), Value::ExoNative(_)) => todo!(),
+            (Value::Native(_), Value::ExoNative(_)) => todo!("{}", msg),
             (Value::ExoNative(_), Value::BigInt(_)) => todo!(),
             (Value::ExoNative(_), Value::Native(_)) => todo!(),
             (Value::ExoNative(f1s), Value::ExoNative(f2s)) => f1s
@@ -171,11 +172,15 @@ impl Value {
         }
     }
 
-    pub(crate) fn inverse(&self) -> Option<Value> {
+    pub(crate) fn inverse(&self) -> Value {
         match &self {
-            Value::Native(f) => f.inverse().map(Value::Native),
-            Value::ExoNative(_) => unreachable!(),
-            Value::BigInt(_) => panic!("can not inverse ExoValue"),
+            Value::Native(f) => Value::Native(f.inverse().unwrap_or_else(|| Fr::zero())),
+            Value::ExoNative(fs) => Value::ExoNative(
+                fs.iter()
+                    .map(|f| f.inverse().unwrap_or_else(|| Fr::zero()))
+                    .collect(),
+            ),
+            Value::BigInt(_) => panic!("can not inverse BigInt"),
         }
     }
 

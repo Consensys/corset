@@ -477,11 +477,11 @@ impl std::convert::TryFrom<&str> for Magma {
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s.to_lowercase().as_str() {
             ":loobean" | ":loob" => Ok(Magma {
-                m: RawMagma::Binary,
+                m: RawMagma::Native,
                 c: Conditioning::Loobean,
             }),
             ":boolean" | ":bool" => Ok(Magma {
-                m: RawMagma::Binary,
+                m: RawMagma::Native,
                 c: Conditioning::Boolean,
             }),
             ":nibble" => Ok(RawMagma::Nibble.into()),

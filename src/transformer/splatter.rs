@@ -129,15 +129,13 @@ impl Node {
                                 .kind(Kind::Phantom)
                                 .build();
                         }
-                        Intrinsic::VectorAdd | Intrinsic::VectorSub | Intrinsic::VectorMul => {
-                            todo!()
-                        }
                         Intrinsic::Inv => {
                             dbg!(&args);
                         }
                         Intrinsic::Normalize => {
                             println!("Maybe TODO: ?");
                         }
+                        Intrinsic::VectorAdd | Intrinsic::VectorSub | Intrinsic::VectorMul => {}
                         _ => unreachable!(),
                     }
                 }
@@ -158,6 +156,7 @@ impl Node {
 
 impl ConstraintSet {
     fn make_ancillaries(&mut self, ancillaries: ProtoAncillaries) {
+        // TODO: should be inline lisp
         self.columns
             .insert_column_and_register(
                 Column::builder()
@@ -247,33 +246,32 @@ impl ConstraintSet {
     pub(crate) fn splatter(&mut self) {
         let mut new_exo_columns = Vec::new();
         let mut new_constants = Vec::new();
-        let mut adder: ProtoAncillaries = Default::default();
+        let mut ancillaries: ProtoAncillaries = Default::default();
         println!("{:?}", self.constraints);
+
         for i in 0..self.constraints.len() {
             if let Constraint::Vanishes { expr: e, .. } = self.constraints.get_mut(i).unwrap() {
                 e.dyadize();
-                println!("{e}");
-                e.do_splatter(
-                    self.columns
-                        .module_for(dbg!(&e).dependencies())
-                        .unwrap()
-                        .as_str(),
-                    &mut adder,
-                    &mut new_exo_columns,
-                    &mut new_constants,
-                );
+                if let Some(module) = self.columns.module_for(dbg!(&e).dependencies()).as_ref() {
+                    e.do_splatter(
+                        module,
+                        &mut ancillaries,
+                        &mut new_exo_columns,
+                        &mut new_constants,
+                    );
+                }
             }
         }
 
-        self.make_ancillaries(adder);
+        self.make_ancillaries(ancillaries);
+
         for (new_column, new_computation) in new_constants {
             let id = self.columns.insert_column_and_register(new_column).unwrap();
             self.computations.insert(&id, new_computation).unwrap();
         }
+
         for (func, (new_handle, new_magma), args) in new_exo_columns.into_iter() {
-            let new_ref = if self.columns.by_handle(&new_handle).is_ok() {
-                new_handle.clone().into()
-            } else {
+            if self.columns.by_handle(&new_handle).is_err() {
                 // TODO: make a maybe_create of this
                 let r = self
                     .columns
@@ -296,7 +294,6 @@ impl ConstraintSet {
                         },
                     )
                     .unwrap();
-                r
             };
 
             match func {
