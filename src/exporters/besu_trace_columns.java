@@ -32,8 +32,8 @@ public record Trace(
   {{#each registers}}
   @JsonProperty("{{ this.corset_name }}") List<{{ this.tupe }}> {{ this.java_name }}{{#unless @last}},{{/unless}}{{#if @last}}) { {{/if}}
   {{/each}}
-  static TraceBuilder builder() {
-    return new TraceBuilder();
+  static TraceBuilder builder(int length) {
+    return new TraceBuilder(length);
   }
 
   public int size() {
@@ -45,10 +45,14 @@ public record Trace(
 
     {{#each registers}}
     @JsonProperty("{{ this.corset_name }}")
-    private final List<{{ this.tupe }}> {{ this.java_name }} = new ArrayList<>();
+    private final List<{{ this.tupe }}> {{ this.java_name }};
     {{/each}}
 
-    private TraceBuilder() {}
+    private TraceBuilder(int length) {
+      {{#each registers}}
+      this.{{ this.java_name }} = new ArrayList<>(length);
+      {{/each}}
+    }
 
     public int size() {
       if (!filled.isEmpty()) {
