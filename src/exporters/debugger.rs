@@ -1,6 +1,7 @@
 use crate::column::Computation;
 use crate::compiler::codetyper::Tty;
 use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
+use crate::constants;
 use crate::pretty::Pretty;
 use crate::structs::Handle;
 use anyhow::*;
@@ -124,10 +125,15 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
         },
         Expression::Const(x) => tty.write(x.to_string()),
         Expression::Column { handle, shift, .. } | Expression::ExoColumn { handle, shift, .. } => {
-            let color = handle.to_string().chars().fold(0, |ax, c| ax + c as usize) % 255 + 1;
+            let color = handle
+                .to_string_short()
+                .chars()
+                .fold(0, |ax, c| ax + c as usize)
+                % 255
+                + 1;
             tty.write(
                 handle
-                    .to_string()
+                    .to_string_short()
                     .color(XtermColors::from(color as u8))
                     .to_string(),
             );
@@ -210,16 +216,31 @@ fn render_constraints(
                     handle,
                     reference,
                     inverted,
-                    normalized,
+                    ..
                 } => {
-                    println!("\n{}", handle.pretty());
-                    println!(
-                        "{} := |{}| == {} × {}",
-                        normalized.pretty(),
-                        reference.pretty(),
-                        reference.pretty(),
-                        inverted.pretty()
-                    )
+                    println!("\n{} :=", handle.pretty());
+                    if reference.bit_size() > constants::FIELD_BITSIZE {
+                        println!("TODO XXX");
+                    } else {
+                        println!(
+                            "|{}| == {} × {}",
+                            reference.pretty(),
+                            reference.pretty(),
+                            inverted.pretty()
+                        );
+                        println!(
+                            "{}×(1 - {}×{}) = 0",
+                            reference.pretty(),
+                            reference.pretty(),
+                            inverted.pretty()
+                        );
+                        println!(
+                            "{}×(1 - {}×{}) = 0",
+                            inverted.pretty(),
+                            reference.pretty(),
+                            inverted.pretty()
+                        );
+                    }
                 }
             }
         }

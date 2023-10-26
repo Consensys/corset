@@ -94,6 +94,9 @@ impl ColumnRef {
 
         self.id = Some(i);
     }
+    pub fn to_string_short(&self) -> String {
+        self.map(|id| format!("col#{}", id), |handle| handle.name.to_owned())
+    }
     pub fn map<T, F, G>(&self, f: F, g: G) -> T
     where
         F: FnOnce(ColumnID) -> T,
@@ -945,10 +948,10 @@ impl Display for Node {
         match self.e() {
             Expression::Const(x) => write!(f, "{}", x),
             Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
-                write!(f, "{}", handle)
+                write!(f, "{}", handle.to_string_short())
             }
             Expression::ArrayColumn { handle, domain, .. } => {
-                write!(f, "{}{}", handle, domain)
+                write!(f, "{}{}", handle.to_string_short(), domain)
             }
             Expression::List(cs) => write!(f, "{{{}}}", format_list(cs)),
             Expression::Funcall { func, args } => {

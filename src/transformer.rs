@@ -152,7 +152,7 @@ fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
 }
 
 fn expression_to_name(e: &Node, prefix: &str) -> String {
-    format!("{}_{}", prefix, e).replace(' ', "_")
+    format!("{}[{}]", prefix, e)
 }
 
 /// Wraps `ex` into a `List` if it is not already one.
