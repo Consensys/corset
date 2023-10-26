@@ -874,7 +874,6 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
         }),
         kw @ ("defun" | "defpurefun") => {
             fn parse_typed_symbols(l: AstNode) -> Result<(String, Option<Type>, bool)> {
-                // TODO: revamp type parsing to add column/scalar/any
                 match l.class {
                     Token::Symbol(s) => Ok((s, None, false)),
                     Token::List(xs) => match xs.as_slice() {

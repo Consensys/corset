@@ -3,8 +3,8 @@
 (defunalias if-zero if!)
 (defunalias if-not-zero if)
 
-(defpurefun ((force-bool :boolean :nowarn) x) x)
-(defpurefun ((is-binary :loob :nowarn) e0) (* e0 (- 1 e0)))
+(defpurefun ((force-bool :@boolean :nowarn) x) x)
+(defpurefun ((is-binary :@loob :nowarn) e0) (* e0 (- 1 e0)))
 
 ;;
 ;; Boolean functions
@@ -12,23 +12,23 @@
 ;; !-suffix denotes loobean algebra (i.e. 0 == true)
 ;; ~-prefix denotes normalized-functions (i.e. output is 0/1)
 (defpurefun (and a b) (* a b))
-(defpurefun ((~and :bool) a b) (~ (and a b)))
-(defpurefun ((and! :loob) a b) (+ a b))
-(defpurefun ((~and! :bool) a b) (~ (and! a b)))
+(defpurefun ((~and :@bool) a b) (~ (and a b)))
+(defpurefun ((and! :@loob) a b) (+ a b))
+(defpurefun ((~and! :@bool) a b) (~ (and! a b)))
 
 (defpurefun (or a b) (+ a b))
-(defpurefun ((~or :boolean) a b) (~ (or a b)))
-(defpurefun ((or! :loob) a b) (* a b))
-(defpurefun ((~or! :boolean) a b) (~ (or! a b)))
+(defpurefun ((~or :@boolean) a b) (~ (or a b)))
+(defpurefun ((or! :@loob) a b) (* a b))
+(defpurefun ((~or! :@boolean) a b) (~ (or! a b)))
 
-(defpurefun ((not :boolean :nowarn) (x :boolean)) (- 1 x))
+(defpurefun ((not :@boolean :nowarn) (x :@boolean)) (- 1 x))
 
-(defpurefun ((eq! :loobean :nowarn) x y) (~>> (-. x y)))
-(defpurefun ((neq! :loobean :nowarn) x y) (not (~ (eq! x y))))
+(defpurefun ((eq! :@loobean :nowarn) x y) (~>> (-. x y)))
+(defpurefun ((neq! :@loobean :nowarn) x y) (not (~ (eq! x y))))
 
-(defpurefun ((eq :boolean :nowarn) (x :boolean) (y :boolean)) (^ (- x y) 2))
-(defpurefun ((eq :boolean :nowarn) x y) (- 1 (eq! x y)))
-(defpurefun ((neq :boolean :nowarn) x y) (eq! x y))
+(defpurefun ((eq :@boolean :nowarn) (x :@boolean) (y :@boolean)) (^ (- x y) 2))
+(defpurefun ((eq :@boolean :nowarn) x y) (- 1 (eq! x y)))
+(defpurefun ((neq :@boolean :nowarn) x y) (eq! x y))
 
 
 ;; Variadic versions of and/or
@@ -71,12 +71,12 @@
 
 
 ;; Helpers
-(defpurefun ((vanishes! :loob :nowarn) e0) e0)
+(defpurefun ((vanishes! :@loob :nowarn) e0) e0)
 (defpurefun (if-eq x val then) (if! (eq! x val) then))
 (defpurefun (if-eq-else x val then else) (if! (eq! x val) then else))
 
 ;; counter constancy constraint
-(defpurefun ((counter-constancy :loob) ct X)
+(defpurefun ((counter-constancy :@loob) ct X)
   (if-not-zero ct
                (remained-constant! X)))
 
@@ -87,7 +87,7 @@
            (eq! acc (+ (* 256 (prev acc)) bytes))))
 
 ;; plateau constraints
-(defpurefun (plateau-constraint CT (X :boolean) C)
+(defpurefun (plateau-constraint CT (X :binary) C)
   (begin (debug-assert (stamp-constancy CT C))
          (if-zero C
                   (eq! X 1)

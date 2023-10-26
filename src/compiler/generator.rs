@@ -1232,16 +1232,18 @@ fn apply_defined(
         f_ctx.insert_symbol(f_arg, traversed_args[i].clone())?;
     }
     Ok(if let Some(r) = reduce(&b.body, &mut f_ctx, settings)? {
+        let found_type = r.t();
         let final_type = if let Some(expected_type) = b.out_type {
-            if r.t() > expected_type && !b.nowarn {
+            if found_type > expected_type && !b.nowarn {
                 warn!(
                 "in call to {}: inferred output type {:?} is incompatible with declared type {:?}",
                 h.pretty(),
-                r.t().yellow(),
+                found_type.yellow(),
                 b.out_type.blue()
             )
             }
-            expected_type
+            // Idea: keep the largest magma and
+            found_type.with_conditioning_of(&expected_type)
         } else {
             r.t()
         };

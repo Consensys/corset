@@ -1,12 +1,13 @@
 #![allow(dead_code)]
 use anyhow::*;
+use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
 use crate::{column::Value, errors::RuntimeError};
 
 pub fn max_type<'a, TS: IntoIterator<Item = &'a Type>>(ts: TS) -> Type {
-    ts.into_iter().fold(Type::INFIMUM, |a, b| a.max(*b))
+    ts.into_iter().fold(Type::INFIMUM, |a, b| a.maxed(b))
 }
 
 /// The type of a column in the IR. This struct contains both the dimensionality
@@ -74,6 +75,18 @@ impl Type {
 
     pub fn with_conditioning(&self, c: Conditioning) -> Self {
         self.with_magma(self.m().with_conditioning(c))
+    }
+
+    pub(crate) fn with_conditioning_of(self, other: &Type) -> Type {
+        if self.c() != Conditioning::None
+            && other.c() != Conditioning::None
+            && self.c() != other.c()
+        {
+            panic!("should never happen");
+        }
+
+        let larger_conditioning = self.c().max(other.c());
+        self.with_magma(self.m().with_conditioning(larger_conditioning))
     }
 
     pub fn with_magma(&self, m: Magma) -> Self {
@@ -158,6 +171,10 @@ impl Type {
             | (Type::List(_), Type::Any(_))
             | (Type::List(_), Type::ArrayColumn(_)) => false,
         }
+    }
+
+    pub(crate) fn maxed(&self, other: &Type) -> Type {
+        self.max(other).with_magma(self.m().maxed(&other.m()))
     }
 }
 impl std::cmp::PartialOrd for Type {
@@ -247,13 +264,26 @@ impl std::fmt::Display for Conditioning {
         )
     }
 }
+impl TryFrom<&str> for Conditioning {
+    type Error = anyhow::Error;
+
+    fn try_from(s: &str) -> Result<Conditioning, Self::Error> {
+        match s {
+            "none" => Result::Ok(Conditioning::None),
+            "bool" | "boolean" => Ok(Conditioning::Boolean),
+            "loob" | "loobean" => Ok(Conditioning::Loobean),
+            _ => bail!("unknown conditioninig: {}", s.red().bold()),
+        }
+    }
+}
 
 lazy_static::lazy_static! {
     static ref F_15: Value = Value::from(15);
     static ref F_255: Value = Value::from(255);
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+// TODO: implement PartialOrd
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, Ord, PartialOrd)]
 pub enum RawMagma {
     None,
     Binary,
@@ -293,7 +323,7 @@ impl RawMagma {
                 if x.is_zero() || x.is_one() {
                     Ok(x)
                 } else {
-                    bail!(RuntimeError::InvalidValue("bool", x))
+                    bail!(RuntimeError::InvalidValue("binary", x))
                 }
             }
             RawMagma::Nibble => {
@@ -319,6 +349,18 @@ impl RawMagma {
                 }
             }
             RawMagma::Any => unreachable!(),
+        }
+    }
+}
+impl TryFrom<&str> for RawMagma {
+    type Error = anyhow::Error;
+
+    fn try_from(s: &str) -> Result<RawMagma, Self::Error> {
+        match s {
+            "binary" => Result::Ok(RawMagma::Binary),
+            "nibble" => Ok(RawMagma::Nibble),
+            "native" => Ok(RawMagma::Native),
+            _ => bail!("unknown magma: {}", s.red().bold()),
         }
     }
 }
@@ -368,6 +410,13 @@ impl Magma {
         m: RawMagma::Any,
         c: Conditioning::None,
     };
+
+    pub fn or_magma(mut self, r: RawMagma) -> Magma {
+        if self.m == RawMagma::None {
+            self.m = r;
+        }
+        self
+    }
 
     pub fn is_binary(&self) -> bool {
         matches!(self.m, RawMagma::Binary)
@@ -470,30 +519,38 @@ impl Magma {
     pub fn any() -> Magma {
         RawMagma::Any.into()
     }
+    pub(crate) fn maxed(&self, other: &Magma) -> Magma {
+        Magma {
+            m: self.m.max(other.m),
+            c: self.c.max(other.c),
+        }
+    }
 }
 impl std::convert::TryFrom<&str> for Magma {
     type Error = anyhow::Error;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        match s.to_lowercase().as_str() {
-            ":loobean" | ":loob" => Ok(Magma {
-                m: RawMagma::Native,
-                c: Conditioning::Loobean,
-            }),
-            ":boolean" | ":bool" => Ok(Magma {
-                m: RawMagma::Native,
-                c: Conditioning::Boolean,
-            }),
-            ":nibble" => Ok(RawMagma::Nibble.into()),
-            ":byte" => Ok(RawMagma::Byte.into()),
-            ":native" | ":natural" => Ok(RawMagma::Native.into()),
-            s => {
-                let re = regex_lite::Regex::new(r":i(\d+)").unwrap();
-                match re.captures(s).and_then(|cs| cs.get(1)) {
-                    Some(x) => Ok(RawMagma::Integer(x.as_str().parse::<usize>().unwrap()).into()),
-                    None => bail!("unknown type: `{}`", s),
-                }
-            }
+        let re_global = regex_lite::Regex::new(
+            r":(?<RawMagma>i(?<Integer>\d+)|[a-z]+)?(@(?<Conditioning>loobean|boolean))?",
+        )?;
+
+        if let Some(caps) = re_global.captures(s) {
+            let conditioning = caps
+                .name("Conditioning")
+                .map_or(Ok(Conditioning::None), |s| s.as_str().try_into())?;
+
+            let raw_magma = if let Some(integer) = caps.name("Integer") {
+                RawMagma::Integer(integer.as_str().parse::<usize>().unwrap())
+            } else {
+                caps.name("RawMagma")
+                    .map_or(Ok(RawMagma::None), |s| s.as_str().try_into())?
+            };
+            Ok(Magma {
+                m: raw_magma,
+                c: conditioning,
+            })
+        } else {
+            bail!("unknown type: {}", s.bold().red())
         }
     }
 }

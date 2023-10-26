@@ -18,21 +18,20 @@ fn invert_expr(e: &Node) -> Node {
 /// pre-computing and proving the inverted column.
 
 impl Node {
-    pub(crate) fn do_expand_inv(
+    pub(crate) fn do_normalize(
         &mut self,
         get_module: &dyn Fn(&HashSet<ColumnRef>) -> String,
         new_cols: &mut Vec<(Handle, Node)>,
-    ) -> Result<()> {
+    ) {
         match self.e_mut() {
             Expression::List(es) => {
                 for e in es.iter_mut() {
-                    e.do_expand_inv(get_module, new_cols)?;
+                    e.do_normalize(get_module, new_cols);
                 }
-                Ok(())
             }
             Expression::Funcall { func, args, .. } => {
                 for e in args.iter_mut() {
-                    e.do_expand_inv(get_module, new_cols)?;
+                    e.do_normalize(get_module, new_cols);
                 }
                 if matches!(func, Intrinsic::Normalize) {
                     let module = get_module(&args[0].dependencies());
@@ -45,22 +44,20 @@ impl Node {
                         .t(self.t().m().invert())
                         .build();
                 }
-                Ok(())
             }
-            _ => Ok(()),
+            _ => {}
         }
     }
 }
 
 impl ConstraintSet {
-    pub fn expand_invs(&mut self) -> Result<()> {
+    pub fn expand_normalizations(&mut self) -> Result<()> {
         let mut new_cols = vec![];
 
         let get_module = |rs: &HashSet<ColumnRef>| self.columns.module_for(rs.iter()).unwrap();
         for i in 0..self.constraints.len() {
             if let Constraint::Vanishes { expr: e, .. } = self.constraints.get_mut(i).unwrap() {
-                e.do_expand_inv(&get_module, &mut new_cols)
-                    .with_context(|| anyhow!("while expanding inverses"))?;
+                e.do_normalize(&get_module, &mut new_cols);
             }
         }
 
@@ -152,5 +149,5 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Res
 }
 
 pub fn expand_invs(cs: &mut ConstraintSet) -> Result<()> {
-    cs.expand_invs()
+    cs.expand_normalizations()
 }
