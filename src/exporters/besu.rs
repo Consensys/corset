@@ -160,12 +160,21 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
         .iter()
         .map(|c| BesuConstant {
             name: crate::utils::purify(&c.0.name),
-            value: if c.1.bits() > 31 {
-                format!("new BigInteger(\"{}\")", c.1)
-            } else {
+            value: if c.1.bits() <= 31 {
                 c.1.to_string()
+            } else if c.1.bits() <= 63 {
+                format!("{}L", c.1)
+            } else {
+                format!("new BigInteger(\"{}\")", c.1)
             },
-            tupe: (if c.1.bits() > 31 { "BigInteger" } else { "int" }).to_string(),
+            tupe: (if c.1.bits() <= 31 {
+                "int"
+            } else if c.1.bits() <= 63 {
+                "long"
+            } else {
+                "BigInteger"
+            })
+            .to_string(),
         })
         .sorted_by_cached_key(|c| c.name.to_owned())
         .collect::<Vec<_>>();
