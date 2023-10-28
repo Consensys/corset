@@ -16,7 +16,7 @@
 package net.consensys.linea.zktracer.module.{{ module }};
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import net.consensys.linea.zktracer.bytes.UnsignedByte;
+import net.consensys.linea.zktracer.types.UnsignedByte;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
