@@ -122,6 +122,24 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
                 tty.cr();
                 tty.write("endif".color(c).bold().to_string());
             }
+            Intrinsic::IfNotZero => {
+                tty.write("if-non-zero".color(c).bold().to_string());
+                pretty_expr(&args[0], Some(Intrinsic::Mul), tty, show_types);
+                tty.shift(INDENT);
+                tty.cr();
+                pretty_expr(&args[1], None, tty, show_types);
+                if let Some(a) = args.get(2) {
+                    tty.unshift();
+                    tty.cr();
+                    tty.write("else".color(c).bold().to_string());
+                    tty.shift(INDENT);
+                    tty.cr();
+                    pretty_expr(a, prev, tty, show_types);
+                }
+                tty.unshift();
+                tty.cr();
+                tty.write("endif".color(c).bold().to_string());
+            }
         },
         Expression::Const(x) => tty.write(x.to_string()),
         Expression::Column { handle, shift, .. } | Expression::ExoColumn { handle, shift, .. } => {

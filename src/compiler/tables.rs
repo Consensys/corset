@@ -58,6 +58,10 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "~>>"),
             class: FunctionClass::Builtin(Builtin::NormFlat),
         },
+        "if" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "if"),
+            class: FunctionClass::Builtin(Builtin::If)
+        },
 
         // Intrinsics
         "+" => Function {
@@ -99,10 +103,6 @@ lazy_static::lazy_static! {
         "begin" => Function{
             handle: Handle::new(super::MAIN_MODULE, "begin"),
             class: FunctionClass::Intrinsic(Intrinsic::Begin)
-        },
-        "if" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "if"),
-            class: FunctionClass::Intrinsic(Intrinsic::IfZero)
         },
     };
 }

@@ -23,6 +23,7 @@ pub enum Builtin {
     Len,
     Shift,
     NormFlat,
+    If,
 }
 impl std::fmt::Display for Builtin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -33,6 +34,7 @@ impl std::fmt::Display for Builtin {
                 Builtin::Len => "len",
                 Builtin::Shift => "shift",
                 Builtin::NormFlat => "~>>",
+                Builtin::If => "if?",
             }
         )
     }
@@ -56,6 +58,7 @@ pub enum Intrinsic {
     Begin,
 
     IfZero,
+    IfNotZero,
 }
 impl Intrinsic {
     pub fn call(self, args: &[Node]) -> Result<Node> {
@@ -87,7 +90,9 @@ impl Intrinsic {
             }
             Intrinsic::Exp => argtype[0],
             Intrinsic::Mul => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
-            Intrinsic::IfZero => argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM)),
+            Intrinsic::IfZero | Intrinsic::IfNotZero => {
+                argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
+            }
             Intrinsic::Begin => Type::List(max_type(argtype).m()),
         }
     }
@@ -110,6 +115,7 @@ impl std::fmt::Display for Intrinsic {
                 Intrinsic::Normalize => "~",
                 Intrinsic::Begin => "begin",
                 Intrinsic::IfZero => "if-zero",
+                Intrinsic::IfNotZero => "if-not-zero",
             }
         )
     }
@@ -182,6 +188,7 @@ impl FuncVerifier<Node> for Builtin {
             Builtin::Len => Arity::Monadic,
             Builtin::Shift => Arity::Dyadic,
             Builtin::NormFlat => Arity::Monadic,
+            Builtin::If => Arity::Between(2, 3),
         }
     }
 
@@ -191,6 +198,7 @@ impl FuncVerifier<Node> for Builtin {
             Builtin::Len => &[&[Type::ArrayColumn(Magma::ANY)]],
             Builtin::Shift => &[&[Type::Column(Magma::ANY)], &[Type::Scalar(Magma::ANY)]],
             Builtin::NormFlat => &[&[Type::Column(Magma::ANY)]],
+            Builtin::If => &[&[Type::Any(Magma::ANY)], &[Type::Any(Magma::ANY)]],
         };
 
         if super::compatible_with_repeating(expected_t, &args_t) {

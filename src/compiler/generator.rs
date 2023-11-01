@@ -244,7 +244,7 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Inv => Arity::Monadic,
             Intrinsic::Normalize => Arity::Monadic,
             Intrinsic::Begin => Arity::AtLeast(1),
-            Intrinsic::IfZero => Arity::Between(2, 3),
+            Intrinsic::IfZero | Intrinsic::IfNotZero => Arity::Between(2, 3),
         }
     }
     fn validate_types(&self, args: &[Node]) -> Result<()> {
@@ -312,7 +312,7 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Exp => &[&[Type::Any(Magma::ANY)], &[Type::Scalar(Magma::ANY)]],
             Intrinsic::Neg => &[&[Type::Scalar(Magma::ANY), Type::Column(Magma::ANY)]],
             Intrinsic::Inv | Intrinsic::Normalize => &[&[Type::Any(Magma::ANY)]],
-            Intrinsic::IfZero => &[
+            Intrinsic::IfZero | Intrinsic::IfNotZero => &[
                 // condition type
                 &[Type::Any(Magma::ANY)],
                 // then/else arms typ
@@ -1245,14 +1245,19 @@ fn apply_defined(
         let final_type = if let Some(expected_type) = b.out_type {
             if found_type > expected_type && !b.nowarn {
                 warn!(
-                "in call to {}: inferred output type {:?} is incompatible with declared type {:?}",
-                h.pretty(),
-                found_type.yellow(),
-                b.out_type.blue()
-            )
+                    "in call to {} with {}: inferred output type {} is incompatible with declared type {}",
+                    h.pretty(),
+                    traversed_args.iter().map(|x| x.pretty()).join(" "),
+                    found_type.yellow().bold(),
+                    expected_type.blue().bold()
+                )
             }
-            // Idea: keep the largest magma and
-            found_type.with_conditioning_of(&expected_type)
+
+            if b.nowarn {
+                found_type.force_with_conditioning_of(&expected_type)
+            } else {
+                found_type.with_conditioning_of(&expected_type)?
+            }
         } else {
             r.t()
         };
@@ -1294,6 +1299,11 @@ fn apply_builtin(
                 Ok(Some(traversed_args[0].clone()))
             }
         }
+        Builtin::If => match traversed_args[0].t().c() {
+            super::Conditioning::None => unreachable!(),
+            super::Conditioning::Boolean => Ok(Some(Intrinsic::IfNotZero.call(&traversed_args)?)),
+            super::Conditioning::Loobean => Ok(Some(Intrinsic::IfZero.call(&traversed_args)?)),
+        },
     }
 }
 
@@ -1323,7 +1333,7 @@ fn apply_intrinsic(
             .with_type(super::max_type(&traversed_args_t)),
         )),
 
-        b @ Intrinsic::IfZero => {
+        b @ Intrinsic::IfZero | b @ Intrinsic::IfNotZero => {
             let r = b.call(&traversed_args)?;
             if traversed_args[0].may_overflow() {
                 let pretty = if let Some(d) = traversed_args[0].dbg() {

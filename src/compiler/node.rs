@@ -692,6 +692,15 @@ impl Node {
                             .unwrap_or_else(|| Some(Value::zero()))
                     }
                 }
+                Intrinsic::IfNotZero => {
+                    if !args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
+                        args[1].eval_fold(i, get, cache, settings, f)
+                    } else {
+                        args.get(2)
+                            .map(|x| x.eval_fold(i, get, cache, settings, f))
+                            .unwrap_or_else(|| Some(Value::zero()))
+                    }
+                }
             },
             Expression::Const(v) => Some(v.clone().into()),
             Expression::Column { handle, shift, .. } => {
