@@ -11,7 +11,7 @@ use log::*;
 
 use crate::{
     column::{ColumnSet, Value, ValueBacking},
-    compiler::{Constraint, ConstraintSet, Domain, Expression, Node},
+    compiler::{Constraint, ConstraintSet, Domain, EvalSettings, Expression, Node},
     pretty::*,
     structs::Handle,
 };
@@ -287,7 +287,7 @@ fn check_constraint_at(
         i,
         |handle, i, wrap| cs.columns.get_raw(handle, i, wrap),
         cache,
-        &Default::default(),
+        &EvalSettings::new().wrap(wrap),
     );
     if let Some(r) = r {
         if !r.is_zero() {
