@@ -415,6 +415,8 @@ impl Node {
 
     /// Return whether this [`Expression`] is susceptible to overflow withtin the field
     pub fn may_overflow(&self) -> bool {
+        // TODO: decide its future
+        return false;
         match self.e() {
             Expression::Funcall { func, args } => match func {
                 Intrinsic::Add => args.iter().any(|a| !a.t().is_binary()),

@@ -83,7 +83,7 @@ pub(crate) mod compiler {
                 .zip(found.iter())
                 .map(|(e, f)| {
                     if e >= f {
-                        e.black().to_string()
+                        e.white().to_string()
                     } else {
                         e.blue().to_string()
                     }
@@ -99,7 +99,7 @@ pub(crate) mod compiler {
                 .zip(found.iter())
                 .map(|(e, f)| {
                     if e >= f {
-                        f.black().to_string()
+                        f.white().to_string()
                     } else {
                         f.red().to_string()
                     }

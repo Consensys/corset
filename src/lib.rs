@@ -159,7 +159,7 @@ impl Trace {
                         values: backing
                             .iter(&c.columns)
                             .map(|x| {
-                                let mut v = x.into_repr();
+                                let mut v = x.into_repr().collect::<Vec<_>>().try_into().unwrap();
                                 if convert_to_be {
                                     reverse_fr(&mut v);
                                 }
@@ -167,7 +167,8 @@ impl Trace {
                             })
                             .collect(),
                         padding_value: {
-                            let mut padding = padding.into_repr().0;
+                            let mut padding =
+                                padding.into_repr().collect::<Vec<_>>().try_into().unwrap();
                             if convert_to_be {
                                 reverse_fr(&mut padding);
                             }
@@ -249,7 +250,7 @@ fn reverse_fr_x86_64(v: &mut [u64; 4]) {
 }
 
 fn make_corset(mut constraints: ConstraintSet) -> Result<Corset> {
-    transformer::expand_to(&mut constraints, ExpansionLevel::all(), &[])?;
+    transformer::expand_to(&mut constraints, ExpansionLevel::all().into(), &[])?;
     Ok(constraints)
 }
 

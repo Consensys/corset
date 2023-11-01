@@ -1,6 +1,6 @@
 use crate::compiler::Magma;
 
-pub const FIELD_BITSIZE: usize = 16;
+pub const FIELD_BITSIZE: usize = 254;
 
 pub fn col_count_bits(x: usize) -> usize {
     (x + FIELD_BITSIZE - 1) / FIELD_BITSIZE

@@ -406,7 +406,7 @@ impl Pretty for Value {
                     "ε{}",
                     match base {
                         Base::Dec => i.to_str_radix(10),
-                        Base::Hex => i.to_str_radix(16),
+                        Base::Hex => format!("0x{}", i.to_str_radix(16)),
                         Base::Bin | Base::Bool | Base::Loob => i.to_str_radix(2),
                         Base::Bytes => i
                             .to_bytes_le()
@@ -488,7 +488,7 @@ pub enum ValueBacking {
     Function {
         /// if i >= 0, shall return the expected actual value; if i < 0, shall
         /// return the adequate padding value
-        f: Box<dyn Fn(isize, &ColumnSet) -> Option<Value> + Sync>,
+        f: Box<dyn Fn(isize, &ColumnSet) -> Option<Value> + Sync + Send>,
         spilling: isize,
     },
 }
@@ -526,7 +526,7 @@ impl ValueBacking {
         ValueBacking::Expression { e, spilling }
     }
 
-    pub fn from_fn<F: Fn(isize, &'_ ColumnSet) -> Option<Value> + Sync + 'static>(
+    pub fn from_fn<F: Fn(isize, &'_ ColumnSet) -> Option<Value> + Sync + 'static + Send>(
         f: Box<F>,
         spilling: isize,
     ) -> Self {

@@ -129,9 +129,7 @@ impl Node {
                                 .kind(Kind::Phantom)
                                 .build();
                         }
-                        Intrinsic::Inv => {
-                            dbg!(&args);
-                        }
+                        Intrinsic::Inv => {}
                         Intrinsic::Normalize => {
                             println!("Maybe TODO: ?");
                         }
@@ -252,7 +250,7 @@ impl ConstraintSet {
         for i in 0..self.constraints.len() {
             if let Constraint::Vanishes { expr: e, .. } = self.constraints.get_mut(i).unwrap() {
                 e.dyadize();
-                if let Some(module) = self.columns.module_for(dbg!(&e).dependencies()).as_ref() {
+                if let Some(module) = self.columns.module_for(&e.dependencies()).as_ref() {
                     e.do_splatter(
                         module,
                         &mut ancillaries,

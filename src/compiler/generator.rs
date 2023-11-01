@@ -132,6 +132,15 @@ impl Default for EvalSettings {
         EvalSettings { wrap: true }
     }
 }
+impl EvalSettings {
+    pub fn new() -> Self {
+        return Default::default();
+    }
+
+    pub fn wrap(self, w: bool) -> Self {
+        Self { wrap: w, ..self }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Function {
@@ -179,16 +188,16 @@ impl Defined {
                 return Ok(s);
             }
         }
-        error!("available specializations:");
+        let mut msg = "available specializations:".to_string();
         for s in self.specializations.iter() {
             let (expected_str, found_str) =
                 errors::compiler::type_comparison_message(&s.in_types, args_t);
-            error!(
-                "expected {} mismatches with found {}",
+            msg += &format!(
+                "\nexpected {} mismatches with found {}",
                 expected_str, found_str
             );
         }
-        bail!("no implementation found matching given arguments")
+        bail!(msg)
     }
 }
 // User-defined function do not need to implement [`FunctionVerifier`], because
