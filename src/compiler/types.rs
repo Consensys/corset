@@ -60,7 +60,7 @@ impl Type {
 
     pub fn rm(self) -> RawMagma {
         match self {
-            Type::Void => RawMagma::None.into(),
+            Type::Void => RawMagma::None,
             Type::Scalar(m)
             | Type::Column(m)
             | Type::Any(m)
@@ -501,10 +501,10 @@ impl Magma {
         matches!(self.c, Conditioning::Loobean)
     }
     pub fn with_raw_magma(&self, m: RawMagma) -> Magma {
-        Magma { m, ..self.clone() }
+        Magma { m, ..*self }
     }
     pub fn with_conditioning(&self, c: Conditioning) -> Magma {
-        Magma { c, ..self.clone() }
+        Magma { c, ..*self }
     }
     pub fn binary() -> Magma {
         RawMagma::Binary.into()

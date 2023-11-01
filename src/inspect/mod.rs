@@ -151,10 +151,8 @@ impl ModuleView {
                             let base = cs.columns.column(column_ref).unwrap().base;
                             let x_str = x.pretty_with_base(base);
                             maxes[k + 1] = maxes[k + 1].max(x_str.len());
-                            let bg_color = x
-                                .into_bytes()
-                                .iter()
-                                .fold(0u8, |ax, bx| ax.wrapping_add(*bx));
+                            let bg_color =
+                                x.to_bytes().iter().fold(0u8, |ax, bx| ax.wrapping_add(*bx));
                             // ensure that we write white on dark colors and white on dark ones
                             let corrected_fg_color = if bg_color % 36 > 18 {
                                 Color::Black

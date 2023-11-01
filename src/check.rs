@@ -616,12 +616,7 @@ pub fn check(
                         None
                     }
                 }
-                Constraint::Normalization {
-                    normalized,
-                    reference,
-                    inverted,
-                    ..
-                } => {
+                Constraint::Normalization { .. } => {
                     todo!()
                 }
             }

@@ -218,7 +218,7 @@ pub fn fill_traces(
                     if xs.len() < module_min_len {
                         xs.reverse();
                         xs.resize_with(module_min_len, || {
-                            padding_value.clone().unwrap_or_default().into()
+                            padding_value.clone().unwrap_or_default()
                         });
                         xs.reverse();
                     }

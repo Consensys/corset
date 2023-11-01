@@ -128,7 +128,7 @@ impl Trace {
                 let column = c.columns.column(cref).unwrap();
                 let handle = &column.handle;
                 trace!("Writing {}", handle);
-                let backing = c.columns.backing(&cref).unwrap_or_else(|| &empty_backing);
+                let backing = c.columns.backing(cref).unwrap_or(&empty_backing);
                 let padding: Value = if let Some(v) = column.padding_value.as_ref() {
                     v.clone()
                 } else {
@@ -159,7 +159,7 @@ impl Trace {
                         values: backing
                             .iter(&c.columns)
                             .map(|x| {
-                                let mut v = x.into_repr().collect::<Vec<_>>().try_into().unwrap();
+                                let mut v = x.to_repr().collect::<Vec<_>>().try_into().unwrap();
                                 if convert_to_be {
                                     reverse_fr(&mut v);
                                 }
@@ -168,7 +168,7 @@ impl Trace {
                             .collect(),
                         padding_value: {
                             let mut padding =
-                                padding.into_repr().collect::<Vec<_>>().try_into().unwrap();
+                                padding.to_repr().collect::<Vec<_>>().try_into().unwrap();
                             if convert_to_be {
                                 reverse_fr(&mut padding);
                             }

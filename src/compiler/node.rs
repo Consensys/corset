@@ -416,31 +416,31 @@ impl Node {
     /// Return whether this [`Expression`] is susceptible to overflow withtin the field
     pub fn may_overflow(&self) -> bool {
         // TODO: decide its future
-        return false;
-        match self.e() {
-            Expression::Funcall { func, args } => match func {
-                Intrinsic::Add => args.iter().any(|a| !a.t().is_binary()),
-                // TODO: see with Olivier
-                Intrinsic::Sub => false,
-                Intrinsic::Mul => args.iter().any(|a| !a.t().is_binary()),
-                // exponentiation are compile-time computed, hence cannot overflow
-                Intrinsic::Exp => false,
-                Intrinsic::Neg => false,
-                Intrinsic::Inv => false,
-                Intrinsic::Normalize => false,
-                Intrinsic::Begin => unreachable!(),
-                Intrinsic::IfZero => {
-                    args[1].may_overflow() || args.get(2).map(|a| a.may_overflow()).unwrap_or(false)
-                }
-                _ => false,
-            },
-            Expression::Const(_) => false,
-            Expression::Column { .. } => false,
-            Expression::ExoColumn { .. } => false,
-            Expression::ArrayColumn { .. } => false,
-            Expression::List(ns) => ns.iter().any(Node::may_overflow),
-            Expression::Void => false,
-        }
+        false
+        // match self.e() {
+        //     Expression::Funcall { func, args } => match func {
+        //         Intrinsic::Add => args.iter().any(|a| !a.t().is_binary()),
+        //         // TODO: see with Olivier
+        //         Intrinsic::Sub => false,
+        //         Intrinsic::Mul => args.iter().any(|a| !a.t().is_binary()),
+        //         // exponentiation are compile-time computed, hence cannot overflow
+        //         Intrinsic::Exp => false,
+        //         Intrinsic::Neg => false,
+        //         Intrinsic::Inv => false,
+        //         Intrinsic::Normalize => false,
+        //         Intrinsic::Begin => unreachable!(),
+        //         Intrinsic::IfZero => {
+        //             args[1].may_overflow() || args.get(2).map(|a| a.may_overflow()).unwrap_or(false)
+        //         }
+        //         _ => false,
+        //     },
+        //     Expression::Const(_) => false,
+        //     Expression::Column { .. } => false,
+        //     Expression::ExoColumn { .. } => false,
+        //     Expression::ArrayColumn { .. } => false,
+        //     Expression::List(ns) => ns.iter().any(Node::may_overflow),
+        //     Expression::Void => false,
+        // }
     }
 
     /// Compute the depth of the tree representing [`Expression`]
@@ -702,7 +702,7 @@ impl Node {
                     }
                 }
             },
-            Expression::Const(v) => Some(v.clone().into()),
+            Expression::Const(v) => Some(v.clone()),
             Expression::Column { handle, shift, .. } => {
                 get(handle, i + (*shift as isize), settings.wrap)
             }

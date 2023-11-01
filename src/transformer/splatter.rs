@@ -46,9 +46,9 @@ impl Node {
                         }
                         2 => {}
                         _ => {
-                            let mut sub_call: Node = func.call(&args[1..]).unwrap().into();
+                            let mut sub_call: Node = func.call(&args[1..]).unwrap();
                             sub_call.dyadize();
-                            *self = func.call(&[args[0].clone(), sub_call]).unwrap().into()
+                            *self = func.call(&[args[0].clone(), sub_call]).unwrap()
                         }
                     },
                     _ => {}
@@ -286,7 +286,7 @@ impl ConstraintSet {
                     .insert(
                         &r,
                         Computation::ExoOperation {
-                            op: func.into(),
+                            op: func,
                             sources: args.clone().into(),
                             target: r.clone(),
                         },

@@ -134,7 +134,7 @@ impl Default for EvalSettings {
 }
 impl EvalSettings {
     pub fn new() -> Self {
-        return Default::default();
+        Default::default()
     }
 
     pub fn wrap(self, w: bool) -> Self {
@@ -335,8 +335,8 @@ impl FuncVerifier<Node> for Intrinsic {
 
 pub type PerspectiveTable = HashMap<String, HashMap<String, Node>>;
 
-pub const ADDER_MODULE: &'static str = "#adder";
-pub const MULER_MODULE: &'static str = "#muler";
+pub const ADDER_MODULE: &str = "#adder";
+pub const MULER_MODULE: &str = "#muler";
 
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct ConstraintSet {
@@ -1065,12 +1065,7 @@ impl ConstraintSet {
                         }
                     }
                 }
-                Constraint::Normalization {
-                    handle,
-                    reference,
-                    inverted,
-                    normalized,
-                } => {}
+                Constraint::Normalization { .. } => {}
                 _ => {}
             }
         }

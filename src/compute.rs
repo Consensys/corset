@@ -147,7 +147,7 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
         for r in comps
             .iter()
             // .into_par_iter() // TODO: is that a bottleneck?
-            .filter_map(|comp| apply_computation(cs, &comp, &mut exo_operations))
+            .filter_map(|comp| apply_computation(cs, comp, &mut exo_operations))
             .collect::<Vec<_>>()
             .into_iter()
         {
@@ -298,15 +298,14 @@ fn compute_exooperation(
 
     let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
     let getter = |handle: &ColumnRef, j, _| {
-        let r = cs.columns.get(handle, j, false).or_else(|| {
+        cs.columns.get(handle, j, false).or_else(|| {
             cs.columns
                 .column(handle)
                 .unwrap()
                 .padding_value
                 .as_ref()
-                .map(|x| x.clone())
-        });
-        r
+                .cloned()
+        })
     };
 
     let value: Vec<Value> = (-spilling..=len)
@@ -471,7 +470,7 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
             delta_values.push(delta.clone());
 
             delta
-                .into_repr()
+                .to_repr()
                 .flat_map(|u| u.to_le_bytes().into_iter())
                 .map(|i| Value::from(i as usize))
                 .enumerate()
@@ -489,13 +488,13 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
         .into_iter()
         .chain(
             ats.iter()
-                .zip(at_values.into_iter())
+                .zip(at_values)
                 .map(|(at, value)| (at.to_owned(), ValueBacking::from_vec(value, spilling))),
         )
         .chain(
             delta_bytes
                 .iter()
-                .zip(delta_bytes_values.into_iter())
+                .zip(delta_bytes_values)
                 .map(|(delta_byte, value)| {
                     (
                         delta_byte.to_owned(),

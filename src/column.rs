@@ -15,15 +15,15 @@ use pairing_ce::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::OnceCell,
     collections::{HashMap, HashSet},
     str::FromStr,
+    sync::OnceLock,
 };
 
 pub type RegisterID = usize;
 pub type ColumnID = usize;
 
-const POW_2_256: OnceCell<BigInt> = OnceCell::new();
+static POW_2_256: OnceLock<BigInt> = OnceLock::new();
 fn clamp_bi(bi: &mut BigInt) {
     *bi = bi.rem_euclid(POW_2_256.get_or_init(|| {
         BigInt::from_str_radix(
@@ -42,14 +42,6 @@ pub enum Value {
     ExoNative(Vec<Fr>),
 }
 impl Value {
-    pub fn to_string(&self) -> String {
-        match self {
-            Value::Native(f) => f.pretty(),
-            Value::ExoNative(fs) => fs.iter().map(|f| f.to_string()).join(" "),
-            Value::BigInt(x) => x.to_str_radix(10),
-        }
-    }
-
     pub fn is_zero(&self) -> bool {
         match self {
             Value::Native(f) => f.is_zero(),
@@ -174,10 +166,10 @@ impl Value {
 
     pub(crate) fn inverse(&self) -> Value {
         match &self {
-            Value::Native(f) => Value::Native(f.inverse().unwrap_or_else(|| Fr::zero())),
+            Value::Native(f) => Value::Native(f.inverse().unwrap_or_else(Fr::zero)),
             Value::ExoNative(fs) => Value::ExoNative(
                 fs.iter()
-                    .map(|f| f.inverse().unwrap_or_else(|| Fr::zero()))
+                    .map(|f| f.inverse().unwrap_or_else(Fr::zero))
                     .collect(),
             ),
             Value::BigInt(_) => panic!("can not inverse BigInt"),
@@ -199,7 +191,7 @@ impl Value {
         }
     }
 
-    pub(crate) fn into_repr(&self) -> impl Iterator<Item = u64> {
+    pub(crate) fn to_repr(&self) -> impl Iterator<Item = u64> {
         let us = match &self {
             Value::Native(f) => f.into_repr().0.to_vec(),
             Value::ExoNative(fs) => fs
@@ -211,7 +203,7 @@ impl Value {
         us.into_iter()
     }
 
-    pub(crate) fn into_bytes(&self) -> Vec<u8> {
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
         match &self {
             Value::Native(f) => f
                 .into_repr()
@@ -228,38 +220,35 @@ impl Value {
     }
 
     pub(crate) fn to_native(&mut self) {
-        match self {
-            Value::BigInt(i) => {
-                clamp_bi(i);
-                *self = if i.bits() as usize > crate::constants::FIELD_BITSIZE {
-                    let bs = i.to_bytes_le();
-                    let mut r = Vec::new();
-                    for bytes in &bs.1.iter().chunks(crate::constants::FIELD_BITSIZE / 8) {
-                        let bb = bytes.cloned().collect_vec();
-                        let small_big_int = BigInt::from_bytes_le(Sign::Plus, &bb);
-                        r.push(Fr::from_str(&small_big_int.to_string()).unwrap());
-                    }
-                    r.reverse();
-                    Value::ExoNative(r)
-                } else {
-                    Value::Native(Fr::from_str(&i.to_string()).unwrap())
-                };
-            }
-            _ => {}
+        if let Value::BigInt(i) = self {
+            clamp_bi(i);
+            *self = if i.bits() as usize > crate::constants::FIELD_BITSIZE {
+                let bs = i.to_bytes_le();
+                let mut r = Vec::new();
+                for bytes in &bs.1.iter().chunks(crate::constants::FIELD_BITSIZE / 8) {
+                    let bb = bytes.cloned().collect_vec();
+                    let small_big_int = BigInt::from_bytes_le(Sign::Plus, &bb);
+                    r.push(Fr::from_str(&small_big_int.to_string()).unwrap());
+                }
+                r.reverse();
+                Value::ExoNative(r)
+            } else {
+                Value::Native(Fr::from_str(&i.to_string()).unwrap())
+            };
         }
     }
 
     pub(crate) fn to_bi(&mut self) {
         match self {
             Value::BigInt(_) => {}
-            _ => *self = Value::BigInt(BigInt::from_bytes_le(Sign::Plus, &self.into_bytes())),
+            _ => *self = Value::BigInt(BigInt::from_bytes_le(Sign::Plus, &self.to_bytes())),
         }
     }
 
     pub(crate) fn into_bi(self) -> Value {
         match self {
             Value::BigInt(_) => self,
-            _ => Value::BigInt(BigInt::from_bytes_le(Sign::Plus, &self.into_bytes())),
+            _ => Value::BigInt(BigInt::from_bytes_le(Sign::Plus, &self.to_bytes())),
         }
     }
 
@@ -300,7 +289,7 @@ impl Value {
         match &self {
             Value::Native(f) => {
                 let mut r = f.inverse().unwrap_or_else(Fr::zero);
-                r.mul_assign(&f);
+                r.mul_assign(f);
                 Value::Native(r)
             }
             Value::ExoNative(fs) => {
@@ -426,7 +415,7 @@ impl Pretty for Value {
 impl std::cmp::PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
-            (Value::BigInt(i1), Value::BigInt(i2)) => Some(i1.cmp(&i2)),
+            (Value::BigInt(i1), Value::BigInt(i2)) => Some(i1.cmp(i2)),
             (Value::BigInt(_), Value::Native(_)) => todo!(),
             (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
             (Value::Native(_), Value::BigInt(_)) => todo!(),
@@ -601,13 +590,8 @@ impl ValueBacking {
             ValueBacking::Expression { e, spilling } => e.eval(
                 i + spilling,
                 |handle, j, _| {
-                    cs.get(handle, j, false).or_else(|| {
-                        cs.column(handle)
-                            .unwrap()
-                            .padding_value
-                            .as_ref()
-                            .map(|x| x.clone())
-                    })
+                    cs.get(handle, j, false)
+                        .or_else(|| cs.column(handle).unwrap().padding_value.as_ref().cloned())
                 },
                 &mut None,
                 &EvalSettings { wrap: false },
@@ -633,13 +617,8 @@ impl ValueBacking {
             ValueBacking::Expression { e, .. } => e.eval(
                 i,
                 |handle, j, _| {
-                    cs.get(handle, j, false).or_else(|| {
-                        cs.column(handle)
-                            .unwrap()
-                            .padding_value
-                            .as_ref()
-                            .map(|x| x.clone())
-                    })
+                    cs.get(handle, j, false)
+                        .or_else(|| cs.column(handle).unwrap().padding_value.as_ref().cloned())
                 },
                 &mut None,
                 &EvalSettings { wrap: false },
@@ -669,7 +648,9 @@ impl ValueBacking {
             ValueBacking::Function { f, spilling } => ValueBacking::Function {
                 f: Box::new(move |i, columns: &ColumnSet| {
                     let mut v = f(i, columns);
-                    v.as_mut().map(|x| x.to_native());
+                    if let Some(x) = v.as_mut() {
+                        x.to_native()
+                    }
                     v
                 }),
                 spilling,
@@ -698,7 +679,7 @@ impl<'a> Iterator for ValueBackingIter<'a> {
                     v.get(self.i as usize).cloned()
                 }
             }
-            ValueBacking::Expression { e, .. } => {
+            ValueBacking::Expression { .. } => {
                 self.i += 1;
                 self.value.get_raw(self.i - 1, false, self.columns)
             }

@@ -241,7 +241,7 @@ fn reg_mangle_ith(cs: &ConstraintSet, c: &ColumnRef, i: usize) -> Result<String>
         .handle
         .as_ref()
         .map(|h| h.mangle_ith(i))
-        .unwrap_or_else(|| Handle::new("", format!("{}_#{}", reg_id.to_string(), i)).mangle()))
+        .unwrap_or_else(|| Handle::new("", format!("{}_#{}", reg_id, i)).mangle()))
 }
 
 fn reg(cs: &ConstraintSet, c: &Handle) -> Result<Handle> {

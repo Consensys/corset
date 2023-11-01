@@ -16,17 +16,18 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
             for e in args.iter_mut() {
                 do_expand_ifs(e)?;
             }
-            if matches!(func, Intrinsic::IfZero) {
+            if matches!(func, Intrinsic::IfZero | Intrinsic::IfNotZero) {
                 let cond = args[0].clone();
-                let reverse = match cond.t().m().c() {
-                    Conditioning::Loobean => false,
-                    Conditioning::Boolean => true,
-                    _ => unreachable!("condition is {}", cond.t()),
-                };
+                let if_not_zero = matches!(func, Intrinsic::IfNotZero);
+                assert!(if if_not_zero {
+                    matches!(cond.t().c(), Conditioning::Boolean | Conditioning::None)
+                } else {
+                    matches!(cond.t().c(), Conditioning::Loobean | Conditioning::None)
+                });
 
                 // If the condition reduces to a constant, we can determine the result
                 if let Ok(constant_cond) = cond.pure_eval() {
-                    if reverse {
+                    if if_not_zero {
                         if !constant_cond.is_zero() {
                             *e = args[1].clone();
                         } else {
@@ -44,7 +45,7 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                         let cond_not_zero = cond.clone();
                         let cond_zero = Intrinsic::Sub
                             .call(&[Node::one(), Intrinsic::Normalize.call(&[cond.clone()])?])?;
-                        if reverse {
+                        if if_not_zero {
                             [cond_zero, cond_not_zero]
                         } else {
                             [cond_not_zero, cond_zero]

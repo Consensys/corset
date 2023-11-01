@@ -399,7 +399,7 @@ impl ConstraintSetBuilder {
             let content = std::fs::read_to_string(&section_file)
                 .with_context(|| anyhow!("reading {}", section_str.yellow().bold()))?;
             info!("adding {}", section_str.bright_white().bold());
-            return Ok(Some(vec![(
+            Ok(Some(vec![(
                 section_file
                     .file_name()
                     .unwrap()
@@ -407,7 +407,7 @@ impl ConstraintSetBuilder {
                     .unwrap()
                     .to_owned(),
                 content,
-            )]));
+            )]))
             // 2. Fail is the file is actually a directory
         } else if section_file.is_dir() {
             bail!(
