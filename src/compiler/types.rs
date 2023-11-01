@@ -77,16 +77,20 @@ impl Type {
         self.with_magma(self.m().with_conditioning(c))
     }
 
-    pub(crate) fn with_conditioning_of(self, other: &Type) -> Type {
+    pub(crate) fn with_conditioning_of(self, other: &Type) -> Result<Type> {
         if self.c() != Conditioning::None
             && other.c() != Conditioning::None
             && self.c() != other.c()
         {
-            panic!("should never happen");
+            bail!("should never happen");
         }
 
         let larger_conditioning = self.c().max(other.c());
-        self.with_magma(self.m().with_conditioning(larger_conditioning))
+        Ok(self.with_magma(self.m().with_conditioning(larger_conditioning)))
+    }
+
+    pub(crate) fn force_with_conditioning_of(self, other: &Type) -> Type {
+        self.with_magma(self.m().with_conditioning(other.c()))
     }
 
     pub fn with_magma(&self, m: Magma) -> Self {
@@ -358,6 +362,7 @@ impl TryFrom<&str> for RawMagma {
     fn try_from(s: &str) -> Result<RawMagma, Self::Error> {
         match s {
             "binary" => Result::Ok(RawMagma::Binary),
+            "byte" => Ok(RawMagma::Byte),
             "nibble" => Ok(RawMagma::Nibble),
             "native" => Ok(RawMagma::Native),
             _ => bail!("unknown magma: {}", s.red().bold()),
@@ -531,7 +536,7 @@ impl std::convert::TryFrom<&str> for Magma {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         let re_global = regex_lite::Regex::new(
-            r":(?<RawMagma>i(?<Integer>\d+)|[a-z]+)?(@(?<Conditioning>loobean|boolean))?",
+            r":(?<RawMagma>i(?<Integer>\d+)|[a-z]+)?(@(?<Conditioning>loobean|boolean|bool|loob))?",
         )?;
 
         if let Some(caps) = re_global.captures(s) {
@@ -540,15 +545,23 @@ impl std::convert::TryFrom<&str> for Magma {
                 .map_or(Ok(Conditioning::None), |s| s.as_str().try_into())?;
 
             let raw_magma = if let Some(integer) = caps.name("Integer") {
-                RawMagma::Integer(integer.as_str().parse::<usize>().unwrap())
+                let bit_size = integer.as_str().parse::<usize>().unwrap();
+                if bit_size >= 250 {
+                    panic!("Not yet :(");
+                }
+                RawMagma::Integer(bit_size)
             } else {
                 caps.name("RawMagma")
-                    .map_or(Ok(RawMagma::None), |s| s.as_str().try_into())?
+                    .map_or(Ok(RawMagma::Any), |s| s.as_str().try_into())?
             };
-            Ok(Magma {
-                m: raw_magma,
-                c: conditioning,
-            })
+            if matches!(raw_magma, RawMagma::None) && matches!(conditioning, Conditioning::None) {
+                bail!("unknown type: {}", s.bold().red())
+            } else {
+                Ok(Magma {
+                    m: raw_magma,
+                    c: conditioning,
+                })
+            }
         } else {
             bail!("unknown type: {}", s.bold().red())
         }
