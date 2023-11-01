@@ -790,48 +790,84 @@ impl Node {
                         Color::White
                     };
 
-                    tty.write(format!("({fname} ",).color(c).to_string());
                     if with_newlines {
-                        tty.shift(fname.len() + 2);
-                    }
-                    if let Some(a) = args.get(0) {
-                        _debug(
-                            a,
-                            tty,
-                            f,
-                            faulty,
-                            unclutter && !matches!(func, Intrinsic::IfZero),
-                            dim,
-                            zero_context,
-                            a.depth() > 2,
-                            with_src,
-                            show_value,
+                        tty.within_styled(
+                            &fname,
+                            |s| s.color(c).to_string(),
+                            Some(fname.len() + 2),
+                            |tty| {
+                                if let Some(a) = args.get(0) {
+                                    _debug(
+                                        a,
+                                        tty,
+                                        f,
+                                        faulty,
+                                        unclutter && !matches!(func, Intrinsic::IfZero),
+                                        dim,
+                                        zero_context,
+                                        a.depth() > 2,
+                                        with_src,
+                                        show_value,
+                                    );
+                                    spacer(tty, with_newlines);
+                                }
+                                let mut args = args.iter().skip(1).peekable();
+                                while let Some(a) = args.next() {
+                                    _debug(
+                                        a,
+                                        tty,
+                                        f,
+                                        faulty,
+                                        unclutter,
+                                        dim,
+                                        zero_context,
+                                        a.depth() > 2,
+                                        with_src,
+                                        show_value,
+                                    );
+                                    if args.peek().is_some() {
+                                        spacer(tty, with_newlines)
+                                    }
+                                }
+                            },
                         );
-                        spacer(tty, with_newlines);
-                    }
-                    let mut args = args.iter().skip(1).peekable();
-                    while let Some(a) = args.next() {
-                        _debug(
-                            a,
-                            tty,
-                            f,
-                            faulty,
-                            unclutter,
-                            dim,
-                            zero_context,
-                            a.depth() > 2,
-                            with_src,
-                            show_value,
-                        );
-                        if args.peek().is_some() {
-                            spacer(tty, with_newlines)
+                    } else {
+                        tty.write(format!("({fname} ",).color(c).to_string());
+                        if let Some(a) = args.get(0) {
+                            _debug(
+                                a,
+                                tty,
+                                f,
+                                faulty,
+                                unclutter && !matches!(func, Intrinsic::IfZero),
+                                dim,
+                                zero_context,
+                                a.depth() > 2,
+                                with_src,
+                                show_value,
+                            );
+                            spacer(tty, with_newlines);
                         }
+                        let mut args = args.iter().skip(1).peekable();
+                        while let Some(a) = args.next() {
+                            _debug(
+                                a,
+                                tty,
+                                f,
+                                faulty,
+                                unclutter,
+                                dim,
+                                zero_context,
+                                a.depth() > 2,
+                                with_src,
+                                show_value,
+                            );
+                            if args.peek().is_some() {
+                                spacer(tty, with_newlines)
+                            }
+                        }
+                        tty.write(")".color(c).to_string());
                     }
-                    if with_newlines {
-                        tty.unshift();
-                        tty.cr();
-                    }
-                    tty.write(")".color(c).to_string());
                     tty.annotate(format!(
                         "→ {}",
                         v.pretty_with_base(Base::Hex).color(c_v).bold()
@@ -897,30 +933,31 @@ impl Node {
                         tty.write("...".color(c).to_string());
                         return;
                     }
-                    tty.write("begin {".color(c).to_string());
-                    tty.shift(3);
-                    tty.cr();
-                    let mut ns = ns.iter().peekable();
-                    while let Some(n) = ns.next() {
-                        _debug(
-                            n,
-                            tty,
-                            f,
-                            faulty,
-                            unclutter,
-                            dim,
-                            v.is_zero() || zero_context,
-                            n.depth() > 2,
-                            with_src,
-                            show_value,
-                        );
-                        if ns.peek().is_some() {
-                            spacer(tty, true);
-                        }
-                    }
-                    tty.unshift();
-                    tty.cr();
-                    tty.write("}".color(c).to_string());
+                    tty.within_styled(
+                        "begin ",
+                        |s| s.color(c).to_string(),
+                        Some(3),
+                        |tty| {
+                            let mut ns = ns.iter().peekable();
+                            while let Some(n) = ns.next() {
+                                _debug(
+                                    n,
+                                    tty,
+                                    f,
+                                    faulty,
+                                    unclutter,
+                                    dim,
+                                    v.is_zero() || zero_context,
+                                    n.depth() > 2,
+                                    with_src,
+                                    show_value,
+                                );
+                                if ns.peek().is_some() {
+                                    spacer(tty, true);
+                                }
+                            }
+                        },
+                    )
                 }
                 Expression::Void => tty.write("∅"),
             };
