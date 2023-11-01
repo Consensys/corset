@@ -2,6 +2,7 @@
 
 (defpurefun (if-zero cond then) (if (vanishes! cond) then))
 (defpurefun (if-zero cond then else) (if (vanishes! cond) then else))
+
 (defpurefun (if-not-zero cond then) (if (force-bool cond) then))
 (defpurefun (if-not-zero cond then else) (if (force-bool cond) then else))
 

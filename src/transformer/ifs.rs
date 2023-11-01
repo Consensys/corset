@@ -46,9 +46,9 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                         let cond_zero = Intrinsic::Sub
                             .call(&[Node::one(), Intrinsic::Normalize.call(&[cond.clone()])?])?;
                         if if_not_zero {
-                            [cond_zero, cond_not_zero]
-                        } else {
                             [cond_not_zero, cond_zero]
+                        } else {
+                            [cond_zero, cond_not_zero]
                         }
                     };
 
@@ -106,7 +106,7 @@ fn raise_ifs(mut e: Node) -> Node {
                 | Intrinsic::VectorMul => {
                     for (i, a) in args.iter().enumerate() {
                         if let Expression::Funcall {
-                            func: func_if @ Intrinsic::IfZero,
+                            func: func_if @ (Intrinsic::IfZero | Intrinsic::IfNotZero),
                             args: args_if,
                         } = a.e()
                         {
@@ -121,28 +121,25 @@ fn raise_ifs(mut e: Node) -> Node {
                                         .collect::<Vec<_>>(),
                                 )
                                 .unwrap();
-                            let new_else = func
-                                .call(
-                                    &args
-                                        .iter()
-                                        .take(i)
-                                        .cloned()
-                                        .chain(std::iter::once(
-                                            args_if.get(2).cloned().unwrap_or_else(|| {
-                                                Node::from_expr(Expression::Void)
-                                            }),
-                                        ))
-                                        .filter(|e| !matches!(e.e(), Expression::Void))
-                                        .collect::<Vec<_>>(),
-                                )
-                                .unwrap();
 
-                            let new_e = raise_ifs(
-                                func_if
-                                    .call(&[cond, new_then, new_else])
-                                    .unwrap()
-                                    .with_type(a.t()),
-                            );
+                            let mut new_args = vec![cond, new_then];
+                            if let Some(arg_else) = args_if.get(2).cloned() {
+                                new_args.push(
+                                    func.call(
+                                        &args
+                                            .iter()
+                                            .take(i)
+                                            .cloned()
+                                            .chain(std::iter::once(arg_else))
+                                            .filter(|e| !matches!(e.e(), Expression::Void))
+                                            .collect::<Vec<_>>(),
+                                    )
+                                    .unwrap(),
+                                )
+                            }
+
+                            let new_e =
+                                raise_ifs(func_if.call(&new_args).unwrap().with_type(a.t()));
                             return new_e;
                         }
                     }

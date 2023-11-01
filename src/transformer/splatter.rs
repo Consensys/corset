@@ -36,10 +36,8 @@ impl Node {
                 }
                 match func {
                     Intrinsic::Add
-                    | Intrinsic::Sub
                     | Intrinsic::Mul
                     | Intrinsic::VectorAdd
-                    | Intrinsic::VectorSub
                     | Intrinsic::VectorMul => match args.len() {
                         1 => {
                             *self = args[0].clone();
@@ -51,6 +49,8 @@ impl Node {
                             *self = func.call(&[args[0].clone(), sub_call]).unwrap()
                         }
                     },
+
+                    Intrinsic::Sub | Intrinsic::VectorSub => {} // TODO: handle nested +/- changing signs
                     _ => {}
                 }
             }
@@ -245,7 +245,6 @@ impl ConstraintSet {
         let mut new_exo_columns = Vec::new();
         let mut new_constants = Vec::new();
         let mut ancillaries: ProtoAncillaries = Default::default();
-        println!("{:?}", self.constraints);
 
         for i in 0..self.constraints.len() {
             if let Constraint::Vanishes { expr: e, .. } = self.constraints.get_mut(i).unwrap() {
