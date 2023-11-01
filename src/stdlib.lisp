@@ -1,7 +1,9 @@
 (defunalias debug-assert debug)
 
-(defunalias if-zero if!)
-(defunalias if-not-zero if)
+(defpurefun (if-zero cond then) (if (vanishes! cond) then))
+(defpurefun (if-zero cond then else) (if (vanishes! cond) then else))
+(defpurefun (if-not-zero cond then) (if (force-bool cond) then))
+(defpurefun (if-not-zero cond then else) (if (force-bool cond) then else))
 
 (defpurefun ((force-bool :@boolean :nowarn) x) x)
 (defpurefun ((is-binary :@loob :nowarn) e0) (* e0 (- 1 e0)))
@@ -21,10 +23,11 @@
 (defpurefun ((or! :@loob) a b) (* a b))
 (defpurefun ((~or! :@boolean) a b) (~ (or! a b)))
 
-(defpurefun ((not :@boolean :nowarn) (x :@boolean)) (- 1 x))
+(defpurefun ((not :@boolean :nowarn) (x :binary)) (- 1 x))
 
 (defpurefun ((eq! :@loobean :nowarn) x y) (~>> (-. x y)))
 (defpurefun ((neq! :@loobean :nowarn) x y) (not (~ (eq! x y))))
+(defunalias = eq!)
 
 (defpurefun ((eq :@boolean :nowarn) (x :@boolean) (y :@boolean)) (^ (- x y) 2))
 (defpurefun ((eq :@boolean :nowarn) x y) (- 1 (eq! x y)))
@@ -38,8 +41,8 @@
 (defunalias all! +)
 
 ;; Boolean functions
-(defpurefun (is-not-zero e0) (* e0 (inv e0)))
-(defpurefun (is-zero e0) (- 1 (* e0 (inv e0))))
+(defpurefun ((is-not-zero :binary@boolean) e0) (~ e0))
+(defpurefun ((is-zero :binary@boolean :nowarn) e0) (- 1 (~ e0)))
 
 
 
@@ -72,8 +75,8 @@
 
 ;; Helpers
 (defpurefun ((vanishes! :@loob :nowarn) e0) e0)
-(defpurefun (if-eq x val then) (if! (eq! x val) then))
-(defpurefun (if-eq-else x val then else) (if! (eq! x val) then else))
+(defpurefun (if-eq x val then) (if (eq! x val) then))
+(defpurefun (if-eq-else x val then else) (if (eq! x val) then else))
 
 ;; counter constancy constraint
 (defpurefun ((counter-constancy :@loob) ct X)
@@ -88,17 +91,17 @@
 
 ;; plateau constraints
 (defpurefun (plateau-constraint CT (X :binary) C)
-  (begin (debug-assert (stamp-constancy CT C))
-         (if-zero C
-                  (eq! X 1)
-                  (if! CT
-                       (vanishes! X)
-                       (if! (eq!  CT C)
-                            (did-inc! X 1)
-                            (remained-constant! X))))))
+            (begin (debug-assert (stamp-constancy CT C))
+                   (if-zero C
+                            (eq! X 1)
+                            (if (eq! CT 0)
+                                (vanishes! X)
+                              (if (eq!  CT C)
+                                  (did-inc! X 1)
+                                (remained-constant! X))))))
 
 ;; stamp constancy imposes that the column C may only
 ;; change at rows where the STAMP column changes.
 (defpurefun (stamp-constancy STAMP C)
-  (if! (will-remain-constant! STAMP)
-       (will-remain-constant! C)))
+            (if (will-remain-constant! STAMP)
+                (will-remain-constant! C)))
