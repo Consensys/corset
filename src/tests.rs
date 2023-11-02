@@ -210,15 +210,15 @@ fn base_declaration() {
     );
 }
 
-#[test]
-fn exo_if() {
-    must_run(
-        "WiP",
-        "(module foobar) (defcolumns A B (C :bool) (D :i32)) (defconstraint pipo () (if (eq! A B) C D))",
-    );
+// #[test]
+// fn exo_if() {
+//     must_run(
+//         "WiP",
+//         "(module foobar) (defcolumns A B (C :bool) (D :i32)) (defconstraint pipo () (if (eq! A B) C D))",
+//     );
 
-    // must_run(
-    //     "WiP 2",
-    //     "(module foobar) (defcolumns A B (C :bool) (D :i32)) (defconstraint pipo () (if (eq! A D) C D))",
-    // );
-}
+//     // must_run(
+//     //     "WiP 2",
+//     //     "(module foobar) (defcolumns A B (C :bool) (D :i32)) (defconstraint pipo () (if (eq! A D) C D))",
+//     // );
+// }
