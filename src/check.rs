@@ -441,7 +441,7 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
             .unwrap_or(0)
             == 0
     {
-        debug!("empty plookup; skipping");
+        warn!("empty lookup; skipping");
         return Ok(());
     }
 
@@ -471,12 +471,12 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
                             .iter()
                             .map(|v| v.get(i as isize, false, &cs.columns).unwrap())
                     )
-                    .map(|(k, v)| format!("{}: {}", k.pretty(), v.pretty()))
+                    .map(|(handle, value)| format!("{}: {}", handle.pretty(), value.pretty()))
                     .collect::<Vec<_>>()
                     .join("\n"),
                 parents
                     .iter()
-                    .map(|k| k.pretty())
+                    .map(|handle| handle.pretty())
                     .collect::<Vec<_>>()
                     .join(", ")
             );

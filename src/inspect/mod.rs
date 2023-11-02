@@ -28,8 +28,10 @@ struct ModuleView {
     name: String,
     /// A cache of this module columns
     columns: Vec<(ColumnRef, Handle)>,
-    /// Current offset in the table view
-    shift: isize,
+    /// Current horizontal offset in the table view
+    h_shift: isize,
+    /// Current vertical offset in the table view
+    v_shift: i16,
     /// Size of the longest column in the module
     size: isize,
 
@@ -57,7 +59,8 @@ impl ModuleView {
         ModuleView {
             name: name.to_owned(),
             columns,
-            shift: 0,
+            h_shift: 0,
+            v_shift: 0,
             size: max_size as isize - 1,
 
             regexps: Vec::new(),
@@ -68,23 +71,31 @@ impl ModuleView {
     }
 
     fn goto(&mut self, i: isize) {
-        self.shift = i.clamp(0, self.size);
+        self.h_shift = i.clamp(0, self.size);
     }
 
     fn left(&mut self, x: isize) {
-        self.shift -= self.shift.min(x);
+        self.h_shift -= self.h_shift.min(x);
     }
 
     fn right(&mut self, x: isize) {
-        self.shift = (self.shift + x).min(self.size);
+        self.h_shift = (self.h_shift + x).min(self.size);
+    }
+
+    fn up(&mut self, x: i16) {
+        self.v_shift -= self.v_shift.min(x);
+    }
+
+    fn down(&mut self, x: i16) {
+        self.v_shift = (self.v_shift + x).min(self.to_show.len() as i16 - 1);
     }
 
     fn home(&mut self) {
-        self.shift = 0;
+        self.h_shift = 0;
     }
 
     fn end(&mut self) {
-        self.shift = self.size;
+        self.h_shift = self.size;
     }
 
     fn current_columns(&self) -> impl Iterator<Item = &(ColumnRef, Handle)> {
@@ -117,7 +128,7 @@ impl ModuleView {
     }
 
     fn render(&self, cs: &ConstraintSet, f: &mut Frame, target: Rect) {
-        let span = 0.max(self.shift)..(self.shift + CONTEXT).min(self.size) + 1;
+        let span = 0.max(self.h_shift)..(self.h_shift + CONTEXT).min(self.size) + 1;
         // max width for each column; defaults to 3
         let max_perspective_len = self
             .current_columns()
@@ -128,76 +139,78 @@ impl ModuleView {
 
         let block = Block::new().borders(Borders::NONE);
 
-        let table = Table::new(self.current_columns().map(|(column_ref, h)| {
-            maxes[0] = maxes[0].max(h.name.len() + 2);
-            Row::new(
-                std::iter::once(
-                    Cell::from(format!(
-                        "{:width$} {}",
-                        if let Some(p) = h.perspective.as_ref() {
-                            p
-                        } else {
-                            ""
-                        },
-                        h.name.to_owned(),
-                        width = max_perspective_len,
-                    ))
-                    .style(Style::default().blue().bold()),
-                )
-                .chain(span.clone().enumerate().map(|(k, i)| {
-                    cs.columns
-                        .get(column_ref, i, false)
-                        .map(|x| {
-                            let base = cs.columns.column(column_ref).unwrap().base;
-                            let x_str = x.pretty_with_base(base);
-                            maxes[k + 1] = maxes[k + 1].max(x_str.len());
-                            let bg_color =
-                                x.to_bytes().iter().fold(0u8, |ax, bx| ax.wrapping_add(*bx));
-                            // ensure that we write white on dark colors and white on dark ones
-                            let corrected_fg_color = if bg_color % 36 > 18 {
-                                Color::Black
+        let table = Table::new(self.current_columns().skip(self.v_shift as usize).map(
+            |(column_ref, h)| {
+                maxes[0] = maxes[0].max(h.name.len());
+                Row::new(
+                    std::iter::once(
+                        Cell::from(format!(
+                            "{:width$} {}",
+                            if let Some(p) = h.perspective.as_ref() {
+                                p
                             } else {
-                                Color::White
-                            };
-
-                            // dim the column if its perspective is inactive
-                            let dim = if let Some(perspective) =
-                                cs.columns.perspective(column_ref).unwrap()
-                            {
-                                cs.get_perspective(&h.module, perspective)
-                                    .unwrap()
-                                    .eval(
-                                        i,
-                                        |handle, i, wrap| cs.columns.get_raw(handle, i, wrap),
-                                        &mut None,
-                                        &Default::default(),
-                                    )
-                                    .map(|x| x.is_zero())
-                                    .unwrap_or(false)
-                            } else {
-                                false
-                            };
-
-                            // render the cell
-                            Cell::from(x_str)
-                                .fg(if dim {
+                                ""
+                            },
+                            h.name.to_owned(),
+                            width = max_column_name_width,
+                        ))
+                        .style(Style::default().blue().bold()),
+                    )
+                    .chain(span.clone().enumerate().map(|(k, i)| {
+                        cs.columns
+                            .get(column_ref, i, false)
+                            .map(|x| {
+                                let base = cs.columns.get_col(column_ref).unwrap().base;
+                                let x_str = x.pretty_with_base(base);
+                                maxes[k + 1] = maxes[k + 1].max(x_str.len());
+                                let bg_color =
+                                    x.to_bytes().iter().fold(0u8, |ax, bx| ax.wrapping_add(*bx));
+                                // ensure that we write white on dark colors and white on dark ones
+                                let corrected_fg_color = if bg_color % 36 > 18 {
                                     Color::Black
                                 } else {
-                                    corrected_fg_color
-                                })
-                                .bg({
-                                    if bg_color > 0 && !dim {
-                                        Color::Indexed(bg_color.wrapping_add(16) % 251)
+                                    Color::White
+                                };
+
+                                // dim the column if its perspective is inactive
+                                let dim = if let Some(perspective) =
+                                    cs.columns.perspective(column_ref).unwrap()
+                                {
+                                    cs.get_perspective(&h.module, perspective)
+                                        .unwrap()
+                                        .eval(
+                                            i,
+                                            |handle, i, wrap| cs.columns.get_raw(handle, i, wrap),
+                                            &mut None,
+                                            &Default::default(),
+                                        )
+                                        .map(|x| x.is_zero())
+                                        .unwrap_or(false)
+                                } else {
+                                    false
+                                };
+
+                                // render the cell
+                                Cell::from(x_str)
+                                    .fg(if dim {
+                                        Color::Black
                                     } else {
-                                        Color::Reset
-                                    }
-                                })
-                        })
-                        .unwrap_or(Cell::from("."))
-                })),
-            )
-            .style(Style::default().white())
-        }));
+                                        corrected_fg_color
+                                    })
+                                    .bg({
+                                        if bg_color > 0 && !dim {
+                                            Color::Indexed(bg_color.wrapping_add(16) % 251)
+                                        } else {
+                                            Color::Reset
+                                        }
+                                    })
+                            })
+                            .unwrap_or(Cell::from("."))
+                    })),
+                )
+                .style(Style::default().white())
+            },
+        ));
 
         let widths = maxes
             .iter()
@@ -442,6 +455,12 @@ impl<'a> Inspector<'a> {
                         }
                         KeyCode::Right => {
                             self.current_module_mut().right(1);
+                        }
+                        KeyCode::Up => {
+                            self.current_module_mut().up(1);
+                        }
+                        KeyCode::Down => {
+                            self.current_module_mut().down(1);
                         }
                         KeyCode::PageUp => {
                             if key.modifiers.contains(KeyModifiers::SHIFT) {

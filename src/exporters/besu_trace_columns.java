@@ -16,7 +16,7 @@
 package net.consensys.linea.zktracer.module.{{ module }};
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import net.consensys.linea.zktracer.bytes.UnsignedByte;
+import net.consensys.linea.zktracer.types.UnsignedByte;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -32,8 +32,12 @@ public record Trace(
   {{#each registers}}
   @JsonProperty("{{ this.corset_name }}") List<{{ this.tupe }}> {{ this.java_name }}{{#unless @last}},{{/unless}}{{#if @last}}) { {{/if}}
   {{/each}}
-  static TraceBuilder builder() {
-    return new TraceBuilder();
+  static TraceBuilder builder(int length) {
+    return new TraceBuilder(length);
+  }
+
+  public int size() {
+      return this.{{ registers.0.java_name }}.size();
   }
 
   static class TraceBuilder {
@@ -41,10 +45,14 @@ public record Trace(
 
     {{#each registers}}
     @JsonProperty("{{ this.corset_name }}")
-    private final List<{{ this.tupe }}> {{ this.java_name }} = new ArrayList<>();
+    private final List<{{ this.tupe }}> {{ this.java_name }};
     {{/each}}
 
-    private TraceBuilder() {}
+    private TraceBuilder(int length) {
+      {{#each registers}}
+      this.{{ this.java_name }} = new ArrayList<>(length);
+      {{/each}}
+    }
 
     public int size() {
       if (!filled.isEmpty()) {
