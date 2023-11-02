@@ -721,7 +721,7 @@ impl Register {
         self.value.as_ref().map(|v| v.spilling())
     }
 
-    pub fn set_value(&mut self, v: Vec<Value>, spilling: isize) -> Result<()> {
+    fn set_value(&mut self, v: Vec<Value>, spilling: isize) -> Result<()> {
         if let Some(ref mut provider) = self.value.as_mut() {
             provider.update_value(v, spilling)
         } else {
@@ -737,7 +737,7 @@ impl Register {
         }
     }
 
-    pub fn set_raw_value(&mut self, v: Vec<Value>, spilling: isize) -> Result<()> {
+    fn set_raw_value(&mut self, v: Vec<Value>, spilling: isize) -> Result<()> {
         if let Some(ref mut provider) = self.value.as_mut() {
             provider.update_value(v, spilling)
         } else {

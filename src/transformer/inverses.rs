@@ -34,15 +34,43 @@ impl Node {
                     e.do_normalize(get_module, new_cols);
                 }
                 if matches!(func, Intrinsic::Normalize) {
-                    let module = get_module(&args[0].dependencies());
-                    let normalized_handle =
-                        Handle::new(module, expression_to_name(&args[0], "NORM"));
-                    new_cols.push((normalized_handle.clone(), args[0].to_owned()));
-                    *self = Node::column()
-                        .handle(normalized_handle)
-                        .kind(Kind::Phantom)
-                        .t(self.t().m().invert())
-                        .build();
+                    // Intrinsic::Inv should never have more than one argument
+                    assert!(args.len() == 1);
+                    let arg = &args[0];
+                    if true {
+                        let module = get_module(&arg.dependencies());
+                        let inverted_handle = Handle::new(module, expression_to_name(arg, "INV"));
+                        new_cols.push((inverted_handle.clone(), arg.to_owned()));
+                        *self = Intrinsic::Mul
+                            .call(&[
+                                arg.to_owned(),
+                                Node::column()
+                                    .handle(inverted_handle)
+                                    .kind(Kind::Phantom)
+                                    .t(self.t().m().invert())
+                                    .build(),
+                            ])
+                            .unwrap()
+                            .into();
+                    } else {
+                        todo!("exo-value case");
+                        // let module = get_module(&args[0].dependencies());
+                        // let normalized_handle =
+                        //     Handle::new(module, expression_to_name(&args[0], "NORM"));
+                        // new_cols.push((normalized_handle.clone(), args[0].to_owned()));
+                        // let old_node = self.clone();
+                        // *self = Intrinsic::Mul
+                        //     .call(&[
+                        //         old_node,
+                        //         Node::column()
+                        //             .handle(normalized_handle)
+                        //             .kind(Kind::Phantom)
+                        //             .t(self.t().m().invert())
+                        //             .build(),
+                        //     ])
+                        //     .unwrap()
+                        //     .into();
+                    }
                 }
             }
             _ => {}
@@ -61,22 +89,47 @@ impl ConstraintSet {
             }
         }
 
-        for (normalized_handle, normalized_expr) in new_cols.into_iter() {
-            if self.columns.by_handle(&normalized_handle).is_err() {
-                let normalized_id = self.columns.insert_column_and_register(
-                    Column::builder()
-                        .handle(normalized_handle.clone())
-                        .kind(Kind::Composite(Box::new(())))
-                        .build(),
-                )?;
+        // TODO: for the exo-normalization case
+        // for (normalized_handle, normalized_expr) in new_cols.into_iter() {
+        //     if self.columns.by_handle(&normalized_handle).is_err() {
+        //         let normalized_id = self.columns.insert_column_and_register(
+        //             Column::builder()
+        //                 .handle(normalized_handle.clone())
+        //                 .kind(Kind::Composite(Box::new(())))
+        //                 .build(),
+        //         )?;
 
-                let inverted_handle = Handle::new(
-                    &normalized_handle.module,
-                    expression_to_name(&normalized_expr, "INV"),
-                );
+        //         let inverted_handle = Handle::new(
+        //             &normalized_handle.module,
+        //             expression_to_name(&normalized_expr, "INV"),
+        //         );
+        //         let inverted_id = self.columns.insert_column_and_register(
+        //             Column::builder()
+        //                 .handle(inverted_handle.to_owned())
+        //                 .kind(Kind::Composite(Box::new(())))
+        //                 .build(),
+        //         )?;
+
+        //         self.computations.insert(
+        //             &inverted_id,
+        //             Computation::Composite {
+        //                 target: inverted_id.clone(),
+        //                 exp: invert_expr(&normalized_expr),
+        //             },
+        //         )?;
+        //         self.constraints.push(Constraint::Normalization {
+        //             handle: normalized_handle.clone(),
+        //             reference: normalized_expr.to_owned(),
+        //             inverted: inverted_id,
+        //             normalized: normalized_id,
+        //         })
+        //     }
+        // }
+        for (inverted_handle, normalized_expr) in new_cols.into_iter() {
+            if self.columns.by_handle(&inverted_handle).is_err() {
                 let inverted_id = self.columns.insert_column_and_register(
                     Column::builder()
-                        .handle(inverted_handle.to_owned())
+                        .handle(inverted_handle.clone())
                         .kind(Kind::Composite(Box::new(())))
                         .build(),
                 )?;
@@ -88,12 +141,6 @@ impl ConstraintSet {
                         exp: invert_expr(&normalized_expr),
                     },
                 )?;
-                self.constraints.push(Constraint::Normalization {
-                    handle: normalized_handle.clone(),
-                    reference: normalized_expr.to_owned(),
-                    inverted: inverted_id,
-                    normalized: normalized_id,
-                })
             }
         }
 

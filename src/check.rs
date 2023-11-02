@@ -124,15 +124,15 @@ fn columns_len(
     if cols_lens.is_empty() {
         return Ok(None);
     }
-    // Early exit if all the columns are empty: the module is not triggered
-    // Ideally, this should be an `all` rather than an `any`, but the ID
-    // pushes columns that will always be filled.
-    if cols_lens.iter().any(|l| l.is_none()) {
+
+    if cols_lens.iter().all(|l| l.is_none()) {
         debug!("Skipping constraint `{}` with empty columns", name);
         return Ok(None);
     }
+
     if !cols_lens
         .iter()
+        .filter(|l| l.is_some())
         .all(|&l| l.unwrap_or_default() == cols_lens[0].unwrap_or_default())
     {
         error!(
