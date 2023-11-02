@@ -789,7 +789,11 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                         Token::DefArrayColumn {
                             name: column_attributes.name,
                             t: Type::ArrayColumn(
-                                column_attributes.t.get().cloned().unwrap_or(Magma::Integer),
+                                column_attributes
+                                    .t
+                                    .get()
+                                    .cloned()
+                                    .unwrap_or(Magma::native()),
                             ),
                             domain: range.clone(),
                             base,
@@ -798,7 +802,11 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                         Token::DefColumn {
                             name: column_attributes.name,
                             t: Type::Column(
-                                column_attributes.t.get().cloned().unwrap_or(Magma::Integer),
+                                column_attributes
+                                    .t
+                                    .get()
+                                    .cloned()
+                                    .unwrap_or(Magma::native()),
                             ),
                             kind: Kind::Atomic,
                             padding_value: column_attributes.padding_value.get().cloned(),
@@ -866,7 +874,6 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
         }),
         kw @ ("defun" | "defpurefun") => {
             fn parse_typed_symbols(l: AstNode) -> Result<(String, Option<Type>, bool)> {
-                // TODO: revamp type parsing to add column/scalar/any
                 match l.class {
                     Token::Symbol(s) => Ok((s, None, false)),
                     Token::List(xs) => match xs.as_slice() {
@@ -928,7 +935,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 // if an argument type is unspecified, it can be of any type
-                .map(|x| (x.0, x.1.unwrap_or(Type::Any(Magma::Any))))
+                .map(|x| (x.0, x.1.unwrap_or(Type::Any(Magma::any()))))
                 .unzip();
 
             let body = Box::new(

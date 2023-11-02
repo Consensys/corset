@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::errors::CompileError;
 
 use super::parser::{AstNode, Token};
-use super::{max_type, Expression, Magma, Node, Type};
+use super::{max_type, Expression, Magma, Node, RawMagma, Type};
 
 /// A form is an applicable that operates directly on the AST
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -21,6 +21,9 @@ pub enum Form {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Builtin {
     Len,
+    Shift,
+    NormFlat,
+    If,
 }
 impl std::fmt::Display for Builtin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -29,6 +32,9 @@ impl std::fmt::Display for Builtin {
             "{}",
             match self {
                 Builtin::Len => "len",
+                Builtin::Shift => "shift",
+                Builtin::NormFlat => "~>>",
+                Builtin::If => "if?",
             }
         )
     }
@@ -41,10 +47,13 @@ pub enum Intrinsic {
     Add,
     Sub,
     Mul,
+    VectorAdd,
+    VectorSub,
+    VectorMul,
     Exp,
-    Shift,
     Neg,
     Inv,
+    Normalize,
 
     Begin,
 
@@ -67,21 +76,24 @@ impl Intrinsic {
     pub fn typing(&self, argtype: &[Type]) -> Type {
         match self {
             Intrinsic::Inv => argtype[0],
+            Intrinsic::Normalize => argtype[0].with_raw_magma(RawMagma::Binary),
             Intrinsic::Add | Intrinsic::Sub | Intrinsic::Neg => {
                 // Boolean is a corner case, as it is not stable under these operations
-                match max_type(argtype) {
-                    Type::Scalar(Magma::Boolean) => Type::Scalar(Magma::Integer),
-                    Type::Column(Magma::Boolean) => Type::Column(Magma::Integer),
-                    x => x,
+                let max_t = max_type(argtype);
+                match max_t.m().rm() {
+                    RawMagma::Binary => max_t.with_raw_magma(RawMagma::Native),
+                    _ => max_t,
                 }
+            }
+            Intrinsic::VectorAdd | Intrinsic::VectorSub | Intrinsic::VectorMul => {
+                super::max_type(argtype.iter())
             }
             Intrinsic::Exp => argtype[0],
             Intrinsic::Mul => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
             Intrinsic::IfZero | Intrinsic::IfNotZero => {
                 argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
             }
-            Intrinsic::Begin => Type::List(max_type(argtype).magma()),
-            Intrinsic::Shift => argtype[0],
+            Intrinsic::Begin => Type::List(max_type(argtype).m()),
         }
     }
 }
@@ -94,10 +106,13 @@ impl std::fmt::Display for Intrinsic {
                 Intrinsic::Add => "+",
                 Intrinsic::Sub => "-",
                 Intrinsic::Mul => "*",
+                Intrinsic::VectorAdd => ".+",
+                Intrinsic::VectorSub => ".-",
+                Intrinsic::VectorMul => ".*",
                 Intrinsic::Exp => "^",
-                Intrinsic::Shift => "shift",
                 Intrinsic::Neg => "-",
                 Intrinsic::Inv => "inv",
+                Intrinsic::Normalize => "~",
                 Intrinsic::Begin => "begin",
                 Intrinsic::IfZero => "if-zero",
                 Intrinsic::IfNotZero => "if-not-zero",
@@ -148,7 +163,7 @@ impl Arity {
 }
 /// The `FuncVerifier` trait defines a function that can check that
 /// it is called with valid arguments
-pub trait FuncVerifier<T: Clone> {
+pub trait FuncVerifier<T> {
     /// The arity of the function
     fn arity(&self) -> Arity;
 
@@ -171,13 +186,19 @@ impl FuncVerifier<Node> for Builtin {
     fn arity(&self) -> Arity {
         match self {
             Builtin::Len => Arity::Monadic,
+            Builtin::Shift => Arity::Dyadic,
+            Builtin::NormFlat => Arity::Monadic,
+            Builtin::If => Arity::Between(2, 3),
         }
     }
 
     fn validate_types(&self, args: &[Node]) -> Result<()> {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
         let expected_t: &[&[Type]] = match self {
-            Builtin::Len => &[&[Type::ArrayColumn(Magma::Any)]],
+            Builtin::Len => &[&[Type::ArrayColumn(Magma::ANY)]],
+            Builtin::Shift => &[&[Type::Column(Magma::ANY)], &[Type::Scalar(Magma::ANY)]],
+            Builtin::NormFlat => &[&[Type::Column(Magma::ANY)]],
+            Builtin::If => &[&[Type::Any(Magma::ANY)], &[Type::Any(Magma::ANY)]],
         };
 
         if super::compatible_with_repeating(expected_t, &args_t) {

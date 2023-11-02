@@ -50,6 +50,10 @@ impl ComputationDag {
     pub fn insert_computation(&mut self, c: &Computation) {
         match c {
             Computation::Composite { target, exp } => {
+                // There is no guarantee here that the target will be included
+                // by the dependency mechanism, as it may have none in this
+                // computation type (e.g. TARGET = 3 × 4)
+                self.nodes.insert(target.clone());
                 for from in exp.dependencies() {
                     self.depends(&from, target);
                 }
@@ -71,6 +75,14 @@ impl ComputationDag {
                     self.depends(from, target);
                 }
             }
+            Computation::ExoOperation {
+                sources, target, ..
+            } => {
+                for source in sources.iter().flat_map(|s| s.dependencies()) {
+                    self.depends(&source, target);
+                }
+            }
+            Computation::ExoConstant { .. } => {}
             Computation::SortingConstraints {
                 ats,
                 eq,

@@ -6,7 +6,7 @@ use pairing_ce::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    compiler::{ColumnRef, Expression, Magma, Node},
+    compiler::{ColumnRef, Conditioning, Expression, Magma, Node},
     structs::Handle,
 };
 
@@ -54,9 +54,9 @@ impl std::convert::TryFrom<&str> for Base {
 
 impl std::convert::From<Magma> for Base {
     fn from(m: Magma) -> Self {
-        match m {
-            Magma::Boolean => Base::Bool,
-            Magma::Loobean => Base::Loob,
+        match m.c() {
+            Conditioning::Boolean => Base::Bool,
+            Conditioning::Loobean => Base::Loob,
             _ => Base::Hex,
         }
     }
@@ -137,20 +137,27 @@ impl Pretty for Fr {
 impl Pretty for Node {
     fn pretty(&self) -> String {
         fn rec_pretty(s: &Node, depth: usize) -> String {
+            let depth = depth
+                + match s.e() {
+                    Expression::Funcall { .. } | Expression::List(_) => 1,
+                    _ => 0,
+                };
             let c = &COLORS[depth % COLORS.len()];
             match s.e() {
-                Expression::Const(x, _) => format!("{}", x).color(*c).to_string(),
-                Expression::Column { handle, .. } => handle.to_string().color(*c).to_string(),
+                Expression::Const(x) => format!("{}", x).color(*c).to_string(),
+                Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
+                    handle.to_string().color(*c).to_string()
+                }
                 Expression::ArrayColumn { handle, domain, .. } => {
                     format!("{}{}", handle.as_handle().name, domain)
                         .color(*c)
                         .to_string()
                 }
-                Expression::List(cs) => format!("{{{}}}", format_list(cs, depth + 1))
+                Expression::List(cs) => format!("{{{}}}", format_list(cs, depth))
                     .color(*c)
                     .to_string(),
                 Expression::Funcall { func, args } => {
-                    format!("({:?} {})", func, format_list(args, depth + 1))
+                    format!("({} {})", func, format_list(args, depth))
                         .color(*c)
                         .to_string()
                 }

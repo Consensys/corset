@@ -81,6 +81,15 @@ impl Handle {
         }
     }
 
+    /// Generate a symbol corresponding to the ith column of an ArrayColumn
+    pub fn iota(&self, i: usize) -> Handle {
+        Handle {
+            module: self.module.clone(),
+            name: format!("{}ɩ{}", self.name, i),
+            perspective: self.perspective.clone(),
+        }
+    }
+
     /// Uniquely mangle a symbol into something usable in Go
     pub fn mangle(&self) -> String {
         let r = format!(
@@ -92,6 +101,21 @@ impl Handle {
                 MODULE_SEPARATOR
             },
             purify(&self.name)
+        );
+        r
+    }
+
+    pub fn mangle_ith(&self, i: usize) -> String {
+        let r = format!(
+            "{}{}{}ɩ{}",
+            purify(&self.module),
+            if self.module.is_empty() {
+                ""
+            } else {
+                MODULE_SEPARATOR
+            },
+            purify(&self.name),
+            i,
         );
         r
     }

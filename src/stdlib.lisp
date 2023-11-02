@@ -1,14 +1,13 @@
-(defunalias = eq!)
 (defunalias debug-assert debug)
 
-(defunalias if-zero if!)
-(defunalias if-not-zero if)
+(defpurefun (if-zero cond then) (if (vanishes! cond) then))
+(defpurefun (if-zero cond then else) (if (vanishes! cond) then else))
 
-(defpurefun ((force-bool :boolean :nowarn) x) x)
-(defpurefun ((is-binary :loob :nowarn) e0) (* e0 (- 1 e0)))
+(defpurefun (if-not-zero cond then) (if (force-bool cond) then))
+(defpurefun (if-not-zero cond then else) (if (force-bool cond) then else))
 
-(defpurefun ((~ :bool) (x :bool)) x)
-(defpurefun ((~ :bool :nowarn) x) (* x (inv x)))
+(defpurefun ((force-bool :@boolean :nowarn) x) x)
+(defpurefun ((is-binary :@loob :nowarn) e0) (* e0 (- 1 e0)))
 
 ;;
 ;; Boolean functions
@@ -16,21 +15,24 @@
 ;; !-suffix denotes loobean algebra (i.e. 0 == true)
 ;; ~-prefix denotes normalized-functions (i.e. output is 0/1)
 (defpurefun (and a b) (* a b))
-(defpurefun ((~and :bool) a b) (~ (and a b)))
-(defpurefun ((and! :loob) a b) (+ a b))
-(defpurefun ((~and! :bool) a b) (~ (and! a b)))
+(defpurefun ((~and :@bool) a b) (~ (and a b)))
+(defpurefun ((and! :@loob) a b) (+ a b))
+(defpurefun ((~and! :@bool) a b) (~ (and! a b)))
 
 (defpurefun (or a b) (+ a b))
-(defpurefun ((~or :boolean) a b) (~ (or a b)))
-(defpurefun ((or! :loob) a b) (* a b))
-(defpurefun ((~or! :boolean) a b) (~ (or! a b)))
+(defpurefun ((~or :@boolean) a b) (~ (or a b)))
+(defpurefun ((or! :@loob) a b) (* a b))
+(defpurefun ((~or! :@boolean) a b) (~ (or! a b)))
 
-(defpurefun ((not :boolean :nowarn) (x :boolean)) (- 1 x))
+(defpurefun ((not :@boolean :nowarn) (x :binary)) (- 1 x))
 
-(defpurefun ((eq! :loobean :nowarn) x y) (- x y))
+(defpurefun ((eq! :@loobean :nowarn) x y) (~>> (-. x y)))
+(defpurefun ((neq! :@loobean :nowarn) x y) (not (~ (eq! x y))))
+(defunalias = eq!)
 
-(defpurefun ((eq :boolean :nowarn) (x :boolean) (y :boolean)) (^ (- x y) 2))
-(defpurefun ((eq :boolean :nowarn) x y) (~ (- x y)))
+(defpurefun ((eq :@boolean :nowarn) (x :@boolean) (y :@boolean)) (^ (- x y) 2))
+(defpurefun ((eq :@boolean :nowarn) x y) (- 1 (eq! x y)))
+(defpurefun ((neq :@boolean :nowarn) x y) (eq! x y))
 
 
 ;; Variadic versions of and/or
@@ -40,9 +42,8 @@
 (defunalias all! +)
 
 ;; Boolean functions
-(defpurefun (is-not-zero e0) (* e0 (inv e0)))
-(defpurefun (is-zero e0) (- 1 (* e0 (inv e0))))
-(defpurefun ((neq! :loob :nowarn) a b) (not (~ (eq! a b))))
+(defpurefun ((is-not-zero :binary@boolean) e0) (~ e0))
+(defpurefun ((is-zero :binary@boolean :nowarn) e0) (- 1 (~ e0)))
 
 
 
@@ -74,12 +75,12 @@
 
 
 ;; Helpers
-(defpurefun ((vanishes! :loob :nowarn) e0) e0)
-(defpurefun (if-eq x val then) (if! (eq! x val) then))
-(defpurefun (if-eq-else x val then else) (if! (eq! x val) then else))
+(defpurefun ((vanishes! :@loob :nowarn) e0) e0)
+(defpurefun (if-eq x val then) (if (eq! x val) then))
+(defpurefun (if-eq-else x val then else) (if (eq! x val) then else))
 
 ;; counter constancy constraint
-(defpurefun ((counter-constancy :loob) ct X)
+(defpurefun ((counter-constancy :@loob) ct X)
   (if-not-zero ct
                (remained-constant! X)))
 
@@ -90,18 +91,18 @@
            (eq! acc (+ (* 256 (prev acc)) bytes))))
 
 ;; plateau constraints
-(defpurefun (plateau-constraint CT (X :boolean) C)
-  (begin (debug-assert (stamp-constancy CT C))
-         (if-zero C
-                  (eq! X 1)
-                  (if! CT
-                       (vanishes! X)
-                       (if! (eq!  CT C)
-                            (did-inc! X 1)
-                            (remained-constant! X))))))
+(defpurefun (plateau-constraint CT (X :binary) C)
+            (begin (debug-assert (stamp-constancy CT C))
+                   (if-zero C
+                            (eq! X 1)
+                            (if (eq! CT 0)
+                                (vanishes! X)
+                              (if (eq!  CT C)
+                                  (did-inc! X 1)
+                                (remained-constant! X))))))
 
 ;; stamp constancy imposes that the column C may only
 ;; change at rows where the STAMP column changes.
 (defpurefun (stamp-constancy STAMP C)
-  (if! (will-remain-constant! STAMP)
-       (will-remain-constant! C)))
+            (if (will-remain-constant! STAMP)
+                (will-remain-constant! C)))

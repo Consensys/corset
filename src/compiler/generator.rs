@@ -8,7 +8,7 @@ use num_traits::cast::ToPrimitive;
 use num_traits::{One, Zero};
 use owo_colors::OwoColorize;
 use pairing_ce::bn256::Fr;
-use pairing_ce::ff::{Field, PrimeField};
+use pairing_ce::ff::PrimeField;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 
@@ -21,7 +21,7 @@ use std::sync::atomic::AtomicUsize;
 use super::node::ColumnRef;
 use super::tables::{ComputationTable, Scope};
 use super::{common::*, CompileSettings, Expression, Magma, Node, Type};
-use crate::column::{Column, ColumnSet, Computation, RegisterID};
+use crate::column::{Column, ColumnSet, Computation, RegisterID, Value, ValueBacking};
 use crate::compiler::parser::*;
 use crate::dag::ComputationDag;
 use crate::errors::{self, CompileError, RuntimeError};
@@ -61,7 +61,14 @@ pub enum Constraint {
     InRange {
         handle: Handle,
         exp: Node,
-        max: Fr,
+        max: Value,
+    },
+    // Ensures that normalized = reference × invert
+    Normalization {
+        handle: Handle,
+        reference: Node,
+        inverted: ColumnRef,
+        normalized: ColumnRef,
     },
 }
 impl Constraint {
@@ -71,6 +78,7 @@ impl Constraint {
             Constraint::Plookup { handle, .. } => handle.to_string(),
             Constraint::Permutation { handle, .. } => handle.to_string(),
             Constraint::InRange { handle, .. } => handle.to_string(),
+            Constraint::Normalization { handle, .. } => handle.to_string(),
         }
     }
 
@@ -78,24 +86,27 @@ impl Constraint {
         match self {
             Constraint::Vanishes { expr, .. } => expr.add_id_to_handles(set_id),
             Constraint::Plookup {
-                handle: _,
                 including: xs,
                 included: ys,
+                ..
             } => xs
                 .iter_mut()
                 .chain(ys.iter_mut())
                 .for_each(|e| e.add_id_to_handles(set_id)),
             Constraint::Permutation {
-                handle: _,
-                from: hs1,
-                to: hs2,
-                signs: _,
+                from: hs1, to: hs2, ..
             } => hs1.iter_mut().chain(hs2.iter_mut()).for_each(|h| set_id(h)),
-            Constraint::InRange {
-                handle: _,
-                exp,
-                max: _,
-            } => exp.add_id_to_handles(set_id),
+            Constraint::InRange { exp, .. } => exp.add_id_to_handles(set_id),
+            Constraint::Normalization {
+                reference,
+                inverted,
+                normalized,
+                ..
+            } => {
+                reference.add_id_to_handles(set_id);
+                set_id(inverted);
+                set_id(normalized);
+            }
         }
     }
 
@@ -105,6 +116,7 @@ impl Constraint {
             Constraint::Plookup { .. } => 1,
             Constraint::Permutation { .. } => 1,
             Constraint::InRange { .. } => 1,
+            Constraint::Normalization { .. } => 1,
         }
     }
 }
@@ -118,6 +130,15 @@ pub struct EvalSettings {
 impl Default for EvalSettings {
     fn default() -> Self {
         EvalSettings { wrap: true }
+    }
+}
+impl EvalSettings {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn wrap(self, w: bool) -> Self {
+        Self { wrap: w, ..self }
     }
 }
 
@@ -153,7 +174,7 @@ impl Defined {
             current_specialization.in_types == new_specialization.in_types
         }) {
             // TODO: better error
-            bail!("specialization {:?} already defined", new_specialization)
+            bail!("specialization {} already defined", new_specialization)
         } else {
             self.specializations.push(new_specialization.clone());
         }
@@ -167,16 +188,16 @@ impl Defined {
                 return Ok(s);
             }
         }
-        error!("available specializations:");
+        let mut msg = "available specializations:".to_string();
         for s in self.specializations.iter() {
             let (expected_str, found_str) =
                 errors::compiler::type_comparison_message(&s.in_types, args_t);
-            error!(
-                "expected {} mismatches with found {}",
+            msg += &format!(
+                "\nexpected {} mismatches with found {}",
                 expected_str, found_str
             );
         }
-        bail!("no implementation found matching given arguments")
+        bail!(msg)
     }
 }
 // User-defined function do not need to implement [`FunctionVerifier`], because
@@ -191,6 +212,23 @@ pub struct Specialization {
     pub body: AstNode,
     pub nowarn: bool,
 }
+impl std::fmt::Display for Specialization {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.pure {
+            write!(f, "(pure) ",)?;
+        }
+
+        for t in self.in_types.iter() {
+            write!(f, "{} ", t)?;
+        }
+
+        if let Some(t) = self.out_type {
+            write!(f, "-> {}", t)
+        } else {
+            write!(f, "-> ?")
+        }
+    }
+}
 
 impl FuncVerifier<Node> for Intrinsic {
     fn arity(&self) -> Arity {
@@ -198,17 +236,60 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Add => Arity::AtLeast(1),
             Intrinsic::Sub => Arity::AtLeast(1),
             Intrinsic::Mul => Arity::AtLeast(1),
+            Intrinsic::VectorAdd => Arity::AtLeast(1),
+            Intrinsic::VectorSub => Arity::AtLeast(1),
+            Intrinsic::VectorMul => Arity::AtLeast(1),
             Intrinsic::Exp => Arity::Dyadic,
             Intrinsic::Neg => Arity::Monadic,
             Intrinsic::Inv => Arity::Monadic,
-            Intrinsic::Shift => Arity::Dyadic,
+            Intrinsic::Normalize => Arity::Monadic,
             Intrinsic::Begin => Arity::AtLeast(1),
-            Intrinsic::IfZero => Arity::Between(2, 3),
-            Intrinsic::IfNotZero => Arity::Between(2, 3),
+            Intrinsic::IfZero | Intrinsic::IfNotZero => Arity::Between(2, 3),
         }
     }
     fn validate_types(&self, args: &[Node]) -> Result<()> {
         let args_t = args.iter().map(|a| a.t()).collect::<Vec<_>>();
+
+        // Intrinsic-specific checks
+        match self {
+            Intrinsic::Add
+            | Intrinsic::Sub
+            | Intrinsic::Mul
+            | Intrinsic::VectorAdd
+            | Intrinsic::VectorSub
+            | Intrinsic::VectorMul => {}
+            Intrinsic::Begin => {
+                // TODO: maybe?
+                // if args_t
+                //     .iter()
+                //     .any(|t| args_t.get(0).map(|tt| tt.c() != t.c()).unwrap_or(false))
+                // {
+                //     bail!(
+                //         "can not mix multiple conditionings in if branches: {}",
+                //         args_t.iter().skip(1).map(|t| t.c().to_string()).join(" ")
+                //     )
+                // }
+            }
+            Intrinsic::IfZero => {
+                if !args_t[0].is_conditioned() {
+                    bail!(CompileError::ConditioningError(self.to_string(), args_t[0]))
+                }
+
+                // TODO: maybe?
+                // if args_t
+                //     .iter()
+                //     .skip(1)
+                //     .any(|t| args_t.get(1).map(|tt| tt.c() != t.c()).unwrap_or(false))
+                // {
+                //     bail!(
+                //         "can not mix multiple conditionings: {}",
+                //         args_t.iter().map(|t| t.to_string()).join(" ")
+                //     )
+                // }
+            }
+            _ => {}
+        }
+
         // The typing of functions is represented as a list of list.
         //
         // The elements of the first-level list represent the acceptable typing
@@ -222,18 +303,22 @@ impl FuncVerifier<Node> for Intrinsic {
         // homogeneous arguments (e.g. Add), a single second-level list is
         // enough.
         let expected_t: &[&[Type]] = match self {
-            Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => &[&[Type::Any(Magma::Any)]],
-            Intrinsic::Exp => &[&[Type::Any(Magma::Any)], &[Type::Scalar(Magma::Any)]],
-            Intrinsic::Neg => &[&[Type::Scalar(Magma::Any), Type::Column(Magma::Any)]],
-            Intrinsic::Inv => &[&[Type::Any(Magma::Any)]],
-            Intrinsic::Shift => &[&[Type::Column(Magma::Any)], &[Type::Scalar(Magma::Any)]],
+            Intrinsic::Add
+            | Intrinsic::Sub
+            | Intrinsic::Mul
+            | Intrinsic::VectorAdd
+            | Intrinsic::VectorSub
+            | Intrinsic::VectorMul => &[&[Type::Any(Magma::ANY)]],
+            Intrinsic::Exp => &[&[Type::Any(Magma::ANY)], &[Type::Scalar(Magma::ANY)]],
+            Intrinsic::Neg => &[&[Type::Scalar(Magma::ANY), Type::Column(Magma::ANY)]],
+            Intrinsic::Inv | Intrinsic::Normalize => &[&[Type::Any(Magma::ANY)]],
             Intrinsic::IfZero | Intrinsic::IfNotZero => &[
-                // condition type TODO: force to bool/loob
-                &[Type::Any(Magma::Any)],
-                // then/else arms type
-                &[Type::Any(Magma::Any), Type::List(Magma::Any)],
+                // condition type
+                &[Type::Any(Magma::ANY)],
+                // then/else arms typ
+                &[Type::Any(Magma::ANY)],
             ],
-            Intrinsic::Begin => &[&[Type::Any(Magma::Any)]],
+            Intrinsic::Begin => &[&[Type::Any(Magma::ANY)]],
         };
 
         if super::compatible_with_repeating(expected_t, &args_t) {
@@ -250,13 +335,18 @@ impl FuncVerifier<Node> for Intrinsic {
 
 pub type PerspectiveTable = HashMap<String, HashMap<String, Node>>;
 
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
+pub const ADDER_MODULE: &str = "#adder";
+pub const MULER_MODULE: &str = "#muler";
+
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct ConstraintSet {
     pub columns: ColumnSet,
     pub constraints: Vec<Constraint>,
     pub constants: HashMap<Handle, BigInt>,
     pub computations: ComputationTable,
     pub perspectives: PerspectiveTable,
+    pub transformations: u32,
+    pub auto_constraints: u32,
 }
 impl ConstraintSet {
     pub fn new(
@@ -272,6 +362,8 @@ impl ConstraintSet {
             constants,
             computations,
             perspectives,
+            transformations: 0,
+            auto_constraints: 0,
         };
         r.convert_refs_to_ids()?;
         r.allocate_registers();
@@ -328,7 +420,7 @@ impl ConstraintSet {
         for c in pool.root {
             let reg = self.columns.new_register(
                 self.handle(&c).to_owned(),
-                self.columns.get_col(&c).unwrap().t,
+                self.columns.column(&c).unwrap().t,
             );
             self.columns.assign_register(&c, reg).unwrap();
         }
@@ -384,7 +476,7 @@ impl ConstraintSet {
                 match c {
                     Computation::Interleaved { target, .. }
                     | Computation::CyclicFrom { target, .. } => {
-                        let col = self.columns.get_col(&target).unwrap();
+                        let col = self.columns.column(&target).unwrap();
                         let reg = self.columns.new_register(col.handle.clone(), col.t);
                         self.columns.assign_register(&target, reg).unwrap();
                     }
@@ -392,9 +484,9 @@ impl ConstraintSet {
                         let mut reg_translation = HashMap::<RegisterID, RegisterID>::new();
                         for (f, t) in froms.iter().zip(tos.iter()) {
                             let reg = reg_translation
-                                .entry(self.columns.get_col(f).unwrap().register.unwrap())
+                                .entry(self.columns.column(f).unwrap().register.unwrap())
                                 .or_insert_with(|| {
-                                    let col = self.columns.get_col(t).unwrap();
+                                    let col = self.columns.column(t).unwrap();
                                     self.columns.new_register(col.handle.clone(), col.t)
                                 });
                             self.columns.assign_register(t, *reg).unwrap();
@@ -412,7 +504,7 @@ impl ConstraintSet {
                             .chain(ats.iter())
                             .chain(delta_bytes.iter())
                         {
-                            let col = self.columns.get_col(r).unwrap();
+                            let col = self.columns.column(r).unwrap();
                             let reg = self.columns.new_register(col.handle.clone(), col.t);
                             self.columns.assign_register(r, reg).unwrap();
                         }
@@ -436,7 +528,7 @@ impl ConstraintSet {
                 match self.computations.get_mut(i).unwrap().clone() {
                     Computation::Interleaved { target, froms } => {
                         if let Some(perspective) = self.columns.perspective_of(froms.iter())? {
-                            let from_handle = self.columns.get_col(&froms[0])?.handle.to_owned();
+                            let from_handle = self.columns.column(&froms[0])?.handle.to_owned();
                             let module = from_handle.module.to_owned();
                             if let Expression::Column { handle, .. } =
                                 self.get_perspective(&module, &perspective)?.e().clone()
@@ -445,7 +537,7 @@ impl ConstraintSet {
                                     &module,
                                     format!(
                                         "{}%intrld",
-                                        self.columns.get_col(&handle).unwrap().handle.name,
+                                        self.columns.column(&handle).unwrap().handle.name,
                                     ),
                                 );
                                 let srt_guard_id = self
@@ -480,7 +572,7 @@ impl ConstraintSet {
                     Computation::Sorted { froms, tos, .. } => {
                         for (j, from) in froms.clone().iter().enumerate() {
                             if let Some(perspective) = self.columns.perspective(from)?.cloned() {
-                                let from_handle = self.columns.get_col(from)?.handle.to_owned();
+                                let from_handle = self.columns.column(from)?.handle.to_owned();
                                 let module = from_handle.module.to_owned();
                                 if let Expression::Column { handle, .. } =
                                     self.get_perspective(&module, &perspective)?.e().clone()
@@ -489,7 +581,7 @@ impl ConstraintSet {
                                         &module,
                                         format!(
                                             "{}%srt",
-                                            self.columns.get_col(&handle).unwrap().handle.name,
+                                            self.columns.column(&handle).unwrap().handle.name,
                                         ),
                                     );
                                     let srt_guard_id = self
@@ -547,7 +639,7 @@ impl ConstraintSet {
     }
 
     pub(crate) fn handle(&self, h: &ColumnRef) -> &Handle {
-        &self.columns.get_col(h).unwrap().handle
+        &self.columns.column(h).unwrap().handle
     }
 
     pub(crate) fn insert_perspective(
@@ -595,7 +687,10 @@ impl ConstraintSet {
 
         for c in self.computations.iter_mut() {
             match c {
-                Computation::Composite { exp, .. } => exp.add_id_to_handles(&convert_to_id),
+                Computation::Composite { target, exp } => {
+                    convert_to_id(target);
+                    exp.add_id_to_handles(&convert_to_id);
+                }
                 Computation::Interleaved { target, froms } => std::iter::once(target)
                     .chain(froms.iter_mut())
                     .for_each(convert_to_id),
@@ -609,6 +704,17 @@ impl ConstraintSet {
                 Computation::SortingConstraints { .. } => {
                     // These computations are built with IDs from the very start
                 }
+                Computation::ExoOperation {
+                    sources, target, ..
+                } => {
+                    for source in sources.iter_mut() {
+                        source.add_id_to_handles(&convert_to_id);
+                    }
+                    convert_to_id(target);
+                }
+                Computation::ExoConstant { target, .. } => {
+                    convert_to_id(target);
+                }
             }
         }
 
@@ -619,21 +725,30 @@ impl ConstraintSet {
         Ok(())
     }
 
-    pub fn raw_len_for_or_set(&mut self, m: &str, x: isize) -> isize {
-        *self.columns.raw_len.entry(m.to_string()).or_insert(x)
+    pub fn effective_len_for(&self, m: &str) -> Option<isize> {
+        self.columns.effective_len.get(m).copied()
     }
 
-    pub fn spilling_for(&self, h: &ColumnRef) -> Option<isize> {
+    pub fn effective_len_or_set(&mut self, m: &str, x: isize) -> isize {
+        *self.columns.effective_len.entry(m.to_string()).or_insert(x)
+    }
+
+    pub fn spilling_of(&self, m: &str) -> Option<isize> {
+        self.columns.spilling.get(m).cloned()
+    }
+
+    pub fn spilling_for_column(&self, h: &ColumnRef) -> Option<isize> {
         let module = if h.is_handle() {
             &h.as_handle().module
         } else {
-            &self.columns.get_col(h).ok()?.handle.module
+            &self.columns.column(h).ok()?.handle.module
         };
-        self.columns.spilling.get(module).cloned()
+        self.spilling_of(module)
     }
 
-    fn compute_spilling(&mut self, m: &str) -> isize {
-        self.computations
+    pub(crate) fn compute_spilling(&mut self, m: &str) -> isize {
+        let spilling = self
+            .computations
             .iter()
             .filter_map(|c| match c {
                 Computation::Composite { target, exp } => {
@@ -656,7 +771,9 @@ impl ConstraintSet {
                 _ => None,
             }))
             .max()
-            .unwrap_or(0)
+            .unwrap_or(0);
+        self.columns.spilling.insert(m.to_owned(), spilling);
+        spilling
     }
 
     fn fill_spilling(&mut self) {
@@ -671,9 +788,12 @@ impl ConstraintSet {
         self.computations
             .computation_for(h)
             .map(|comp| match comp {
-                Computation::Composite { exp, .. } => {
-                    self.length_multiplier(exp.dependencies().iter().next().unwrap())
-                }
+                Computation::Composite { exp, .. } => exp
+                    .dependencies()
+                    .iter()
+                    .next()
+                    .map(|d| self.length_multiplier(d))
+                    .unwrap_or(1),
                 Computation::Interleaved { froms, .. } => {
                     self.length_multiplier(&froms[0]) * froms.len()
                 }
@@ -681,11 +801,18 @@ impl ConstraintSet {
                     self.length_multiplier(&froms[0])
                 }
                 Computation::SortingConstraints { .. } => 1,
+                Computation::ExoOperation { sources, .. } => sources
+                    .iter()
+                    .flat_map(|s| s.dependencies())
+                    .next()
+                    .map(|c| self.length_multiplier(&c))
+                    .unwrap_or(1),
+                Computation::ExoConstant { .. } => 1,
             })
             .unwrap_or(1)
             * self
                 .columns
-                .get_col(h)
+                .column(h)
                 .unwrap()
                 .intrinsic_size_factor
                 .unwrap_or(1)
@@ -707,50 +834,49 @@ impl ConstraintSet {
                 .columns
                 .all()
                 .into_iter()
-                .map(|h| (h.clone(), self.columns.get_col(&h).unwrap()))
+                .map(|h| (h.clone(), self.columns.column(&h).unwrap()))
                 .filter(|(_, c)| c.handle.module == module)
                 .peekable();
-            let empty_vec = Vec::new();
+            let empty_backing: ValueBacking = ValueBacking::default();
             while let Some((r, column)) = current_col.next() {
                 let handle = &column.handle;
                 trace!("Writing {}", handle);
-                let value = self.columns.value(&r).unwrap_or(&empty_vec);
-                let padding = if let Some((_, fr)) = column.padding_value {
-                    fr
+                let backing = self.columns.backing(&r).unwrap_or_else(|| &empty_backing);
+                let padding: Value = if let Some(v) = column.padding_value.as_ref() {
+                    v.clone()
                 } else {
-                    value.get(0).cloned().unwrap_or_else(|| {
+                    backing.get(0, false, &self.columns).unwrap_or_else(|| {
                         self.computations
                             .computation_for(&r)
                             .map(|c| match c {
                                 Computation::Composite { exp, .. } => exp
                                     .eval(
                                         0,
-                                        &mut |_, _, _| Some(Fr::zero()),
+                                        |_, _, _| Some(Value::zero()),
                                         &mut None,
                                         &EvalSettings::default(),
                                     )
-                                    .unwrap_or_else(Fr::zero),
-                                Computation::Interleaved { .. } => Fr::zero(),
-                                Computation::Sorted { .. } => Fr::zero(),
-                                Computation::CyclicFrom { .. } => Fr::zero(),
-                                Computation::SortingConstraints { .. } => Fr::zero(),
+                                    .unwrap_or_else(Value::zero),
+                                Computation::Interleaved { .. } => Value::zero(),
+                                Computation::Sorted { .. } => Value::zero(),
+                                Computation::CyclicFrom { .. } => Value::zero(),
+                                Computation::SortingConstraints { .. } => Value::zero(),
+                                Computation::ExoOperation { .. } => Value::zero(), // TODO: FIXME:
+                                Computation::ExoConstant { .. } => Value::zero(),  // TODO: FIXME:
                             })
-                            .unwrap_or_else(Fr::zero)
+                            .unwrap_or_else(Value::zero)
                     })
                 };
 
                 out.write_all(format!("\"{}\":{{\n", handle).as_bytes())?;
                 out.write_all("\"values\":[".as_bytes())?;
 
-                let mut value = value.iter().peekable();
+                let mut value = backing.iter(&self.columns).peekable();
                 while let Some(x) = value.next() {
                     out.write_all(
                         cache
                             .cache_get_or_set_with(x.to_owned(), || {
-                                format!(
-                                    "\"0x0{}\"",
-                                    x.into_repr().to_string()[2..].trim_start_matches('0')
-                                )
+                                format!("\"0x0{}\"", x.to_string()[2..].trim_start_matches('0'))
                             })
                             .as_bytes(),
                     )?;
@@ -824,6 +950,21 @@ impl ConstraintSet {
                         ))
                     }
                 }
+                Constraint::Normalization {
+                    handle,
+                    reference,
+                    inverted,
+                    normalized,
+                } => {
+                    if !(reference.dependencies().into_iter().any(|h| h.is_id())
+                        && inverted.is_id()
+                        && normalized.is_id())
+                    {
+                        bail!(errors::compiler::Error::ConstraintWithHandles(
+                            handle.to_string()
+                        ))
+                    }
+                }
             }
         }
 
@@ -838,7 +979,7 @@ impl ConstraintSet {
                 Computation::Composite { target, exp } => {
                     if !target.is_id() || exp.dependencies().into_iter().any(|r| !r.is_id()) {
                         bail!(errors::compiler::Error::ComputationWithHandles(
-                            c.to_string()
+                            c.to_string(),
                         ))
                     }
                 }
@@ -879,31 +1020,53 @@ impl ConstraintSet {
                         ))
                     }
                 }
+                Computation::ExoOperation {
+                    sources, target, ..
+                } => {
+                    if std::iter::once(target.clone())
+                        .chain(sources.iter().flat_map(|s| s.dependencies()))
+                        .any(|r| !r.is_id())
+                    {
+                        bail!(errors::compiler::Error::ComputationWithHandles(
+                            c.to_string()
+                        ))
+                    }
+                }
+                Computation::ExoConstant { target, .. } => {
+                    if !target.is_id() {
+                        bail!(errors::compiler::Error::ComputationWithHandles(
+                            target.to_string()
+                        ))
+                    }
+                }
             }
         }
 
         // Check that no constraint mixes cardinalities
         for c in self.constraints.iter() {
-            if let Constraint::Vanishes {
-                handle,
-                domain: _,
-                expr,
-            } = c
-            {
-                let mut sizes = expr.dependencies().into_iter();
-                if let Some(first) = sizes.next() {
-                    let first_size = self.length_multiplier(&first);
-                    for other in sizes {
-                        let other_size = self.length_multiplier(&other);
-                        if first_size != other_size {
-                            bail!(
-                                    "constraint {} mixes columns {} (×{}) and {} (×{}) of different size factors ",
-                                    handle.pretty(), first.pretty(), first_size,
-                                    other.pretty(), other_size,
-                                );
+            match c {
+                Constraint::Vanishes {
+                    handle,
+                    domain: _,
+                    expr,
+                } => {
+                    let mut sizes = expr.dependencies().into_iter();
+                    if let Some(first) = sizes.next() {
+                        let first_size = self.length_multiplier(&first);
+                        for other in sizes {
+                            let other_size = self.length_multiplier(&other);
+                            if first_size != other_size {
+                                bail!(
+                                        "constraint {} mixes columns {} (×{}) and {} (×{}) of different size factors ",
+                                        handle.pretty(), first.pretty(), first_size,
+                                        other.pretty(), other_size,
+                                    );
+                            }
                         }
                     }
                 }
+                Constraint::Normalization { .. } => {}
+                _ => {}
             }
         }
 
@@ -963,10 +1126,7 @@ fn apply_form(
                 for i in is.iter() {
                     let mut for_ctx = ctx.derive(&uniquify(format!("{}-for-{}", ctx.name(), i)))?;
 
-                    for_ctx.insert_symbol(
-                        i_name,
-                        Expression::Const(BigInt::from(i), Fr::from_str(&i.to_string())).into(),
-                    )?;
+                    for_ctx.insert_symbol(i_name, Expression::Const(Value::from(i)).into())?;
 
                     if let Some(r) = reduce(&body.clone(), &mut for_ctx, settings)? {
                         t = t.max(r.t());
@@ -1031,7 +1191,7 @@ fn apply_form(
                 | Expression::Void
                 | Expression::ArrayColumn { .. }
                 | Expression::Funcall { .. }
-                | Expression::Const(_, _) => panic!(),
+                | Expression::Const(_) => panic!(),
                 Expression::List(xs) => {
                     if xs.len() < 2 {
                         Ok(Some(body))
@@ -1048,6 +1208,7 @@ fn apply_form(
                         r
                     }
                 }
+                Expression::ExoColumn { .. } => todo!(),
             };
         }
     }
@@ -1075,16 +1236,23 @@ fn apply_defined(
         f_ctx.insert_symbol(f_arg, traversed_args[i].clone())?;
     }
     Ok(if let Some(r) = reduce(&b.body, &mut f_ctx, settings)? {
+        let found_type = r.t();
         let final_type = if let Some(expected_type) = b.out_type {
-            if r.t() > expected_type && !b.nowarn {
+            if found_type > expected_type && !b.nowarn {
                 warn!(
-                "in call to {}: inferred output type {:?} is incompatible with declared type {:?}",
-                h.pretty(),
-                r.t().yellow(),
-                b.out_type.blue()
-            )
+                    "in call to {} with {}: inferred output type {} is incompatible with declared type {}",
+                    h.pretty(),
+                    traversed_args.iter().map(|x| x.pretty()).join(" "),
+                    found_type.yellow().bold(),
+                    expected_type.blue().bold()
+                )
             }
-            expected_type
+
+            if b.nowarn {
+                found_type.force_with_conditioning_of(&expected_type)
+            } else {
+                found_type.with_conditioning_of(&expected_type)?
+            }
         } else {
             r.t()
         };
@@ -1115,6 +1283,22 @@ fn apply_builtin(
                 bail!(RuntimeError::NotAnArray(traversed_args[0].e().clone()))
             }
         }
+        Builtin::Shift => {
+            let shift = traversed_args[1].pure_eval()?.to_i16().unwrap();
+            Ok(Some(traversed_args.get(0).unwrap().clone().shift(shift)))
+        }
+        Builtin::NormFlat => {
+            if traversed_args[0].is_exocolumn() {
+                todo!("{}", traversed_args[0].pretty())
+            } else {
+                Ok(Some(traversed_args[0].clone()))
+            }
+        }
+        Builtin::If => match traversed_args[0].t().c() {
+            super::Conditioning::None => unreachable!(),
+            super::Conditioning::Boolean => Ok(Some(Intrinsic::IfNotZero.call(&traversed_args)?)),
+            super::Conditioning::Loobean => Ok(Some(Intrinsic::IfZero.call(&traversed_args)?)),
+        },
     }
 }
 
@@ -1144,7 +1328,7 @@ fn apply_intrinsic(
             .with_type(super::max_type(&traversed_args_t)),
         )),
 
-        b @ (Intrinsic::IfZero | Intrinsic::IfNotZero) => {
+        b @ Intrinsic::IfZero | b @ Intrinsic::IfNotZero => {
             let r = b.call(&traversed_args)?;
             if traversed_args[0].may_overflow() {
                 let pretty = if let Some(d) = traversed_args[0].dbg() {
@@ -1160,10 +1344,13 @@ fn apply_intrinsic(
         b @ (Intrinsic::Add
         | Intrinsic::Sub
         | Intrinsic::Mul
+        | Intrinsic::VectorAdd
+        | Intrinsic::VectorSub
+        | Intrinsic::VectorMul
         | Intrinsic::Exp
         | Intrinsic::Neg
         | Intrinsic::Inv
-        | Intrinsic::Shift) => Ok(Some(b.call(&traversed_args)?)),
+        | Intrinsic::Normalize) => Ok(Some(b.call(&traversed_args)?)),
     }
 }
 
@@ -1207,15 +1394,13 @@ fn apply(
 pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<Option<Node>> {
     match &e.class {
         Token::Keyword(_) | Token::Domain(_) => Ok(None),
-        Token::Value(x) => Ok(Some(
-            Node::from(Expression::Const(x.clone(), Fr::from_str(&x.to_string()))).with_type(
-                if *x >= Zero::zero() && *x <= One::one() {
-                    Type::Scalar(Magma::Boolean)
-                } else {
-                    Type::Scalar(Magma::Integer)
-                },
-            ),
-        )),
+        Token::Value(x) => Ok(Some(Node::from(Expression::Const(x.into())).with_type(
+            if *x >= Zero::zero() && *x <= One::one() {
+                Type::Scalar(Magma::binary())
+            } else {
+                Type::Scalar(Magma::native())
+            },
+        ))),
         Token::Symbol(name) => Ok(Some(
             ctx.resolve_symbol(name)
                 .with_context(|| make_ast_error(e))?,
@@ -1239,7 +1424,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                                     .handle(handle.as_handle().ith(i))
                                     .kind(Kind::Atomic)
                                     .base(*base)
-                                    .t(array.t().magma())
+                                    .t(array.t().m())
                                     .build(),
                             ))
                         } else {
@@ -1381,7 +1566,7 @@ fn reduce_toplevel(
             let body = if let Some(guard) = guard {
                 let guard_expr = reduce(guard, &mut ctx, settings)?
                     .with_context(|| anyhow!("guard `{:?}` is empty", guard))?;
-                Intrinsic::IfNotZero.call(&[guard_expr, body])?
+                Intrinsic::Mul.call(&[guard_expr, body])?
             } else {
                 body
             };
@@ -1403,19 +1588,19 @@ fn reduce_toplevel(
 
             if body.t() == Type::Void {
                 error!(
-                    "constraint {} should be of type {}, found {:?}",
+                    "constraint {} should be of type {}, found {}",
                     handle.pretty(),
                     "Loobean".yellow().bold(),
                     body.t().red().bold()
                 );
                 Ok(None)
             } else {
-                if body.t().magma() != Magma::Loobean {
+                if !body.t().m().is_loobean() {
                     error!(
-                        "constraint {} should be of type {}, found {:?}",
+                        "constraint {} should be {}, found {}",
                         handle.pretty(),
-                        "Loobean".yellow().bold(),
-                        body.t().magma().red().bold()
+                        "loobean".yellow().bold(),
+                        body.t().red().bold()
                     )
                 }
                 Ok(Some(Constraint::Vanishes {
@@ -1461,7 +1646,8 @@ fn reduce_toplevel(
                 handle,
                 exp: reduce(e, ctx, settings)?.unwrap(),
                 max: Fr::from_str(&range.to_string())
-                    .ok_or_else(|| anyhow!("`{range}` is not representable in Fr"))?,
+                    .ok_or_else(|| anyhow!("`{range}` is not representable in Fr"))?
+                    .into(), // TODO: may be out of Fr and in Value
             }))
         }
         Token::DefColumns(columns) => {

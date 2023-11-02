@@ -1,4 +1,5 @@
 use crate::{
+    column::Value,
     compiler::ColumnRef,
     pretty::{self, Pretty},
 };
@@ -6,10 +7,6 @@ use anyhow::*;
 use either::Either;
 use num_bigint::BigInt;
 use num_traits::{FromPrimitive, Num};
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 use std::collections::HashMap;
 
 /// A Combinator operates on boolean expressions
@@ -65,7 +62,7 @@ pub enum Relation {
     Lte,
 }
 impl Relation {
-    fn apply(&self, args: &[Either<Fr, bool>]) -> bool {
+    fn apply(&self, args: &[Either<Value, bool>]) -> bool {
         let a1 = args[0].as_ref().left().unwrap();
         let a2 = args[1].as_ref().left().unwrap();
         match self {
@@ -109,20 +106,20 @@ pub enum Function {
     Mul,
 }
 impl Function {
-    fn apply(&self, args: &[Fr]) -> Fr {
+    fn apply(&self, args: &[Value]) -> Value {
         match self {
             Function::Add => {
-                let mut x = args[0];
+                let mut x = args[0].clone();
                 x.add_assign(&args[1]);
                 x
             }
             Function::Sub => {
-                let mut x = args[0];
+                let mut x = args[0].clone();
                 x.sub_assign(&args[1]);
                 x
             }
             Function::Mul => {
-                let mut x = args[0];
+                let mut x = args[0].clone();
                 x.mul_assign(&args[1]);
                 x
             }
@@ -156,7 +153,7 @@ pub enum Node {
     Comparison(Relation, Vec<Node>),
     Funcall(Function, Vec<Node>),
     Column(String, ColumnRef),
-    Const(Fr),
+    Const(Value),
 }
 impl Node {
     fn is_bool(&self) -> bool {
@@ -170,7 +167,11 @@ impl Node {
     /// From a root Node, returns a (potentially empty) list of all the
     /// positions in [[0; size]] such that the columns accessed through get
     /// matches the expression.
-    pub fn scan<F: Fn(isize, &ColumnRef) -> Option<Fr>>(&self, get: &F, max: isize) -> Vec<isize> {
+    pub fn scan<F: Fn(isize, &ColumnRef) -> Option<Value>>(
+        &self,
+        get: &F,
+        max: isize,
+    ) -> Vec<isize> {
         (0..max)
             .filter(|i| {
                 let r = self.eval(*i, &get);
@@ -189,11 +190,11 @@ impl Node {
     /// The computed value may be either Fr or boolean; depending on whether
     /// they stem from a column or a function call, or from a condition or a
     /// combinator. An Either monad encodes this dichotomy.
-    fn eval<F: Fn(isize, &ColumnRef) -> Option<Fr>>(
+    fn eval<F: Fn(isize, &ColumnRef) -> Option<Value>>(
         &self,
         i: isize,
         get: &F,
-    ) -> Option<Either<Fr, bool>> {
+    ) -> Option<Either<Value, bool>> {
         match self {
             Node::Combinator(c, args) => {
                 let args = args
@@ -217,7 +218,7 @@ impl Node {
                 args.map(|args| Either::Left(f.apply(&args)))
             }
             Node::Column(_, column) => get(i, column).map(Either::Left),
-            Node::Const(x) => Some(Either::Left(*x)),
+            Node::Const(x) => Some(Either::Left(x.clone())),
         }
     }
 }
@@ -339,7 +340,7 @@ pub fn parse(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> Res
                 stack.push(match f {
                     Function::Add => {
                         if let (Node::Const(c1), Node::Const(c2)) = (&args[0], &args[1]) {
-                            let mut r = *c1;
+                            let mut r = c1.clone();
                             r.add_assign(c2);
                             Node::Const(r)
                         } else {
@@ -348,7 +349,7 @@ pub fn parse(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> Res
                     }
                     Function::Sub => {
                         if let (Node::Const(c1), Node::Const(c2)) = (&args[0], &args[1]) {
-                            let mut r = *c1;
+                            let mut r = c1.clone();
                             r.sub_assign(c2);
                             Node::Const(r)
                         } else {
@@ -357,7 +358,7 @@ pub fn parse(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> Res
                     }
                     Function::Mul => {
                         if let (Node::Const(c1), Node::Const(c2)) = (&args[0], &args[1]) {
-                            let mut r = *c1;
+                            let mut r = c1.clone();
                             r.mul_assign(c2);
                             Node::Const(r)
                         } else {
@@ -366,7 +367,7 @@ pub fn parse(s: &str, module: &str, columns: &HashMap<String, ColumnRef>) -> Res
                     }
                 });
             }
-            Token::Const(x) => stack.push(Node::Const(Fr::from_str(&x.to_string()).unwrap())),
+            Token::Const(x) => stack.push(Node::Const(Value::from(x.to_string().as_str()))), // TODO: Value::from BigInt
             Token::Column(s, c) => stack.push(Node::Column(s, c)),
         }
     }

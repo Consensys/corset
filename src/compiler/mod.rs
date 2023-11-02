@@ -173,23 +173,41 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
                             .handle(handle.as_handle().clone())
                             .used(*used)
                             .kind(k.to_nil())
-                            .t(symbol.t().magma())
+                            .t(symbol.t().m())
                             .base(*base)
                             .build();
                         let id = columns.insert_column(column)?;
                         match k {
                             Kind::Atomic | Kind::Phantom => (),
-                            Kind::Composite(e) => computations.insert(
-                                &id,
-                                Computation::Composite {
-                                    target: id.clone(),
-                                    exp: *e.clone(),
-                                },
-                            )?,
+                            Kind::Composite(e) => computations
+                                .insert(
+                                    &id,
+                                    Computation::Composite {
+                                        target: id.clone(),
+                                        exp: *e.clone(),
+                                    },
+                                )
+                                .map(|_| ())?,
                         }
                     }
-                    Expression::Const(ref x, _) => {
-                        constants.insert(handle, x.clone());
+                    Expression::ExoColumn {
+                        handle,
+                        padding_value,
+                        base,
+                        ..
+                    } => {
+                        let column = Column::builder()
+                            .and_padding_value(padding_value.to_owned())
+                            .handle(handle.as_handle().clone())
+                            .used(*used)
+                            .kind(Kind::Atomic)
+                            .t(symbol.t().m())
+                            .base(*base)
+                            .build();
+                        columns.insert_column(column)?;
+                    }
+                    Expression::Const(ref x) => {
+                        constants.insert(handle, x.clone().into());
                     }
                     _ => {}
                 }

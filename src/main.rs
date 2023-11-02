@@ -12,6 +12,7 @@ use std::{
     io::{Read, Write},
     path::Path,
 };
+use transformer::{AutoConstraint, ExpansionLevel};
 
 use clap::{Parser, Subcommand};
 
@@ -19,6 +20,7 @@ mod check;
 mod column;
 mod compiler;
 mod compute;
+mod constants;
 mod dag;
 mod errors;
 mod exporters;
@@ -45,6 +47,12 @@ pub struct Args {
         global = true
     )]
     source: Vec<String>,
+
+    #[arg(short='e', action = clap::ArgAction::Count, help="perform various levels of expansion", global=true)]
+    expand: u8,
+
+    #[arg(long="auto-constraints", value_parser=["sorts", "nhood"], value_delimiter=',', global=true)]
+    auto_constraints: Vec<String>,
 
     #[arg(long = "debug", help = "Compile code in debug mode", global = true)]
     debug: bool,
@@ -153,18 +161,18 @@ enum Commands {
         tracefile: String,
 
         #[arg(
+            long = "native",
+            short = 'N',
+            help = "execute computations in target Galois field"
+        )]
+        native_arithmetic: bool,
+
+        #[arg(
             short = 'F',
             long = "trace-full",
             help = "print all the module columns on error"
         )]
         full_trace: bool,
-
-        #[arg(
-            short = 'E',
-            long = "expand",
-            help = "perform all expansion operations before checking"
-        )]
-        expand: bool,
 
         #[arg(
             long = "only",
@@ -228,17 +236,16 @@ enum Commands {
             help = "the trace to inspect"
         )]
         tracefile: String,
+
+        #[arg(
+            long = "native",
+            short = 'N',
+            help = "execute computations in target Galois field"
+        )]
+        native_arithmetic: bool,
     },
     /// Display the compiled the constraint system
     Debug {
-        #[arg(short = 'e', long = "expand", value_parser=["nhood", "lower-shifts", "ifs", "constraints", "permutations", "inverses"], value_delimiter=',')]
-        expand: Vec<String>,
-        #[arg(
-            short = 'E',
-            long = "expand-all",
-            help = "perform all expansion operations before checking"
-        )]
-        expand_all: bool,
         #[arg(
             short = 'm',
             long = "modules",
@@ -346,6 +353,8 @@ struct ConstraintSetBuilder {
     debug: bool,
     no_stdlib: bool,
     source: Either<SourceMapping, ConstraintSet>,
+    expand_to: ExpansionLevel,
+    auto_constraints: Vec<AutoConstraint>,
 }
 impl ConstraintSetBuilder {
     fn from_sources(no_stdlib: bool, debug: bool) -> ConstraintSetBuilder {
@@ -353,6 +362,8 @@ impl ConstraintSetBuilder {
             debug,
             no_stdlib,
             source: Either::Left(Vec::new()),
+            expand_to: Default::default(),
+            auto_constraints: Default::default(),
         }
     }
 
@@ -367,7 +378,17 @@ impl ConstraintSetBuilder {
                 )
                 .with_context(|| anyhow!("while parsing `{}`", filename))?,
             ),
+            expand_to: Default::default(),
+            auto_constraints: Default::default(),
         })
+    }
+
+    fn expand_to(&mut self, to: ExpansionLevel) {
+        self.expand_to = to;
+    }
+
+    fn auto_constraints(&mut self, auto: &[AutoConstraint]) {
+        self.auto_constraints = auto.to_vec();
     }
 
     fn find_section(root: &Path, section: &str) -> Result<Option<SourceMapping>> {
@@ -378,7 +399,7 @@ impl ConstraintSetBuilder {
             let content = std::fs::read_to_string(&section_file)
                 .with_context(|| anyhow!("reading {}", section_str.yellow().bold()))?;
             info!("adding {}", section_str.bright_white().bold());
-            return Ok(Some(vec![(
+            Ok(Some(vec![(
                 section_file
                     .file_name()
                     .unwrap()
@@ -386,7 +407,7 @@ impl ConstraintSetBuilder {
                     .unwrap()
                     .to_owned(),
                 content,
-            )]));
+            )]))
             // 2. Fail is the file is actually a directory
         } else if section_file.is_dir() {
             bail!(
@@ -506,15 +527,18 @@ impl ConstraintSetBuilder {
         }
     }
 
-    fn to_constraint_set(&self) -> Result<ConstraintSet> {
-        match self.source.as_ref() {
-            Either::Left(sources) => compiler::make(
+    fn to_constraint_set(self) -> Result<ConstraintSet> {
+        let mut cs = match self.source {
+            Either::Left(ref sources) => compiler::make(
                 &self.prepare_sources(sources),
                 &compiler::CompileSettings { debug: self.debug },
             )
             .map(|r| r.1),
-            Either::Right(cs) => Ok(cs.clone()),
-        }
+            Either::Right(cs) => Ok(cs),
+        }?;
+
+        transformer::expand_to(&mut cs, self.expand_to, &self.auto_constraints)?;
+        Ok(cs)
     }
 }
 
@@ -584,6 +608,9 @@ fn main() -> Result<()> {
         panic!("Compile Corset with the `parser` feature to enable the compiler")
     };
 
+    builder.expand_to(args.expand.into());
+    builder.auto_constraints(&AutoConstraint::parse(&args.auto_constraints));
+
     match args.command {
         #[cfg(feature = "exporters")]
         Commands::Go { package, filename } => {
@@ -606,15 +633,11 @@ fn main() -> Result<()> {
         }
         #[cfg(feature = "exporters")]
         Commands::WizardIOP { out_filename } => {
-            let mut constraints = builder.to_constraint_set()?;
-            // transformer::validate_nhood(&mut constraints)?;
-            transformer::lower_shifts(&mut constraints);
-            transformer::expand_ifs(&mut constraints);
-            transformer::expand_constraints(&mut constraints)?;
-            transformer::sorts(&mut constraints)?;
-            transformer::expand_invs(&mut constraints)?;
+            builder.expand_to(ExpansionLevel::top());
+            builder.auto_constraints(AutoConstraint::all());
+            let cs = builder.to_constraint_set()?;
 
-            exporters::wizardiop::render(&constraints, &out_filename)?;
+            exporters::wizardiop::render(&cs, &out_filename)?;
         }
         #[cfg(all(feature = "parser", feature = "exporters"))]
         Commands::Latex {
@@ -635,15 +658,11 @@ fn main() -> Result<()> {
             outfile,
             fail_on_missing,
         } => {
-            let mut constraints = builder.to_constraint_set()?;
-            transformer::validate_nhood(&mut constraints)?;
-            transformer::lower_shifts(&mut constraints);
-            transformer::expand_ifs(&mut constraints);
-            transformer::expand_constraints(&mut constraints)?;
-            transformer::sorts(&mut constraints)?;
-            transformer::expand_invs(&mut constraints)?;
+            builder.expand_to(ExpansionLevel::top());
+            builder.auto_constraints(AutoConstraint::all());
+            let mut cs = builder.to_constraint_set()?;
 
-            compute::compute_trace(&tracefile, &mut constraints, fail_on_missing)
+            compute::compute_trace(&tracefile, &mut cs, fail_on_missing)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
 
             let outfile = outfile.as_ref().unwrap();
@@ -651,8 +670,7 @@ fn main() -> Result<()> {
                 .with_context(|| format!("while creating `{}`", &outfile))?;
 
             let mut out = std::io::BufWriter::with_capacity(10_000_000, &mut f);
-            constraints
-                .write(&mut out)
+            cs.write(&mut out)
                 .with_context(|| format!("while writing to `{}`", &outfile))?;
             out.flush()?;
         }
@@ -738,8 +756,8 @@ fn main() -> Result<()> {
         }
         Commands::Check {
             tracefile,
+            native_arithmetic,
             full_trace,
-            expand,
             report,
             only,
             skip,
@@ -756,30 +774,20 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
-            let mut constraints = builder.to_constraint_set()?;
-            if expand {
-                transformer::validate_nhood(&mut constraints)
-                    .with_context(|| anyhow!("while creating nhood constraints"))?;
-                transformer::lower_shifts(&mut constraints);
-                transformer::expand_ifs(&mut constraints);
-                transformer::expand_constraints(&mut constraints)
-                    .with_context(|| anyhow!("while expanding constraints"))?;
-                transformer::sorts(&mut constraints)
-                    .with_context(|| anyhow!("while creating sorting constraints"))?;
-                transformer::expand_invs(&mut constraints)
-                    .with_context(|| anyhow!("while expanding inverses"))?;
-            }
+            let mut cs = builder.to_constraint_set()?;
 
-            compute::compute_trace(&tracefile, &mut constraints, false)
+            compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
-
+            if native_arithmetic {
+                transformer::concretize(&mut cs);
+            }
             check::check(
-                &constraints,
+                &cs,
                 &only,
                 &skip,
                 args.verbose.log_level_filter() >= log::Level::Warn
                     && std::io::stdout().is_terminal(),
-                expand,
+                ExpansionLevel::from(args.expand) >= ExpansionLevel::ExpandInvs,
                 check::DebugSettings::new()
                     .unclutter(unclutter)
                     .dim(dim)
@@ -795,23 +803,27 @@ fn main() -> Result<()> {
             info!("{}: SUCCESS", tracefile)
         }
         #[cfg(feature = "inspector")]
-        Commands::Inspect { tracefile } => {
+        Commands::Inspect {
+            tracefile,
+            native_arithmetic,
+        } => {
             if utils::is_file_empty(&tracefile)? {
                 warn!("`{}` is empty, exiting", tracefile);
                 return Ok(());
             }
-            let mut constraints = builder.to_constraint_set()?;
+            let mut cs = builder.to_constraint_set()?;
 
-            compute::compute_trace(&tracefile, &mut constraints, false)
+            compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
+            if native_arithmetic {
+                transformer::concretize(&mut cs);
+            }
 
-            inspect::inspect(&constraints)
+            inspect::inspect(&cs)
                 .with_context(|| format!("while checking {}", tracefile.bright_white().bold()))?;
             info!("{}: SUCCESS", tracefile)
         }
         Commands::Debug {
-            expand,
-            expand_all,
             show_modules,
             show_constants,
             show_columns,
@@ -822,35 +834,14 @@ fn main() -> Result<()> {
             only,
             skip,
         } => {
-            let mut constraints = builder.to_constraint_set()?;
-            if expand.contains(&"nhood".into()) || expand_all {
-                transformer::validate_nhood(&mut constraints)
-                    .with_context(|| anyhow!("while creating nhood constraints"))?;
-            }
-            if expand.contains(&"lower-shifts".into()) || expand_all {
-                transformer::lower_shifts(&mut constraints);
-            }
-            if expand.contains(&"ifs".into()) || expand_all {
-                transformer::expand_ifs(&mut constraints);
-            }
-            if expand.contains(&"constraints".into()) || expand_all {
-                transformer::expand_constraints(&mut constraints)
-                    .with_context(|| anyhow!("while expanding constraints"))?;
-            }
-            if expand.contains(&"permutations".into()) || expand_all {
-                transformer::sorts(&mut constraints)
-                    .with_context(|| anyhow!("while creating sorting constraints"))?;
-            }
-            if expand.contains(&"inverses".into()) || expand_all {
-                transformer::expand_invs(&mut constraints)
-                    .with_context(|| anyhow!("while expanding inverses"))?;
-            }
             if !show_columns && !show_constraints {
                 error!("no elements specified to debug");
             }
 
+            let cs = builder.to_constraint_set()?;
+
             exporters::debugger::debug(
-                &constraints,
+                &cs,
                 exporters::debugger::DebugSettings {
                     modules: show_modules,
                     constants: show_constants,

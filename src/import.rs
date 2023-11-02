@@ -1,14 +1,11 @@
 use super::compiler::{ColumnRef, Magma};
+use crate::column::Value as CValue;
 use anyhow::*;
 use cached::Cached;
 use flate2::bufread::GzDecoder;
 use log::*;
 use logging_timer::time;
 use owo_colors::OwoColorize;
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
 use serde_json::Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
@@ -92,21 +89,23 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
 }
 
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
-fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
+fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
     let mut cache_num = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut cache_str = cached::SizedCache::with_size(200000); // ~1.60MB cache
-    let mut r = vec![Fr::zero()];
+    let mut r = vec![CValue::zero()];
     let xs = xs
         .iter()
         .map(|x| match x {
-            Value::Number(n) => cache_num
-                .cache_get_or_set_with(n, || Fr::from_str(&n.to_string()))
-                .with_context(|| format!("while parsing Fr from Number `{:?}`", x))
-                .and_then(|x| crate::utils::validate(t, x)),
-            Value::String(s) => cache_str
-                .cache_get_or_set_with(s, || Fr::from_str(s))
-                .with_context(|| format!("while parsing Fr from String `{:?}`", x))
-                .and_then(|x| crate::utils::validate(t, x)),
+            Value::Number(n) => t.rm().validate(
+                cache_num
+                    .cache_get_or_set_with(n, || CValue::from_str(&n.to_string()).unwrap())
+                    .to_owned(),
+            ),
+            Value::String(s) => t.rm().validate(
+                cache_str
+                    .cache_get_or_set_with(s.clone(), || CValue::from_str(&s).unwrap())
+                    .to_owned(),
+            ),
             _ => bail!("expected numeric value, found `{}`", x),
         })
         .collect::<Result<Vec<_>>>()?;
@@ -119,9 +118,9 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
 }
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
-fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
+fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
     let mut cache = cached::SizedCache::with_size(200000); // ~1.60MB cache
-    let mut r = vec![Fr::zero()];
+    let mut r = vec![CValue::zero()];
     let xs = xs
         .iter()
         .map(|x| {
@@ -136,10 +135,11 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<Fr>> {
                 Value::String(s) => s.to_string(),
                 _ => bail!("expected numeric value, found `{}`", x),
             };
-            cache
-                .cache_get_or_set_with(s.clone(), || Fr::from_str(&s))
-                .with_context(|| format!("while parsing Fr from `{:?}`", x))
-                .and_then(|x| crate::utils::validate(t, x))
+            t.rm().validate(
+                cache
+                    .cache_get_or_set_with(s.clone(), || CValue::from_str(&s).unwrap())
+                    .to_owned(),
+            )
         })
         .collect::<Result<Vec<_>>>()?;
     r.extend(xs);
@@ -176,16 +176,16 @@ pub fn fill_traces(
                 let module = path[path.len() - 2].to_string();
                 let handle: ColumnRef = Handle::new(&module, &path[path.len() - 1]).into();
                 // The first column sets the size of its module
-                let module_raw_size = cs.raw_len_for_or_set(&module, xs.len() as isize);
+                let module_raw_size = cs.effective_len_or_set(&module, xs.len() as isize);
 
                 // The min length can be set if the module contains range
                 // proofs, that require a minimal length of a certain power of 2
                 let module_min_len = cs.columns.min_len.get(&module).cloned().unwrap_or(0);
-                let module_spilling = cs.spilling_for(&handle);
+                let module_spilling = cs.spilling_for_column(&handle);
 
                 if let Result::Ok(Column {
                     t, padding_value, ..
-                }) = cs.columns.get_col(&handle)
+                }) = cs.columns.column(&handle)
                 {
                     trace!("inserting {} ({})", handle, xs.len());
                     if let Some(first_column) = initiator.as_mut() {
@@ -218,12 +218,12 @@ pub fn fill_traces(
                     if xs.len() < module_min_len {
                         xs.reverse();
                         xs.resize_with(module_min_len, || {
-                            padding_value.map(|v| v.1).unwrap_or_default()
+                            padding_value.clone().unwrap_or_default()
                         });
                         xs.reverse();
                     }
                     cs.columns.set_column_value(&handle, xs, module_spilling)?
-                } else if let Some(Register { magma, .. }) = cs.columns.get_register(&handle) {
+                } else if let Some(Register { magma, .. }) = cs.columns.register(&handle) {
                     let module_spilling = module_spilling
                         .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 
@@ -247,7 +247,7 @@ pub fn fill_traces(
                     // no need to trigger a more complex padding system.
                     if xs.len() < module_min_len {
                         xs.reverse();
-                        xs.resize(module_min_len, Fr::zero()); // TODO: register padding values
+                        xs.resize(module_min_len, CValue::zero()); // TODO: register padding values
                         xs.reverse();
                     }
                     cs.columns

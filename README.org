@@ -62,14 +62,14 @@ Columns are the basic building block of Corset programs, as they represent the v
     X Y Z)
 
   ;; Columns may have a type
-  (defcolumns A (B :BOOLEAN) (C :NIBBLE))
+  (defcolumns A (B :bool) (C :nibble))
 
   ;; Columns can be scalar...
   (defcolumns VALUE)
   (defconstraint () pipo (eq VALUE 3))
 
   ;; ...or array-like
-  (defcolumns (VALUES :ARRAY[5]))
+  (defcolumns (VALUES[5]))
 
   ;; Array domains can be defined using several syntaxes
   (defcolumns
@@ -78,13 +78,13 @@ Columns are the basic building block of Corset programs, as they represent the v
     (EXAMPLE3[2:10:2])  ;; start:end:step:   EXAMPLE3 is defined over {2, 4, 6, 8, 10}
     (EXAMPLE4{1 6 8}))  ;; diescrete domain: EXAMPLE4 is defined over {1, 6, 8}
 
-  ;; Array columns are indexed using the nth function
+  ;; Array columns are indexed using square brackets
   (defconstraint foo ()
-    (eq (nth EXAMPLE1 2) (nth EXAMPLE4 6)))
+    (eq [EXAMPLE1 2] [EXAMPLE4 6]))
 
   ;; Array accesses are checked at compile time
   (defconstraint will-fail ()
-    (nth EXAMPLE4 2)) ;; 2 ∉ {1, 6, 8}
+    [EXAMPLE4 2]) ;; 2 ∉ {1, 6, 8}
 #+end_src
 *** Functions
 Functions can be defined to factorize common operations. This is done using the ~defun~ form, specifying the name of the function and its (optional) parameters.
@@ -98,7 +98,7 @@ Functions can be defined to factorize common operations. This is done using the 
 
   ;; A == B == C[2]
   (defconstraint alpha ()
-    (eq3 A B (nth C 2)))
+    (eq3 A B [C 2]))
 
 
   (defun (large-operation T U V i k)
@@ -109,14 +109,14 @@ Functions can be defined to factorize common operations. This is done using the 
   ;; Factorize big constraints
   (defconstraint () beta
     (begin
-     (large-operation A (nth C 1))
-     (large-operation A (nth C 3))
-     (large-operation A (nth C 2))))
+     (large-operation A [C 1])
+     (large-operation A [C 3])
+     (large-operation A [C 2])))
 
   ;; Functions can be combined with for
   (defconstraint () beta-prime
     (for i [3]
-         (large-operation A (nth C i))))
+         (large-operation A [C i])))
 #+end_src
 **** Pure Functions
 Functions close over their environment, and thus capture or shadow columns accessible from their declaration point, which are available within the body, along the function parameters.
@@ -129,32 +129,6 @@ In contrast, *pure functions* can only operate on their arguments and constants,
 
   (defpurefun (f X) (eq X W)) ;; OK
   (defpurefun (f X) (eq X A)) ;; KO: f can not access A
-#+end_src
-*** Aliases
-Aliases create new bindings of an existing column or function under a new name. While the aliased object behaves exactly as its target does, it may prove easier to read in certain contexts.
-**** Column Aliases
-Column aliases are defined using the ~defalias~ function, which takes one or more pairs of ~ALIAS TARGET~ pairs.
-#+begin_src lisp
-  (defcolumn T)
-  (defalias U T)
-  ;; U now behaves like T
-
-  (defcolumns A B C)
-  (defalias
-    X A
-    Y B
-    Z C)
-  ;; (X, Y, Z) now behave like (A, B, C)
-#+end_src
-**** Function Aliases
-Function aliases, defined using the ~defunalias~ function, work the same way as column aliases, but act on functions instead of columns.
-#+begin_src lisp
-  (defcolumns A B)
-
-  (defunalias minus sub)
-  ;; minus now behaves just like sub
-  (defconstraint () always-true
-    (eq (sub A B) (minus A B)))
 #+end_src
 *** Constraints
 Constraints are the parts of a Corset program that will be compiled and featured in the final product, and represent an epxression of the defined columns that should always evaluate to 0. Their definitions follow the syntax ~(defconstraint NAME (LIMITERS) EXPRESSION)~.
@@ -181,202 +155,4 @@ In order to avoid name conflicts, Corset offers an optional module system allowi
 
   (defcolumns A B) ;; A & B now exist in shabang, distinct from the previously declared A & B
   (defconstraint foobar (eq A B)) ;; will now work
-#+end_src
-
-** The Standard library
-Unless specified otherwise (by using the ~--no-stdlib~ flag when invoking the Corset compiler), Corset provides a set of base functions.
-*** Boolean Operators
-The boolean operators work under the assumption that their operands are binary.
-  - ~(not x)~
-  - ~(eq x y)~
-  - ~(neq x y)~
-  - ~(and x y)~
-  - ~(or x y)~
-  - ~(xor x y)~
-  - ~(is-binary x)~
-*** Special Forms
-**** ~nth~
-The ~nth~ function is used to access an element of a column array.
-#+begin_src lisp
-  (defcolumns A B[1:3])
-
-  (defconstraint foo (1 2)
-    (eq A (nth B 2)))
-
-  ;; Creates a function accessing the i-th element of B
-  (defun (nth-B i) (nth B i))
-
-  (defconstraint bar ()
-    (eq A (nth-B 2)))
-#+end_src
-**** ~begin~
-The ~begin~ forms define a list of conditions that should all be verified. They are useful /e.g./ in function definitions or within ~if~ branches.
-#+begin_src lisp
-  (defcolumns A B C)
-
-  (defconstraint foo ()
-    (begin  ;; the two following constraints must be verfiied
-     (eq A B)
-     (eq A C)))
-
-  (defun (two-change X Y)
-      (begin
-       (did-change X)
-       (did-change Y)))
-
-  (defconstraint bar ()
-    (two-change A B))
-#+end_src
-It should be noted that ~begin~ will automatically flatten its argument; /i.e./ if one of its arguments is already a ~begin~ form, then its element will be added piecewise to the outer ~begin~ instead of forming a list containing another list.
-**** ~for~
-The ~for~ forms generate similar constraints, parametrized by the specified iteration variable, corresponding to the provided range.
-#+begin_src lisp
-  (defcolumns A[4] C[2:4])
-
-
-  ;; Range syntax is identical to the one used in DEFCOLUMNS
-  ;; ∀i, A[i] = i
-  (defconstraint alpha ()
-    (for i [4] (eq (nth A i) i)))
-
-
-  (defun (same-at-i X Y i)
-      (eq (nth X i) (nth Y i)))
-
-  ;; A[2] = C[2] && A[4] = C[4]
-  (defconstraint beta ()
-    (for i {2 4} (same-at-i A C i)))
-
-  ;; For forms can be nested
-  ;; A[1, 3] ⨯ C[2, 4] = constant
-  (defconstraint gamma ()
-    (for i [1:4:2]
-         (for j {2 4}
-              (eq (nth A i) (nth C j)))))
-
-#+end_src
-**** ~force-bool~
-The ~force-bool~ form forces the type of its argument to coalesce to boolean.
-
-The main use for this form is to trigger optimization by forcing type inference that can not be performed automatically. For instance, given two boolean columns ~B1~ and ~B2~ that happen to be mutually exclusive, the type system can not determine that ~(+ B1 B2)~ is also boolean. However, ~(force-bool (+ B1 B2))~ will ensure that this expression is typed as boolean, and will thus trigger related optimizations, typically as ~if-zero~ conditions.
-*** Branching Forms
-Corset features several branching operations. Although they ought to be simplified in coming revisions of Corset, they are still quite clumsy.
-**** Branching Forms
-Branching forms reproduce the classical ~if COND then A [else B]~ scheme. If ~A~ or ~B~ contain several several sub-statements, then they must be wrapped in a ~begin~ form.
-***** Binary Forms
-The behavior of these forms is only guaranteed if ~COND~ is binary.
-  - ~(bin-if-zero COND A [B])~
-  - ~(bin-if-not-zero COND A [B])~
-***** Generic Forms
-The behavior of these forms is defined in any case, but they are less performant than their ~-binary~ counterpart.
-  - ~(if-zero COND A [B])~
-  - ~(if-not-zero COND A [B])~
-
-*** Chronological Operations
-Chronological operations define constraints on the temporal evolution of a column.
-  - ~(did-change x)~ ensures that $X_{i-1} \neq X_{i}$
-  - ~(didnt-change x)~ (or ~remains-constant~) ensures that $X_{i-1} = X$
-  - ~(will-eq x y)~ ensures that $X_{i+1} = Y$
-  - ~(was-eq x y)~ ensures that $X_{i-1} = Y$
-  - ~(inc x k)~ ensures that $X_{i+1} = X_{i} + k$
-  - ~(dec x k)~ ensures that $X_{i+1} = X_{i} - k$
-
-*** PLookups
-PLookup constraints are defined using the ~defplookup~ form, which takes two lists of columns or column expressions that must be included one in the other, following this format:
-#+begin_src lisp
-  (defcolumns A B C P Q R)
-
-;; (defplookup NAME (parents...) (children...))
-  (defplookup plookup-1 (A C) (Q R))
-  (defplookup another-name (A B) ((* 2 Q) (+ Q R)))
-#+end_src
-
-* Compiling Constraint Systems
-Although Corset can simply dynamically recompile programs on every invocation, it is much faster to compile a constraint system to a single file and reuse it for later invocations.
-
-This is accomplished with the ~compile~ subcommand:
-#+begin_src
-Usage: corset compile [OPTIONS] --out <OUTFILE> [SOURCE]...
-
-Arguments:
-  [SOURCE]...  Either a file or a string containing the Corset code to process
-
-Options:
-  -o, --out <OUTFILE>      cCreate a compiled Corset file
-  -v, --verbose...         More output per occurrence
-  -q, --quiet...           Less output per occurrence
-      --debug              Compile code in debug mode
-      --allow-dups         Whether to allow re-declaration of symbols
-  -t, --threads <THREADS>  Number of threads to use [default: 1]
-  -h, --help               Print help information
-  -V, --version            Print version information
-#+end_src
-* Checking Traces
-Corset can be used to ensure that a trace, or a set of columns, actually satisfies the constraints defined in a Corset program, using the ~check~ command.
-#+begin_src
-  Usage: corset check [OPTIONS] --trace <TRACEFILE> [SOURCE]...
-
-Arguments:
-  [SOURCE]...  Either a file or a string containing the Corset code to process
-
-Options:
-  -T, --trace <TRACEFILE>        the trace to compute & verify
-  -v, --verbose...               More output per occurrence
-  -F, --trace-full               print all the module columns on error
-  -q, --quiet...                 Less output per occurrence
-      --debug                    Compile code in debug mode
-  -E, --expand                   perform all expansion operations before checking
-      --allow-dups               Whether to allow re-declaration of symbols
-      --no-abort                 continue checking a constraint after it met an error
-      --only <ONLY>              only check these constraints
-  -t, --threads <THREADS>        number of threads to use [default: 1]
-      --skip <SKIP>              skip these constraints
-  -S, --trace-span <TRACE_SPAN>  [default: 3]
-  -h, --help                     Print help information
-  -V, --version                  Print version information
-#+end_src
-* Exporting Corset Constraint Systems
-Corset programs can be exported in multiple formats. For now, backends are provided to export in LaTeX, in zkGeth-compatible Go, or in Wizard-IOP Go.
-* An Example
-** General Example of a Corset Program
-#+begin_src lisp
-  ;; User-defined function
-  (defun (vanishes x) x)
-
-  ;; List the columns used
-  (defcolumns
-    ALPHA DELTA
-    HEIGHT HEIGHT_UNDER HEIGHT_OVER
-    STACK_EXCEPTION STACK_UNDERFLOW_EXCEPTION STACK_OVERFLOW_EXCEPTION)
-
-  ;; Define aliases for some columns
-  (defalias
-    HU HEIGHT_UNDER
-    HO HEIGHT_OVER
-    SUX STACK_UNDERFLOW_EXCEPTION
-    SOX STACK_OVERFLOW_EXCEPTION
-    SEX STACK_EXCEPTION)
-
-  ;; Implements HU = (2*SUX - 1)*(DELTA - HEIGHT) - SUX
-  (defconstraint height-under ()
-    (= HU
-       (- (* (- (* 2 STACK_UNDERFLOW_EXCEPTION) 1)
-             (- DELTA HEIGHT))
-          STACK_UNDERFLOW_EXCEPTION)))
-
-  ;; SUX and SOX are mutually exclusive
-  (defconstraint sux-xor-sox ()
-    (if-non-zero STACK_UNDERFLOW_EXCEPTION
-                 STACK_OVERFLOW_EXCEPTION))
-
-  ;; (SUX == 0) ==> HO = (2*SOX - 1)*(HEIGHT_UNDER + ALPHA - 1024) - SOX
-  (defconstraint sux-0 ()
-    (vanishes (if-zero SUX (= HO (- (* (- (* 2 SOX) 1)
-                                       (- (+ HU ALPHA) 1024))
-                                    SOX)))))
-
-  ;; If SUX or SOX is set, then SEX is set; and they are mutually exclusive
-  (defconstraint ifSuxOrSoxThenSex ()
-    (= SEX
-       (+ SOX SUX)))
 #+end_src

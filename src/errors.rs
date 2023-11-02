@@ -1,6 +1,6 @@
 use super::pretty::Pretty;
+use crate::column::Value;
 use owo_colors::OwoColorize;
-use pairing_ce::bn256::Fr;
 use thiserror::Error;
 
 use crate::{
@@ -12,6 +12,9 @@ use crate::{
 pub(crate) enum CompileError<'a> {
     #[error("{}", compiler::make_type_error_msg(.0, .1, .2))]
     TypeError(String, &'a [&'a [Type]], Vec<Type>),
+
+    #[error("{} expects a condition, found {}", .0, .1.red().bold())]
+    ConditioningError(String, Type),
 
     #[error("{} is never used", .0.pretty())]
     NotUsed(Handle),
@@ -29,7 +32,7 @@ pub enum RuntimeError<'a> {
     NotComputed(Handle),
 
     #[error("expected a {} value, found {}", .0.white().bold(), .1.pretty().red())]
-    InvalidValue(&'a str, Fr),
+    InvalidValue(&'a str, Value),
 
     #[error("expected an array, found {:?}", .0)]
     NotAnArray(Expression),
@@ -80,7 +83,7 @@ pub(crate) mod compiler {
                 .zip(found.iter())
                 .map(|(e, f)| {
                     if e >= f {
-                        e.black().to_string()
+                        e.white().to_string()
                     } else {
                         e.blue().to_string()
                     }
@@ -96,7 +99,7 @@ pub(crate) mod compiler {
                 .zip(found.iter())
                 .map(|(e, f)| {
                     if e >= f {
-                        f.black().to_string()
+                        f.white().to_string()
                     } else {
                         f.red().to_string()
                     }

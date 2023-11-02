@@ -1,23 +1,140 @@
+mod concretize;
 mod ifs;
 mod inverses;
 mod nhood;
 mod selectors;
-mod shifter;
 mod sort;
+mod splatter;
 mod statics;
 
-pub use ifs::expand_ifs;
-pub use inverses::expand_invs;
-pub use nhood::validate_nhood;
-pub use selectors::expand_constraints;
-pub use shifter::lower_shifts;
-pub use sort::sorts;
+use anyhow::*;
+use log::*;
+
+pub use concretize::concretize;
+use ifs::expand_ifs;
+use inverses::expand_invs;
+use nhood::validate_nhood;
+use selectors::expand_constraints;
+use sort::sorts;
+use splatter::splatter;
 pub use statics::precompute;
 
 use crate::{
-    compiler::{Expression, Intrinsic, Kind, Magma, Node},
+    compiler::{ConstraintSet, Expression, Intrinsic, Kind, Magma, Node},
     structs::Handle,
 };
+
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum AutoConstraint {
+    Sorts = 1,
+    Nhood = 2,
+}
+impl AutoConstraint {
+    pub fn apply(&self, cs: &mut ConstraintSet) -> Result<()> {
+        if (cs.transformations & *self as u32) == 0 {
+            info!("Applying {:?}", self);
+            match self {
+                AutoConstraint::Sorts => sorts(cs)?,
+                AutoConstraint::Nhood => validate_nhood(cs)?,
+            }
+            cs.auto_constraints |= *self as u32;
+        }
+        Ok(())
+    }
+
+    pub fn parse(args: &[String]) -> Vec<AutoConstraint> {
+        args.iter()
+            .map(|s| AutoConstraint::from(s.as_str()))
+            .collect()
+    }
+
+    pub fn all() -> &'static [AutoConstraint] {
+        &[AutoConstraint::Sorts, AutoConstraint::Nhood]
+    }
+}
+impl From<&str> for AutoConstraint {
+    fn from(s: &str) -> Self {
+        match s {
+            "sorts" => AutoConstraint::Sorts,
+            "nhood" => AutoConstraint::Nhood,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Copy, Clone)]
+pub(crate) enum ExpansionLevel {
+    None = 0,
+    ExpandsIfs = 1,
+    Splatter = 2,
+    ColumnizeExpressions = 4,
+    ExpandInvs = 8,
+}
+impl Default for ExpansionLevel {
+    fn default() -> Self {
+        ExpansionLevel::None
+    }
+}
+impl From<u8> for ExpansionLevel {
+    fn from(x: u8) -> Self {
+        match x {
+            0 => ExpansionLevel::None,
+            1 => ExpansionLevel::ExpandsIfs,
+            2 => ExpansionLevel::Splatter,
+            3 => ExpansionLevel::ColumnizeExpressions,
+            4 | _ => ExpansionLevel::ExpandInvs,
+        }
+    }
+}
+impl ExpansionLevel {
+    pub fn all() -> u8 {
+        5
+    }
+
+    pub fn top() -> ExpansionLevel {
+        u8::MAX.into()
+    }
+
+    pub fn apply(&self, cs: &mut ConstraintSet) -> Result<()> {
+        if (cs.transformations & *self as u32) == 0 {
+            info!("Applying {:?}", self);
+            match self {
+                ExpansionLevel::None => {}
+                ExpansionLevel::ExpandsIfs => expand_ifs(cs),
+                ExpansionLevel::Splatter => splatter(cs),
+                ExpansionLevel::ColumnizeExpressions => expand_constraints(cs)?,
+                ExpansionLevel::ExpandInvs => expand_invs(cs)?,
+            }
+            cs.transformations |= *self as u32;
+        }
+
+        Ok(())
+    }
+}
+
+pub(crate) fn expand_to(
+    cs: &mut ConstraintSet,
+    level: ExpansionLevel,
+    auto_constraints: &[AutoConstraint],
+) -> Result<()> {
+    for c in auto_constraints.iter() {
+        c.apply(cs)?;
+    }
+
+    for transformation in [
+        ExpansionLevel::ExpandsIfs,
+        ExpansionLevel::Splatter,
+        ExpansionLevel::ColumnizeExpressions,
+        ExpansionLevel::ExpandInvs,
+    ] {
+        if level >= transformation {
+            transformation.apply(cs)?;
+        }
+    }
+
+    cs.convert_refs_to_ids()?;
+    cs.validate()
+}
 
 fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
     cs.push(
@@ -27,7 +144,7 @@ fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
                 Node::column()
                     .handle(x_col.to_owned())
                     .kind(Kind::Composite(Box::new(x_expr.clone())))
-                    .t(Magma::Integer)
+                    .t(Magma::native())
                     .build(),
             ])
             .unwrap(),
@@ -35,9 +152,10 @@ fn validate_computation(cs: &mut Vec<Node>, x_expr: &Node, x_col: &Handle) {
 }
 
 fn expression_to_name(e: &Node, prefix: &str) -> String {
-    format!("{}_{}", prefix, e).replace(' ', "_")
+    format!("C/{}[{}]", prefix, e)
 }
 
+/// Wraps `ex` into a `List` if it is not already one.
 fn wrap(ex: Node) -> Node {
     match ex.e() {
         Expression::List(_) => ex,

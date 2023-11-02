@@ -8,14 +8,10 @@ use std::collections::HashSet;
 
 use anyhow::*;
 use log::*;
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 
 use crate::{
-    column::ColumnSet,
-    compiler::{Constraint, ConstraintSet, Domain, Expression, Node},
+    column::{ColumnSet, Value, ValueBacking},
+    compiler::{Constraint, ConstraintSet, Domain, EvalSettings, Expression, Node},
     pretty::*,
     structs::Handle,
 };
@@ -128,19 +124,20 @@ fn columns_len(
     if cols_lens.is_empty() {
         return Ok(None);
     }
-    // Early exit if all the columns are empty: the module is not triggered
-    // Ideally, this should be an `all` rather than an `any`, but the ID
-    // pushes columns that will always be filled.
-    if cols_lens.iter().any(|l| l.is_none()) {
+
+    if cols_lens.iter().all(|l| l.is_none()) {
         debug!("Skipping constraint `{}` with empty columns", name);
         return Ok(None);
     }
+
     if !cols_lens
         .iter()
+        .filter(|l| l.is_some())
         .all(|&l| l.unwrap_or_default() == cols_lens[0].unwrap_or_default())
     {
         error!(
-            "all columns are not of the same length:\n{}",
+            "all columns in {} are not of the same length:\n{}",
+            expr,
             expr.dependencies()
                 .iter()
                 .map(|handle| format!(
@@ -226,7 +223,10 @@ fn fail(
                 .chain(handles.iter().map(|handle| {
                     cs.columns
                         .get(handle, j, true)
-                        .map(|x| x.pretty_with_base(cs.columns.get_col(handle).unwrap().base))
+                        .map(|x| {
+                            x.pretty_with_base(cs.columns.column(handle).unwrap().base)
+                                .to_string()
+                        })
                         .unwrap_or_else(|| "nil".into())
                 }))
                 .collect(),
@@ -263,7 +263,7 @@ fn fail(
             + &expr.debug(
                 &|n| n.eval(
                     i,
-                    &mut |handle, i, wrap| cs.columns.get(handle, i, wrap).cloned(),
+                    |handle, i, wrap| cs.columns.get(handle, i, wrap),
                     &mut None,
                     &Default::default(),
                 ),
@@ -280,14 +280,14 @@ fn check_constraint_at(
     i: isize,
     wrap: bool,
     fail_on_oob: bool,
-    cache: &mut Option<SizedCache<Fr, Fr>>,
+    cache: &mut Option<SizedCache<Value, Value>>,
     settings: DebugSettings,
 ) -> Result<()> {
     let r = expr.eval(
         i,
-        &mut |handle, i, wrap| cs.columns.get_raw(handle, i, wrap).cloned(),
+        |handle, i, wrap| cs.columns.get_raw(handle, i, wrap),
         cache,
-        &Default::default(),
+        &EvalSettings::new().wrap(wrap),
     );
     if let Some(r) = r {
         if !r.is_zero() {
@@ -299,14 +299,14 @@ fn check_constraint_at(
     Ok(())
 }
 
-fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Fr) -> Result<()> {
+fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Value) -> Result<()> {
     let l = columns_len(expr, columns, name, false)?;
     if let Some(l) = l {
         for i in 0..l as isize {
             let r = expr
                 .eval(
                     i,
-                    &mut |handle, i, wrap| columns.get_raw(handle, i, wrap).cloned(),
+                    |handle, i, wrap| columns.get_raw(handle, i, wrap),
                     &mut None,
                     &Default::default(),
                 )
@@ -368,28 +368,18 @@ fn check_constraint(
 
 fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Result<()> {
     // Compute the LC \sum_k (k+1) × x_k[i]
-    fn pseudo_rlc(cols: &[Vec<Fr>], i: usize) -> Fr {
-        let mut ax = Fr::zero();
+    fn pseudo_rlc(cols: &[&ValueBacking], i: usize, columns: &ColumnSet) -> Value {
+        let mut ax = Value::zero();
+
         for (j, col) in cols.iter().enumerate() {
-            let mut x = Fr::from_str(&(j + 2).to_string()).unwrap();
-            x.mul_assign(&col[i]);
+            let mut x = Value::from(j + 2);
+            let mut col_value = col.get(i as isize, false, columns).unwrap();
+            col_value.to_bi();
+
+            x.mul_assign(&col_value);
             ax.add_assign(&x);
         }
         ax
-    }
-
-    // Given a list of column expression to PLookup, retrieve the corresponding values
-    fn compute_cols(exps: &[Node], cs: &ConstraintSet) -> Result<Vec<Vec<Fr>>> {
-        let cols = exps
-            .iter()
-            .map(|e| crate::compute::compute_composite_static(cs, e))
-            .collect::<Result<Vec<_>>>()
-            .with_context(|| anyhow!("while computing {:?}", exps))?;
-        if !cols.iter().all(|p| p.len() == cols[0].len()) {
-            bail!("all columns should be of the same length")
-        }
-
-        Ok(cols)
     }
 
     // Check that we have the same number of columns; should be guaranteed by the com
@@ -410,44 +400,83 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
         .all(|l| l == 0);
     match (children_empty, parent_empty) {
         (true, true) | (true, false) => {
-            debug!("empty plookup found; skipping");
+            warn!("empty plookup found; skipping");
             return Ok(());
         }
         (false, true) => bail!(
             "parents ({}) are empty, but not children",
-            parents.iter().map(|p| p.to_string()).join(", ")
+            parents.iter().map(|p| p.pretty()).join(", ")
         ),
         (false, false) => {}
     }
 
-    // Compute the final columns
-    let parent_cols = compute_cols(parents, cs)?;
-    let child_cols = compute_cols(children, cs)?;
-    if parent_cols.get(0).map(|c| c.len()).unwrap_or(0) == 0
-        || child_cols.get(0).map(|c| c.len()).unwrap_or(0) == 0
+    let parent_cols = parents
+        .iter()
+        .map(|n| {
+            if let Expression::Column { handle, .. } = n.e() {
+                handle
+            } else {
+                unreachable!()
+            }
+        })
+        .collect::<Vec<_>>();
+    let child_cols = parents
+        .iter()
+        .map(|n| {
+            if let Expression::Column { handle, .. } = n.e() {
+                handle
+            } else {
+                unreachable!()
+            }
+        })
+        .collect::<Vec<_>>();
+    if parent_cols
+        .get(0)
+        .map(|p| cs.columns.register_of(p).len().unwrap())
+        .unwrap_or(0)
+        == 0
+        || child_cols
+            .get(0)
+            .map(|c| cs.columns.register_of(c).len().unwrap())
+            .unwrap_or(0)
+            == 0
     {
         warn!("empty lookup; skipping");
         return Ok(());
     }
 
-    let hashes: HashSet<_> = (0..parent_cols[0].len())
-        .map(|i| pseudo_rlc(&parent_cols, i))
+    let parent_backings = parent_cols
+        .iter()
+        .map(|h| cs.columns.backing(h).unwrap())
+        .collect::<Vec<_>>();
+
+    let child_backings = child_cols
+        .iter()
+        .map(|h| cs.columns.backing(h).unwrap())
+        .collect::<Vec<_>>();
+
+    let hashes: HashSet<_> = (0..parent_backings.iter().find_map(|p| p.len()).unwrap())
+        .map(|i| pseudo_rlc(&parent_backings, i, &cs.columns))
         .collect();
 
-    for i in 0..child_cols[0].len() {
-        if !hashes.contains(&pseudo_rlc(&child_cols, i)) {
+    for i in 0..child_backings.iter().find_map(|c| c.len()).unwrap() {
+        if !hashes.contains(&pseudo_rlc(&child_backings, i, &cs.columns)) {
             bail!(
                 "@{}: {{\n{}\n}} not found in {{{}}}",
                 i,
                 children
                     .iter()
-                    .zip(child_cols.iter().map(|c| c[i].pretty()))
-                    .map(|(handle, value)| format!("{}: {}", handle.pretty(), value))
+                    .zip(
+                        child_backings
+                            .iter()
+                            .map(|v| v.get(i as isize, false, &cs.columns).unwrap())
+                    )
+                    .map(|(handle, value)| format!("{}: {}", handle.pretty(), value.pretty()))
                     .collect::<Vec<_>>()
                     .join("\n"),
                 parents
                     .iter()
-                    .map(|handle| format!("{}", handle.pretty()))
+                    .map(|handle| handle.pretty())
                     .collect::<Vec<_>>()
                     .join(", ")
             );
@@ -586,6 +615,9 @@ pub fn check(
                     } else {
                         None
                     }
+                }
+                Constraint::Normalization { .. } => {
+                    todo!()
                 }
             }
         })

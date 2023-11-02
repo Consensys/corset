@@ -3,7 +3,9 @@ use std::collections::HashMap;
 
 use crate::{
     column::{Column, Computation},
-    compiler::{ColumnRef, Constraint, ConstraintSet, Domain, Intrinsic, Kind, Magma, Node},
+    compiler::{
+        ColumnRef, Constraint, ConstraintSet, Domain, Intrinsic, Kind, Magma, Node, RawMagma,
+    },
     pretty::Base,
     structs::Handle,
 };
@@ -19,7 +21,7 @@ fn process_nhood(
         Column::builder()
             .handle(Handle::new(module, format!("AUX_2_{}_HOOD", n)))
             .kind(Kind::Phantom)
-            .t(Magma::Integer) // TODO: tighten for GL
+            .t(Magma::integer(n as usize + 1))
             .build(),
     )?;
     cs.computations.insert(
@@ -68,7 +70,7 @@ fn process_nhood(
         .handle(srt_intrld_aux_xs_id.clone())
         .kind(Kind::Phantom)
         .base(Base::Dec)
-        .t(Magma::Byte)
+        .t(Magma::byte())
         .build();
 
     cs.constraints.push(Constraint::Vanishes {
@@ -98,12 +100,12 @@ fn process_nhood(
         expr: Box::new(Intrinsic::Mul.call(&[
             // SRT_ILD_[i+1] - SRT_ILD_[i]
             Intrinsic::Sub.call(&[
-                Intrinsic::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)])?,
+                srt_intrld_aux_xs_node.clone().shift(1),
                 srt_intrld_aux_xs_node.clone(),
             ])?,
             // SRT_ILD_[i+1] - (SRT_ILD_[i] + 1)
             Intrinsic::Sub.call(&[
-                Intrinsic::Shift.call(&[srt_intrld_aux_xs_node.clone(), Node::from_const(1)])?,
+                srt_intrld_aux_xs_node.clone().shift(1),
                 Intrinsic::Add.call(&[srt_intrld_aux_xs_node, Node::from_const(1)])?,
             ])?,
         ])?),
@@ -119,12 +121,12 @@ pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
     for (h, c) in cs.columns.iter() {
         // only atomic columns (i.e. filled from traces) are of interest here
         if c.kind == Kind::Atomic {
-            match c.t {
-                Magma::Nibble => nibble_columns
+            match c.t.rm() {
+                RawMagma::Nibble => nibble_columns
                     .entry(c.handle.module.to_owned())
                     .or_default()
                     .push(h.clone()),
-                Magma::Byte => byte_columns
+                RawMagma::Byte => byte_columns
                     .entry(c.handle.module.to_owned())
                     .or_default()
                     .push(h.clone()),

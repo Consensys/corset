@@ -11,7 +11,6 @@ use log::*;
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use owo_colors::OwoColorize;
-use pairing_ce::ff::PrimeField;
 use serde::{Deserialize, Serialize};
 use sorbus::{NodeID, Tree};
 use std::{
@@ -51,20 +50,20 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, Builtin::Len.to_string()),
             class: FunctionClass::Builtin(Builtin::Len),
         },
-
-        // Intrinsics
-        "inv" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "inv"),
-            class: FunctionClass::Intrinsic(Intrinsic::Inv)
-        },
-        "neg" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "neg"),
-            class: FunctionClass::Intrinsic(Intrinsic::Neg)
-        },
         "shift" => Function{
             handle: Handle::new(super::MAIN_MODULE, "shift"),
-            class: FunctionClass::Intrinsic(Intrinsic::Shift),
+            class: FunctionClass::Builtin(Builtin::Shift),
         },
+        "~>>" => Function{
+            handle: Handle::new(super::MAIN_MODULE, "~>>"),
+            class: FunctionClass::Builtin(Builtin::NormFlat),
+        },
+        "if" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "if"),
+            class: FunctionClass::Builtin(Builtin::If)
+        },
+
+        // Intrinsics
         "+" => Function {
             handle: Handle::new(super::MAIN_MODULE, "+"),
             class: FunctionClass::Intrinsic(Intrinsic::Add)
@@ -73,29 +72,42 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "*"),
             class: FunctionClass::Intrinsic(Intrinsic::Mul)
         },
-        "^" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "^"),
-            class: FunctionClass::Intrinsic(Intrinsic::Exp)
-        },
         "-" => Function {
             handle: Handle::new(super::MAIN_MODULE, "-"),
             class: FunctionClass::Intrinsic(Intrinsic::Sub)
+        },
+        "+." => Function {
+            handle: Handle::new(super::MAIN_MODULE, "+"),
+            class: FunctionClass::Intrinsic(Intrinsic::VectorAdd)
+        },
+        "*." => Function {
+            handle: Handle::new(super::MAIN_MODULE, "*"),
+            class: FunctionClass::Intrinsic(Intrinsic::VectorMul)
+        },
+        "-." => Function {
+            handle: Handle::new(super::MAIN_MODULE, "-"),
+            class: FunctionClass::Intrinsic(Intrinsic::VectorSub)
+        },
+        "~" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "~"),
+            class: FunctionClass::Intrinsic(Intrinsic::Normalize)
+        },
+        "neg" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "neg"),
+            class: FunctionClass::Intrinsic(Intrinsic::Neg)
+        },
+        "^" => Function {
+            handle: Handle::new(super::MAIN_MODULE, "^"),
+            class: FunctionClass::Intrinsic(Intrinsic::Exp)
         },
         "begin" => Function{
             handle: Handle::new(super::MAIN_MODULE, "begin"),
             class: FunctionClass::Intrinsic(Intrinsic::Begin)
         },
-        "if!" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "if!"),
-            class: FunctionClass::Intrinsic(Intrinsic::IfZero)
-        },
-        "if" => Function {
-            handle: Handle::new(super::MAIN_MODULE, "if"),
-            class: FunctionClass::Intrinsic(Intrinsic::IfNotZero)
-        },
     };
 }
 
+type ComputationID = usize;
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct ComputationTable {
     pub(crate) dependencies: HashMap<ColumnRef, usize>,
@@ -123,14 +135,18 @@ impl ComputationTable {
     }
 
     /// Insert the computation defining `target`. Will fail if `target` is already defined by an existing computation.
-    pub fn insert(&mut self, target: &ColumnRef, computation: Computation) -> Result<()> {
+    pub fn insert(
+        &mut self,
+        target: &ColumnRef,
+        computation: Computation,
+    ) -> Result<ComputationID> {
         if self.dependencies.contains_key(target) {
             panic!("`{}` already present as a computation target", target);
         }
         self.computations.push(computation);
-        self.dependencies
-            .insert(target.to_owned(), self.computations.len() - 1);
-        Ok(())
+        let id = self.computations.len() - 1;
+        self.dependencies.insert(target.to_owned(), id);
+        Ok(id)
     }
 
     /// Insert a computation defining multiple columns at once (e.g. permutations).
@@ -305,6 +321,9 @@ impl Scope {
     }
 
     pub fn switch_to_module(&mut self, name: &str) -> Result<Scope> {
+        if name.starts_with('#') {
+            bail!("names starting with `#` are reserved for internal usage")
+        }
         let root = self.tree.borrow().root();
         let maybe_child = self.tree.borrow().find_child(root, |n| n.name == name);
         match maybe_child {
@@ -414,7 +433,11 @@ impl Scope {
             .insert_many(targets, computation)
     }
 
-    pub fn insert_computation(&self, target: &ColumnRef, computation: Computation) -> Result<()> {
+    pub fn insert_computation(
+        &self,
+        target: &ColumnRef,
+        computation: Computation,
+    ) -> Result<ComputationID> {
         self.tree
             .borrow_mut()
             .metadata_mut()
@@ -676,6 +699,9 @@ impl Scope {
     }
 
     pub fn insert_symbol(&mut self, name: &str, e: Node) -> Result<()> {
+        if name.starts_with('#') {
+            bail!("names starting with `#` are reserved for intenal usage")
+        }
         if data!(self).symbols.contains_key(name) {
             bail!(symbols::Error::SymbolAlreadyExists(
                 name.to_owned(),
@@ -784,26 +810,24 @@ impl Scope {
 
     pub fn insert_constant(&mut self, name: &str, value: BigInt, replace: bool) -> Result<()> {
         let t = if Zero::is_zero(&value) || One::is_one(&value) {
-            Type::Scalar(Magma::Boolean)
+            Type::Scalar(Magma::binary())
         } else {
-            Type::Scalar(Magma::Integer)
+            Type::Scalar(Magma::native())
         };
         if data!(self).symbols.contains_key(name) && !replace {
             bail!(symbols::Error::SymbolAlreadyExists(
                 name.to_owned(),
                 data!(self).name.to_owned()
             ))
-        } else if let Some(fr) = pairing_ce::bn256::Fr::from_str(&value.to_string()) {
+        } else {
             data_mut!(self).symbols.insert(
                 name.to_owned(),
                 Symbol::Final(
-                    Node::from_expr(Expression::Const(value, Some(fr))).with_type(t),
+                    Node::from_expr(Expression::Const(value.into())).with_type(t),
                     false,
                 ),
             );
             Ok(())
-        } else {
-            bail!("{} is not an Fr element", value.to_string().red().bold())
         }
     }
 

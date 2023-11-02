@@ -392,6 +392,7 @@ dependencies = [
  "convert_case",
  "crossterm",
  "either",
+ "ellipse",
  "errno",
  "flate2",
  "handlebars",
@@ -526,6 +527,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a26ae43d7bcc3b814de94796a5e736d4029efb0ee900c12e2d54c993ad1a1e07"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "ellipse"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1835a82a08e5c9393639e7cf99786a65af71f7fa9df7c91a519f2d52e6fa052d"
+dependencies = [
+ "unicode-segmentation",
 ]
 
 [[package]]

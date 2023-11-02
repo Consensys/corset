@@ -60,7 +60,28 @@ impl Tty {
         self.lines.last_mut().unwrap().text.push_str(l);
     }
 
-    pub fn within<F: Fn(&mut Tty)>(&mut self, label: &str, indent: Option<usize>, what: F) {
+    pub fn within_styled<F: Fn(&mut Tty), D: Fn(&str) -> String>(
+        &mut self,
+        label: &str,
+        decorator: D,
+        indent: Option<usize>,
+        block: F,
+    ) {
+        self.write(decorator(&format!(
+            "({}{}",
+            label,
+            if label.is_empty() { "" } else { " " }
+        )));
+        let indent = indent.unwrap_or(self.default_indent);
+        self.shift(indent);
+
+        block(self);
+
+        self.write(")");
+        self.unshift();
+    }
+
+    pub fn within<F: Fn(&mut Tty)>(&mut self, label: &str, indent: Option<usize>, block: F) {
         self.write(format!(
             "({}{}",
             label,
@@ -69,7 +90,7 @@ impl Tty {
         let indent = indent.unwrap_or(self.default_indent);
         self.shift(indent);
 
-        what(self);
+        block(self);
 
         self.write(")");
         self.unshift();
@@ -121,7 +142,7 @@ impl Tty {
 
     fn make_indent(&self, l: &Line) -> String {
         if self.with_guides {
-            " ".to_string() // Account for the skipped first '|'
+            if self.depths[l.indentation].len() > 0 {" "} else {""}.to_string() // Account for the first skipped '|'
             + &self
                 .depths[l.indentation]
                 .iter()

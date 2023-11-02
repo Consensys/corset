@@ -7,19 +7,20 @@ use compiler::ConstraintSet;
 use errno::{set_errno, Errno};
 use libc::c_char;
 use log::*;
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 use rayon::{prelude::*, ThreadPool};
 use std::ffi::{c_uint, CStr, CString};
+use transformer::ExpansionLevel;
 
-use crate::{column::Computation, compiler::EvalSettings};
+use crate::{
+    column::{Computation, Value, ValueBacking},
+    compiler::EvalSettings,
+};
 
 mod check;
 mod column;
 mod compiler;
 mod compute;
+mod constants;
 mod dag;
 mod errors;
 mod import;
@@ -121,42 +122,44 @@ impl Trace {
             .columns
             .all()
             .par_iter()
-            .map(|i| {
-                let empty_vec = Vec::new();
-                let column = &c.columns._cols[i.as_id()];
-                let value = c.columns.value(i).unwrap_or(&empty_vec);
-                let padding = if let Some((_, fr)) = column.padding_value {
-                    fr
+            .map(|cref| {
+                let empty_backing: ValueBacking = ValueBacking::default();
+
+                let column = c.columns.column(cref).unwrap();
+                let handle = &column.handle;
+                trace!("Writing {}", handle);
+                let backing = c.columns.backing(cref).unwrap_or(&empty_backing);
+                let padding: Value = if let Some(v) = column.padding_value.as_ref() {
+                    v.clone()
                 } else {
-                    value.get(0).cloned().unwrap_or_else(|| {
+                    backing.get(0, false, &c.columns).unwrap_or_else(|| {
                         c.computations
-                            .computation_for(i)
+                            .computation_for(&cref)
                             .map(|c| match c {
                                 Computation::Composite { exp, .. } => exp
                                     .eval(
                                         0,
-                                        &mut |_, _, _| Some(Fr::zero()),
+                                        |_, _, _| Some(Value::zero()),
                                         &mut None,
                                         &EvalSettings::default(),
                                     )
-                                    .unwrap_or_else(Fr::zero),
-                                Computation::Interleaved { .. } => Fr::zero(),
-                                Computation::Sorted { .. } => Fr::zero(),
-                                Computation::CyclicFrom { .. } => Fr::zero(),
-                                Computation::SortingConstraints { .. } => Fr::zero(),
+                                    .unwrap_or_else(Value::zero),
+                                Computation::Interleaved { .. } => Value::zero(),
+                                Computation::Sorted { .. } => Value::zero(),
+                                Computation::CyclicFrom { .. } => Value::zero(),
+                                Computation::SortingConstraints { .. } => Value::zero(),
+                                Computation::ExoOperation { .. } => Value::zero(), // TODO: FIXME:
+                                Computation::ExoConstant { .. } => Value::zero(),  // TODO: FIXME:
                             })
-                            .unwrap_or_else(Fr::zero)
+                            .unwrap_or_else(Value::zero)
                     })
                 };
                 (
                     ComputedColumn {
-                        values: c
-                            .columns
-                            .value(i)
-                            .unwrap_or(&empty_vec)
-                            .iter()
+                        values: backing
+                            .iter(&c.columns)
                             .map(|x| {
-                                let mut v = x.into_repr().0;
+                                let mut v = x.to_repr().collect::<Vec<_>>().try_into().unwrap();
                                 if convert_to_be {
                                     reverse_fr(&mut v);
                                 }
@@ -164,14 +167,15 @@ impl Trace {
                             })
                             .collect(),
                         padding_value: {
-                            let mut padding = padding.into_repr().0;
+                            let mut padding =
+                                padding.to_repr().collect::<Vec<_>>().try_into().unwrap();
                             if convert_to_be {
                                 reverse_fr(&mut padding);
                             }
                             padding
                         },
                     },
-                    c.handle(i).to_string(),
+                    c.handle(cref).to_string(),
                 )
             })
             .collect::<Vec<_>>();
@@ -246,13 +250,7 @@ fn reverse_fr_x86_64(v: &mut [u64; 4]) {
 }
 
 fn make_corset(mut constraints: ConstraintSet) -> Result<Corset> {
-    transformer::validate_nhood(&mut constraints)?;
-    transformer::lower_shifts(&mut constraints);
-    transformer::expand_ifs(&mut constraints);
-    transformer::expand_constraints(&mut constraints)?;
-    transformer::sorts(&mut constraints)?;
-    transformer::expand_invs(&mut constraints)?;
-
+    transformer::expand_to(&mut constraints, ExpansionLevel::all().into(), &[])?;
     Ok(constraints)
 }
 

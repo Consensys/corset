@@ -20,6 +20,7 @@ pub struct LatexExporter {
 fn sanitize(s: &str) -> String {
     s.replace('_', "\\_")
 }
+
 fn romanize(s: &str) -> String {
     s.replace('1', "I")
         .replace('2', "II")
@@ -432,7 +433,7 @@ pub fn render(asts: &[Ast], constraints_file: Option<String>) -> Result<()> {
         let mut out = File::create(constraints_file)
             .with_context(|| anyhow!("while opening {}", constraints_file))?;
         out.write_all(
-            r#"
+            r"
 \documentclass{article}
 \usepackage{algorithm2e}
 \usepackage{amsmath}
@@ -446,7 +447,7 @@ pub fn render(asts: &[Ast], constraints_file: Option<String>) -> Result<()> {
 }
 
 
-"#
+"
             .as_bytes(),
         )?;
         let columns = render_columns(asts)?;

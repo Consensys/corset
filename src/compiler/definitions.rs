@@ -37,7 +37,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                 .fold(Ok(()), |ax, col| ax.and(reduce(col, &mut new_ctx)))
         }
         Token::DefColumn {
-            name: col,
+            name,
             t,
             kind,
             padding_value,
@@ -47,20 +47,19 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             let symbol = Node::column()
                 .handle(Handle::maybe_with_perspective(
                     module_name,
-                    col,
+                    name,
                     ctx.perspective(),
                 ))
                 .base(*base)
                 .kind(match kind {
                     Kind::Atomic => Kind::Atomic,
                     Kind::Phantom => Kind::Phantom,
-                    // The actual expression is computed by the generator
                     Kind::Composite(_) => Kind::Phantom,
                 })
                 .and_padding_value(*padding_value)
-                .t(t.magma())
+                .t(t.m())
                 .build();
-            ctx.insert_symbol(col, symbol)
+            ctx.insert_symbol(name, symbol)
         }
         Token::DefInterleaving { target, froms: _ } => {
             let node = Node::column()
@@ -77,12 +76,12 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             ctx.insert_symbol(&target.name, node)
         }
         Token::DefArrayColumn {
-            name: col,
+            name,
             domain: range,
             t,
             base,
         } => {
-            let handle = Handle::maybe_with_perspective(ctx.module(), col, ctx.perspective());
+            let handle = Handle::maybe_with_perspective(ctx.module(), name, ctx.perspective());
             // those are inserted for symbol lookups
             for i in range.iter() {
                 let ith_handle = handle.ith(i.try_into().unwrap());
@@ -92,19 +91,19 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                         .handle(ith_handle.clone())
                         .kind(Kind::Atomic)
                         .base(*base)
-                        .t(t.magma())
+                        .t(t.m())
                         .build(),
                 )?;
             }
 
             // and this one for validating calls to `nth`
             ctx.insert_symbol(
-                col,
+                name,
                 Node::array_column()
                     .handle(handle)
                     .domain(range.to_owned())
                     .base(*base)
-                    .t(t.magma())
+                    .t(t.m())
                     .build(),
             )?;
             Ok(())
@@ -135,7 +134,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     Node::column()
                         .handle(Handle::new(ctx.module(), to.name.clone()))
                         .kind(Kind::Phantom)
-                        .t(Magma::Integer) // TODO previously we took the type of the corresponding 'from' column, is that a problem?
+                        .t(Magma::native()) // TODO: previously we took the type of the corresponding 'from' column, is that a problem?
                         .base(to.base)
                         .build(),
                 )

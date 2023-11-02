@@ -1,15 +1,14 @@
-use crate::column::ColumnID;
+use crate::column::{ColumnID, Value};
 use crate::compiler::Domain;
 use anyhow::*;
 use cached::Cached;
 use num_bigint::BigInt;
-use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use num_traits::{One, ToPrimitive, Zero};
 use owo_colors::{colored::Color, OwoColorize};
-use pairing_ce::ff::Field;
-use pairing_ce::{bn256::Fr, ff::PrimeField};
 use serde::{Deserialize, Serialize};
+use std::write;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fmt::{Debug, Display, Formatter},
 };
 
@@ -95,6 +94,9 @@ impl ColumnRef {
 
         self.id = Some(i);
     }
+    pub fn to_string_short(&self) -> String {
+        self.map(|id| format!("col#{}", id), |handle| handle.name.to_owned())
+    }
     pub fn map<T, F, G>(&self, f: F, g: G) -> T
     where
         F: FnOnce(ColumnID) -> T,
@@ -161,17 +163,23 @@ pub enum Expression {
         func: Intrinsic,
         args: Vec<Node>,
     },
-    Const(BigInt, Option<Fr>),
+    Const(Value),
     Column {
         handle: ColumnRef,
+        shift: i16,
         kind: Kind<Node>,
         padding_value: Option<i64>,
         base: Base,
-        fetched: bool,
     },
     ArrayColumn {
         handle: ColumnRef,
         domain: Domain,
+        base: Base,
+    },
+    ExoColumn {
+        handle: ColumnRef,
+        shift: i16,
+        padding_value: Option<i64>,
         base: Base,
     },
     List(Vec<Node>),
@@ -205,22 +213,23 @@ impl Node {
     }
     pub fn from_const(x: isize) -> Node {
         Node {
-            _e: Expression::Const(BigInt::from_isize(x).unwrap(), Fr::from_str(&x.to_string())),
+            _e: Expression::Const(x.into()),
             _t: Some(Type::Scalar(match x {
-                0 | 1 => Magma::Boolean,
-                _ => Magma::Integer,
+                0 | 1 => Magma::binary(),
+                _ => Magma::native(),
             })),
             dbg: None,
         }
     }
     pub fn from_bigint(x: BigInt) -> Node {
+        let magma = if x.is_one() || x.is_zero() {
+            Magma::binary()
+        } else {
+            Magma::native()
+        };
         Node {
-            _e: Expression::Const(x.to_owned(), Fr::from_str(&x.to_string())),
-            _t: Some(Type::Scalar(if x.is_one() || x.is_zero() {
-                Magma::Boolean
-            } else {
-                Magma::Integer
-            })),
+            _e: Expression::Const(x.into()),
+            _t: Some(Type::Scalar(magma)),
             dbg: None,
         }
     }
@@ -236,21 +245,36 @@ impl Node {
     #[builder(entry = "column", exit = "build", visibility = "pub")]
     pub fn new_column(
         handle: ColumnRef,
+        shift: Option<i16>,
         base: Option<Base>,
-        kind: Kind<Node>,
+        kind: Option<Kind<Node>>,
         padding_value: Option<i64>,
         t: Option<Magma>,
     ) -> Node {
-        Node {
-            _e: Expression::Column {
-                handle,
-                kind,
-                padding_value,
-                base: base.unwrap_or_else(|| t.unwrap_or(Magma::Integer).into()),
-                fetched: false,
-            },
-            _t: Some(Type::Column(t.unwrap_or(Magma::Integer))),
-            dbg: None,
+        let magma = t.unwrap_or(Magma::native());
+        if magma > Magma::native() {
+            Node {
+                _e: Expression::ExoColumn {
+                    handle: handle.clone(),
+                    shift: shift.unwrap_or(0),
+                    padding_value,
+                    base: base.unwrap_or_else(|| t.unwrap_or(Magma::native()).into()),
+                },
+                _t: Some(Type::Column(magma)),
+                dbg: None,
+            }
+        } else {
+            Node {
+                _e: Expression::Column {
+                    handle: handle.clone(),
+                    shift: shift.unwrap_or(0),
+                    kind: kind.unwrap_or(Kind::Phantom),
+                    padding_value,
+                    base: base.unwrap_or_else(|| t.unwrap_or(Magma::native()).into()),
+                },
+                _t: Some(Type::Column(t.unwrap_or(Magma::native()))),
+                dbg: None,
+            }
         }
     }
     #[builder(entry = "array_column", exit = "build", visibility = "pub")]
@@ -266,28 +290,42 @@ impl Node {
                 domain,
                 base: base.unwrap_or(Base::Hex),
             },
-            _t: Some(Type::ArrayColumn(t.unwrap_or(Magma::Integer))),
+            _t: Some(Type::ArrayColumn(t.unwrap_or(Magma::native()))),
             dbg: None,
         }
     }
-    pub fn phantom_column(x: &ColumnRef, m: Magma) -> Node {
-        Node {
-            _e: Expression::Column {
-                handle: x.to_owned(),
-                kind: Kind::Phantom,
-                padding_value: None,
-                base: Base::Hex,
-                fetched: false,
-            },
-            _t: Some(Type::Column(m)),
-            dbg: None,
-        }
+    pub fn shift(mut self, i: i16) -> Self {
+        match self.e_mut() {
+            Expression::Funcall { args, .. } => {
+                for a in args.iter_mut() {
+                    *a = a.clone().shift(i);
+                }
+            }
+            Expression::Column { shift, .. } | Expression::ExoColumn { shift, .. } => {
+                *shift += i;
+            }
+            Expression::ArrayColumn { .. } => unreachable!(),
+            Expression::List(ls) => {
+                for l in ls.iter_mut() {
+                    *l = l.clone().shift(i);
+                }
+            }
+            Expression::Const(_) => {}
+            Expression::Void => {}
+        };
+        self
     }
     pub fn one() -> Node {
-        Self::from_expr(Expression::Const(One::one(), Some(Fr::one())))
+        Self::from_expr(Expression::Const(Value::one()))
     }
     pub fn zero() -> Node {
-        Self::from_expr(Expression::Const(Zero::zero(), Some(Fr::zero())))
+        Self::from_expr(Expression::Const(Value::zero()))
+    }
+    pub fn is_constant(&self) -> bool {
+        matches!(self.e(), Expression::Const(..))
+    }
+    pub fn is_exocolumn(&self) -> bool {
+        matches!(self.e(), Expression::ExoColumn { .. })
     }
     pub fn e(&self) -> &Expression {
         &self._e
@@ -296,41 +334,40 @@ impl Node {
         &mut self._e
     }
     pub fn t(&self) -> Type {
-        self._t.unwrap_or_else(|| match &self.e() {
-            Expression::Funcall { func, args } => {
-                func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
-            }
-            Expression::Const(ref x, _) => {
-                if Zero::is_zero(x) || One::is_one(x) {
-                    Type::Scalar(Magma::Boolean)
-                } else {
-                    Type::Scalar(Magma::Integer)
+        self._t
+            .unwrap_or_else(|| match &self.e() {
+                Expression::Funcall { func, args } => {
+                    func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
                 }
-            }
-            Expression::Column { handle, .. } => {
-                unreachable!("COLUMN {} SHOULD BE TYPED", handle.pretty())
-            }
-            Expression::ArrayColumn { .. } => unreachable!("ARRAYCOLUMN SHOULD BE TYPED"),
-            Expression::List(xs) => Type::List(
-                xs.iter()
-                    .map(Node::t)
-                    .max()
-                    .unwrap_or(Type::INFIMUM)
-                    .magma(),
-            ),
-            Expression::Void => Type::Void,
-        })
+                Expression::Const(ref x) => {
+                    if x.is_zero() || x.is_one() {
+                        Type::Scalar(Magma::binary())
+                    } else {
+                        Type::Scalar(Magma::native())
+                    }
+                }
+                Expression::Column { handle, .. } => {
+                    unreachable!("COLUMN {} SHOULD BE TYPED", handle.pretty())
+                }
+                Expression::ExoColumn { .. } => unreachable!("FIELDVALUES SHOULD BE TYPED"),
+                Expression::ArrayColumn { .. } => unreachable!("ARRAYCOLUMN SHOULD BE TYPED"),
+                Expression::List(xs) => {
+                    let l_types = xs.iter().map(|x| x.t()).collect::<Vec<_>>();
+                    super::max_type(l_types.iter())
+                }
+                Expression::Void => Type::Void,
+            })
+            .to_owned()
     }
     pub fn dbg(&self) -> Option<&String> {
         self.dbg.as_ref()
     }
-
     pub fn pretty_with_handle(&self, cs: &ConstraintSet) -> String {
         fn rec_pretty(s: &Node, depth: usize, cs: &ConstraintSet) -> String {
             let c = &COLORS[depth % COLORS.len()];
             match s.e() {
-                Expression::Const(x, _) => format!("{}", x).color(*c).to_string(),
-                Expression::Column { handle, .. } => {
+                Expression::Const(x) => format!("{}", x).color(*c).to_string(),
+                Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
                     cs.handle(handle).to_string().color(*c).to_string()
                 }
                 Expression::ArrayColumn { handle, domain, .. } => {
@@ -364,37 +401,46 @@ impl Node {
         match self.e() {
             Expression::Funcall { args, .. } => 1 + args.iter().map(Node::size).sum::<usize>(),
             Expression::Const(..) => 0,
-            Expression::Column { .. } => 1,
+            Expression::Column { .. } => 0,
+            Expression::ExoColumn { .. } => 0,
             Expression::ArrayColumn { .. } => 0,
             Expression::List(xs) => xs.iter().map(Node::size).sum::<usize>(),
             Expression::Void => 0,
         }
     }
 
+    pub fn bit_size(&self) -> usize {
+        self.t().m().bit_size()
+    }
+
     /// Return whether this [`Expression`] is susceptible to overflow withtin the field
     pub fn may_overflow(&self) -> bool {
-        match self.e() {
-            Expression::Funcall { func, args } => match func {
-                Intrinsic::Add => args.iter().any(|a| !a.t().is_bool()),
-                // TODO: see with Olivier
-                Intrinsic::Sub => false,
-                Intrinsic::Mul => args.iter().any(|a| !a.t().is_bool()),
-                // exponentiation are compile-time computed, hence cannot overflow
-                Intrinsic::Exp => false,
-                Intrinsic::Shift => false,
-                Intrinsic::Neg => false,
-                Intrinsic::Inv => false,
-                Intrinsic::Begin => unreachable!(),
-                Intrinsic::IfZero | Intrinsic::IfNotZero => {
-                    args[1].may_overflow() || args.get(2).map(|a| a.may_overflow()).unwrap_or(false)
-                }
-            },
-            Expression::Const(_, _) => false,
-            Expression::Column { .. } => false,
-            Expression::ArrayColumn { .. } => false,
-            Expression::List(ns) => ns.iter().any(Node::may_overflow),
-            Expression::Void => false,
-        }
+        // TODO: decide its future
+        false
+        // match self.e() {
+        //     Expression::Funcall { func, args } => match func {
+        //         Intrinsic::Add => args.iter().any(|a| !a.t().is_binary()),
+        //         // TODO: see with Olivier
+        //         Intrinsic::Sub => false,
+        //         Intrinsic::Mul => args.iter().any(|a| !a.t().is_binary()),
+        //         // exponentiation are compile-time computed, hence cannot overflow
+        //         Intrinsic::Exp => false,
+        //         Intrinsic::Neg => false,
+        //         Intrinsic::Inv => false,
+        //         Intrinsic::Normalize => false,
+        //         Intrinsic::Begin => unreachable!(),
+        //         Intrinsic::IfZero => {
+        //             args[1].may_overflow() || args.get(2).map(|a| a.may_overflow()).unwrap_or(false)
+        //         }
+        //         _ => false,
+        //     },
+        //     Expression::Const(_) => false,
+        //     Expression::Column { .. } => false,
+        //     Expression::ExoColumn { .. } => false,
+        //     Expression::ArrayColumn { .. } => false,
+        //     Expression::List(ns) => ns.iter().any(Node::may_overflow),
+        //     Expression::Void => false,
+        // }
     }
 
     /// Compute the depth of the tree representing [`Expression`]
@@ -406,6 +452,7 @@ impl Node {
             Expression::List(xs) => 1 + xs.iter().map(Node::depth).max().unwrap_or_default(),
             Expression::Const(..)
             | Expression::Column { .. }
+            | Expression::ExoColumn { .. }
             | Expression::ArrayColumn { .. }
             | Expression::Void => 0,
         }
@@ -413,58 +460,35 @@ impl Node {
 
     /// Compute the maximum past (negative) shift coefficient in the AST rooted at `self`
     pub fn past_spill(&self) -> isize {
-        fn _past_span(e: &Expression, ax: isize) -> isize {
-            match e {
-                Expression::Funcall { func, args } => {
-                    let mut mine = ax;
-                    if let Intrinsic::Shift = func {
-                        let arg_big = args[1].pure_eval().unwrap_or_else(|_| {
-                            panic!(
-                                "{} is not a valid shift offset",
-                                args[1].to_string().as_str()
-                            )
-                        });
-                        let arg = arg_big.to_isize().unwrap_or_else(|| {
-                            panic!("{} is not an isize", arg_big.to_string().as_str())
-                        });
-                        mine = mine.min(mine + arg);
-                    }
-                    args.iter().map(|e| _past_span(e.e(), mine)).min().unwrap()
+        self.leaves()
+            .iter()
+            .filter_map(|n| match n.e() {
+                Expression::Column { shift, .. } | Expression::ExoColumn { shift, .. } => {
+                    Some(*shift as isize)
                 }
-                Expression::List(es) => es.iter().map(|e| _past_span(e.e(), ax)).min().unwrap(),
-                _ => ax,
-            }
-        }
-
-        _past_span(self.e(), 0).min(0)
+                Expression::ArrayColumn { .. } => unreachable!(),
+                _ => None,
+            })
+            .filter(|x| *x < 0)
+            .min()
+            .unwrap_or(0)
     }
 
     /// Compute the maximum future (positive) shift coefficient in the AST rooted at `self`
     pub fn future_spill(&self) -> isize {
-        fn _future_span(e: &Expression, ax: isize) -> isize {
-            match e {
-                Expression::Funcall { func, args } => {
-                    let mut mine = ax;
-                    if let Intrinsic::Shift = func {
-                        let arg_big = args[1]
-                            .pure_eval()
-                            .unwrap_or_else(|_| panic!("{}", args[1].to_string().as_str()));
-                        let arg = arg_big
-                            .to_isize()
-                            .unwrap_or_else(|| panic!("{}", arg_big.to_string().as_str()));
-                        mine = mine.max(mine + arg);
-                    }
-                    args.iter()
-                        .map(|e| _future_span(e.e(), mine))
-                        .max()
-                        .unwrap()
+        self.leaves()
+            .iter()
+            .filter_map(|n| match n.e() {
+                Expression::Column { shift, .. } | Expression::ExoColumn { shift, .. } => {
+                    Some(*shift as isize)
                 }
-                Expression::List(es) => es.iter().map(|e| _future_span(e.e(), ax)).max().unwrap(),
-                _ => ax,
-            }
-        }
-
-        _future_span(self.e(), 0).max(0)
+                Expression::ArrayColumn { .. } => unreachable!(),
+                _ => None,
+            })
+            .filter(|x| *x > 0)
+            .max()
+            .unwrap_or(0)
+            .max(0)
     }
 
     // TODO: replace with a generic map()
@@ -475,9 +499,10 @@ impl Node {
             }
 
             Expression::Column { handle, .. } => set_id(handle),
+            Expression::ExoColumn { handle, .. } => set_id(handle),
             Expression::List(xs) => xs.iter_mut().for_each(|x| x.add_id_to_handles(set_id)),
 
-            Expression::ArrayColumn { .. } | Expression::Const(_, _) | Expression::Void => {}
+            Expression::ArrayColumn { .. } | Expression::Const(_) | Expression::Void => {}
         }
     }
 
@@ -492,6 +517,7 @@ impl Node {
                 }
                 Expression::Const(..) => ax.push(e.clone()),
                 Expression::Column { .. } => ax.push(e.clone()),
+                Expression::ExoColumn { .. } => ax.push(e.clone()),
                 Expression::ArrayColumn { .. } => {}
                 Expression::List(args) => {
                     for a in args {
@@ -512,7 +538,9 @@ impl Node {
         self.leaves()
             .into_iter()
             .filter_map(|e| match e.e() {
-                Expression::Column { handle, .. } => Some(handle.clone()),
+                Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
+                    Some(handle.clone())
+                }
                 _ => None,
             })
             .collect()
@@ -559,51 +587,34 @@ impl Node {
                 }
                 x => bail!("{} is not known at compile-time", x.to_string().red()),
             },
-            Expression::Const(v, _) => Ok(v.to_owned()),
+            Expression::Const(v) => Ok(v.into()),
             _ => bail!("{} is not known at compile-time", self.to_string().red()),
         }
     }
 
-    #[allow(dead_code)]
-    pub fn eval_trace(
+    pub fn eval<F: Fn(&ColumnRef, isize, bool) -> Option<Value>>(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        get: F,
+        cache: &mut Option<cached::SizedCache<Value, Value>>,
         settings: &EvalSettings,
-    ) -> (Option<Fr>, HashMap<String, Option<Fr>>) {
-        let mut trace = HashMap::new();
-        let r = self.eval_fold(i, get, cache, settings, &mut |n, v| {
-            if !matches!(n.e(), Expression::List(_) | Expression::Const(..)) {
-                trace.insert(n.to_string(), *v);
-            }
-        });
-        (r, trace)
+    ) -> Option<Value> {
+        self.eval_fold(i, &get, cache, settings, &mut |_, _| {})
     }
 
-    pub fn eval(
+    pub fn eval_fold<F: Fn(&ColumnRef, isize, bool) -> Option<Value>>(
         &self,
         i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
+        get: &F,
+        cache: &mut Option<cached::SizedCache<Value, Value>>,
         settings: &EvalSettings,
-    ) -> Option<Fr> {
-        self.eval_fold(i, get, cache, settings, &mut |_, _| {})
-    }
-
-    pub fn eval_fold(
-        &self,
-        i: isize,
-        get: &mut dyn FnMut(&ColumnRef, isize, bool) -> Option<Fr>,
-        cache: &mut Option<cached::SizedCache<Fr, Fr>>,
-        settings: &EvalSettings,
-        f: &mut dyn FnMut(&Node, &Option<Fr>),
-    ) -> Option<Fr> {
+        f: &mut dyn FnMut(&Node, &Option<Value>),
+    ) -> Option<Value> {
         let r = match self.e() {
             Expression::Funcall { func, args } => match func {
                 Intrinsic::Add => {
-                    let mut ax = Fr::zero();
-                    for arg in args.iter() {
+                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
+                    for arg in args.iter().skip(1) {
                         ax.add_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
@@ -616,24 +627,41 @@ impl Node {
                     Some(ax)
                 }
                 Intrinsic::Mul => {
-                    let mut ax = Fr::one();
-                    for arg in args.iter() {
+                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
+                    for arg in args.iter().skip(1) {
                         ax.mul_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)
                 }
+                Intrinsic::VectorAdd => {
+                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
+                    for arg in args.iter().skip(1) {
+                        ax.vector_add_assign(&arg.eval_fold(i, get, cache, settings, f)?)
+                    }
+                    Some(ax)
+                }
+                Intrinsic::VectorSub => {
+                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
+                    for arg in args.iter().skip(1) {
+                        ax.vector_sub_assign(&arg.eval_fold(i, get, cache, settings, f)?)
+                    }
+                    Some(ax)
+                }
+                Intrinsic::VectorMul => {
+                    let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
+                    for arg in args.iter().skip(1) {
+                        ax.vector_mul_assign(&arg.eval_fold(i, get, cache, settings, f)?)
+                    }
+                    Some(ax)
+                }
                 Intrinsic::Exp => {
-                    let mut ax = Fr::one();
+                    let mut ax = Value::one();
                     let mantissa = args[0].eval_fold(i, get, cache, settings, f)?;
                     let exp = args[1].pure_eval().unwrap().to_usize().unwrap();
                     for _ in 0..exp {
                         ax.mul_assign(&mantissa);
                     }
                     Some(ax)
-                }
-                Intrinsic::Shift => {
-                    let shift = args[1].pure_eval().unwrap().to_isize().unwrap();
-                    args[0].eval_fold(i + shift, get, cache, &EvalSettings { wrap: false }, f)
                 }
                 Intrinsic::Neg => args[0].eval_fold(i, get, cache, settings, f).map(|mut x| {
                     x.negate();
@@ -644,13 +672,16 @@ impl Node {
                     if let Some(ref mut rcache) = cache {
                         x.map(|x| {
                             rcache
-                                .cache_get_or_set_with(x, || x.inverse().unwrap_or_else(Fr::zero))
+                                .cache_get_or_set_with(x.clone(), || x.inverse())
                                 .to_owned()
                         })
                     } else {
-                        x.and_then(|x| x.inverse()).or_else(|| Some(Fr::zero()))
+                        x.map(|x| x.inverse())
                     }
                 }
+                Intrinsic::Normalize => args[0]
+                    .eval_fold(i, get, cache, settings, f)
+                    .map(|x| x.normalize()),
                 Intrinsic::Begin => unreachable!(),
                 Intrinsic::IfZero => {
                     if args[0].eval_fold(i, get, cache, settings, f)?.is_zero() {
@@ -658,7 +689,7 @@ impl Node {
                     } else {
                         args.get(2)
                             .map(|x| x.eval_fold(i, get, cache, settings, f))
-                            .unwrap_or_else(|| Some(Fr::zero()))
+                            .unwrap_or_else(|| Some(Value::zero()))
                     }
                 }
                 Intrinsic::IfNotZero => {
@@ -667,19 +698,22 @@ impl Node {
                     } else {
                         args.get(2)
                             .map(|x| x.eval_fold(i, get, cache, settings, f))
-                            .unwrap_or_else(|| Some(Fr::zero()))
+                            .unwrap_or_else(|| Some(Value::zero()))
                     }
                 }
             },
-            Expression::Const(v, x) => {
-                Some(x.unwrap_or_else(|| panic!("{} is not an Fr element.", v)))
+            Expression::Const(v) => Some(v.clone()),
+            Expression::Column { handle, shift, .. } => {
+                get(handle, i + (*shift as isize), settings.wrap)
             }
-            Expression::Column { handle, .. } => get(handle, i, settings.wrap),
+            Expression::ExoColumn { handle, shift, .. } => {
+                get(handle, i + (*shift as isize), settings.wrap)
+            }
             Expression::List(xs) => xs
                 .iter()
                 .filter_map(|x| x.eval_fold(i, get, cache, settings, f))
                 .find(|x| !x.is_zero())
-                .or_else(|| Some(Fr::zero())),
+                .or_else(|| Some(Value::zero())),
             _ => unreachable!("{:?}", self),
         };
         f(self, &r);
@@ -688,7 +722,7 @@ impl Node {
 
     pub fn debug(
         &self,
-        f: &dyn Fn(&Node) -> Option<Fr>,
+        f: &dyn Fn(&Node) -> Option<Value>,
         unclutter: bool,
         dim: bool,
         src: bool,
@@ -703,8 +737,8 @@ impl Node {
         fn _debug(
             n: &Node,
             tty: &mut Tty,
-            f: &dyn Fn(&Node) -> Option<Fr>,
-            faulty: &Fr, // the non-zero value of the constraint
+            f: &dyn Fn(&Node) -> Option<Value>,
+            faulty: &Value, // the non-zero value of the constraint
             unclutter: bool,
             dim: bool,           // whether the user enabled --debug-dim
             zero_context: bool,  // whether we are in a zero-path
@@ -734,7 +768,7 @@ impl Node {
 
             match n.e() {
                 Expression::Funcall { func, args } => {
-                    let v = f(n).unwrap_or_default();
+                    let v = f(n).unwrap_or_else(Value::bi_zero);
                     let zero_context = (v.is_zero() || zero_context) && dim;
                     if v.is_zero() && unclutter && n.depth() >= 1 {
                         tty.write("...".color(Color::BrightBlack).to_string());
@@ -756,46 +790,56 @@ impl Node {
                         Color::White
                     };
 
-                    if matches!(func, Intrinsic::Shift) {
-                        let subponent = args[1].pure_eval().unwrap().to_i64().unwrap();
-                        _debug(
-                            &args[0],
-                            tty,
-                            f,
-                            faulty,
-                            unclutter,
-                            dim,
-                            zero_context,
-                            false,
-                            with_src,
-                            false,
-                        );
-                        if subponent > 0 {
-                            tty.write("₊".color(c_v).to_string());
-                        }
-                        tty.write(
-                            crate::pretty::subscript(&subponent.to_string())
-                                .color(c_v)
-                                .to_string(),
-                        );
-                        tty.write(
-                            format!("<{}>", v.pretty_with_base(Base::Hex))
-                                .color(c_v)
-                                .to_string(),
+                    if with_newlines {
+                        tty.within_styled(
+                            &fname,
+                            |s| s.color(c).to_string(),
+                            Some(fname.len() + 2),
+                            |tty| {
+                                if let Some(a) = args.get(0) {
+                                    _debug(
+                                        a,
+                                        tty,
+                                        f,
+                                        faulty,
+                                        unclutter && !matches!(func, Intrinsic::IfZero),
+                                        dim,
+                                        zero_context,
+                                        a.depth() > 2,
+                                        with_src,
+                                        show_value,
+                                    );
+                                    spacer(tty, with_newlines);
+                                }
+                                let mut args = args.iter().skip(1).peekable();
+                                while let Some(a) = args.next() {
+                                    _debug(
+                                        a,
+                                        tty,
+                                        f,
+                                        faulty,
+                                        unclutter,
+                                        dim,
+                                        zero_context,
+                                        a.depth() > 2,
+                                        with_src,
+                                        show_value,
+                                    );
+                                    if args.peek().is_some() {
+                                        spacer(tty, with_newlines)
+                                    }
+                                }
+                            },
                         );
                     } else {
                         tty.write(format!("({fname} ",).color(c).to_string());
-                        if with_newlines {
-                            tty.shift(fname.len() + 2);
-                        }
                         if let Some(a) = args.get(0) {
                             _debug(
                                 a,
                                 tty,
                                 f,
                                 faulty,
-                                unclutter
-                                    && !matches!(func, Intrinsic::IfZero | Intrinsic::IfNotZero),
+                                unclutter && !matches!(func, Intrinsic::IfZero),
                                 dim,
                                 zero_context,
                                 a.depth() > 2,
@@ -822,18 +866,14 @@ impl Node {
                                 spacer(tty, with_newlines)
                             }
                         }
-                        if with_newlines {
-                            tty.unshift();
-                            tty.cr();
-                        }
                         tty.write(")".color(c).to_string());
-                        tty.annotate(format!(
-                            "→ {}",
-                            v.pretty_with_base(Base::Hex).color(c_v).bold()
-                        ));
                     }
+                    tty.annotate(format!(
+                        "→ {}",
+                        v.pretty_with_base(Base::Hex).color(c_v).bold()
+                    ));
                 }
-                Expression::Const(x, _) => {
+                Expression::Const(x) => {
                     let c = if dim && zero_context {
                         Color::BrightBlack
                     } else {
@@ -842,9 +882,18 @@ impl Node {
                     tty.write(x.to_string().color(c).bold().to_string());
                 }
                 Expression::Column {
-                    handle: h, base, ..
+                    handle: h,
+                    shift,
+                    base,
+                    ..
+                }
+                | Expression::ExoColumn {
+                    handle: h,
+                    shift,
+                    base,
+                    ..
                 } => {
-                    let v = f(n).unwrap_or_default();
+                    let v = f(n).unwrap_or_else(Value::bi_zero);
                     let c = if dim && zero_context {
                         Color::BrightBlack
                     } else if v.eq(faulty) {
@@ -854,6 +903,16 @@ impl Node {
                     };
 
                     tty.write(h.as_handle().name.color(c).bold().to_string());
+                    if *shift != 0 {
+                        if *shift > 0 {
+                            tty.write("₊".color(c).to_string());
+                        }
+                        tty.write(
+                            crate::pretty::subscript(&shift.to_string())
+                                .color(c)
+                                .to_string(),
+                        );
+                    }
                     if show_value {
                         tty.write(
                             format!("<{}>", v.pretty_with_base(*base))
@@ -874,37 +933,38 @@ impl Node {
                         tty.write("...".color(c).to_string());
                         return;
                     }
-                    tty.write("begin {".color(c).to_string());
-                    tty.shift(3);
-                    tty.cr();
-                    let mut ns = ns.iter().peekable();
-                    while let Some(n) = ns.next() {
-                        _debug(
-                            n,
-                            tty,
-                            f,
-                            faulty,
-                            unclutter,
-                            dim,
-                            v.is_zero() || zero_context,
-                            n.depth() > 2,
-                            with_src,
-                            show_value,
-                        );
-                        if ns.peek().is_some() {
-                            spacer(tty, true);
-                        }
-                    }
-                    tty.unshift();
-                    tty.cr();
-                    tty.write("}".color(c).to_string());
+                    tty.within_styled(
+                        "begin ",
+                        |s| s.color(c).to_string(),
+                        Some(3),
+                        |tty| {
+                            let mut ns = ns.iter().peekable();
+                            while let Some(n) = ns.next() {
+                                _debug(
+                                    n,
+                                    tty,
+                                    f,
+                                    faulty,
+                                    unclutter,
+                                    dim,
+                                    v.is_zero() || zero_context,
+                                    n.depth() > 2,
+                                    with_src,
+                                    show_value,
+                                );
+                                if ns.peek().is_some() {
+                                    spacer(tty, true);
+                                }
+                            }
+                        },
+                    )
                 }
                 Expression::Void => tty.write("∅"),
             };
         }
 
         let mut tty = Tty::new().with_guides();
-        let faulty = f(self).unwrap_or_default();
+        let faulty = f(self).unwrap_or_else(Value::fr_zero);
         _debug(
             self, &mut tty, f, &faulty, unclutter, dim, false, true, src, true,
         );
@@ -934,12 +994,12 @@ impl Display for Node {
         }
 
         match self.e() {
-            Expression::Const(x, _) => write!(f, "{}", x),
-            Expression::Column { handle, .. } => {
-                write!(f, "{}", handle)
+            Expression::Const(x) => write!(f, "{}", x),
+            Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
+                write!(f, "{}", handle.to_string_short())
             }
             Expression::ArrayColumn { handle, domain, .. } => {
-                write!(f, "{}{}", handle, domain)
+                write!(f, "{}{}", handle.to_string_short(), domain)
             }
             Expression::List(cs) => write!(f, "{{{}}}", format_list(cs)),
             Expression::Funcall { func, args } => {
@@ -960,10 +1020,10 @@ impl Debug for Node {
         }
 
         match self.e() {
-            Expression::Const(x, _) => write!(f, "{}", x)?,
-            Expression::Column {
-                handle, fetched, ..
-            } => write!(f, "{}{}", if *fetched { "F:" } else { "" }, handle,)?,
+            Expression::Const(x) => write!(f, "{}", x)?,
+            Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
+                write!(f, "{}", handle,)?
+            }
             Expression::ArrayColumn { handle, domain, .. } => {
                 write!(f, "{}:{:?}{}", handle, self.t(), domain)?
             }

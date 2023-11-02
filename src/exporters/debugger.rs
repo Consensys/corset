@@ -1,27 +1,46 @@
 use crate::column::Computation;
 use crate::compiler::codetyper::Tty;
 use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
+use crate::constants;
 use crate::pretty::Pretty;
 use crate::structs::Handle;
 use anyhow::*;
+use ellipse::Ellipse;
 use itertools::Itertools;
-use num_traits::ToPrimitive;
 use owo_colors::XtermColors;
 use owo_colors::{colored::Color, OwoColorize};
 use std::cmp::Ordering;
 
 fn priority(a: Intrinsic, b: Intrinsic) -> Ordering {
     match (a, b) {
-        (Intrinsic::Add, Intrinsic::Add) => Ordering::Equal,
-        (Intrinsic::Add, Intrinsic::Sub) => Ordering::Less,
-        (Intrinsic::Add, Intrinsic::Mul) => Ordering::Less,
-        (Intrinsic::Sub, Intrinsic::Mul) => Ordering::Less,
-        (Intrinsic::Sub, Intrinsic::Add) => Ordering::Equal,
-        (Intrinsic::Mul, Intrinsic::Add) => Ordering::Greater,
-        (Intrinsic::Mul, Intrinsic::Sub) => Ordering::Greater,
-        (Intrinsic::Mul, Intrinsic::Mul) => Ordering::Equal,
-        (Intrinsic::Sub, Intrinsic::Sub) => Ordering::Equal,
-        (Intrinsic::Sub, Intrinsic::Exp) => Ordering::Less,
+        (Intrinsic::Add | Intrinsic::VectorAdd, Intrinsic::Add | Intrinsic::VectorAdd) => {
+            Ordering::Equal
+        }
+        (Intrinsic::Add | Intrinsic::VectorAdd, Intrinsic::Sub | Intrinsic::VectorSub) => {
+            Ordering::Less
+        }
+        (Intrinsic::Add | Intrinsic::VectorAdd, Intrinsic::Mul | Intrinsic::VectorMul) => {
+            Ordering::Less
+        }
+        (Intrinsic::Sub | Intrinsic::VectorSub, Intrinsic::Mul | Intrinsic::VectorMul) => {
+            Ordering::Less
+        }
+        (Intrinsic::Sub | Intrinsic::VectorSub, Intrinsic::Add | Intrinsic::VectorAdd) => {
+            Ordering::Equal
+        }
+        (Intrinsic::Mul | Intrinsic::VectorMul, Intrinsic::Add | Intrinsic::VectorAdd) => {
+            Ordering::Greater
+        }
+        (Intrinsic::Mul | Intrinsic::VectorMul, Intrinsic::Sub | Intrinsic::VectorSub) => {
+            Ordering::Greater
+        }
+        (Intrinsic::Mul | Intrinsic::VectorMul, Intrinsic::Mul | Intrinsic::VectorMul) => {
+            Ordering::Equal
+        }
+        (Intrinsic::Sub | Intrinsic::VectorSub, Intrinsic::Sub | Intrinsic::VectorSub) => {
+            Ordering::Equal
+        }
+        (Intrinsic::Sub | Intrinsic::VectorSub, Intrinsic::Exp) => Ordering::Less,
         _ => unimplemented!("{a}/{b}"),
     }
 }
@@ -45,7 +64,12 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
     let c = colors[tty.depth() % colors.len()];
     match n.e() {
         Expression::Funcall { func: f, args } => match f {
-            Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => {
+            Intrinsic::Add
+            | Intrinsic::Sub
+            | Intrinsic::Mul
+            | Intrinsic::VectorAdd
+            | Intrinsic::VectorSub
+            | Intrinsic::VectorMul => {
                 if prev.map(|p| priority(*f, p)).unwrap_or(Ordering::Equal) == Ordering::Less {
                     tty.write("(");
                 }
@@ -65,18 +89,17 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
                 tty.write("^");
                 pretty_expr(&args[1], Some(*f), tty, show_types);
             }
-            Intrinsic::Shift => {
-                pretty_expr(&args[0], None, tty, show_types);
-                let subponent = args[1].pure_eval().unwrap().to_i64().unwrap();
-                tty.write(if subponent > 0 { "₊" } else { "" });
-                tty.write(crate::pretty::subscript(&subponent.to_string()));
-            }
             Intrinsic::Neg => {
                 tty.write("-");
                 pretty_expr(&args[0], prev, tty, show_types);
             }
             Intrinsic::Inv => {
                 tty.write("INV(");
+                pretty_expr(&args[0], prev, tty, show_types);
+                tty.write(")");
+            }
+            Intrinsic::Normalize => {
+                tty.write("NORM(");
                 pretty_expr(&args[0], prev, tty, show_types);
                 tty.write(")");
             }
@@ -100,7 +123,7 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
                 tty.write("endif".color(c).bold().to_string());
             }
             Intrinsic::IfNotZero => {
-                tty.write("if-not-zero ".color(c).bold().to_string());
+                tty.write("if-non-zero".color(c).bold().to_string());
                 pretty_expr(&args[0], Some(Intrinsic::Mul), tty, show_types);
                 tty.shift(INDENT);
                 tty.cr();
@@ -118,15 +141,24 @@ fn pretty_expr(n: &Node, prev: Option<Intrinsic>, tty: &mut Tty, show_types: boo
                 tty.write("endif".color(c).bold().to_string());
             }
         },
-        Expression::Const(x, _) => tty.write(x.to_string()),
-        Expression::Column { handle, .. } => {
-            let color = handle.to_string().chars().fold(0, |ax, c| ax + c as usize) % 255 + 1;
+        Expression::Const(x) => tty.write(x.to_string()),
+        Expression::Column { handle, shift, .. } | Expression::ExoColumn { handle, shift, .. } => {
+            let color = handle
+                .to_string_short()
+                .chars()
+                .fold(0, |ax, c| ax + c as usize)
+                % 255
+                + 1;
             tty.write(
                 handle
-                    .to_string()
+                    .to_string_short()
                     .color(XtermColors::from(color as u8))
                     .to_string(),
-            )
+            );
+            if *shift != 0 {
+                tty.write(if *shift > 0 { "₊" } else { "" });
+                tty.write(crate::pretty::subscript(&shift.to_string()));
+            }
         }
         Expression::List(xs) => {
             tty.write("{".color(c).to_string());
@@ -167,15 +199,16 @@ fn render_constraints(
                     expr,
                 } => {
                     let mut tty = Tty::new().with_guides();
-                    pretty_expr(expr, None, &mut tty, show_types);
                     println!("\n{} :=", handle.pretty());
+                    pretty_expr(expr, None, &mut tty, show_types);
                     println!("{}", tty.page_feed());
                 }
                 Constraint::Plookup {
+                    handle,
                     including,
                     included,
-                    ..
                 } => {
+                    println!("\n{}", handle.pretty());
                     println!(
                         "{{{}}} ⊂ {{{}}}",
                         included
@@ -196,6 +229,36 @@ fn render_constraints(
                     pretty_expr(exp, None, &mut tty, false);
                     println!("\n{}", handle.pretty());
                     println!("{} < {}", tty.page_feed(), max);
+                }
+                Constraint::Normalization {
+                    handle,
+                    reference,
+                    inverted,
+                    ..
+                } => {
+                    println!("\n{} :=", handle.pretty());
+                    if reference.bit_size() > constants::FIELD_BITSIZE {
+                        println!("TODO XXX");
+                    } else {
+                        println!(
+                            "|{}| == {} × {}",
+                            reference.pretty(),
+                            reference.pretty(),
+                            inverted.pretty()
+                        );
+                        println!(
+                            "{}×(1 - {}×{}) = 0",
+                            reference.pretty(),
+                            reference.pretty(),
+                            inverted.pretty()
+                        );
+                        println!(
+                            "{}×(1 - {}×{}) = 0",
+                            inverted.pretty(),
+                            reference.pretty(),
+                            inverted.pretty()
+                        );
+                    }
                 }
             }
         }
@@ -222,31 +285,32 @@ fn render_constants(cs: &ConstraintSet) {
 
 fn render_columns(cs: &ConstraintSet) {
     println!("\n{}", "=== Columns ===".bold().yellow());
+
+    println!(
+        "{:>4}{:>80}{:>6}{:>4}{:>50}",
+        "ID", "Name", "Type", "×", "Reg."
+    );
     for (r, col) in cs.columns.iter().sorted_by_key(|c| c.1.register) {
         println!(
-            "{:4}{:>80} {:>20}{}",
+            "{:>4}{:>80}{:>6}{:>4}{:>50}",
             r.as_id(),
-            format!(
-                "{}{}",
-                col.handle
-                    .perspective
-                    .as_ref()
-                    .map(|p| format!(" ({})", p))
-                    .unwrap_or_default(),
-                &col.handle,
-            ),
-            format!("{} × {:?}", cs.length_multiplier(&r), col.t),
+            col.handle.to_string().as_str().truncate_ellipse(75),
+            col.t.to_string(),
+            cs.length_multiplier(&r),
             col.register
                 .map(|r| format!(
-                    " ∈ {}/{}",
+                    "r{}/{}ι{}",
                     r,
                     cs.columns.registers[r]
                         .handle
                         .as_ref()
                         .map(|h| h.to_string())
-                        .unwrap_or(format!("r{}", r))
+                        .unwrap_or("?".into()),
+                    cs.columns.registers[r].width()
                 ))
                 .unwrap_or_default()
+                .as_str()
+                .truncate_ellipse(45)
         );
     }
 }
@@ -279,14 +343,28 @@ fn render_computations(cs: &ConstraintSet) {
                     .join(" "),
             ),
             Computation::CyclicFrom { target, froms, .. } => println!(
-                "{} ↻ {}",
+                "{} ≜ ↻ {}",
+                target.pretty(),
                 froms.iter().map(|c| cs.handle(c).pretty()).join(", "),
-                target
             ),
             Computation::SortingConstraints { sorted, .. } => println!(
                 "Sorting constraints for {}",
                 sorted.iter().map(|c| cs.handle(c).pretty()).join(", ")
             ),
+            Computation::ExoOperation {
+                op,
+                sources,
+                target,
+            } => println!(
+                "{} ≜ {} {} {}",
+                target.pretty(),
+                sources[0].pretty(),
+                op,
+                sources[1].pretty(),
+            ),
+            Computation::ExoConstant { value, target } => {
+                println!("{} := {}", target.pretty(), value)
+            }
         }
     }
 }

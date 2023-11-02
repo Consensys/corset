@@ -10,7 +10,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use itertools::Itertools;
-use pairing_ce::ff::{Field, PrimeField};
 use ratatui::{prelude::*, widgets::*};
 use regex_lite::Regex;
 use std::collections::HashMap;
@@ -131,7 +130,7 @@ impl ModuleView {
     fn render(&self, cs: &ConstraintSet, f: &mut Frame, target: Rect) {
         let span = 0.max(self.h_shift)..(self.h_shift + CONTEXT).min(self.size) + 1;
         // max width for each column; defaults to 3
-        let max_column_name_width = self
+        let max_perspective_len = self
             .current_columns()
             .filter_map(|(_, h)| h.perspective.as_ref().map(|p| p.len()))
             .max()
@@ -153,7 +152,7 @@ impl ModuleView {
                                 ""
                             },
                             h.name.to_owned(),
-                            width = max_column_name_width,
+                            width = max_perspective_len,
                         ))
                         .style(Style::default().blue().bold()),
                     )
@@ -161,15 +160,11 @@ impl ModuleView {
                         cs.columns
                             .get(column_ref, i, false)
                             .map(|x| {
-                                let base = cs.columns.get_col(column_ref).unwrap().base;
+                                let base = cs.columns.column(column_ref).unwrap().base;
                                 let x_str = x.pretty_with_base(base);
                                 maxes[k + 1] = maxes[k + 1].max(x_str.len());
-                                let bg_color = x
-                                    .into_repr()
-                                    .0
-                                    .iter()
-                                    .flat_map(|x| x.to_le_bytes())
-                                    .fold(0u8, |ax, bx| ax.wrapping_add(bx));
+                                let bg_color =
+                                    x.to_bytes().iter().fold(0u8, |ax, bx| ax.wrapping_add(*bx));
                                 // ensure that we write white on dark colors and white on dark ones
                                 let corrected_fg_color = if bg_color % 36 > 18 {
                                     Color::Black
@@ -185,9 +180,7 @@ impl ModuleView {
                                         .unwrap()
                                         .eval(
                                             i,
-                                            &mut |handle, i, wrap| {
-                                                cs.columns.get_raw(handle, i, wrap).cloned()
-                                            },
+                                            |handle, i, wrap| cs.columns.get_raw(handle, i, wrap),
                                             &mut None,
                                             &Default::default(),
                                         )
@@ -389,7 +382,7 @@ impl<'a> Inspector<'a> {
                             )
                             .run(
                                 &mut t,
-                                &|i, r| self.cs.columns.get_raw(r, i, false).copied(),
+                                &|i, r| self.cs.columns.get_raw(r, i, false),
                                 self.current_module().size,
                                 self.minibuffer,
                             );

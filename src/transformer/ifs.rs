@@ -1,7 +1,7 @@
 use anyhow::Result;
 use num_traits::Zero;
 
-use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
+use crate::compiler::{Conditioning, Constraint, ConstraintSet, Expression, Intrinsic, Node};
 
 use super::{flatten_list, wrap};
 
@@ -18,43 +18,37 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
             }
             if matches!(func, Intrinsic::IfZero | Intrinsic::IfNotZero) {
                 let cond = args[0].clone();
+                let if_not_zero = matches!(func, Intrinsic::IfNotZero);
+                assert!(if if_not_zero {
+                    matches!(cond.t().c(), Conditioning::Boolean | Conditioning::None)
+                } else {
+                    matches!(cond.t().c(), Conditioning::Loobean | Conditioning::None)
+                });
+
                 // If the condition reduces to a constant, we can determine the result
                 if let Ok(constant_cond) = cond.pure_eval() {
-                    match func {
-                        Intrinsic::IfZero => {
-                            if constant_cond.is_zero() {
-                                *e = args[1].clone();
-                            } else {
-                                *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
-                            }
+                    if if_not_zero {
+                        if !constant_cond.is_zero() {
+                            *e = args[1].clone();
+                        } else {
+                            *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
                         }
-                        Intrinsic::IfNotZero => {
-                            if !constant_cond.is_zero() {
-                                *e = args[1].clone();
-                            } else {
-                                *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
-                            }
+                    } else {
+                        if constant_cond.is_zero() {
+                            *e = args[1].clone();
+                        } else {
+                            *e = flatten_list(args.get(2).cloned().unwrap_or_else(Node::zero));
                         }
-                        _ => unreachable!(),
                     }
                 } else {
                     let conds = {
                         let cond_not_zero = cond.clone();
-                        // If the condition is binary, cond_zero = 1 - x...
-                        let cond_zero = if args[0].t().is_bool() {
-                            Intrinsic::Sub.call(&[Node::one(), cond])?
+                        let cond_zero = Intrinsic::Sub
+                            .call(&[Node::one(), Intrinsic::Normalize.call(&[cond.clone()])?])?;
+                        if if_not_zero {
+                            [cond_not_zero, cond_zero]
                         } else {
-                            // ...otherwise, cond_zero = 1 - x.INV(x)
-                            Intrinsic::Sub.call(&[
-                                Node::one(),
-                                Intrinsic::Mul
-                                    .call(&[cond.clone(), Intrinsic::Inv.call(&[cond])?])?,
-                            ])?
-                        };
-                        match func {
-                            Intrinsic::IfZero => [cond_zero, cond_not_zero],
-                            Intrinsic::IfNotZero => [cond_not_zero, cond_zero],
-                            _ => unreachable!(),
+                            [cond_zero, cond_not_zero]
                         }
                     };
 
@@ -104,7 +98,12 @@ fn raise_ifs(mut e: Node) -> Node {
             *args = args.iter_mut().map(|a| raise_ifs(a.clone())).collect();
 
             match func {
-                Intrinsic::Add | Intrinsic::Sub | Intrinsic::Mul => {
+                Intrinsic::Add
+                | Intrinsic::Sub
+                | Intrinsic::Mul
+                | Intrinsic::VectorAdd
+                | Intrinsic::VectorSub
+                | Intrinsic::VectorMul => {
                     for (i, a) in args.iter().enumerate() {
                         if let Expression::Funcall {
                             func: func_if @ (Intrinsic::IfZero | Intrinsic::IfNotZero),
@@ -122,28 +121,25 @@ fn raise_ifs(mut e: Node) -> Node {
                                         .collect::<Vec<_>>(),
                                 )
                                 .unwrap();
-                            let new_else = func
-                                .call(
-                                    &args
-                                        .iter()
-                                        .take(i)
-                                        .cloned()
-                                        .chain(std::iter::once(
-                                            args_if.get(2).cloned().unwrap_or_else(|| {
-                                                Node::from_expr(Expression::Void)
-                                            }),
-                                        ))
-                                        .filter(|e| !matches!(e.e(), Expression::Void))
-                                        .collect::<Vec<_>>(),
-                                )
-                                .unwrap();
 
-                            let new_e = raise_ifs(
-                                func_if
-                                    .call(&[cond, new_then, new_else])
-                                    .unwrap()
-                                    .with_type(a.t()),
-                            );
+                            let mut new_args = vec![cond, new_then];
+                            if let Some(arg_else) = args_if.get(2).cloned() {
+                                new_args.push(
+                                    func.call(
+                                        &args
+                                            .iter()
+                                            .take(i)
+                                            .cloned()
+                                            .chain(std::iter::once(arg_else))
+                                            .filter(|e| !matches!(e.e(), Expression::Void))
+                                            .collect::<Vec<_>>(),
+                                    )
+                                    .unwrap(),
+                                )
+                            }
+
+                            let new_e =
+                                raise_ifs(func_if.call(&new_args).unwrap().with_type(a.t()));
                             return new_e;
                         }
                     }
@@ -151,9 +147,9 @@ fn raise_ifs(mut e: Node) -> Node {
                 }
                 Intrinsic::IfZero
                 | Intrinsic::IfNotZero
-                | Intrinsic::Shift
                 | Intrinsic::Neg
                 | Intrinsic::Inv
+                | Intrinsic::Normalize
                 | Intrinsic::Exp
                 | Intrinsic::Begin => e,
             }
