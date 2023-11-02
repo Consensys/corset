@@ -2,11 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.0-alpha] - 2023-11-02
+
+### Bug Fixes
+
+- Ensure that generated Besu files implement `ModuleTrace`
+
+### Features
+
+- Add vertical scrolling
+- Prettier plookups
+- Introduce field-agnosticity and related type-system revision ([#40](https://github.com/orhun/git-cliff/issues/40))
+
+### Besu
+
+- Pre-allocate column buffers
+- Fine-typing of constants
+- Update to new packages
+
 ## [8.3.9] - 2023-09-29
 
 ### Bug Fixes
 
 - Do not ignore explicit base annotation on column declarations
+
+### Miscellaneous Tasks
+
+- Release corset version 8.3.9
 
 ## [8.3.8] - 2023-09-28
 
