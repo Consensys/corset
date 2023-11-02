@@ -15,7 +15,7 @@ use regex_lite::Regex;
 use std::collections::HashMap;
 
 type Backend = CrosstermBackend<std::io::Stdout>;
-type Frame<'a> = ratatui::Frame<'a, Backend>;
+type Frame<'a> = ratatui::Frame<'a>;
 type StdTerminal = Terminal<Backend>;
 
 const CONTEXT: isize = 50;

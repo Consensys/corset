@@ -17,7 +17,7 @@ path = "src/main.rs"
 anyhow = "1"
 buche = "0.7"
 buildstructor = "0.5.2"
-cached = { version = "0.45", default-features = false }
+cached = { version = "0.46", default-features = false }
 clap = { version = "4", features = ["derive", "wrap_help", "cargo"], optional = true }
 clap-verbosity-flag = { version = "2", optional = true }
 convert_case = "0.6"
@@ -41,7 +41,7 @@ pairing_ce = "0.28"
 pest = { version = "2.4", optional = true }
 pest_derive = { version = "2.4", optional = true }
 postgres = { version = "0.19", optional = true }
-ratatui = {version = "0.23", optional = true }
+ratatui = {version = "0.24", optional = true }
 rayon = "1.5"
 regex-lite = "0.1"
 ron = "^0.7.0"
@@ -49,11 +49,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
 sorbus = "0.9"
 thiserror = "1.0.38"
-ratatui-textarea = { version = "0.3", optional = true }
+ratatui-textarea = { version = "0.4", optional = true }
 ellipse = "0.2.0"
 
 [target.'cfg(all(target_arch = "x86_64", target_feature = "avx"))'.dependencies]
-simd-json = "0.11"
+simd-json = "0.13"
 
 [features]
 cli = ["dep:clap-verbosity-flag", "dep:clap"]
