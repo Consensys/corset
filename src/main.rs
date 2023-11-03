@@ -278,6 +278,12 @@ enum Commands {
             help = "display perspective details"
         )]
         show_perspectives: bool,
+        #[arg(
+            short = 's',
+            long = "spilling",
+            help = "display spilling for all modules"
+        )]
+        show_spilling: bool,
         #[arg(short = 'T', long = "types", help = "display types information")]
         show_types: bool,
         #[arg(
@@ -831,6 +837,7 @@ fn main() -> Result<()> {
             show_computations,
             show_perspectives,
             show_types,
+            show_spilling,
             only,
             skip,
         } => {
@@ -850,6 +857,7 @@ fn main() -> Result<()> {
                     types: show_types,
                     perspectives: show_perspectives,
                     computations: show_computations,
+                    spilling: show_spilling,
                 },
                 only.as_ref(),
                 &skip,

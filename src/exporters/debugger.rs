@@ -382,6 +382,13 @@ fn render_perspectives(cs: &ConstraintSet) {
     }
 }
 
+fn render_spilling(cs: &ConstraintSet) {
+    println!("\n{}", "=== Spilling ===".bold().yellow());
+    for (module, spilling) in cs.columns.spilling.iter() {
+        println!("{:>10}: {:>4}", module.blue().bold(), spilling);
+    }
+}
+
 pub(crate) struct DebugSettings {
     pub modules: bool,
     pub constraints: bool,
@@ -390,6 +397,7 @@ pub(crate) struct DebugSettings {
     pub computations: bool,
     pub perspectives: bool,
     pub types: bool,
+    pub spilling: bool,
 }
 
 pub(crate) fn debug(
@@ -415,6 +423,9 @@ pub(crate) fn debug(
     }
     if settings.perspectives {
         render_perspectives(cs);
+    }
+    if settings.spilling {
+        render_spilling(cs);
     }
     Ok(())
 }
