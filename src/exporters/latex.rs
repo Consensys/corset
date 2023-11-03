@@ -345,7 +345,7 @@ fn constraints(ast: &Ast) -> Vec<LatexConstraint> {
                 })
             }
             // Token::DefPermutation { from, to } => todo!(),
-            // Token::DefPlookup {
+            // Token::DefLookup {
             //     name,
             //     including,
             //     included,

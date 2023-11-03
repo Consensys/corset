@@ -201,8 +201,8 @@ fn format_defcolumns(xs: &[AstNode], tty: &mut Tty) {
     });
 }
 
-fn format_defplookup(xs: &[AstNode], tty: &mut Tty) {
-    tty.within("defplookup", None, |tty| {
+fn format_deflookup(xs: &[AstNode], tty: &mut Tty) {
+    tty.within("deflookup", None, |tty| {
         tty.cr();
         tty.each_but_last(
             xs.iter().skip(1),
@@ -617,7 +617,7 @@ impl AstNode {
                                 format_defpairs(ns, tty)
                             }
                             Some("defperspective") => format_defperspective(ns, tty),
-                            Some("defplookup") => format_defplookup(ns, tty),
+                            Some("deflookup") => format_deflookup(ns, tty),
                             Some("defpermutation") => format_defpermutation(ns, tty),
                             Some("definterleaved") => format_definterleaved(ns, tty),
                             Some("let") => format_let(ns, tty),

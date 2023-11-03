@@ -203,7 +203,7 @@ fn render_constraints(
                     pretty_expr(expr, None, &mut tty, show_types);
                     println!("{}", tty.page_feed());
                 }
-                Constraint::Plookup {
+                Constraint::Lookup {
                     handle,
                     including,
                     included,

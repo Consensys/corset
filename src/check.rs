@@ -366,7 +366,7 @@ fn check_constraint(
     }
 }
 
-fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Result<()> {
+fn check_lookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Result<()> {
     // Compute the LC \sum_k (k+1) × x_k[i]
     fn pseudo_rlc(cols: &[&ValueBacking], i: usize, columns: &ColumnSet) -> Value {
         let mut ax = Value::zero();
@@ -400,7 +400,7 @@ fn check_plookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Res
         .all(|l| l == 0);
     match (children_empty, parent_empty) {
         (true, true) | (true, false) => {
-            warn!("empty plookup found; skipping");
+            warn!("empty lookup found; skipping");
             return Ok(());
         }
         (false, true) => bail!(
@@ -583,12 +583,12 @@ pub fn check(
                         }
                     }
                 }
-                Constraint::Plookup {
+                Constraint::Lookup {
                     handle: name,
                     including: parents,
                     included: children,
                 } => {
-                    if let Err(trace) = check_plookup(cs, parents, children) {
+                    if let Err(trace) = check_lookup(cs, parents, children) {
                         if settings.report {
                             println!("{} failed:\n{:?}\n", name, trace);
                         }

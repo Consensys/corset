@@ -20,7 +20,7 @@ struct FmtParser;
 #[derive(PartialEq, Eq, Clone)]
 /// a symbol can either be:
 ///   - Symbol::Local, i.e. relative to the current symbol table;
-///   - Symbol::Path, i.e. a fully specified path (especially useful for plookups)
+///   - Symbol::Path, i.e. a fully specified path (especially useful for lookups)
 pub enum Symbol {
     Local(String),
     Path(Vec<String>),

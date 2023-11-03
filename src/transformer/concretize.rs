@@ -27,7 +27,7 @@ impl ConstraintSet {
         for c in self.constraints.iter_mut() {
             match c {
                 Constraint::Vanishes { expr, .. } => expr.concretize(),
-                Constraint::Plookup { .. } => {}
+                Constraint::Lookup { .. } => {}
                 Constraint::Permutation { .. } => {}
                 Constraint::InRange { exp, .. } => exp.concretize(),
                 Constraint::Normalization { .. } => {}

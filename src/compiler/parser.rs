@@ -168,7 +168,7 @@ impl<T> Kind<T> {
 #[derive(PartialEq, Eq, Clone)]
 /// a symbol can either be:
 ///   - Symbol::Local, i.e. relative to the current symbol table;
-///   - Symbol::Path, i.e. a fully specified path (especially useful for plookups)
+///   - Symbol::Path, i.e. a fully specified path (especially useful for lookups)
 pub enum Symbol {
     Local(String),
     Path(Vec<String>),
@@ -300,8 +300,8 @@ pub enum Token {
         /// the source columns to be interleaved
         froms: Vec<AstNode>, // either Token::Symbol or Token::IndexedSymbol
     },
-    /// declaration of a plookup constraint between two sets of columns
-    DefPlookup {
+    /// declaration of a lookup constraint between two sets of columns
+    DefLookup {
         name: String,
         including: Vec<AstNode>,
         included: Vec<AstNode>,
@@ -449,7 +449,7 @@ impl Debug for Token {
             Token::DefAliases(cols) => write!(f, "ALIASES {:?}", cols),
             Token::DefAlias(from, to) => write!(f, "{} -> {}", from, to),
             Token::DefunAlias(from, to) => write!(f, "{} -> {}", from, to),
-            Token::DefPlookup {
+            Token::DefLookup {
                 name,
                 including,
                 included,
@@ -1030,10 +1030,10 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 lc,
             })
         }
-        "defplookup" => {
+        "deflookup" => {
             let name = tokens
                 .next()
-                .with_context(|| anyhow!("expected plookup name"))??
+                .with_context(|| anyhow!("expected lookup name"))??
                 .as_symbol()?
                 .to_owned();
 
@@ -1050,7 +1050,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 .to_vec();
 
             Ok(AstNode {
-                class: Token::DefPlookup {
+                class: Token::DefLookup {
                     name,
                     including,
                     included,

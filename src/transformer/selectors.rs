@@ -57,7 +57,7 @@ pub fn expand_constraints(cs: &mut ConstraintSet) -> Result<()> {
     let mut new_cs_exps = vec![];
     for c in cs.constraints.iter_mut() {
         match c {
-            Constraint::Plookup {
+            Constraint::Lookup {
                 handle,
                 including: parents,
                 included: children,

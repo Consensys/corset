@@ -47,7 +47,7 @@ pub enum Constraint {
         domain: Option<Domain>,
         expr: Box<Node>,
     },
-    Plookup {
+    Lookup {
         handle: Handle,
         including: Vec<Node>,
         included: Vec<Node>,
@@ -75,7 +75,7 @@ impl Constraint {
     pub fn name(&self) -> String {
         match self {
             Constraint::Vanishes { handle, .. } => handle.to_string(),
-            Constraint::Plookup { handle, .. } => handle.to_string(),
+            Constraint::Lookup { handle, .. } => handle.to_string(),
             Constraint::Permutation { handle, .. } => handle.to_string(),
             Constraint::InRange { handle, .. } => handle.to_string(),
             Constraint::Normalization { handle, .. } => handle.to_string(),
@@ -85,7 +85,7 @@ impl Constraint {
     pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut ColumnRef)) {
         match self {
             Constraint::Vanishes { expr, .. } => expr.add_id_to_handles(set_id),
-            Constraint::Plookup {
+            Constraint::Lookup {
                 including: xs,
                 included: ys,
                 ..
@@ -113,7 +113,7 @@ impl Constraint {
     pub(crate) fn size(&self) -> usize {
         match self {
             Constraint::Vanishes { expr, .. } => expr.size(),
-            Constraint::Plookup { .. } => 1,
+            Constraint::Lookup { .. } => 1,
             Constraint::Permutation { .. } => 1,
             Constraint::InRange { .. } => 1,
             Constraint::Normalization { .. } => 1,
@@ -918,7 +918,7 @@ impl ConstraintSet {
                         ))
                     }
                 }
-                Constraint::Plookup {
+                Constraint::Lookup {
                     handle,
                     including,
                     included,
@@ -1535,7 +1535,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
         | Token::Defun { .. }
         | Token::Defpurefun { .. }
         | Token::DefPermutation { .. }
-        | Token::DefPlookup { .. }
+        | Token::DefLookup { .. }
         | Token::DefInrange(..) => Ok(None),
         Token::BlockComment(_) | Token::InlineComment(_) => unreachable!(),
     }
@@ -1610,12 +1610,12 @@ fn reduce_toplevel(
                 }))
             }
         }
-        Token::DefPlookup {
+        Token::DefLookup {
             name,
             including: parent,
             included: child,
         } => {
-            *ctx = ctx.derive(&format!("plookup-{}", name))?.global(true);
+            *ctx = ctx.derive(&format!("lookup-{}", name))?.global(true);
             let handle = Handle::new(ctx.module(), name);
             let parents = parent
                 .iter()
@@ -1633,7 +1633,7 @@ fn reduce_toplevel(
                     children.len()
                 )
             } else {
-                Ok(Some(Constraint::Plookup {
+                Ok(Some(Constraint::Lookup {
                     handle,
                     including: parents,
                     included: children,

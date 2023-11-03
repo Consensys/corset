@@ -104,7 +104,7 @@ impl Node {
                             assert!(args.len() == 2);
                             for a in args.iter_mut() {
                                 // TODO: probably only necessary for
-                                // exo-constants; plookups columnization ought
+                                // exo-constants; lookups columnization ought
                                 // to work otherwise
                                 if a.is_constant() {
                                     a.columnize_constant(module, new_constants);
@@ -296,7 +296,7 @@ impl ConstraintSet {
             match func {
                 ExoOperation::Add | ExoOperation::Sub => {
                     let module = ADDER_MODULE;
-                    self.constraints.push(Constraint::Plookup {
+                    self.constraints.push(Constraint::Lookup {
                         handle: Handle::new(module, &new_handle.name),
                         including: vec![
                             Node::column()
@@ -331,7 +331,7 @@ impl ConstraintSet {
                 }
                 ExoOperation::Mul => {
                     let module = MULER_MODULE;
-                    self.constraints.push(Constraint::Plookup {
+                    self.constraints.push(Constraint::Lookup {
                         handle: Handle::new(module, &new_handle.name),
                         including: vec![
                             Node::column()

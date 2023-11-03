@@ -477,8 +477,8 @@ impl ConstraintSetBuilder {
             sources.append(&mut constants);
         }
 
-        if let Some(mut plookups) = Self::find_section(dir, "plookups")? {
-            sources.append(&mut plookups);
+        if let Some(mut lookups) = Self::find_section(dir, "lookups")? {
+            sources.append(&mut lookups);
         }
 
         Ok(sources)
@@ -841,10 +841,6 @@ fn main() -> Result<()> {
             only,
             skip,
         } => {
-            if !show_columns && !show_constraints {
-                error!("no elements specified to debug");
-            }
-
             let cs = builder.to_constraint_set()?;
 
             exporters::debugger::debug(

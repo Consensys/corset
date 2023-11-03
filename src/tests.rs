@@ -162,7 +162,7 @@ fn array_len() {
 fn global_scope() {
     must_run(
         "global scope ok",
-        "(module asdf) (defcolumns a b) (module zxcv) (defcolumns x y) (defplookup test (asdf.a asdf.b) (zxcv.x zxcv.y))",
+        "(module asdf) (defcolumns a b) (module zxcv) (defcolumns x y) (deflookup test (asdf.a asdf.b) (zxcv.x zxcv.y))",
     );
     must_fail(
         "local scope ok",

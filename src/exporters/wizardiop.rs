@@ -150,7 +150,7 @@ fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
                 domain,
                 expr,
             } => render_constraint(cs, &handle.to_string(), domain.clone(), expr),
-            Constraint::Plookup {
+            Constraint::Lookup {
                 handle,
                 including,
                 included,
