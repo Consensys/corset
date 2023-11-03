@@ -163,8 +163,11 @@ impl ModuleView {
                                 let base = cs.columns.column(column_ref).unwrap().base;
                                 let x_str = x.pretty_with_base(base);
                                 maxes[k + 1] = maxes[k + 1].max(x_str.len());
-                                let bg_color =
+                                // map color to the 231-17 range of readable color
+                                // https://i.stack.imgur.com/KTSQa.png
+                                let hash =
                                     x.to_bytes().iter().fold(0u8, |ax, bx| ax.wrapping_add(*bx));
+                                let bg_color = (hash % (231 - 17)) + 17;
                                 // ensure that we write white on dark colors and white on dark ones
                                 let corrected_fg_color = if bg_color % 36 > 18 {
                                     Color::Black
