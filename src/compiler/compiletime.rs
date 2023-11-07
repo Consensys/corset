@@ -26,7 +26,10 @@ fn compile_time_constants(e: &AstNode, ctx: &mut Scope, settings: &CompileSettin
                 };
                 ctx.insert_constant(
                     name,
-                    value.pure_eval().with_context(|| make_ast_error(exp))?,
+                    value
+                        .pure_eval()
+                        .with_context(|| make_ast_error(exp))?
+                        .into(),
                     true,
                 )?;
             }

@@ -5,15 +5,14 @@ use crate::{
     structs::Handle,
 };
 use anyhow::*;
+use ark_bls12_377::fr::Fr;
+use ark_ff::{fields::Field, BigInteger, PrimeField};
 use itertools::Itertools;
 use num_bigint::{BigInt, Sign};
 use num_traits::{Euclid, FromPrimitive, Num, One, ToPrimitive, Zero};
 use owo_colors::OwoColorize;
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 use serde::{Deserialize, Serialize};
+use std::ops::{AddAssign, MulAssign, SubAssign};
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
@@ -35,12 +34,32 @@ fn clamp_bi(bi: &mut BigInt) {
     assert!(bi.sign() != Sign::Minus);
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, Ord, Hash)]
+#[derive(Debug, Clone, Eq, Ord, Hash, Serialize, Deserialize)]
 pub enum Value {
     BigInt(BigInt),
+    #[serde(with = "FrDef")]
     Native(Fr),
+    #[serde(skip)]
     ExoNative(Vec<Fr>),
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(remote = "Fr")]
+struct FrDef {
+    #[serde(getter = "get_limbs")]
+    limbs: [u64; 4],
+}
+
+fn get_limbs(x: &Fr) -> &[u64; 4] {
+    &x.0 .0
+}
+
+impl From<FrDef> for Fr {
+    fn from(def: FrDef) -> Fr {
+        Fr::from(ark_ff::BigInt(def.limbs))
+    }
+}
+
 impl Value {
     pub fn is_zero(&self) -> bool {
         match self {
@@ -59,11 +78,19 @@ impl Value {
     }
 
     pub(crate) fn zero() -> Self {
-        Value::BigInt(BigInt::zero())
+        if *crate::IS_NATIVE.read().unwrap() {
+            Value::Native(Fr::zero())
+        } else {
+            Value::BigInt(BigInt::zero())
+        }
     }
 
     pub(crate) fn one() -> Self {
-        Value::BigInt(BigInt::one())
+        if *crate::IS_NATIVE.read().unwrap() {
+            Value::Native(Fr::one())
+        } else {
+            Value::BigInt(BigInt::one())
+        }
     }
 
     pub(crate) fn add_assign(&mut self, other: &Value) {
@@ -109,7 +136,9 @@ impl Value {
     }
 
     pub(crate) fn negate(&mut self) {
-        todo!()
+        let mut ax = Value::zero().same_as(self);
+        ax.sub_assign(self);
+        *self = ax;
     }
 
     pub(crate) fn vector_add_assign(&mut self, other: &Value) {
@@ -193,11 +222,8 @@ impl Value {
 
     pub(crate) fn to_repr(&self) -> impl Iterator<Item = u64> {
         let us = match &self {
-            Value::Native(f) => f.into_repr().0.to_vec(),
-            Value::ExoNative(fs) => fs
-                .iter()
-                .flat_map(|f| f.into_repr().0.into_iter())
-                .collect(),
+            Value::Native(f) => f.0 .0.to_vec(),
+            Value::ExoNative(fs) => fs.iter().flat_map(|f| f.0 .0.iter()).cloned().collect(),
             Value::BigInt(_) => todo!(),
         };
         us.into_iter()
@@ -205,15 +231,10 @@ impl Value {
 
     pub(crate) fn to_bytes(&self) -> Vec<u8> {
         match &self {
-            Value::Native(f) => f
-                .into_repr()
-                .0
-                .iter()
-                .flat_map(|x| x.to_be_bytes())
-                .collect(),
+            Value::Native(f) => f.0 .0.iter().flat_map(|u| u.to_be_bytes()).collect(),
             Value::ExoNative(fs) => fs
                 .iter()
-                .flat_map(|f| f.into_repr().0.into_iter().flat_map(|x| x.to_be_bytes()))
+                .flat_map(|f| f.0 .0.iter().flat_map(|u| u.to_be_bytes()))
                 .collect(),
             Value::BigInt(bi) => bi.to_bytes_be().1,
         }
@@ -238,17 +259,26 @@ impl Value {
         }
     }
 
-    pub(crate) fn to_bi(&mut self) {
+    pub(crate) fn to_bi(&self) -> BigInt {
+        match self {
+            Value::BigInt(x) => x.clone(),
+            Value::Native(fr) => BigInt::from_bytes_be(Sign::Plus, &fr.into_bigint().to_bytes_be()),
+            Value::ExoNative(_) => unimplemented!(),
+        }
+    }
+
+    pub(crate) fn into_bi(&mut self) {
         match self {
             Value::BigInt(_) => {}
             _ => *self = Value::BigInt(BigInt::from_bytes_le(Sign::Plus, &self.to_bytes())),
         }
     }
 
-    pub(crate) fn into_bi(self) -> Value {
+    pub(crate) fn to_bi_variant(&self) -> Value {
         match self {
-            Value::BigInt(_) => self,
-            _ => Value::BigInt(BigInt::from_bytes_le(Sign::Plus, &self.to_bytes())),
+            Value::BigInt(_) => self.clone(),
+            Value::Native(fr) => Value::BigInt(self.to_bi()),
+            _ => unimplemented!(),
         }
     }
 
@@ -276,7 +306,7 @@ impl Value {
 
     pub(crate) fn same_as(self, other: &Value) -> Value {
         match other {
-            Value::BigInt(_) => self.into_bi(),
+            Value::BigInt(_) => self.to_bi_variant(),
             Value::Native(_) => self.into_native(),
             Value::ExoNative(_) => unreachable!(),
         }
@@ -319,6 +349,31 @@ impl Value {
         }
     }
 }
+// impl Serialize for Value {
+//     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         match self {
+//             Value::BigInt(bi) => serializer.serialize_newtype_variant("Value", 0, "BigInt", &bi),
+//             Value::Native(_fr) => {
+//                 // serializer.serialize_newtype_variant("Value", 1, "Native", &fr.0 .0)
+//                 unimplemented!()
+//             }
+//             Value::ExoNative(_frs) => {
+//                 unimplemented!()
+//             }
+//         }
+//     }
+// }
+// impl<'de> Deserialize<'de> for Value {
+//     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+//     where
+//         D: serde::Deserializer<'de>,
+//     {
+//         todo!()
+//     }
+// }
 impl std::default::Default for Value {
     fn default() -> Value {
         Value::BigInt(BigInt::zero())
@@ -341,42 +396,48 @@ impl From<Fr> for Value {
 }
 impl From<usize> for Value {
     fn from(x: usize) -> Self {
-        Value::BigInt(BigInt::from_usize(x).unwrap())
+        if *crate::IS_NATIVE.read().unwrap() {
+            Value::Native(Fr::from(x as u64))
+        } else {
+            Value::BigInt(BigInt::from_usize(x).unwrap())
+        }
     }
 }
 impl From<isize> for Value {
     fn from(x: isize) -> Self {
-        let bi = BigInt::from_isize(x).unwrap();
-        Value::BigInt(bi)
+        if *crate::IS_NATIVE.read().unwrap() {
+            Value::Native(Fr::from(x as i64))
+        } else {
+            Value::BigInt(BigInt::from_isize(x).unwrap())
+        }
     }
 }
 impl From<i32> for Value {
     fn from(x: i32) -> Self {
-        let bi = BigInt::from_i32(x).unwrap();
-        Value::BigInt(bi)
+        if *crate::IS_NATIVE.read().unwrap() {
+            Value::Native(Fr::from(x))
+        } else {
+            Value::BigInt(BigInt::from_i32(x).unwrap())
+        }
     }
 }
 impl From<&str> for Value {
     fn from(x: &str) -> Self {
-        Value::BigInt(BigInt::from_str(x).unwrap())
+        if *crate::IS_NATIVE.read().unwrap() {
+            Value::Native(Fr::from_str(x).unwrap())
+        } else {
+            Value::BigInt(BigInt::from_str(x).unwrap())
+        }
     }
 }
 impl From<&Value> for BigInt {
     fn from(v: &Value) -> Self {
-        match v {
-            Value::BigInt(bi) => bi.clone(),
-            Value::Native(_) => todo!(),
-            Value::ExoNative(_) => todo!(),
-        }
+        v.to_bi()
     }
 }
 impl From<Value> for BigInt {
     fn from(v: Value) -> Self {
-        match v {
-            Value::BigInt(bi) => bi.clone(),
-            Value::Native(_) => todo!(),
-            Value::ExoNative(_) => todo!(),
-        }
+        v.to_bi()
     }
 }
 impl Pretty for Value {
@@ -461,6 +522,7 @@ impl std::fmt::Display for Value {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FieldRegister {
     pub handle: Handle,
+    #[serde(skip)]
     value: Option<Vec<Fr>>,
 }
 

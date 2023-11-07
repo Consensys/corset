@@ -470,11 +470,11 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
             delta_values.push(delta.clone());
 
             delta
-                .to_repr()
-                .flat_map(|u| u.to_le_bytes().into_iter())
+                .to_bytes()
+                .into_iter()
                 .map(|i| Value::from(i as usize))
                 .enumerate()
-                .take(16)
+                .take(16) // TODO: ensure that stays coherent with field size
                 .for_each(|(i, b)| delta_bytes_values[i].push(b));
         }
 

@@ -8,7 +8,10 @@ use errno::{set_errno, Errno};
 use libc::c_char;
 use log::*;
 use rayon::{prelude::*, ThreadPool};
-use std::ffi::{c_uint, CStr, CString};
+use std::{
+    ffi::{c_uint, CStr, CString},
+    sync::RwLock,
+};
 use transformer::ExpansionLevel;
 
 use crate::{
@@ -28,6 +31,8 @@ mod pretty;
 mod structs;
 mod transformer;
 mod utils;
+
+pub(crate) static IS_NATIVE: RwLock<bool> = RwLock::new(true);
 
 type Corset = ConstraintSet;
 

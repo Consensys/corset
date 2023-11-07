@@ -307,7 +307,7 @@ pub enum Token {
         included: Vec<AstNode>,
     },
     /// this constraint ensures that exp remains lesser than max
-    DefInrange(Box<AstNode>, usize),
+    DefInrange(Box<AstNode>, u64),
 }
 const LIST_DISPLAY_THRESHOLD: usize = 4;
 impl Token {
@@ -1025,7 +1025,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 .as_u64()?;
 
             Ok(AstNode {
-                class: Token::DefInrange(Box::new(exp), range as usize),
+                class: Token::DefInrange(Box::new(exp), range),
                 src,
                 lc,
             })

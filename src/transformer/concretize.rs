@@ -1,4 +1,5 @@
 use crate::compiler::{Constraint, ConstraintSet, Expression, Node};
+use std::str::FromStr;
 
 impl Node {
     pub(crate) fn concretize(&mut self) {
@@ -43,6 +44,7 @@ impl ConstraintSet {
 }
 
 pub fn concretize(cs: &mut ConstraintSet) {
-    cs.concretize_constraints();
+    *crate::IS_NATIVE.write().unwrap() = true;
     cs.concretize_registers();
+    cs.concretize_constraints();
 }

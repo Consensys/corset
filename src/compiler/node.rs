@@ -655,10 +655,10 @@ impl Node {
                     Some(ax)
                 }
                 Intrinsic::Exp => {
-                    let mut ax = Value::one();
                     let mantissa = args[0].eval_fold(i, get, cache, settings, f)?;
+                    let mut ax = mantissa.clone();
                     let exp = args[1].pure_eval().unwrap().to_usize().unwrap();
-                    for _ in 0..exp {
+                    for _ in 1..exp {
                         ax.mul_assign(&mantissa);
                     }
                     Some(ax)

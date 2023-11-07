@@ -1,4 +1,5 @@
 use anyhow::*;
+use ark_bls12_377::Fr;
 use cached::Cached;
 use itertools::Itertools;
 use log::*;
@@ -7,8 +8,6 @@ use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
 use num_traits::{One, Zero};
 use owo_colors::OwoColorize;
-use pairing_ce::bn256::Fr;
-use pairing_ce::ff::PrimeField;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 
@@ -1645,9 +1644,7 @@ fn reduce_toplevel(
             Ok(Some(Constraint::InRange {
                 handle,
                 exp: reduce(e, ctx, settings)?.unwrap(),
-                max: Fr::from_str(&range.to_string())
-                    .ok_or_else(|| anyhow!("`{range}` is not representable in Fr"))?
-                    .into(), // TODO: may be out of Fr and in Value
+                max: Fr::from(*range as u64).into(),
             }))
         }
         Token::DefColumns(columns) => {

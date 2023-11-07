@@ -356,6 +356,7 @@ fn check_constraint(
                 }
             }
         };
+        trace!("{} validated", name.pretty());
         Ok(())
     } else {
         warn!(
@@ -373,8 +374,7 @@ fn check_lookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Resu
 
         for (j, col) in cols.iter().enumerate() {
             let mut x = Value::from(j + 2);
-            let mut col_value = col.get(i as isize, false, columns).unwrap();
-            col_value.to_bi();
+            let col_value = col.get(i as isize, false, columns).unwrap();
 
             x.mul_assign(&col_value);
             ax.add_assign(&x);
@@ -525,8 +525,9 @@ pub fn check(
     }
 
     let failed = todo
-        .par_iter()
-        .with_max_len(1)
+        // .par_iter()
+        // .with_max_len(1)
+        .iter()
         .inspect(|_| {
             #[cfg(feature = "interactive")]
             {

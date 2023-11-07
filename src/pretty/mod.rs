@@ -1,8 +1,8 @@
+use ark_bls12_377::Fr;
+use ark_ff::{BigInteger, PrimeField};
+use itertools::Itertools;
+use num_traits::Zero;
 use owo_colors::{colored::Color, OwoColorize};
-use pairing_ce::{
-    bn256::Fr,
-    ff::{Field, PrimeField},
-};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -67,12 +67,27 @@ pub trait Pretty {
     fn pretty_with_base(&self, base: Base) -> String;
 }
 
+fn to_bytes<'a>(f: &'a Fr) -> Vec<u8> {
+    // TODO: smallvec
+    f.into_bigint()
+        .0
+        .iter()
+        .flat_map(|bs| bs.to_be_bytes())
+        .collect()
+}
+
+fn to_byte(f: &Fr) -> Option<u8> {
+    let bs = f.0.to_bytes_le();
+    if bs.iter().skip(1).any(|&b| b != 0) {
+        None
+    } else {
+        Some(bs[0])
+    }
+}
+
 impl Pretty for Fr {
     fn pretty(&self) -> String {
-        let hex = self.into_repr().to_string();
-        u64::from_str_radix(&hex[2..], 16)
-            .map(|x| x.to_string())
-            .unwrap_or(format!("0x0{}", hex[2..].trim_start_matches('0')))
+        format!("{}", self)
     }
 
     fn pretty_with_base(&self, base: Base) -> String {
@@ -85,50 +100,30 @@ impl Pretty for Fr {
                     if self.is_zero() {
                         String::from("0")
                     } else {
-                        format!(
-                            "0x{}",
-                            self.into_repr().to_string()[2..].trim_start_matches('0')
-                        )
+                        self.pretty()
                     }
                 }
-                Base::Bin => format!(
-                    "0b{:b}",
-                    u64::from_str_radix(
-                        self.into_repr().to_string()[2..].trim_start_matches('0'),
-                        16
-                    )
-                    .expect("too big to represent as binary"),
-                ),
+                Base::Bin => to_bytes(self)
+                    .into_iter()
+                    .map(|b| format!("0b{:b}", b))
+                    .join(""),
                 Base::Bytes => {
-                    // ugly, but works
                     if self.is_zero() {
-                        String::from("0")
+                        String::from("00")
                     } else {
-                        let mut bytes = self.into_repr().to_string()[2..]
-                            .trim_start_matches('0')
-                            .to_string();
-                        if bytes.len() % 2 != 0 {
-                            bytes.insert(0, '0');
-                        }
-
-                        let mut out = String::with_capacity(2 * bytes.len());
-                        let mut z = bytes.chars().peekable();
-                        while z.peek().is_some() {
-                            out.push_str(z.by_ref().take(2).collect::<String>().as_str());
-                            out.push(' ');
-                        }
-                        out
+                        to_bytes(self)
+                            .into_iter()
+                            .rev()
+                            .map(|b| format!("{:x}", b))
+                            .rev()
+                            .join(" ")
                     }
                 }
                 Base::Bool => if self.is_zero() { "false" } else { "true" }.to_string(),
                 Base::Loob => if self.is_zero() { "true" } else { "false" }.to_string(),
-                Base::OpCode => opcodes::to_str(
-                    u8::from_str_radix(
-                        self.into_repr().to_string()[2..].trim_start_matches('0'),
-                        16,
-                    )
-                    .expect("not an opcode"),
-                ),
+                Base::OpCode => to_byte(self)
+                    .map(|b| opcodes::to_str(b))
+                    .unwrap_or_else(|| self.pretty()),
             }
         }
     }

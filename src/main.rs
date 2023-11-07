@@ -7,7 +7,9 @@ use compiler::{Ast, ConstraintSet};
 use either::Either;
 use log::*;
 use owo_colors::OwoColorize;
+use std::cell::OnceCell;
 use std::io::IsTerminal;
+use std::sync::RwLock;
 use std::{
     io::{Read, Write},
     path::Path,
@@ -35,6 +37,8 @@ mod structs;
 mod tests;
 mod transformer;
 mod utils;
+
+pub(crate) static IS_NATIVE: RwLock<bool> = RwLock::new(false);
 
 #[derive(Parser)]
 #[command(author, version = concat!(clap::crate_version!(), " ", std::env!("GIT_HASH"), " ", std::env!("SIMD_ENABLED")), propagate_version = true)]
@@ -246,6 +250,12 @@ enum Commands {
     },
     /// Display the compiled the constraint system
     Debug {
+        #[arg(
+            long = "native",
+            short = 'N',
+            help = "execute computations in target Galois field"
+        )]
+        native_arithmetic: bool,
         #[arg(
             short = 'm',
             long = "modules",
@@ -830,6 +840,7 @@ fn main() -> Result<()> {
             info!("{}: SUCCESS", tracefile)
         }
         Commands::Debug {
+            native_arithmetic,
             show_modules,
             show_constants,
             show_columns,
@@ -841,7 +852,10 @@ fn main() -> Result<()> {
             only,
             skip,
         } => {
-            let cs = builder.to_constraint_set()?;
+            let mut cs = builder.to_constraint_set()?;
+            if native_arithmetic {
+                transformer::concretize(&mut cs);
+            }
 
             exporters::debugger::debug(
                 &cs,

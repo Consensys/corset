@@ -80,7 +80,7 @@ pub fn to_str(opcode: u8) -> String {
         0xfd => "REVERT".to_string(),
         0xfe => "INVALID".to_string(),
         0xff => "SELFDESTRUCT".to_string(),
-        _ => "???".to_string(),
+        _ => format!("{:x}", opcode),
     }
 }
 

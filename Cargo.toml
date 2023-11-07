@@ -15,6 +15,8 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+ark-bls12-377 = "0.4.0"
+ark-serialize = { version = "0.4", features = ["derive"] }
 buche = "0.7"
 buildstructor = "0.5.2"
 cached = { version = "0.46", default-features = false }
@@ -37,7 +39,6 @@ md5 = "0.7"
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
 owo-colors = "3.5.0"
-pairing_ce = "0.28"
 pest = { version = "2.4", optional = true }
 pest_derive = { version = "2.4", optional = true }
 postgres = { version = "0.19", optional = true }
@@ -51,6 +52,7 @@ sorbus = "0.9"
 thiserror = "1.0.38"
 ratatui-textarea = { version = "0.4", optional = true }
 ellipse = "0.2.0"
+ark-ff = "0.4.2"
 
 [target.'cfg(all(target_arch = "x86_64", target_feature = "avx"))'.dependencies]
 simd-json = "0.13"
