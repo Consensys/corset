@@ -111,7 +111,7 @@ fn render_funcall(cs: &ConstraintSet, func: &Intrinsic, args: &[Node]) -> String
     match func {
         Intrinsic::Add => make_chain(cs, args, "Add", true),
         Intrinsic::Mul => make_chain(cs, args, "Mul", false),
-        Intrinsic::Sub => make_chain(cs, args, "Sub", true),
+        Intrinsic::Sub | Intrinsic::VectorSub => make_chain(cs, args, "Sub", true), // TODO: drop later
         Intrinsic::Exp => {
             let exp = args[1]
                 .pure_eval()
@@ -135,7 +135,7 @@ fn render_funcall(cs: &ConstraintSet, func: &Intrinsic, args: &[Node]) -> String
         }
         Intrinsic::Neg => format!("({}).Neg()", render_expression(cs, &args[0])),
         x => {
-            unimplemented!("{:?}", x)
+            unimplemented!("{:?}/{:?}", x, args)
         }
     }
 }

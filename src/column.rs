@@ -907,7 +907,8 @@ impl ColumnSet {
     ) -> Option<String> {
         let modules = cols
             .into_iter()
-            .map(|c| self.column(c.borrow()).unwrap().handle.module.clone())
+            .filter_map(|c| self.column(c.borrow()).ok())
+            .map(|c| c.handle.module.clone())
             .collect::<HashSet<_>>();
         if modules.len() != 1 {
             None

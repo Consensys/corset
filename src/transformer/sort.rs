@@ -227,10 +227,8 @@ fn create_sort_constraint(
                             .shift(-1)
                             .build(),
                     ])?;
-                    let diff_inv = Intrinsic::Inv.call(&[diff.clone()])?;
-
                     Intrinsic::Sub
-                        .call(&[Node::from_const(1), Intrinsic::Mul.call(&[diff, diff_inv])?])?
+                        .call(&[Node::from_const(1), Intrinsic::Normalize.call(&[diff])?])?
                 },
             ])?),
         });
