@@ -443,7 +443,7 @@ impl From<Value> for BigInt {
 impl Pretty for Value {
     fn pretty(&self) -> String {
         match self {
-            Value::BigInt(i) => format!("ε{}", i),
+            Value::BigInt(i) => format!("{}", i),
             Value::Native(f) => f.pretty(),
             Value::ExoNative(fs) => fs.iter().map(|f| f.pretty()).join("/"),
         }
@@ -453,7 +453,7 @@ impl Pretty for Value {
         match self {
             Value::BigInt(i) => {
                 format!(
-                    "ε{}",
+                    "{}",
                     match base {
                         Base::Dec => i.to_str_radix(10),
                         Base::Hex => format!("0x{}", i.to_str_radix(16)),
@@ -510,7 +510,7 @@ impl std::cmp::PartialEq for Value {
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Value::BigInt(i) => write!(f, "ε{}", i),
+            Value::BigInt(i) => write!(f, "{}", i),
             Value::Native(fr) => write!(f, "{}", fr.pretty()),
             Value::ExoNative(fs) => {
                 write!(f, "{:?}", fs.iter().map(|f| f.pretty()).collect::<Vec<_>>())

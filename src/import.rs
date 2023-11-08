@@ -98,12 +98,12 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
         .map(|x| match x {
             Value::Number(n) => t.rm().validate(
                 cache_num
-                    .cache_get_or_set_with(n, || CValue::from_str(&n.to_string()).unwrap())
+                    .cache_get_or_set_with(n, || CValue::from(n.as_str()))
                     .to_owned(),
             ),
             Value::String(s) => t.rm().validate(
                 cache_str
-                    .cache_get_or_set_with(s.clone(), || CValue::from_str(&s).unwrap())
+                    .cache_get_or_set_with(s.clone(), || CValue::from(s.as_str()))
                     .to_owned(),
             ),
             _ => bail!("expected numeric value, found `{}`", x),
@@ -137,7 +137,7 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
             };
             t.rm().validate(
                 cache
-                    .cache_get_or_set_with(s.clone(), || CValue::from_str(&s).unwrap())
+                    .cache_get_or_set_with(s.clone(), || CValue::from(s.as_str()))
                     .to_owned(),
             )
         })
