@@ -202,7 +202,7 @@ fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
 }
 
 fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {
-    let r = format!("limits.{}", h.mangled_module().to_case(Case::ScreamingSnake));
+    let r = format!("build.{}", h.mangled_module().to_case(Case::ScreamingSnake));
     // let r = format!("SIZE_{}", h.mangled_module());
     sizes.insert(r.clone());
     r
