@@ -7,9 +7,6 @@ import (
 	"github.com/consensys/accelerated-crypto-monorepo/zkevm"
 )
 
-// TODO: __go:embed traces-limits-v1.toml
-// TODO: var limitStr string
-
 func ZkEVMDefine(build *zkevm.Builder) {
 	
 	
