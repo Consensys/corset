@@ -19,7 +19,7 @@ use std::sync::atomic::AtomicUsize;
 
 use super::node::ColumnRef;
 use super::tables::{ComputationTable, Scope};
-use super::{common::*, CompileSettings, Expression, Magma, Node, Type};
+use super::{common::*, CompileSettings, Conditioning, Expression, Magma, Node, Type};
 use crate::column::{Column, ColumnSet, Computation, RegisterID, Value, ValueBacking};
 use crate::compiler::parser::*;
 use crate::dag::ComputationDag;
@@ -1565,7 +1565,12 @@ fn reduce_toplevel(
             let body = if let Some(guard) = guard {
                 let guard_expr = reduce(guard, &mut ctx, settings)?
                     .with_context(|| anyhow!("guard `{:?}` is empty", guard))?;
-                Intrinsic::Mul.call(&[guard_expr, body])?
+                match guard_expr.t().c() {
+                    Conditioning::Loobean => {
+                        bail!("unexpected loobean guard in {}", handle.pretty())
+                    }
+                    _ => Intrinsic::IfNotZero.call(&[guard_expr, body])?,
+                }
             } else {
                 body
             };
