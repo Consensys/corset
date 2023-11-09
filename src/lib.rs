@@ -12,7 +12,7 @@ use std::{
     ffi::{c_uint, CStr, CString},
     sync::RwLock,
 };
-use transformer::ExpansionLevel;
+use transformer::{AutoConstraint, ExpansionLevel};
 
 use crate::{
     column::{Computation, Value, ValueBacking},
@@ -255,7 +255,11 @@ fn reverse_fr_x86_64(v: &mut [u64; 4]) {
 }
 
 fn make_corset(mut constraints: ConstraintSet) -> Result<Corset> {
-    transformer::expand_to(&mut constraints, ExpansionLevel::all().into(), &[])?;
+    transformer::expand_to(
+        &mut constraints,
+        ExpansionLevel::all().into(),
+        AutoConstraint::all(),
+    )?;
     transformer::concretize(&mut constraints);
     Ok(constraints)
 }
