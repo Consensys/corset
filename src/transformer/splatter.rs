@@ -260,7 +260,7 @@ impl ConstraintSet {
             }
         }
 
-        self.make_ancillaries(ancillaries);
+        // self.make_ancillaries(ancillaries);
 
         for (new_column, new_computation) in new_constants {
             let id = self.columns.insert_column_and_register(new_column).unwrap();
@@ -296,7 +296,7 @@ impl ConstraintSet {
             match func {
                 ExoOperation::Add | ExoOperation::Sub => {
                     let module = ADDER_MODULE;
-                    self.constraints.push(Constraint::Lookup {
+                    self.insert_constraint(Constraint::Lookup {
                         handle: Handle::new(module, &new_handle.name),
                         including: vec![
                             Node::column()
@@ -331,7 +331,7 @@ impl ConstraintSet {
                 }
                 ExoOperation::Mul => {
                     let module = MULER_MODULE;
-                    self.constraints.push(Constraint::Lookup {
+                    self.insert_constraint(Constraint::Lookup {
                         handle: Handle::new(module, &new_handle.name),
                         including: vec![
                             Node::column()

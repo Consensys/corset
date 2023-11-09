@@ -7,7 +7,6 @@ use compiler::{Ast, ConstraintSet};
 use either::Either;
 use log::*;
 use owo_colors::OwoColorize;
-use std::cell::OnceCell;
 use std::io::IsTerminal;
 use std::sync::RwLock;
 use std::{

@@ -55,7 +55,6 @@ pub enum Constraint {
         handle: Handle,
         from: Vec<ColumnRef>,
         to: Vec<ColumnRef>,
-        signs: Vec<bool>,
     },
     InRange {
         handle: Handle,
@@ -639,6 +638,41 @@ impl ConstraintSet {
 
     pub(crate) fn handle(&self, h: &ColumnRef) -> &Handle {
         &self.columns.column(h).unwrap().handle
+    }
+
+    pub(crate) fn insert_constraint(&mut self, c: Constraint) {
+        match &c {
+            Constraint::Vanishes { expr, .. } => {
+                for c in expr.dependencies().into_iter() {
+                    self.columns.get_col_mut(&c).unwrap().used = true
+                }
+            }
+            Constraint::Lookup {
+                including,
+                included,
+                ..
+            } => {
+                for c in including
+                    .iter()
+                    .flat_map(Node::dependencies)
+                    .chain(included.iter().flat_map(Node::dependencies))
+                {
+                    self.columns.mark_used(&c).unwrap();
+                }
+            }
+            Constraint::Permutation { from, to, .. } => {
+                for c in from.iter().chain(to.iter()) {
+                    self.columns.mark_used(&c).unwrap();
+                }
+            }
+            Constraint::InRange { exp, .. } => {
+                for c in exp.dependencies().into_iter() {
+                    self.columns.mark_used(&c).unwrap();
+                }
+            }
+            Constraint::Normalization { .. } => {}
+        }
+        self.constraints.push(c);
     }
 
     pub(crate) fn insert_perspective(
@@ -1744,7 +1778,6 @@ fn reduce_toplevel(
                 ),
                 from: froms,
                 to: tos,
-                signs: signs.clone(),
             }))
         }
         Token::DefInterleaving { .. } => {

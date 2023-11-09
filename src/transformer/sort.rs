@@ -99,7 +99,7 @@ fn create_sort_constraint(
         .collect::<Result<Vec<_>>>()?;
 
     // Create the binarity constraints
-    cs.constraints.push(Constraint::Vanishes {
+    cs.insert_constraint(Constraint::Vanishes {
         handle: Handle::new(&module, format!("{}-is-binary", cs.handle(&eq).name)),
         domain: None,
         expr: Box::new(Intrinsic::Mul.call(&[
@@ -111,7 +111,7 @@ fn create_sort_constraint(
         ])?),
     });
     for at in ats.iter() {
-        cs.constraints.push(Constraint::Vanishes {
+        cs.insert_constraint(Constraint::Vanishes {
             handle: Handle::new(&module, format!("{}-is-binary", cs.handle(at).name)),
             domain: None,
             expr: Box::new(Intrinsic::Mul.call(&[
@@ -125,7 +125,7 @@ fn create_sort_constraint(
     }
 
     // Create the byte decomposition constraint
-    cs.constraints.push(Constraint::Vanishes {
+    cs.insert_constraint(Constraint::Vanishes {
         handle: Handle::new(&module, format!("{}-is-binary", cs.handle(&delta).name)),
         domain: None,
         expr: Box::new(
@@ -152,7 +152,7 @@ fn create_sort_constraint(
 
     // Create the bytehood constraints
     for delta_byte in delta_bytes.iter() {
-        cs.constraints.push(Constraint::InRange {
+        cs.insert_constraint(Constraint::InRange {
             handle: Handle::new(&module, format!("{}-is-byte", cs.handle(delta_byte).name)),
             exp: Node::column()
                 .handle(delta_byte.clone())
@@ -185,7 +185,7 @@ fn create_sort_constraint(
         };
 
         let sorted_t = cs.columns.column(&sorted[i])?.t;
-        cs.constraints.push(Constraint::Vanishes {
+        cs.insert_constraint(Constraint::Vanishes {
             handle: Handle::new(&module, format!("{at}-0")),
             domain: None,
             expr: Box::new(
@@ -209,7 +209,7 @@ fn create_sort_constraint(
                 ])?,
             ),
         });
-        cs.constraints.push(Constraint::Vanishes {
+        cs.insert_constraint(Constraint::Vanishes {
             handle: Handle::new(&module, format!("{at}-1")),
             domain: None,
             expr: Box::new(Intrinsic::Mul.call(&[
@@ -235,7 +235,7 @@ fn create_sort_constraint(
     }
 
     // // Create the Eq + ∑@ = 1 (i.e. Eq = 1 XOR ∑@ = 1)
-    cs.constraints.push(Constraint::Vanishes {
+    cs.insert_constraint(Constraint::Vanishes {
         handle: Handle::new(&module, format!("Eq_@_{suffix}")),
         domain: None,
         expr: Box::new(
@@ -255,7 +255,7 @@ fn create_sort_constraint(
     });
 
     // // Create the Eq[i] = 0 constraint
-    cs.constraints.push(Constraint::Vanishes {
+    cs.insert_constraint(Constraint::Vanishes {
         handle: Handle::new(&module, format!("__SRT__Eq_i_{suffix}")),
         domain: None,
         expr: Box::new(

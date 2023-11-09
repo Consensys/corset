@@ -65,6 +65,14 @@ fn process_nhood(
             signs: vec![true],
         },
     )?;
+    cs.insert_constraint(Constraint::Permutation {
+        handle: Handle::new(
+            module,
+            format!("{} perm. {}", _intrld_aux_xs_id, srt_intrld_aux_xs_id),
+        ),
+        from: vec![_intrld_aux_xs_id],
+        to: vec![srt_intrld_aux_xs_id.clone()],
+    });
 
     let srt_intrld_aux_xs_node = Node::column()
         .handle(srt_intrld_aux_xs_id.clone())
@@ -73,13 +81,13 @@ fn process_nhood(
         .t(Magma::byte())
         .build();
 
-    cs.constraints.push(Constraint::Vanishes {
+    cs.insert_constraint(Constraint::Vanishes {
         handle: Handle::new(module, format!("2^{n}-hood-start")),
         domain: Some(Domain::Set(vec![0])),
         expr: Box::new(srt_intrld_aux_xs_node.clone()),
     });
 
-    cs.constraints.push(Constraint::Vanishes {
+    cs.insert_constraint(Constraint::Vanishes {
         handle: Handle::new(module, format!("2^{n}-hood-end")),
         domain: Some(Domain::Set(vec![-1])),
         expr: Box::new(
@@ -94,7 +102,7 @@ fn process_nhood(
         ),
     });
 
-    cs.constraints.push(Constraint::Vanishes {
+    cs.insert_constraint(Constraint::Vanishes {
         handle: Handle::new(module, format!("2^{n}-hood-middle")),
         domain: None,
         expr: Box::new(Intrinsic::Mul.call(&[

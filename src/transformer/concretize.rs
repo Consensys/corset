@@ -2,7 +2,6 @@ use crate::{
     column::Computation,
     compiler::{Constraint, ConstraintSet, Expression, Node},
 };
-use std::str::FromStr;
 
 impl Node {
     pub(crate) fn concretize(&mut self) {

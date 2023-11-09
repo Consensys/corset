@@ -169,10 +169,7 @@ fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
                     .join(", ")
             )],
             Constraint::Permutation {
-                handle,
-                from,
-                to,
-                signs: _,
+                handle, from, to, ..
             } => vec![format!(
                 "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
                 handle.mangle().to_case(Case::Snake),

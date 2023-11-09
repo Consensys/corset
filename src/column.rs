@@ -964,6 +964,15 @@ impl ColumnSet {
         }
     }
 
+    pub(crate) fn mark_used(&mut self, h: &ColumnRef) -> Result<()> {
+        if let Some(ref mut column) = self.get_col_mut(h) {
+            column.used = true;
+            Ok(())
+        } else {
+            bail!("{} can not be found", h.pretty())
+        }
+    }
+
     pub fn get_col_mut(&mut self, h: &ColumnRef) -> Option<&mut Column> {
         if h.is_id() {
             self._cols.get_mut(h.as_id())
