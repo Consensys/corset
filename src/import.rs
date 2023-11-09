@@ -175,8 +175,6 @@ pub fn fill_traces(
             if path.len() >= 2 {
                 let module = path[path.len() - 2].to_string();
                 let handle: ColumnRef = Handle::new(&module, &path[path.len() - 1]).into();
-                // The first column sets the size of its module
-                let module_raw_size = cs.effective_len_or_set(&module, xs.len() as isize);
 
                 // The min length can be set if the module contains range
                 // proofs, that require a minimal length of a certain power of 2
@@ -197,16 +195,6 @@ pub fn fill_traces(
                     let module_spilling = module_spilling
                         .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 
-                    if xs.len() as isize != module_raw_size {
-                        bail!(
-                            "{} has an incorrect length: expected {} (from {}), found {}",
-                            handle.to_string().blue(),
-                            module_raw_size.to_string().red().bold(),
-                            initiator.as_ref().unwrap(),
-                            xs.len().to_string().yellow().bold(),
-                        );
-                    }
-
                     let mut xs = parse_column(xs, handle.as_handle(), *t)
                         .with_context(|| anyhow!("while importing {}", handle))?;
 
@@ -222,11 +210,9 @@ pub fn fill_traces(
                         });
                         xs.reverse();
                     }
-                    cs.columns.set_column_value(&handle, xs, module_spilling)?
-                } else if let Some(Register { magma, .. }) = cs.columns.register(&handle) {
-                    let module_spilling = module_spilling
-                        .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 
+                    // The first column sets the size of its module
+                    let module_raw_size = cs.effective_len_or_set(&module, xs.len() as isize);
                     if xs.len() as isize != module_raw_size {
                         bail!(
                             "{} has an incorrect length: expected {} (from {}), found {}",
@@ -236,6 +222,11 @@ pub fn fill_traces(
                             xs.len().to_string().yellow().bold(),
                         );
                     }
+
+                    cs.columns.set_column_value(&handle, xs, module_spilling)?
+                } else if let Some(Register { magma, .. }) = cs.columns.register(&handle) {
+                    let module_spilling = module_spilling
+                        .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 
                     let mut xs = parse_column(xs, handle.as_handle(), *magma)
                         .with_context(|| anyhow!("while importing {}", handle))?;
@@ -250,6 +241,18 @@ pub fn fill_traces(
                         xs.resize(module_min_len, CValue::zero()); // TODO: register padding values
                         xs.reverse();
                     }
+
+                    let module_raw_size = cs.effective_len_or_set(&module, xs.len() as isize);
+                    if xs.len() as isize != module_raw_size {
+                        bail!(
+                            "{} has an incorrect length: expected {} (from {}), found {}",
+                            handle.to_string().blue(),
+                            module_raw_size.to_string().red().bold(),
+                            initiator.as_ref().unwrap(),
+                            xs.len().to_string().yellow().bold(),
+                        );
+                    }
+
                     cs.columns
                         .set_register_value(&handle, xs, module_spilling)?
                 } else {

@@ -873,6 +873,7 @@ impl ConstraintSet {
             let empty_backing: ValueBacking = ValueBacking::default();
             while let Some((r, column)) = current_col.next() {
                 let handle = &column.handle;
+                let module_size = self.effective_len_for(&handle.module).unwrap();
                 trace!("Writing {}", handle);
                 let backing = self.columns.backing(&r).unwrap_or_else(|| &empty_backing);
                 let padding: Value = if let Some(v) = column.padding_value.as_ref() {
@@ -904,7 +905,7 @@ impl ConstraintSet {
                 out.write_all(format!("\"{}\":{{\n", handle).as_bytes())?;
                 out.write_all("\"values\":[".as_bytes())?;
 
-                let mut value = backing.iter(&self.columns).peekable();
+                let mut value = backing.iter(&self.columns, module_size).peekable();
                 while let Some(x) = value.next() {
                     out.write_all(
                         cache
