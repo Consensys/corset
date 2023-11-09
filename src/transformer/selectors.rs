@@ -89,7 +89,7 @@ pub fn expand_constraints(cs: &mut ConstraintSet) -> Result<()> {
         }
     }
     if !new_cs_exps.is_empty() {
-        cs.constraints.push(Constraint::Vanishes {
+        cs.insert_constraint(Constraint::Vanishes {
             handle: Handle::new("RESERVED", "EXPANSION_CONSTRAINTS"),
             domain: None,
             expr: Box::new(Expression::List(new_cs_exps).into()),

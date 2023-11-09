@@ -87,7 +87,11 @@ fn to_byte(f: &Fr) -> Option<u8> {
 
 impl Pretty for Fr {
     fn pretty(&self) -> String {
-        format!("{}", self)
+        if self.is_zero() {
+            "0".into()
+        } else {
+            format!("{}", self)
+        }
     }
 
     fn pretty_with_base(&self, base: Base) -> String {

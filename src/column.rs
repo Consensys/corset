@@ -220,23 +220,11 @@ impl Value {
         }
     }
 
-    pub(crate) fn to_repr(&self) -> impl Iterator<Item = u64> {
-        let us = match &self {
-            Value::Native(f) => f.0 .0.to_vec(),
-            Value::ExoNative(fs) => fs.iter().flat_map(|f| f.0 .0.iter()).cloned().collect(),
-            Value::BigInt(_) => todo!(),
-        };
-        us.into_iter()
-    }
-
     pub(crate) fn to_bytes(&self) -> Vec<u8> {
         match &self {
-            Value::Native(f) => f.0 .0.iter().flat_map(|u| u.to_be_bytes()).collect(),
-            Value::ExoNative(fs) => fs
-                .iter()
-                .flat_map(|f| f.0 .0.iter().flat_map(|u| u.to_be_bytes()))
-                .collect(),
             Value::BigInt(bi) => bi.to_bytes_be().1,
+            Value::Native(f) => f.into_bigint().to_bytes_be(),
+            Value::ExoNative(_) => todo!(),
         }
     }
 
@@ -376,7 +364,7 @@ impl Value {
 // }
 impl std::default::Default for Value {
     fn default() -> Value {
-        Value::BigInt(BigInt::zero())
+        Value::zero()
     }
 }
 impl From<BigInt> for Value {
@@ -443,7 +431,7 @@ impl From<Value> for BigInt {
 impl Pretty for Value {
     fn pretty(&self) -> String {
         match self {
-            Value::BigInt(i) => format!("ε{}", i),
+            Value::BigInt(i) => format!("{}", i),
             Value::Native(f) => f.pretty(),
             Value::ExoNative(fs) => fs.iter().map(|f| f.pretty()).join("/"),
         }
@@ -453,7 +441,7 @@ impl Pretty for Value {
         match self {
             Value::BigInt(i) => {
                 format!(
-                    "ε{}",
+                    "{}",
                     match base {
                         Base::Dec => i.to_str_radix(10),
                         Base::Hex => format!("0x{}", i.to_str_radix(16)),
@@ -510,7 +498,7 @@ impl std::cmp::PartialEq for Value {
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Value::BigInt(i) => write!(f, "ε{}", i),
+            Value::BigInt(i) => write!(f, "{}", i),
             Value::Native(fr) => write!(f, "{}", fr.pretty()),
             Value::ExoNative(fs) => {
                 write!(f, "{:?}", fs.iter().map(|f| f.pretty()).collect::<Vec<_>>())
@@ -649,8 +637,8 @@ impl ValueBacking {
                 }
             }
             .cloned(),
-            ValueBacking::Expression { e, spilling } => e.eval(
-                i + spilling,
+            ValueBacking::Expression { e, .. } => e.eval(
+                i,
                 |handle, j, _| {
                     cs.get(handle, j, false)
                         .or_else(|| cs.column(handle).unwrap().padding_value.as_ref().cloned())
@@ -658,7 +646,7 @@ impl ValueBacking {
                 &mut None,
                 &EvalSettings { wrap: false },
             ),
-            ValueBacking::Function { f, spilling } => f(i + spilling, cs),
+            ValueBacking::Function { f, .. } => f(i, cs),
         }
     }
 
@@ -689,10 +677,11 @@ impl ValueBacking {
         }
     }
 
-    pub fn iter<'a>(&'a self, columns: &'a ColumnSet) -> ValueBackingIter<'a> {
+    pub fn iter<'a>(&'a self, columns: &'a ColumnSet, len: isize) -> ValueBackingIter<'a> {
         ValueBackingIter {
             value: self,
             i: 0,
+            len,
             columns,
         }
     }
@@ -724,6 +713,7 @@ impl ValueBacking {
 pub struct ValueBackingIter<'a> {
     value: &'a ValueBacking,
     columns: &'a ColumnSet,
+    len: isize,
     i: isize,
 }
 
@@ -741,9 +731,17 @@ impl<'a> Iterator for ValueBackingIter<'a> {
                     v.get(self.i as usize).cloned()
                 }
             }
-            ValueBacking::Expression { .. } => {
-                self.i += 1;
-                self.value.get_raw(self.i - 1, false, self.columns)
+            ValueBacking::Expression { spilling, .. } => {
+                if self.i >= self.len {
+                    None
+                } else {
+                    self.i += 1;
+                    Some(
+                        self.value
+                            .get(self.i - 1, false, self.columns)
+                            .unwrap_or_default(),
+                    )
+                }
             }
             ValueBacking::Function { f, .. } => {
                 self.i += 1;
@@ -961,6 +959,15 @@ impl ColumnSet {
             })
         } else {
             unreachable!()
+        }
+    }
+
+    pub(crate) fn mark_used(&mut self, h: &ColumnRef) -> Result<()> {
+        if let Some(ref mut column) = self.get_col_mut(h) {
+            column.used = true;
+            Ok(())
+        } else {
+            bail!("{} can not be found", h.pretty())
         }
     }
 

@@ -12,7 +12,7 @@ use std::{
     ffi::{c_uint, CStr, CString},
     sync::RwLock,
 };
-use transformer::ExpansionLevel;
+use transformer::{AutoConstraint, ExpansionLevel};
 
 use crate::{
     column::{Computation, Value, ValueBacking},
@@ -94,10 +94,13 @@ fn cstr_to_string<'a>(s: *const c_char) -> &'a str {
     name.to_str().unwrap()
 }
 
-const EMPTY_MARKER: [u64; 4] = [0, u64::MAX, 0, u64::MAX];
+const EMPTY_MARKER: [u8; 32] = [
+    2, 4, 8, 16, 32, 64, 128, 255, 255, 128, 64, 32, 16, 8, 4, 2, 2, 4, 8, 16, 32, 64, 128, 255,
+    255, 128, 64, 32, 16, 8, 4, 2,
+];
 struct ComputedColumn {
-    padding_value: [u64; 4],
-    values: Vec<[u64; 4]>,
+    padding_value: [u8; 32],
+    values: Vec<[u8; 32]>,
 }
 impl ComputedColumn {
     fn empty() -> Self {
@@ -118,7 +121,7 @@ pub struct Trace {
     ids: Vec<String>,
 }
 impl Trace {
-    fn from_constraints(c: &Corset, convert_to_be: bool) -> Self {
+    fn from_constraints(c: &Corset) -> Self {
         let mut r = Trace {
             ..Default::default()
         };
@@ -132,6 +135,11 @@ impl Trace {
 
                 let column = c.columns.column(cref).unwrap();
                 let handle = &column.handle;
+                let module_size = c
+                    .effective_len_for(&handle.module)
+                    // If the module is empty, use its spilling
+                    .or_else(|| c.spilling_of(&handle.module))
+                    .unwrap();
                 trace!("Writing {}", handle);
                 let backing = c.columns.backing(cref).unwrap_or(&empty_backing);
                 let padding: Value = if let Some(v) = column.padding_value.as_ref() {
@@ -162,23 +170,10 @@ impl Trace {
                 (
                     ComputedColumn {
                         values: backing
-                            .iter(&c.columns)
-                            .map(|x| {
-                                let mut v = x.to_repr().collect::<Vec<_>>().try_into().unwrap();
-                                if convert_to_be {
-                                    reverse_fr(&mut v);
-                                }
-                                v
-                            })
+                            .iter(&c.columns, module_size)
+                            .map(|x| x.to_bytes().try_into().unwrap())
                             .collect(),
-                        padding_value: {
-                            let mut padding =
-                                padding.to_repr().collect::<Vec<_>>().try_into().unwrap();
-                            if convert_to_be {
-                                reverse_fr(&mut padding);
-                            }
-                            padding
-                        },
+                        padding_value: { padding.to_bytes().try_into().unwrap() },
                     },
                     c.handle(cref).to_string(),
                 )
@@ -204,58 +199,13 @@ impl Trace {
     }
 }
 
-fn reverse_fr(v: &mut [u64; 4]) {
-    #[cfg(target_arch = "aarch64")]
-    reverse_fr_aarch64(v);
-    #[cfg(target_arch = "x86_64")]
-    reverse_fr_x86_64(v);
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-    reverse_fr_fallback(v);
-}
-
-fn reverse_fr_fallback(v: &mut [u64; 4]) {
-    for vi in v.iter_mut() {
-        *vi = vi.swap_bytes();
-    }
-    v.swap(0, 3);
-    v.swap(1, 2);
-}
-
-#[cfg(target_arch = "aarch64")]
-fn reverse_fr_aarch64(v: &mut [u64; 4]) {
-    for vi in v.iter_mut() {
-        *vi = vi.swap_bytes();
-    }
-    v.swap(0, 3);
-    v.swap(1, 2);
-}
-
-#[cfg(target_arch = "x86_64")]
-fn reverse_fr_x86_64(v: &mut [u64; 4]) {
-    if is_x86_feature_detected!("avx2") {
-        unsafe {
-            use std::arch::x86_64::*;
-            let inverter = _mm256_set_epi64x(
-                0x0001020304050607,
-                0x08090a0b0c0d0e0f,
-                0x0001020304050607,
-                0x08090a0b0c0d0e0f,
-            );
-            let value = _mm256_loadu_si256(v.as_ptr() as *const __m256i);
-            let x = _mm256_shuffle_epi8(value, inverter);
-            *v = std::mem::transmute(_mm256_permute2f128_si256(x, x, 0x01));
-        }
-    } else {
-        for vi in v.iter_mut() {
-            *vi = vi.swap_bytes();
-        }
-        v.swap(0, 3);
-        v.swap(1, 2);
-    }
-}
-
 fn make_corset(mut constraints: ConstraintSet) -> Result<Corset> {
-    transformer::expand_to(&mut constraints, ExpansionLevel::all().into(), &[])?;
+    transformer::expand_to(
+        &mut constraints,
+        ExpansionLevel::all().into(),
+        AutoConstraint::all(),
+    )?;
+    transformer::concretize(&mut constraints);
     Ok(constraints)
 }
 
@@ -279,23 +229,21 @@ fn _corset_from_str(zkevmstr: &str) -> Result<Corset> {
 fn _compute_trace_from_file(
     constraints: &mut Corset,
     tracefile: &str,
-    convert_to_be: bool,
     fail_on_missing: bool,
 ) -> Result<Trace> {
     compute::compute_trace(tracefile, constraints, fail_on_missing)
         .with_context(|| format!("while computing from file `{}`", tracefile))?;
-    Ok(Trace::from_constraints(constraints, convert_to_be))
+    Ok(Trace::from_constraints(constraints))
 }
 
 fn _compute_trace_from_str(
     constraints: &mut Corset,
     tracestr: &str,
-    convert_to_be: bool,
     fail_on_missing: bool,
 ) -> Result<Trace> {
     compute::compute_trace_str(tracestr.as_bytes(), constraints, fail_on_missing)
         .with_context(|| format!("while computing from string `{}`", tracestr))?;
-    Ok(Trace::from_constraints(constraints, convert_to_be))
+    Ok(Trace::from_constraints(constraints))
 }
 
 #[no_mangle]
@@ -410,16 +358,14 @@ pub extern "C" fn trace_compute_from_file(
     corset: *mut Corset,
     tracefile: *const c_char,
     threads: c_uint,
-    convert_to_be: bool,
     fail_on_missing: bool,
 ) -> *mut Trace {
     match init_rayon(threads) {
         Result::Ok(tp) => {
             let tracefile = cstr_to_string(tracefile);
             let constraints = Corset::mut_from_ptr(corset);
-            let r = tp.install(|| {
-                _compute_trace_from_file(constraints, tracefile, convert_to_be, fail_on_missing)
-            });
+            let r =
+                tp.install(|| _compute_trace_from_file(constraints, tracefile, fail_on_missing));
             match r {
                 Err(e) => {
                     eprintln!("{:?}", e);
@@ -441,7 +387,6 @@ pub extern "C" fn trace_compute_from_string(
     corset: *mut Corset,
     tracestr: *const c_char,
     threads: c_uint,
-    convert_to_be: bool,
     fail_on_missing: bool,
 ) -> *mut Trace {
     match init_rayon(threads) {
@@ -453,9 +398,7 @@ pub extern "C" fn trace_compute_from_string(
             }
 
             let constraints = Corset::mut_from_ptr(corset);
-            let r = tp.install(|| {
-                _compute_trace_from_str(constraints, tracestr, convert_to_be, fail_on_missing)
-            });
+            let r = tp.install(|| _compute_trace_from_str(constraints, tracestr, fail_on_missing));
             match r {
                 Err(e) => {
                     eprintln!("{:?}", e);
@@ -505,8 +448,8 @@ pub extern "C" fn trace_column_names(trace: *const Trace) -> *const *mut c_char 
 
 #[repr(C)]
 pub struct ColumnData {
-    padding_value: [u64; 4],
-    values: *const [u64; 4],
+    padding_value: [u8; 32],
+    values: *const [u8; 32],
     values_len: u64,
 }
 impl Default for ColumnData {

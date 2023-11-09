@@ -195,11 +195,19 @@ fn render_constraints(
             match c {
                 Constraint::Vanishes {
                     handle,
-                    domain: _,
+                    domain,
                     expr,
                 } => {
                     let mut tty = Tty::new().with_guides();
-                    println!("\n{} :=", handle.pretty());
+                    println!(
+                        "\n{}{} :=",
+                        handle.pretty(),
+                        if let Some(domain) = domain {
+                            domain.to_string()
+                        } else {
+                            String::new()
+                        }
+                    );
                     pretty_expr(expr, None, &mut tty, show_types);
                     println!("{}", tty.page_feed());
                 }
@@ -223,7 +231,16 @@ fn render_constraints(
                             .join(", "),
                     )
                 }
-                Constraint::Permutation { .. } => (),
+                Constraint::Permutation {
+                    handle, from, to, ..
+                } => {
+                    println!("\n{}", handle.pretty());
+                    println!(
+                        "[{}] perm. [{}]",
+                        to.iter().map(|c| c.pretty()).join(", "),
+                        from.iter().map(|c| c.pretty()).join(", ")
+                    )
+                }
                 Constraint::InRange { handle, exp, max } => {
                     let mut tty = Tty::new().with_guides();
                     pretty_expr(exp, None, &mut tty, false);

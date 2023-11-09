@@ -6,7 +6,7 @@ use crate::{
     pretty::Base,
     structs::Handle,
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::*;
 
 use super::expression_to_name;
 
@@ -117,7 +117,7 @@ impl ConstraintSet {
         //                 exp: invert_expr(&normalized_expr),
         //             },
         //         )?;
-        //         self.constraints.push(Constraint::Normalization {
+        //         self.insert_constraint(Constraint::Normalization {
         //             handle: normalized_handle.clone(),
         //             reference: normalized_expr.to_owned(),
         //             inverted: inverted_id,

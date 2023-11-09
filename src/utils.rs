@@ -53,7 +53,7 @@ pub fn maybe_warn(t: Magma, xs: &[Value], h: &Handle) -> Result<()> {
 pub fn purify(s: &str) -> String {
     s.replace(
         [
-            '(', ')', '{', '}', '[', ']', '<', '>', ':', '%', '.', '-', '#',
+            '(', ')', '{', '}', '[', ']', '<', '>', ':', '%', '.', '-', '#', ' ',
         ],
         "_",
     )
@@ -61,6 +61,7 @@ pub fn purify(s: &str) -> String {
     .replace('+', "add")
     .replace('/', "div")
     .replace('^', "pow")
+    .replace('~', "norm")
     .replace('α', "alpha")
     .replace('β', "beta")
     .replace('γ', "gamma")
@@ -71,5 +72,18 @@ pub fn purify(s: &str) -> String {
     .replace('μ', "mu")
     .replace('ν', "nu")
     .replace('∅', "empty")
+    .replace('ₐ', "a")
+    .replace('ₑ', "e")
+    .replace('ₓ', "x")
+    .replace('₀', "0")
+    .replace('₁', "1")
+    .replace('₂', "2")
+    .replace('₃', "3")
+    .replace('₄', "4")
+    .replace('₅', "5")
+    .replace('₆', "6")
+    .replace('₇', "7")
+    .replace('₈', "8")
+    .replace('₉', "9")
     .replace(|c: char| !c.is_ascii(), "_")
 }

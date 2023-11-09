@@ -2,7 +2,7 @@
 use anyhow::*;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
+use std::{cmp::Ordering, sync::OnceLock};
 
 use crate::{column::Value, errors::RuntimeError};
 
@@ -281,10 +281,8 @@ impl TryFrom<&str> for Conditioning {
     }
 }
 
-lazy_static::lazy_static! {
-    static ref F_15: Value = Value::from(15);
-    static ref F_255: Value = Value::from(255);
-}
+static F_15: OnceLock<Value> = OnceLock::new();
+static F_255: OnceLock<Value> = OnceLock::new();
 
 // TODO: implement PartialOrd
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, Ord, PartialOrd)]
@@ -331,14 +329,14 @@ impl RawMagma {
                 }
             }
             RawMagma::Nibble => {
-                if x.le(&F_15) {
+                if x.le(F_15.get_or_init(|| Value::from(15))) {
                     Ok(x)
                 } else {
                     bail!(RuntimeError::InvalidValue("nibble", x))
                 }
             }
             RawMagma::Byte => {
-                if x.le(&F_255) {
+                if x.le(F_255.get_or_init(|| Value::from(255))) {
                     Ok(x)
                 } else {
                     bail!(RuntimeError::InvalidValue("byte", x))

@@ -1,5 +1,7 @@
-use crate::compiler::{Constraint, ConstraintSet, Expression, Node};
-use std::str::FromStr;
+use crate::{
+    column::Computation,
+    compiler::{Constraint, ConstraintSet, Expression, Node},
+};
 
 impl Node {
     pub(crate) fn concretize(&mut self) {
@@ -36,6 +38,15 @@ impl ConstraintSet {
         }
     }
 
+    fn concretize_computations(&mut self) {
+        for c in self.computations.iter_mut() {
+            match c {
+                Computation::Composite { exp, .. } => exp.concretize(),
+                _ => {}
+            }
+        }
+    }
+
     fn concretize_registers(&mut self) {
         for r in self.columns.registers.iter_mut() {
             r.concretize();
@@ -47,4 +58,5 @@ pub fn concretize(cs: &mut ConstraintSet) {
     *crate::IS_NATIVE.write().unwrap() = true;
     cs.concretize_registers();
     cs.concretize_constraints();
+    cs.concretize_computations();
 }

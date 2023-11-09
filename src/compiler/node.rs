@@ -995,8 +995,20 @@ impl Display for Node {
 
         match self.e() {
             Expression::Const(x) => write!(f, "{}", x),
-            Expression::Column { handle, .. } | Expression::ExoColumn { handle, .. } => {
-                write!(f, "{}", handle.to_string_short())
+            Expression::Column { handle, shift, .. }
+            | Expression::ExoColumn { handle, shift, .. } => {
+                write!(
+                    f,
+                    "{}{}",
+                    handle.to_string_short(),
+                    if *shift > 0 {
+                        format!("₊{}", crate::pretty::subscript(&shift.to_string()))
+                    } else if *shift < 0 {
+                        crate::pretty::subscript(&shift.to_string())
+                    } else {
+                        Default::default()
+                    }
+                )
             }
             Expression::ArrayColumn { handle, domain, .. } => {
                 write!(f, "{}{}", handle.to_string_short(), domain)

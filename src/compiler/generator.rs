@@ -19,7 +19,7 @@ use std::sync::atomic::AtomicUsize;
 
 use super::node::ColumnRef;
 use super::tables::{ComputationTable, Scope};
-use super::{common::*, CompileSettings, Expression, Magma, Node, Type};
+use super::{common::*, CompileSettings, Conditioning, Expression, Magma, Node, Type};
 use crate::column::{Column, ColumnSet, Computation, RegisterID, Value, ValueBacking};
 use crate::compiler::parser::*;
 use crate::dag::ComputationDag;
@@ -55,7 +55,6 @@ pub enum Constraint {
         handle: Handle,
         from: Vec<ColumnRef>,
         to: Vec<ColumnRef>,
-        signs: Vec<bool>,
     },
     InRange {
         handle: Handle,
@@ -641,6 +640,41 @@ impl ConstraintSet {
         &self.columns.column(h).unwrap().handle
     }
 
+    pub(crate) fn insert_constraint(&mut self, c: Constraint) {
+        match &c {
+            Constraint::Vanishes { expr, .. } => {
+                for c in expr.dependencies().into_iter() {
+                    self.columns.get_col_mut(&c).unwrap().used = true
+                }
+            }
+            Constraint::Lookup {
+                including,
+                included,
+                ..
+            } => {
+                for c in including
+                    .iter()
+                    .flat_map(Node::dependencies)
+                    .chain(included.iter().flat_map(Node::dependencies))
+                {
+                    self.columns.mark_used(&c).unwrap();
+                }
+            }
+            Constraint::Permutation { from, to, .. } => {
+                for c in from.iter().chain(to.iter()) {
+                    self.columns.mark_used(&c).unwrap();
+                }
+            }
+            Constraint::InRange { exp, .. } => {
+                for c in exp.dependencies().into_iter() {
+                    self.columns.mark_used(&c).unwrap();
+                }
+            }
+            Constraint::Normalization { .. } => {}
+        }
+        self.constraints.push(c);
+    }
+
     pub(crate) fn insert_perspective(
         &mut self,
         module: &str,
@@ -839,6 +873,7 @@ impl ConstraintSet {
             let empty_backing: ValueBacking = ValueBacking::default();
             while let Some((r, column)) = current_col.next() {
                 let handle = &column.handle;
+                let module_size = self.effective_len_for(&handle.module).unwrap();
                 trace!("Writing {}", handle);
                 let backing = self.columns.backing(&r).unwrap_or_else(|| &empty_backing);
                 let padding: Value = if let Some(v) = column.padding_value.as_ref() {
@@ -870,7 +905,7 @@ impl ConstraintSet {
                 out.write_all(format!("\"{}\":{{\n", handle).as_bytes())?;
                 out.write_all("\"values\":[".as_bytes())?;
 
-                let mut value = backing.iter(&self.columns).peekable();
+                let mut value = backing.iter(&self.columns, module_size).peekable();
                 while let Some(x) = value.next() {
                     out.write_all(
                         cache
@@ -1565,7 +1600,12 @@ fn reduce_toplevel(
             let body = if let Some(guard) = guard {
                 let guard_expr = reduce(guard, &mut ctx, settings)?
                     .with_context(|| anyhow!("guard `{:?}` is empty", guard))?;
-                Intrinsic::Mul.call(&[guard_expr, body])?
+                match guard_expr.t().c() {
+                    Conditioning::Loobean => {
+                        bail!("unexpected loobean guard in {}", handle.pretty())
+                    }
+                    _ => Intrinsic::IfNotZero.call(&[guard_expr, body])?,
+                }
             } else {
                 body
             };
@@ -1739,7 +1779,6 @@ fn reduce_toplevel(
                 ),
                 from: froms,
                 to: tos,
-                signs: signs.clone(),
             }))
         }
         Token::DefInterleaving { .. } => {
