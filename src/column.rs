@@ -376,7 +376,7 @@ impl Value {
 // }
 impl std::default::Default for Value {
     fn default() -> Value {
-        Value::BigInt(BigInt::zero())
+        Value::zero()
     }
 }
 impl From<BigInt> for Value {
