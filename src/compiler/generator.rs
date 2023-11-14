@@ -366,7 +366,7 @@ impl ConstraintSet {
         r.convert_refs_to_ids()?;
         r.allocate_registers();
         r.fill_perspectives()?;
-        r.fill_spilling();
+        r.compute_spillings();
         r.validate()?;
         Ok(r)
     }
@@ -766,10 +766,6 @@ impl ConstraintSet {
         *self.columns.effective_len.entry(m.to_string()).or_insert(x)
     }
 
-    pub fn spilling_of(&self, m: &str) -> Option<isize> {
-        self.columns.spilling.get(m).cloned()
-    }
-
     pub fn spilling_for_column(&self, h: &ColumnRef) -> Option<isize> {
         let module = if h.is_handle() {
             &h.as_handle().module
@@ -809,12 +805,31 @@ impl ConstraintSet {
         spilling
     }
 
-    fn fill_spilling(&mut self) {
+    pub fn iter_len(&self, module: &str) -> usize {
+        self.effective_len_for(module)
+            // If the module is empty, use its spilling
+            .or_else(|| self.spilling_of(module))
+            .unwrap() as usize
+    }
+
+    pub fn spilling_of(&self, m: &str) -> Option<isize> {
+        self.columns.spilling.get(m).cloned()
+    }
+
+    fn compute_spillings(&mut self) {
         let all_modules = self.columns.modules();
         for m in all_modules {
             let spilling = self.compute_spilling(&m);
             self.columns.spilling.insert(m, spilling);
         }
+    }
+
+    pub(crate) fn module_of_expr(&self, e: &Node) -> Option<String> {
+        self.columns.module_for(e.dependencies())
+    }
+
+    pub(crate) fn module_of_exprs(&self, es: &[Node]) -> Option<String> {
+        es.iter().find_map(|e| self.module_of_expr(e))
     }
 
     pub fn length_multiplier(&self, h: &ColumnRef) -> usize {

@@ -369,12 +369,22 @@ fn check_constraint(
 
 fn check_lookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Result<()> {
     // Compute the LC \sum_k (k+1) × x_k[i]
-    fn pseudo_rlc(cols: &[&ValueBacking], i: usize, columns: &ColumnSet) -> Value {
+    fn pseudo_rlc(exps: &[Node], i: usize, cs: &ColumnSet) -> Value {
         let mut ax = Value::zero();
 
-        for (j, col) in cols.iter().enumerate() {
+        for (j, exp) in exps.iter().enumerate() {
             let mut x = Value::from(j + 2);
-            let col_value = col.get(i as isize, false, columns).unwrap();
+            let col_value = exp
+                .eval(
+                    i as isize,
+                    |handle, j, _| {
+                        cs.get(handle, j, false)
+                            .or_else(|| cs.column(handle).unwrap().padding_value.as_ref().cloned())
+                    },
+                    &mut None,
+                    &EvalSettings::default(),
+                )
+                .unwrap_or_default();
 
             x.mul_assign(&col_value);
             ax.add_assign(&x);
@@ -410,67 +420,41 @@ fn check_lookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Resu
         (false, false) => {}
     }
 
-    let parent_cols = parents
-        .iter()
-        .map(|n| {
-            if let Expression::Column { handle, .. } = n.e() {
-                handle
-            } else {
-                unreachable!()
-            }
-        })
-        .collect::<Vec<_>>();
-    let child_cols = parents
-        .iter()
-        .map(|n| {
-            if let Expression::Column { handle, .. } = n.e() {
-                handle
-            } else {
-                unreachable!()
-            }
-        })
-        .collect::<Vec<_>>();
-    if parent_cols
-        .get(0)
-        .map(|p| cs.columns.register_of(p).len().unwrap())
-        .unwrap_or(0)
-        == 0
-        || child_cols
-            .get(0)
-            .map(|c| cs.columns.register_of(c).len().unwrap())
-            .unwrap_or(0)
-            == 0
-    {
-        warn!("empty lookup; skipping");
-        return Ok(());
-    }
+    let parent_module = cs.module_of_exprs(parents).unwrap();
+    let parent_len = cs.iter_len(&parent_module);
 
-    let parent_backings = parent_cols
-        .iter()
-        .map(|h| cs.columns.backing(h).unwrap())
-        .collect::<Vec<_>>();
+    let child_module = cs.module_of_exprs(children).unwrap();
+    let child_len = cs.iter_len(&child_module);
 
-    let child_backings = child_cols
-        .iter()
-        .map(|h| cs.columns.backing(h).unwrap())
-        .collect::<Vec<_>>();
-
-    let hashes: HashSet<_> = (0..parent_backings.iter().find_map(|p| p.len()).unwrap())
-        .map(|i| pseudo_rlc(&parent_backings, i, &cs.columns))
+    let parent_hashes: HashSet<_> = (0..parent_len)
+        .map(|i| pseudo_rlc(parents, i, &cs.columns))
         .collect();
 
-    for i in 0..child_backings.iter().find_map(|c| c.len()).unwrap() {
-        if !hashes.contains(&pseudo_rlc(&child_backings, i, &cs.columns)) {
+    for i in 0..child_len {
+        if !parent_hashes.contains(&pseudo_rlc(&children, i, &cs.columns)) {
             bail!(
                 "@{}: {{\n{}\n}} not found in {{{}}}",
                 i,
                 children
                     .iter()
-                    .zip(
-                        child_backings
-                            .iter()
-                            .map(|v| v.get(i as isize, false, &cs.columns).unwrap())
-                    )
+                    .zip(children.iter().map(|e| {
+                        e.eval(
+                            i as isize,
+                            |handle, j, _| {
+                                cs.columns.get(handle, j, false).or_else(|| {
+                                    cs.columns
+                                        .column(handle)
+                                        .unwrap()
+                                        .padding_value
+                                        .as_ref()
+                                        .cloned()
+                                })
+                            },
+                            &mut None,
+                            &EvalSettings::default(),
+                        )
+                        .unwrap()
+                    }))
                     .map(|(handle, value)| format!("{}: {}", handle.pretty(), value.pretty()))
                     .collect::<Vec<_>>()
                     .join("\n"),
