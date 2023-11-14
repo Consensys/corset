@@ -662,7 +662,7 @@ impl ConstraintSet {
             }
             Constraint::Permutation { from, to, .. } => {
                 for c in from.iter().chain(to.iter()) {
-                    self.columns.mark_used(&c).unwrap();
+                    self.columns.mark_used(c).unwrap();
                 }
             }
             Constraint::InRange { exp, .. } => {
@@ -890,7 +890,7 @@ impl ConstraintSet {
                 let handle = &column.handle;
                 let module_size = self.effective_len_for(&handle.module).unwrap();
                 trace!("Writing {}", handle);
-                let backing = self.columns.backing(&r).unwrap_or_else(|| &empty_backing);
+                let backing = self.columns.backing(&r).unwrap_or(&empty_backing);
                 let padding: Value = if let Some(v) = column.padding_value.as_ref() {
                     v.clone()
                 } else {
@@ -1699,7 +1699,7 @@ fn reduce_toplevel(
             Ok(Some(Constraint::InRange {
                 handle,
                 exp: reduce(e, ctx, settings)?.unwrap(),
-                max: Fr::from(*range as u64).into(),
+                max: Fr::from(*range).into(),
             }))
         }
         Token::DefColumns(columns) => {

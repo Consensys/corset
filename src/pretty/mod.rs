@@ -67,7 +67,7 @@ pub trait Pretty {
     fn pretty_with_base(&self, base: Base) -> String;
 }
 
-fn to_bytes<'a>(f: &'a Fr) -> Vec<u8> {
+fn to_bytes(f: &Fr) -> Vec<u8> {
     // TODO: smallvec
     f.into_bigint()
         .0

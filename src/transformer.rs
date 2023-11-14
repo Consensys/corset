@@ -62,18 +62,14 @@ impl From<&str> for AutoConstraint {
     }
 }
 
-#[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Copy, Clone)]
+#[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Copy, Clone, Default)]
 pub(crate) enum ExpansionLevel {
+    #[default]
     None = 0,
     ExpandsIfs = 1,
     Splatter = 2,
     ColumnizeExpressions = 4,
     ExpandInvs = 8,
-}
-impl Default for ExpansionLevel {
-    fn default() -> Self {
-        ExpansionLevel::None
-    }
 }
 impl From<u8> for ExpansionLevel {
     fn from(x: u8) -> Self {
@@ -82,7 +78,8 @@ impl From<u8> for ExpansionLevel {
             1 => ExpansionLevel::ExpandsIfs,
             2 => ExpansionLevel::Splatter,
             3 => ExpansionLevel::ColumnizeExpressions,
-            4 | _ => ExpansionLevel::ExpandInvs,
+            4 => ExpansionLevel::ExpandInvs,
+            _ => ExpansionLevel::ExpandInvs,
         }
     }
 }

@@ -50,8 +50,7 @@ impl Node {
                                     .t(self.t().m().invert())
                                     .build(),
                             ])
-                            .unwrap()
-                            .into();
+                            .unwrap();
                     } else {
                         todo!("exo-value case");
                         // let module = get_module(&args[0].dependencies());

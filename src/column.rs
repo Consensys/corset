@@ -439,23 +439,19 @@ impl Pretty for Value {
 
     fn pretty_with_base(&self, base: Base) -> String {
         match self {
-            Value::BigInt(i) => {
-                format!(
-                    "{}",
-                    match base {
-                        Base::Dec => i.to_str_radix(10),
-                        Base::Hex => format!("0x{}", i.to_str_radix(16)),
-                        Base::Bin | Base::Bool | Base::Loob => i.to_str_radix(2),
-                        Base::Bytes => i
-                            .to_bytes_le()
-                            .1
-                            .iter()
-                            .map(|b| format!("{b:0>2x}"))
-                            .join(" "),
-                        Base::OpCode => opcodes::to_str(i.to_usize().unwrap().try_into().unwrap()),
-                    }
-                )
+            Value::BigInt(i) => match base {
+                Base::Dec => i.to_str_radix(10),
+                Base::Hex => format!("0x{}", i.to_str_radix(16)),
+                Base::Bin | Base::Bool | Base::Loob => i.to_str_radix(2),
+                Base::Bytes => i
+                    .to_bytes_le()
+                    .1
+                    .iter()
+                    .map(|b| format!("{b:0>2x}"))
+                    .join(" "),
+                Base::OpCode => opcodes::to_str(i.to_usize().unwrap().try_into().unwrap()),
             }
+            .to_string(),
             Value::Native(f) => f.pretty_with_base(base),
             Value::ExoNative(fs) => fs.iter().map(|f| f.pretty_with_base(base)).join("."),
         }
@@ -899,7 +895,7 @@ impl ColumnSet {
         self.column(c).unwrap().handle.module.clone()
     }
 
-    pub(crate) fn module_for<'a, I: std::borrow::Borrow<ColumnRef>, C: IntoIterator<Item = I>>(
+    pub(crate) fn module_for<I: std::borrow::Borrow<ColumnRef>, C: IntoIterator<Item = I>>(
         &self,
         cols: C,
     ) -> Option<String> {
@@ -1037,7 +1033,10 @@ impl ColumnSet {
         if h.is_id() {
             h.as_id()
         } else if h.is_handle() {
-            *self.cols.get(h.as_handle()).expect(&h.to_string())
+            *self
+                .cols
+                .get(h.as_handle())
+                .unwrap_or_else(|| panic!("{}", h.to_string()))
         } else {
             unreachable!()
         }

@@ -10,7 +10,7 @@ fn make(name: &str, source: &str) -> Result<()> {
     r.add_source(source)?;
     r.expand_to(ExpansionLevel::top());
 
-    r.to_constraint_set().map(|_| ())
+    r.into_constraint_set().map(|_| ())
 }
 
 fn must_run(name: &str, source: &str) {

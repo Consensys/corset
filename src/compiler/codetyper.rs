@@ -142,7 +142,7 @@ impl Tty {
 
     fn make_indent(&self, l: &Line) -> String {
         if self.with_guides {
-            if self.depths[l.indentation].len() > 0 {" "} else {""}.to_string() // Account for the first skipped '|'
+            if !self.depths[l.indentation].is_empty() {" "} else {""}.to_string() // Account for the first skipped '|'
             + &self
                 .depths[l.indentation]
                 .iter()

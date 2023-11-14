@@ -542,7 +542,7 @@ impl ConstraintSetBuilder {
         }
     }
 
-    fn to_constraint_set(self) -> Result<ConstraintSet> {
+    fn into_constraint_set(self) -> Result<ConstraintSet> {
         let mut cs = match self.source {
             Either::Left(ref sources) => compiler::make(
                 &self.prepare_sources(sources),
@@ -629,7 +629,11 @@ fn main() -> Result<()> {
     match args.command {
         #[cfg(feature = "exporters")]
         Commands::Go { package, filename } => {
-            exporters::zkgeth::render(&builder.to_constraint_set()?, &package, filename.as_ref())?;
+            exporters::zkgeth::render(
+                &builder.into_constraint_set()?,
+                &package,
+                filename.as_ref(),
+            )?;
         }
         #[cfg(feature = "exporters")]
         Commands::Besu {
@@ -637,7 +641,7 @@ fn main() -> Result<()> {
             output_file_path: output_path,
         } => {
             exporters::besu::render(
-                &builder.to_constraint_set()?,
+                &builder.into_constraint_set()?,
                 &package,
                 output_path.as_ref(),
             )?;
@@ -650,7 +654,7 @@ fn main() -> Result<()> {
         Commands::WizardIOP { out_filename } => {
             builder.expand_to(ExpansionLevel::top());
             builder.auto_constraints(AutoConstraint::all());
-            let cs = builder.to_constraint_set()?;
+            let cs = builder.into_constraint_set()?;
 
             exporters::wizardiop::render(&cs, &out_filename)?;
         }
@@ -675,7 +679,7 @@ fn main() -> Result<()> {
         } => {
             builder.expand_to(ExpansionLevel::top());
             builder.auto_constraints(AutoConstraint::all());
-            let mut cs = builder.to_constraint_set()?;
+            let mut cs = builder.into_constraint_set()?;
 
             compute::compute_trace(&tracefile, &mut cs, fail_on_missing)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
@@ -789,7 +793,7 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
-            let mut cs = builder.to_constraint_set()?;
+            let mut cs = builder.into_constraint_set()?;
 
             compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
@@ -826,7 +830,7 @@ fn main() -> Result<()> {
                 warn!("`{}` is empty, exiting", tracefile);
                 return Ok(());
             }
-            let mut cs = builder.to_constraint_set()?;
+            let mut cs = builder.into_constraint_set()?;
 
             compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
@@ -851,7 +855,7 @@ fn main() -> Result<()> {
             only,
             skip,
         } => {
-            let mut cs = builder.to_constraint_set()?;
+            let mut cs = builder.into_constraint_set()?;
             if native_arithmetic {
                 transformer::concretize(&mut cs);
             }
@@ -885,7 +889,7 @@ fn main() -> Result<()> {
             }
         }
         Commands::Compile { outfile, pretty } => {
-            let constraints = builder.to_constraint_set()?;
+            let constraints = builder.into_constraint_set()?;
             std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?
                 .write_all(

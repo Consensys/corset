@@ -10,7 +10,7 @@ use anyhow::*;
 use log::*;
 
 use crate::{
-    column::{ColumnSet, Value, ValueBacking},
+    column::{ColumnSet, Value},
     compiler::{Constraint, ConstraintSet, Domain, EvalSettings, Expression, Node},
     pretty::*,
     structs::Handle,
@@ -431,7 +431,7 @@ fn check_lookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Resu
         .collect();
 
     for i in 0..child_len {
-        if !parent_hashes.contains(&pseudo_rlc(&children, i, &cs.columns)) {
+        if !parent_hashes.contains(&pseudo_rlc(children, i, &cs.columns)) {
             bail!(
                 "@{}: {{\n{}\n}} not found in {{{}}}",
                 i,

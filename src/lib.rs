@@ -143,7 +143,7 @@ impl Trace {
                 } else {
                     backing.get(0, false, &c.columns).unwrap_or_else(|| {
                         c.computations
-                            .computation_for(&cref)
+                            .computation_for(cref)
                             .map(|c| match c {
                                 Computation::Composite { exp, .. } => exp
                                     .eval(
