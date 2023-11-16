@@ -429,6 +429,10 @@ impl Magma {
         self.m.bit_size()
     }
 
+    pub fn byte_size(&self) -> usize {
+        (self.m.bit_size() + 7) / 8
+    }
+
     pub fn invert(&self) -> Magma {
         Magma {
             m: match self.m {

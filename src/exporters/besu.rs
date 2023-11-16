@@ -28,6 +28,7 @@ struct BesuColumn {
     updater: String,
     tupe: String,
     register: String,
+    putter: String,
     reg_id: usize,
 }
 #[derive(Serialize)]
@@ -37,6 +38,7 @@ struct BesuRegister {
     tupe: String,
     id: usize,
     zero_value: String,
+    bytes_width: i16,
 }
 #[derive(Serialize)]
 struct BesuConstant {
@@ -120,7 +122,11 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
         .iter()
         .enumerate()
         .map(|(i, r)| {
-            let corset_name = reg_to_string(r, i);
+            let corset_name = format!(
+                "{}.{}",
+                r.handle.as_ref().unwrap().module,
+                r.handle.as_ref().unwrap().name
+            );
             let java_name = reg_to_string(r, i).to_case(Case::Camel);
             BesuRegister {
                 corset_name,
@@ -128,6 +134,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                 tupe: magma_to_java_type(r.magma),
                 id: i,
                 zero_value: magma_to_java_zero(r.magma),
+                bytes_width: r.magma.byte_size() as i16,
             }
         })
         .sorted_by_key(|f| f.java_name.clone())
@@ -141,13 +148,21 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                 let r = c.register.unwrap();
                 let register = reg_to_string(&cs.columns.registers[r], r).to_case(Case::Camel);
                 Some(BesuColumn {
-                    corset_name: c.handle.name.to_string(),
+                    corset_name: c.handle.to_string(),
                     java_name: c.handle.name.to_case(Case::Camel),
                     appender: handle_to_appender(&c.handle),
                     updater: handle_to_updater(&c.handle),
                     tupe: magma_to_java_type(c.t),
                     register,
                     reg_id: r,
+                    putter: match c.t.rm() {
+                        RawMagma::Binary => "put((byte) (b ? 1 : 0))",
+                        RawMagma::Nibble => "put(b.toByte())",
+                        RawMagma::Byte => "put(b.toByte())",
+                        RawMagma::Native => "put(b.toByteArray())",
+                        _ => unreachable!(),
+                    }
+                    .to_string(),
                 })
             } else {
                 None

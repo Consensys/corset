@@ -140,7 +140,7 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
         })?
     }
 
-    let constraints = maybe_bail(
+    let mut constraints = maybe_bail(
         asts.iter()
             .flat_map(|(name, ast)| generator::pass(ast, ctx.clone(), name, settings))
             .collect(),
@@ -179,15 +179,29 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
                         let id = columns.insert_column(column)?;
                         match k {
                             Kind::Atomic | Kind::Phantom => (),
-                            Kind::Computed(e) => computations
-                                .insert(
-                                    &id,
-                                    Computation::Composite {
-                                        target: id.clone(),
-                                        exp: *e.clone(),
-                                    },
-                                )
-                                .map(|_| ())?,
+                            Kind::Computed(e) => {
+                                computations
+                                    .insert(
+                                        &id,
+                                        Computation::Composite {
+                                            target: id.clone(),
+                                            exp: *e.clone(),
+                                        },
+                                    )
+                                    .map(|_| ())?;
+                                constraints.push(Constraint::Vanishes {
+                                    handle: Handle::new(
+                                        &handle.as_handle().module,
+                                        format!("prove-{}", handle.as_handle().name),
+                                    ),
+                                    domain: None,
+                                    expr: Box::new(
+                                        Intrinsic::Sub
+                                            .call(&[Node::column().handle(id).build(), *e.clone()])
+                                            .unwrap(),
+                                    ),
+                                })
+                            }
                         }
                     }
                     Expression::ExoColumn {

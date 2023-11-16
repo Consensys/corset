@@ -1,5 +1,5 @@
 /*
- * Copyright ConsenSys AG.
+ * Copyright ConsenSys Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -15,13 +15,15 @@
 
 package net.consensys.linea.zktracer.module.{{ module }};
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import net.consensys.linea.zktracer.types.UnsignedByte;
-
 import java.math.BigInteger;
+import java.nio.MappedByteBuffer;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import net.consensys.linea.zktracer.ColumnHeader;
+import net.consensys.linea.zktracer.types.UnsignedByte;
 
 /**
  * WARNING: This code is generated automatically.
@@ -40,18 +42,25 @@ public record Trace(
       return this.{{ registers.0.java_name }}.size();
   }
 
+    public static List<ColumnHeader> headers(int size) {
+    return List.of(
+        {{#each registers}}
+        new ColumnHeader("{{ this.corset_name }}", {{ this.bytes_width }}, size){{ #unless @last}},{{/unless}}
+        {{/each}}
+        );
+    }
+
+
+
   static class TraceBuilder {
     private final BitSet filled = new BitSet();
+    private int currentLine = 0;
 
     {{#each registers}}
-    @JsonProperty("{{ this.corset_name }}")
-    private final List<{{ this.tupe }}> {{ this.java_name }};
+    private MappedByteBuffer {{ this.java_name}};
     {{/each}}
 
     private TraceBuilder(int length) {
-      {{#each registers}}
-      this.{{ this.java_name }} = new ArrayList<>(length);
-      {{/each}}
     }
 
     public int size() {
@@ -59,7 +68,19 @@ public record Trace(
         throw new RuntimeException("Cannot measure a trace with a non-validated row.");
       }
 
-      return this.{{ registers.0.java_name }}.size();
+      return this.currentLine;
+    }
+
+    public void setBuffers(List<MappedByteBuffer> buffers) {
+        {{ #each registers }}
+        this.{{ java_name }} = buffers.get({{ @index }});
+        {{ /each }}
+    }
+
+    public void releaseBuffers() {
+        {{ #each registers }}
+        this.{{ java_name }} = null;
+        {{ /each }}
     }
 
     {{#each columns}}
@@ -70,15 +91,12 @@ public record Trace(
         filled.set({{ this.reg_id }});
       }
 
-      {{ this.register }}.add(b);
+      {{ this.register }}.{{ this.putter }};
 
       return this;
     }
-    {{#unless @last}}
 
-    {{/unless}}
     {{/each}}
-
     public TraceBuilder validateRow() {
       {{#each registers}}
       if (!filled.get({{ this.id }})) {
@@ -86,32 +104,24 @@ public record Trace(
       }
 
       {{/each}}
-
       filled.clear();
+      this.currentLine++;
 
       return this;
     }
 
     public TraceBuilder fillAndValidateRow() {
-      {{#each registers}}
-      if (!filled.get({{ this.id }})) {
-          {{ this.java_name }}.add({{ this.zero_value }});
-          this.filled.set({{ this.id }});
-      }
-      {{/each}}
+      filled.clear();
+      this.currentLine++;
 
-      return this.validateRow();
+      return this;
     }
 
     public Trace build() {
       if (!filled.isEmpty()) {
         throw new IllegalStateException("Cannot build trace with a non-validated row.");
       }
-
-      return new Trace(
-        {{#each registers}}
-        {{ this.java_name }}{{#unless @last}},{{/unless}}{{#if @last}});{{/if}}
-        {{/each}}
+      return null;
     }
   }
 }
