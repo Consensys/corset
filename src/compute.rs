@@ -603,7 +603,11 @@ fn prepare(cs: &mut ConstraintSet, fail_on_missing: bool) -> Result<()> {
 }
 
 pub fn compute_trace(tracefile: &str, cs: &mut ConstraintSet, fail_on_missing: bool) -> Result<()> {
-    import::read_trace(tracefile, cs)?;
+    if tracefile.ends_with("lt") {
+        import::parse_flat_trace(tracefile, cs)?;
+    } else {
+        import::parse_json_trace(tracefile, cs)?;
+    }
     prepare(cs, fail_on_missing)
 }
 

@@ -5,6 +5,7 @@ use cached::Cached;
 use flate2::bufread::GzDecoder;
 use log::*;
 use logging_timer::time;
+use num_bigint::{BigInt, Sign};
 use owo_colors::OwoColorize;
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
 use serde_json::Value;
@@ -14,7 +15,7 @@ use simd_json::BorrowedValue as Value;
 use std::io::Read;
 use std::{
     fs::File,
-    io::{BufReader, Seek},
+    io::{BufReader, Bytes, Read, Seek},
 };
 
 use crate::{
@@ -24,8 +25,133 @@ use crate::{
     structs::Handle,
 };
 
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
+
+#[derive(Debug)]
+struct ColumnHeader {
+    handle: Handle,
+    bytes_per_element: usize,
+    length: i32,
+}
+
+struct ColumnsReader<R: Read> {
+    bytes: R,
+}
+impl<R: Read> ColumnsReader<R> {
+    fn from(bytes: R) -> Self {
+        ColumnsReader { bytes }
+    }
+
+    fn i8(&mut self) -> Result<i8> {
+        self.bytes
+            .read_i8()
+            .with_context(|| anyhow!("not enough bytes"))
+    }
+
+    fn i16(&mut self) -> Result<i16> {
+        self.bytes
+            .read_i16::<BigEndian>()
+            .with_context(|| anyhow!("not enough bytes"))
+    }
+
+    fn i32(&mut self) -> Result<i32> {
+        self.bytes
+            .read_i32::<BigEndian>()
+            .with_context(|| anyhow!("not enough bytes"))
+    }
+
+    fn string(&mut self, len: usize) -> Result<String> {
+        let mut buffer = vec![0; len];
+        self.bytes.read_exact(&mut buffer)?;
+        String::from_utf8(buffer).with_context(|| anyhow!("invalid UTF8"))
+    }
+
+    fn slice(&mut self, len: usize) -> Result<Vec<u8>> {
+        let mut buffer = vec![0; len];
+        self.bytes.read_exact(&mut buffer)?;
+        Ok(buffer)
+    }
+
+    fn header(&mut self) -> Result<ColumnHeader> {
+        let handle_length = self.i16()?;
+        let handle_str = self.string(handle_length as usize)?;
+        let mut splitted = handle_str.splitn(2, '.');
+        let bytes_per_element = self.i8()? as usize;
+        let length = self.i32()?;
+
+        Ok(ColumnHeader {
+            handle: Handle::new(splitted.next().unwrap(), splitted.next().unwrap()),
+            bytes_per_element,
+            length,
+        })
+    }
+
+    fn map(&mut self) -> Result<Vec<ColumnHeader>> {
+        let column_count = self.i32()?;
+        (0..column_count).map(|_| self.header()).collect()
+    }
+}
+
+#[time("info", "Parsing binary traces")]
+pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
+    let mut columns_reader = ColumnsReader::from(BufReader::new(File::open(tracefile)?));
+    let map = columns_reader.map()?;
+
+    for column in dbg!(map).into_iter() {
+        let column_ref: ColumnRef = column.handle.clone().into();
+        let mut xs = std::iter::once(Ok(CValue::zero()))
+            .chain((0..column.length).map(|_| {
+                columns_reader
+                    .slice(column.bytes_per_element)
+                    .map(|bs| CValue::from(BigInt::from_bytes_be(Sign::Plus, &bs)))
+            }))
+            .collect::<Result<Vec<_>>>()?;
+
+        let module_spilling = cs
+            .spilling_for_column(&column_ref)
+            .ok_or_else(|| anyhow!("no spilling found for {}", column.handle.pretty()))?;
+        let module_min_len = cs
+            .columns
+            .min_len
+            .get(&column.handle.module)
+            .cloned()
+            .unwrap_or(0);
+
+        if let Some(Register { magma, .. }) = cs.columns.register(&column_ref) {
+            debug!("Importing {}", column.handle.pretty());
+            // If the parsed column is not long enought w.r.t. the
+            // minimal module length, prepend it with as many zeroes as
+            // required.
+            // Atomic columns are always padded with zeroes, so there is
+            // no need to trigger a more complex padding system.
+            if xs.len() < module_min_len {
+                xs.reverse();
+                xs.resize(module_min_len, CValue::zero()); // TODO: register padding values
+                xs.reverse();
+            }
+
+            let module_raw_size = cs.effective_len_or_set(&column.handle.module, xs.len() as isize);
+            if xs.len() as isize != module_raw_size {
+                bail!(
+                    "{} has an incorrect length: expected {}, found {}",
+                    column.handle.to_string().blue(),
+                    module_raw_size.to_string().red().bold(),
+                    xs.len().to_string().yellow().bold(),
+                );
+            }
+
+            cs.columns
+                .set_register_value(&column.handle.into(), xs, module_spilling)?
+        } else {
+            debug!("ignoring unknown column {}", column.handle.pretty());
+        }
+    }
+
+    Ok(())
+}
+
 #[time("info", "Parsing trace from JSON file with SIMD")]
-pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
+pub fn parse_json_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
     let mut f = File::open(tracefile).with_context(|| format!("while opening `{}`", tracefile))?;
 
     #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
@@ -42,7 +168,7 @@ pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
         .with_context(|| format!("while reading `{}`", tracefile))?;
         let v = simd_json::to_borrowed_value(&mut content)
             .map_err(|e| anyhow!("while parsing json: {}", e))?;
-        fill_traces(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
+        fill_traces_from_json(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
     }
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
     {
@@ -55,7 +181,7 @@ pub fn read_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
             }
         }
         .with_context(|| format!("while reading `{}`", tracefile))?;
-        fill_traces(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
+        fill_traces_from_json(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
     }
 }
 
@@ -75,7 +201,7 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
         };
         let v = simd_json::to_borrowed_value(&mut content)
             .map_err(|e| anyhow!("while parsing json: {}", e))?;
-        fill_traces(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
+        fill_traces_from_json(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
     }
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
     {
@@ -84,7 +210,7 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
             Some(_) => serde_json::from_reader(gz),
             None => serde_json::from_reader(BufReader::new(tracestr)),
         }?;
-        fill_traces(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
+        fill_traces_from_json(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
     }
 }
 
@@ -149,7 +275,7 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
     Ok(r)
 }
 
-pub fn fill_traces(
+pub fn fill_traces_from_json(
     v: &Value,
     path: Vec<String>,
     cs: &mut ConstraintSet,
@@ -162,11 +288,11 @@ pub fn fill_traces(
                     debug!("Importing {}", path[path.len() - 1]);
                     let mut first_column = String::new();
                     let mut initiator = Some(&mut first_column);
-                    fill_traces(v, path.clone(), cs, &mut initiator)?;
+                    fill_traces_from_json(v, path.clone(), cs, &mut initiator)?;
                 } else {
                     let mut path = path.clone();
                     path.push(k.to_string());
-                    fill_traces(v, path, cs, initiator)?;
+                    fill_traces_from_json(v, path, cs, initiator)?;
                 }
             }
             Ok(())
