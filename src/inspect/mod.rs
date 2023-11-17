@@ -167,10 +167,12 @@ impl ModuleView {
                                 // https://i.stack.imgur.com/KTSQa.png
                                 let hash =
                                     x.to_bytes().iter().fold(0u8, |ax, bx| ax.wrapping_add(*bx));
-                                let bg_color = (hash % (231 - 17)) + 17;
+                                let bg_color = (hash % (231 - 16)) + 0;
                                 // ensure that we write white on dark colors and white on dark ones
                                 let corrected_fg_color = if bg_color % 36 > 18 {
                                     Color::Black
+                                } else if bg_color == 0 {
+                                    Color::DarkGray
                                 } else {
                                     Color::White
                                 };
