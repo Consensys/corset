@@ -277,7 +277,7 @@ impl ConstraintSet {
                             .handle(new_handle.to_owned())
                             .t(new_magma)
                             .base(Base::Hex)
-                            .kind(Kind::Composite(Box::new(())))
+                            .kind(Kind::Computed(Box::new(())))
                             .build(),
                     )
                     .unwrap();

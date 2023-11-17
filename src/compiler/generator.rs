@@ -473,7 +473,8 @@ impl ConstraintSet {
             {
                 match c {
                     Computation::Interleaved { target, .. }
-                    | Computation::CyclicFrom { target, .. } => {
+                    | Computation::CyclicFrom { target, .. }
+                    | Computation::Composite { target, .. } => {
                         let col = self.columns.column(&target).unwrap();
                         let reg = self.columns.new_register(col.handle.clone(), col.t);
                         self.columns.assign_register(&target, reg).unwrap();
@@ -1511,11 +1512,11 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
             kind: k,
             ..
         } => match k {
-            Kind::Composite(e) => {
+            Kind::Computed(e) => {
                 let n = reduce(e, ctx, settings)?.unwrap();
                 ctx.edit_symbol(name, &|x| {
                     if let Expression::Column { kind, .. } = x {
-                        *kind = Kind::Composite(Box::new(n.clone()))
+                        *kind = Kind::Computed(Box::new(n.clone()))
                     }
                 })?;
                 Ok(None)

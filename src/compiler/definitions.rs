@@ -54,7 +54,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                 .kind(match kind {
                     Kind::Atomic => Kind::Atomic,
                     Kind::Phantom => Kind::Phantom,
-                    Kind::Composite(_) => Kind::Phantom,
+                    Kind::Computed(_) => Kind::Phantom,
                 })
                 .and_padding_value(*padding_value)
                 .t(t.m())

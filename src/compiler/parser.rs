@@ -152,14 +152,14 @@ pub enum Kind<T> {
     Phantom,
     /// a composite column is similar to a phantom column, but the expression
     /// computing it is known
-    Composite(Box<T>),
+    Computed(Box<T>),
 }
 impl<T> Kind<T> {
     pub fn to_nil(&self) -> Kind<()> {
         match self {
             Kind::Atomic => Kind::Atomic,
             Kind::Phantom => Kind::Phantom,
-            Kind::Composite(_) => Kind::Composite(Box::new(())),
+            Kind::Computed(_) => Kind::Computed(Box::new(())),
         }
     }
 }
@@ -618,6 +618,7 @@ struct ColumnAttributes {
     range: OnceCell<Domain>,
     padding_value: OnceCell<i64>,
     base: OnceCell<Base>,
+    computation: Option<AstNode>,
 }
 
 impl std::convert::TryInto<DisplayableColumn> for ColumnAttributes {
@@ -731,7 +732,10 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
                     })?;
                 ColumnParser::Begin
             }
-            ColumnParser::Computation => todo!(),
+            ColumnParser::Computation => {
+                attributes.computation = Some(x);
+                ColumnParser::Begin
+            }
             ColumnParser::PaddingValue => {
                 attributes.padding_value.set(x.as_i64()?).map_err(|_| {
                     anyhow!(
@@ -808,7 +812,10 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                     .cloned()
                                     .unwrap_or(Magma::native()),
                             ),
-                            kind: Kind::Atomic,
+                            kind: column_attributes
+                                .computation
+                                .map(|c| Kind::Computed(Box::new(c)))
+                                .unwrap_or(Kind::Atomic),
                             padding_value: column_attributes.padding_value.get().cloned(),
                             base,
                         }

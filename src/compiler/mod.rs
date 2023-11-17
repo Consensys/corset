@@ -179,7 +179,7 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
                         let id = columns.insert_column(column)?;
                         match k {
                             Kind::Atomic | Kind::Phantom => (),
-                            Kind::Composite(e) => computations
+                            Kind::Computed(e) => computations
                                 .insert(
                                     &id,
                                     Computation::Composite {
