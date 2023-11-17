@@ -159,7 +159,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                         RawMagma::Binary => "put((byte) (b ? 1 : 0))",
                         RawMagma::Nibble => "put(b.toByte())",
                         RawMagma::Byte => "put(b.toByte())",
-                        RawMagma::Native => "put(b.toByteArray())",
+                        RawMagma::Native => "put(UInt256.valueOf(b).toBytes().toArray())",
                         _ => unreachable!(),
                     }
                     .to_string(),

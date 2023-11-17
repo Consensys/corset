@@ -24,6 +24,8 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import net.consensys.linea.zktracer.ColumnHeader;
 import net.consensys.linea.zktracer.types.UnsignedByte;
+import org.apache.tuweni.units.bigints.UInt256;
+
 
 /**
  * WARNING: This code is generated automatically.
