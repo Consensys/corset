@@ -97,7 +97,7 @@ pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
     let mut columns_reader = ColumnsReader::from(BufReader::new(File::open(tracefile)?));
     let map = columns_reader.map()?;
 
-    for column in dbg!(map).into_iter() {
+    for column in map.into_iter() {
         let column_ref: ColumnRef = column.handle.clone().into();
         let mut xs = std::iter::once(Ok(CValue::zero()))
             .chain((0..column.length).map(|_| {
@@ -107,9 +107,6 @@ pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
             }))
             .collect::<Result<Vec<_>>>()?;
 
-        let module_spilling = cs
-            .spilling_for_column(&column_ref)
-            .ok_or_else(|| anyhow!("no spilling found for {}", column.handle.pretty()))?;
         let module_min_len = cs
             .columns
             .min_len
@@ -119,6 +116,9 @@ pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
 
         if let Some(Register { magma, .. }) = cs.columns.register(&column_ref) {
             debug!("Importing {}", column.handle.pretty());
+            let module_spilling = cs
+                .spilling_for_column(&column_ref)
+                .ok_or_else(|| anyhow!("no spilling found for {}", column.handle.pretty()))?;
             // If the parsed column is not long enought w.r.t. the
             // minimal module length, prepend it with as many zeroes as
             // required.

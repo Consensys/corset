@@ -18,7 +18,6 @@ use serde::Serialize;
 use super::reg_to_string;
 
 const TRACE_COLUMNS_TEMPLATE: &str = include_str!("besu_trace_columns.java");
-const TRACE_MODULE_TEMPLATE: &str = include_str!("besu_module_trace.java");
 
 #[derive(Serialize)]
 struct BesuColumn {
@@ -205,10 +204,6 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
         columns,
     };
 
-    let trace_module_render = handlebars
-        .render_template(TRACE_MODULE_TEMPLATE, &template_data)
-        .expect("error rendering trace module java template for Besu");
-
     let trace_columns_render = handlebars
         .render_template(TRACE_COLUMNS_TEMPLATE, &template_data)
         .expect("error rendering trace columns java template for Besu");
@@ -218,22 +213,13 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
             if !Path::new(f).is_dir() {
                 bail!("{} is not a directory", f.bold().yellow());
             }
-            let trace_module_java_filepath = {
-                let m = format!("{}{}", template_data.module_prefix, "Trace.java");
-                Path::new(f).join(m)
-            };
 
             let trace_columns_java_filepath = Path::new(f).join("Trace.java");
-
-            fill_file(trace_module_java_filepath, trace_module_render)
-                .expect("error creating trace module java file for Besu");
 
             fill_file(trace_columns_java_filepath, trace_columns_render)
                 .expect("error creating trace columns java file for Besu");
         }
         None => {
-            println!("{trace_module_render}");
-            println!("=========================================================================");
             println!("{trace_columns_render}");
         }
     }
