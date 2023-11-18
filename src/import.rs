@@ -15,7 +15,7 @@ use simd_json::BorrowedValue as Value;
 use std::io::Read;
 use std::{
     fs::File,
-    io::{BufReader, Bytes, Read, Seek},
+    io::{BufReader, Read, Seek},
 };
 
 use crate::{
@@ -25,68 +25,84 @@ use crate::{
     structs::Handle,
 };
 
-use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
-
 #[derive(Debug)]
-struct ColumnHeader {
+struct RegisterHeader {
     handle: Handle,
     bytes_per_element: usize,
     length: i32,
 }
 
-struct ColumnsReader<R: Read> {
-    bytes: R,
+struct TraceReader<Data: AsRef<[u8]>> {
+    bytes: Data,
+    cursor: usize,
 }
-impl<R: Read> ColumnsReader<R> {
-    fn from(bytes: R) -> Self {
-        ColumnsReader { bytes }
+impl<Data: AsRef<[u8]>> TraceReader<Data> {
+    fn from(bytes: Data) -> Self {
+        TraceReader { bytes, cursor: 0 }
     }
 
     fn i8(&mut self) -> Result<i8> {
+        self.cursor += 1;
         self.bytes
-            .read_i8()
+            .as_ref()
+            .get(self.cursor - 1)
+            .map(|x| *x as i8)
             .with_context(|| anyhow!("not enough bytes"))
     }
 
     fn i16(&mut self) -> Result<i16> {
+        self.cursor += 2;
         self.bytes
-            .read_i16::<BigEndian>()
+            .as_ref()
+            .get(self.cursor - 2..self.cursor)
+            .map(|bs| i16::from_be_bytes(bs.try_into().unwrap()))
             .with_context(|| anyhow!("not enough bytes"))
     }
 
     fn i32(&mut self) -> Result<i32> {
+        self.cursor += 4;
         self.bytes
-            .read_i32::<BigEndian>()
+            .as_ref()
+            .get(self.cursor - 4..self.cursor)
+            .map(|bs| i32::from_be_bytes(bs.try_into().unwrap()))
             .with_context(|| anyhow!("not enough bytes"))
     }
 
     fn string(&mut self, len: usize) -> Result<String> {
-        let mut buffer = vec![0; len];
-        self.bytes.read_exact(&mut buffer)?;
-        String::from_utf8(buffer).with_context(|| anyhow!("invalid UTF8"))
+        self.cursor += len;
+        String::from_utf8(
+            self.bytes
+                .as_ref()
+                .get(self.cursor - len..self.cursor)
+                .with_context(|| anyhow!("not enough bytes"))?
+                .to_vec(),
+        )
+        .with_context(|| anyhow!("invalid UTF8"))
     }
 
-    fn slice(&mut self, len: usize) -> Result<Vec<u8>> {
-        let mut buffer = vec![0; len];
-        self.bytes.read_exact(&mut buffer)?;
-        Ok(buffer)
+    fn slice(&mut self, len: usize) -> Result<&[u8]> {
+        self.cursor += len;
+        self.bytes
+            .as_ref()
+            .get(self.cursor - len..self.cursor)
+            .with_context(|| anyhow!("not enough bytes"))
     }
 
-    fn header(&mut self) -> Result<ColumnHeader> {
+    fn header(&mut self) -> Result<RegisterHeader> {
         let handle_length = self.i16()?;
         let handle_str = self.string(handle_length as usize)?;
         let mut splitted = handle_str.splitn(2, '.');
         let bytes_per_element = self.i8()? as usize;
         let length = self.i32()?;
 
-        Ok(ColumnHeader {
+        Ok(RegisterHeader {
             handle: Handle::new(splitted.next().unwrap(), splitted.next().unwrap()),
             bytes_per_element,
             length,
         })
     }
 
-    fn map(&mut self) -> Result<Vec<ColumnHeader>> {
+    fn map(&mut self) -> Result<Vec<RegisterHeader>> {
         let column_count = self.i32()?;
         (0..column_count).map(|_| self.header()).collect()
     }
@@ -94,14 +110,13 @@ impl<R: Read> ColumnsReader<R> {
 
 #[time("info", "Parsing binary traces")]
 pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
-    let mut columns_reader = ColumnsReader::from(BufReader::new(File::open(tracefile)?));
-    let map = columns_reader.map()?;
-
-    for column in map.into_iter() {
+    let mut trace_reader =
+        TraceReader::from(unsafe { memmap2::MmapOptions::new().map(&File::open(tracefile)?)? });
+    for column in trace_reader.map()?.into_iter() {
         let column_ref: ColumnRef = column.handle.clone().into();
         let mut xs = std::iter::once(Ok(CValue::zero()))
             .chain((0..column.length).map(|_| {
-                columns_reader
+                trace_reader
                     .slice(column.bytes_per_element)
                     .map(|bs| CValue::from(BigInt::from_bytes_be(Sign::Plus, &bs)))
             }))
