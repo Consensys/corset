@@ -50,7 +50,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
 sorbus = "0.9"
 thiserror = "1.0.38"
-ratatui-textarea = { version = "0.4", optional = true }
+tui-textarea = { version = "0.4", optional = true }
 ellipse = "0.2.0"
 ark-ff = "0.4.2"
 memmap2 = "0.9.0"
@@ -63,7 +63,7 @@ cli = ["dep:clap-verbosity-flag", "dep:clap"]
 conflater = []
 default = ["interactive", "cli", "exporters", "parser", "inspector"]
 exporters = ["dep:handlebars"]
-inspector = ["dep:ratatui", "dep:ratatui-textarea", "cli", "parser"]
+inspector = ["dep:ratatui", "dep:tui-textarea", "cli", "parser"]
 interactive = ["dep:indicatif"]
 parser = ["dep:pest", "dep:pest_derive"]
 postgres = ["dep:postgres"]

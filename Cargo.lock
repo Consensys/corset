@@ -539,7 +539,6 @@ dependencies = [
  "pest_derive",
  "postgres",
  "ratatui",
- "ratatui-textarea",
  "rayon",
  "regex-lite",
  "ron",
@@ -548,6 +547,7 @@ dependencies = [
  "simd-json",
  "sorbus",
  "thiserror",
+ "tui-textarea",
 ]
 
 [[package]]
@@ -1471,16 +1471,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ratatui-textarea"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34d1b2612ef92d22d219e3f12dd6fef2c936b90150652f5ff7eaaa35ec3a5c77"
-dependencies = [
- "crossterm",
- "ratatui",
-]
-
-[[package]]
 name = "rayon"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2022,6 +2012,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.39",
+]
+
+[[package]]
+name = "tui-textarea"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3e38ced1f941a9cfc923fbf2fe6858443c42cc5220bfd35bdd3648371e7bd8e"
+dependencies = [
+ "crossterm",
+ "ratatui",
+ "unicode-width",
 ]
 
 [[package]]

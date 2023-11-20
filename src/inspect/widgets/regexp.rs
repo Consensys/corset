@@ -3,8 +3,8 @@ use ratatui::{
     style::{Color, Style},
     widgets::{Block, Borders},
 };
-use ratatui_textarea::{Input, Key, TextArea};
 use regex_lite::Regex;
+use tui_textarea::{CursorMove, Input, Key, TextArea};
 
 use crate::inspect::StdTerminal;
 
@@ -18,7 +18,7 @@ impl RegexpInput<'_> {
             title: title.to_owned(),
             input: TextArea::from([content]),
         };
-        r.input.move_cursor(ratatui_textarea::CursorMove::End);
+        r.input.move_cursor(CursorMove::End);
         r
     }
 

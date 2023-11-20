@@ -11,8 +11,8 @@ use ratatui::{
     style::{Color, Style},
     widgets::{Block, Borders},
 };
-use ratatui_textarea::{Input, Key, TextArea};
 use std::collections::HashMap;
+use tui_textarea::{CursorMove, Input, Key, TextArea};
 
 pub struct ScanInput<'a> {
     module: String,
@@ -26,7 +26,7 @@ impl<'a> ScanInput<'a> {
             columns,
             input: TextArea::from([content]),
         };
-        r.input.move_cursor(ratatui_textarea::CursorMove::End);
+        r.input.move_cursor(CursorMove::End);
         r
     }
 

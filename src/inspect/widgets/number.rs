@@ -3,7 +3,7 @@ use ratatui::{
     style::{Color, Style},
     widgets::{Block, Borders},
 };
-use ratatui_textarea::{Input, Key, TextArea};
+use tui_textarea::{Input, Key, TextArea};
 
 use crate::inspect::StdTerminal;
 

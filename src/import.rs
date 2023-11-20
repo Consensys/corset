@@ -12,7 +12,6 @@ use serde_json::Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
 use simd_json::BorrowedValue as Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
-use std::io::Read;
 use std::{
     fs::File,
     io::{BufReader, Read, Seek},
