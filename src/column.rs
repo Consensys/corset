@@ -159,14 +159,13 @@ impl Value {
     }
 
     pub(crate) fn vector_sub_assign(&mut self, other: &Value) {
-        let msg = format!("{} .- {}", self, other);
         match (self, other) {
             (Value::BigInt(ref mut i1), Value::BigInt(ref i2)) => *i1 -= i2,
             (Value::BigInt(_), Value::Native(_)) => todo!(),
             (Value::BigInt(_), Value::ExoNative(_)) => todo!(),
             (Value::Native(_), Value::BigInt(_)) => todo!(),
             (Value::Native(ref mut f1), Value::Native(ref f2)) => f1.sub_assign(f2),
-            (Value::Native(_), Value::ExoNative(_)) => todo!("{}", msg),
+            (Value::Native(_), Value::ExoNative(_)) => todo!(),
             (Value::ExoNative(_), Value::BigInt(_)) => todo!(),
             (Value::ExoNative(_), Value::Native(_)) => todo!(),
             (Value::ExoNative(f1s), Value::ExoNative(f2s)) => f1s
@@ -265,7 +264,7 @@ impl Value {
     pub(crate) fn to_bi_variant(&self) -> Value {
         match self {
             Value::BigInt(_) => self.clone(),
-            Value::Native(fr) => Value::BigInt(self.to_bi()),
+            Value::Native(_) => Value::BigInt(self.to_bi()),
             _ => unimplemented!(),
         }
     }
@@ -727,7 +726,7 @@ impl<'a> Iterator for ValueBackingIter<'a> {
                     v.get(self.i as usize).cloned()
                 }
             }
-            ValueBacking::Expression { spilling, .. } => {
+            ValueBacking::Expression { .. } => {
                 if self.i >= self.len {
                     None
                 } else {

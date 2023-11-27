@@ -7,6 +7,7 @@ use log::*;
 use logging_timer::time;
 use num_bigint::{BigInt, Sign};
 use owo_colors::OwoColorize;
+use rayon::prelude::*;
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
 use serde_json::Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
@@ -87,11 +88,19 @@ impl<Data: AsRef<[u8]>> TraceReader<Data> {
     }
 
     fn header(&mut self) -> Result<RegisterHeader> {
-        let handle_length = self.i16()?;
-        let handle_str = self.string(handle_length as usize)?;
+        let handle_length = self
+            .i16()
+            .with_context(|| anyhow!("parsing a register name length"))?;
+        let handle_str = self
+            .string(handle_length as usize)
+            .with_context(|| anyhow!("parsing a register name"))?;
         let mut splitted = handle_str.splitn(2, '.');
-        let bytes_per_element = self.i8()? as usize;
-        let length = self.i32()?;
+        let bytes_per_element =
+            self.i8()
+                .with_context(|| anyhow!("parsing BPE for {}", handle_str))? as usize;
+        let length = self
+            .i32()
+            .with_context(|| anyhow!("parsing length of {}", handle_str))?;
 
         Ok(RegisterHeader {
             handle: Handle::new(splitted.next().unwrap(), splitted.next().unwrap()),
@@ -101,8 +110,8 @@ impl<Data: AsRef<[u8]>> TraceReader<Data> {
     }
 
     fn map(&mut self) -> Result<Vec<RegisterHeader>> {
-        let column_count = self.i32()?;
-        (0..column_count).map(|_| self.header()).collect()
+        let register_count = self.i32().with_context(|| "parsing register count")?;
+        (0..register_count).map(|_| self.header()).collect()
     }
 }
 
@@ -110,28 +119,44 @@ impl<Data: AsRef<[u8]>> TraceReader<Data> {
 pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
     let mut trace_reader =
         TraceReader::from(unsafe { memmap2::MmapOptions::new().map(&File::open(tracefile)?)? });
-    for column in trace_reader.map()?.into_iter() {
-        let column_ref: ColumnRef = column.handle.clone().into();
-        let mut xs = std::iter::once(Ok(CValue::zero()))
-            .chain((0..column.length).map(|_| {
-                trace_reader
-                    .slice(column.bytes_per_element)
-                    .map(|bs| CValue::from(BigInt::from_bytes_be(Sign::Plus, &bs)))
-            }))
-            .collect::<Result<Vec<_>>>()?;
+    for register in trace_reader.map()?.into_iter() {
+        let column_ref: ColumnRef = register.handle.clone().into();
+        let register_bytes =
+            trace_reader.slice(register.length as usize * register.bytes_per_element)?;
+        let mut xs = (-1..register.length)
+            .into_par_iter()
+            .map(|i| {
+                if i == -1 {
+                    Ok(CValue::zero())
+                } else {
+                    let i = i as usize;
+                    register_bytes
+                        .get(i * register.bytes_per_element..(i + 1) * register.bytes_per_element)
+                        .map(|bs| CValue::from(BigInt::from_bytes_be(Sign::Plus, &bs)))
+                        .with_context(|| anyhow!("reading {}th element", i))
+                }
+            })
+            .collect::<Result<Vec<_>>>()
+            .with_context(|| {
+                anyhow!(
+                    "reading data for {} ({} elts. expected)",
+                    register.handle.pretty(),
+                    register.length
+                )
+            })?;
 
         let module_min_len = cs
             .columns
             .min_len
-            .get(&column.handle.module)
+            .get(&register.handle.module)
             .cloned()
             .unwrap_or(0);
 
         if let Some(Register { magma, .. }) = cs.columns.register(&column_ref) {
-            debug!("Importing {}", column.handle.pretty());
+            debug!("Importing {}", register.handle.pretty());
             let module_spilling = cs
                 .spilling_for_column(&column_ref)
-                .ok_or_else(|| anyhow!("no spilling found for {}", column.handle.pretty()))?;
+                .ok_or_else(|| anyhow!("no spilling found for {}", register.handle.pretty()))?;
             // If the parsed column is not long enought w.r.t. the
             // minimal module length, prepend it with as many zeroes as
             // required.
@@ -143,20 +168,21 @@ pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
                 xs.reverse();
             }
 
-            let module_raw_size = cs.effective_len_or_set(&column.handle.module, xs.len() as isize);
+            let module_raw_size =
+                cs.effective_len_or_set(&register.handle.module, xs.len() as isize);
             if xs.len() as isize != module_raw_size {
                 bail!(
                     "{} has an incorrect length: expected {}, found {}",
-                    column.handle.to_string().blue(),
+                    register.handle.to_string().blue(),
                     module_raw_size.to_string().red().bold(),
                     xs.len().to_string().yellow().bold(),
                 );
             }
 
             cs.columns
-                .set_register_value(&column.handle.into(), xs, module_spilling)?
+                .set_register_value(&register.handle.into(), xs, module_spilling)?
         } else {
-            debug!("ignoring unknown column {}", column.handle.pretty());
+            debug!("ignoring unknown column {}", register.handle.pretty());
         }
     }
 
@@ -335,7 +361,7 @@ pub fn fill_traces_from_json(
                         .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 
                     let mut xs = parse_column(xs, handle.as_handle(), *t)
-                        .with_context(|| anyhow!("while importing {}", handle))?;
+                        .with_context(|| anyhow!("importing {}", handle))?;
 
                     // If the parsed column is not long enought w.r.t. the
                     // minimal module length, prepend it with as many zeroes as
@@ -368,7 +394,7 @@ pub fn fill_traces_from_json(
                         .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 
                     let mut xs = parse_column(xs, handle.as_handle(), *magma)
-                        .with_context(|| anyhow!("while importing {}", handle))?;
+                        .with_context(|| anyhow!("importing {}", handle))?;
 
                     // If the parsed column is not long enought w.r.t. the
                     // minimal module length, prepend it with as many zeroes as
