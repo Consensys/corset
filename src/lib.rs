@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 #[macro_use]
-#[cfg(feature = "parser")]
 extern crate pest_derive;
 use anyhow::*;
 use compiler::ConstraintSet;
@@ -282,8 +281,6 @@ fn _trace_check(corset: &mut ConstraintSet, tracefile: &str, fail_on_missing: bo
         corset,
         &None,
         &[],
-        false,
-        true,
         check::DebugSettings::new()
             .unclutter(false)
             .dim(true)

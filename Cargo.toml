@@ -23,12 +23,11 @@ cached = { version = "0.46", default-features = false }
 clap = { version = "4", features = ["derive", "wrap_help", "cargo"], optional = true }
 clap-verbosity-flag = { version = "2", optional = true }
 convert_case = "0.6"
-crossterm = "0.27.0"
+crossterm = { version = "0.27.0", optional = true }
 either = { version = "1.8.1", features = ["serde"] }
 errno = "0.3.0"
 flate2 = "1"
 handlebars = { version = "4.3.6", default-features = false, optional = true }
-indicatif = { version = "0.17", optional = true }
 itertools = "0.11"
 lazy_static = "1.4"
 libc = {version = "0.2.139", default-features = false }
@@ -39,8 +38,8 @@ md5 = "0.7"
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
 owo-colors = "3.5.0"
-pest = { version = "2.4", optional = true }
-pest_derive = { version = "2.4", optional = true }
+pest = "2.4"
+pest_derive = "2.4"
 postgres = { version = "0.19", optional = true }
 ratatui = {version = "0.24", optional = true }
 rayon = "1.5"
@@ -61,11 +60,9 @@ simd-json = "0.13"
 [features]
 cli = ["dep:clap-verbosity-flag", "dep:clap"]
 conflater = []
-default = ["interactive", "cli", "exporters", "parser", "inspector"]
+default = ["cli", "exporters", "inspector"]
 exporters = ["dep:handlebars"]
-inspector = ["dep:ratatui", "dep:tui-textarea", "cli", "parser"]
-interactive = ["dep:indicatif"]
-parser = ["dep:pest", "dep:pest_derive"]
+inspector = ["dep:crossterm", "dep:ratatui", "dep:tui-textarea", "cli"]
 postgres = ["dep:postgres"]
 
 [package.metadata.release]
@@ -80,3 +77,6 @@ opt-level = 3
 
 [build-dependencies]
 cbindgen = {version = "0.26", default-features = false }
+
+[profile.release]
+debug = true

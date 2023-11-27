@@ -1,4 +1,3 @@
-#![cfg(feature = "parser")]
 use std::matches;
 use std::unreachable;
 

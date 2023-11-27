@@ -26,7 +26,6 @@ pub mod codetyper;
 mod common;
 mod compiletime;
 mod definitions;
-#[cfg(feature = "parser")]
 mod fmtparser;
 pub mod generator;
 mod node;
@@ -63,7 +62,6 @@ fn maybe_bail<R>(errs: Vec<Result<R>>) -> Result<Vec<R>> {
     }
 }
 
-#[cfg(feature = "parser")]
 pub fn parse_ast<S1: AsRef<str>, S2: AsRef<str>>(
     sources: &[(S1, S2)],
 ) -> Result<Vec<(String, Ast)>> {
@@ -80,7 +78,6 @@ pub fn parse_ast<S1: AsRef<str>, S2: AsRef<str>>(
     )
 }
 
-#[cfg(feature = "parser")]
 pub fn parse_simple_ast<S1: AsRef<str>, S2: AsRef<str>>(
     sources: &[(S1, S2)],
 ) -> Result<Vec<(String, Ast)>> {
@@ -97,7 +94,6 @@ pub fn parse_simple_ast<S1: AsRef<str>, S2: AsRef<str>>(
     )
 }
 
-#[cfg(feature = "parser")]
 pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
     sources: &[(S1, S2)],
     settings: &CompileSettings,

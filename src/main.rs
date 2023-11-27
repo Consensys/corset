@@ -1,13 +1,11 @@
 #![cfg(feature = "cli")]
 #[macro_use]
-#[cfg(feature = "parser")]
 extern crate pest_derive;
 use anyhow::*;
 use compiler::{Ast, ConstraintSet};
 use either::Either;
 use log::*;
 use owo_colors::OwoColorize;
-use std::io::IsTerminal;
 use std::sync::RwLock;
 use std::{
     io::{Read, Write},
@@ -25,7 +23,6 @@ mod constants;
 mod dag;
 mod errors;
 mod exporters;
-#[cfg(feature = "parser")]
 mod formatter;
 mod import;
 #[cfg(feature = "inspector")]
@@ -122,7 +119,7 @@ enum Commands {
         #[arg(short = 'o', long = "out", help = "where to render the columns")]
         filename: Option<String>,
     },
-    #[cfg(all(feature = "parser", feature = "exporters"))]
+    #[cfg(feature = "exporters")]
     /// Produce a LaTeX file describing the constraints
     Latex {
         #[arg(
@@ -311,7 +308,6 @@ enum Commands {
         skip: Vec<String>,
     },
     /// Format the given source in an idiomatic way
-    #[cfg(feature = "parser")]
     Format {
         #[arg(
             short = 'i',
@@ -571,45 +567,25 @@ fn main() -> Result<()> {
         .build_global()
         .unwrap();
 
-    let mut builder = if cfg!(feature = "parser") {
-        if matches!(args.command, Commands::Format { .. }) {
-            if args.source.len() != 1 {
-                bail!(
-                    "can only format one file at a time; found {}",
-                    args.source.len()
-                )
-            } else if args.source.len() == 1
-                && Path::new(&args.source[0])
-                    .extension()
-                    .map(|e| e == "bin")
-                    .unwrap_or(false)
-            {
-                bail!("expected Corset source file, found compiled constraint set")
-            } else {
-                let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
-                for f in args.source.iter() {
-                    r.add_source(f)?;
-                }
-                r
-            }
+    let mut builder = if matches!(args.command, Commands::Format { .. }) {
+        if args.source.len() != 1 {
+            bail!(
+                "can only format one file at a time; found {}",
+                args.source.len()
+            )
         } else if args.source.len() == 1
             && Path::new(&args.source[0])
                 .extension()
                 .map(|e| e == "bin")
                 .unwrap_or(false)
         {
-            info!("Loading `{}`", &args.source[0]);
-            ConstraintSetBuilder::from_bin(&args.source[0])?
+            bail!("expected Corset source file, found compiled constraint set")
         } else {
-            #[cfg(feature = "parser")]
-            {
-                info!("Parsing Corset source files...");
-                let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
-                for f in args.source.iter() {
-                    r.add_source(f)?;
-                }
-                r
+            let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
+            for f in args.source.iter() {
+                r.add_source(f)?;
             }
+            r
         }
     } else if args.source.len() == 1
         && Path::new(&args.source[0])
@@ -620,7 +596,12 @@ fn main() -> Result<()> {
         info!("Loading `{}`", &args.source[0]);
         ConstraintSetBuilder::from_bin(&args.source[0])?
     } else {
-        panic!("Compile Corset with the `parser` feature to enable the compiler")
+        info!("Parsing Corset source files...");
+        let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
+        for f in args.source.iter() {
+            r.add_source(f)?;
+        }
+        r
     };
 
     builder.expand_to(args.expand.into());
@@ -658,7 +639,7 @@ fn main() -> Result<()> {
 
             exporters::wizardiop::render(&cs, &out_filename)?;
         }
-        #[cfg(all(feature = "parser", feature = "exporters"))]
+        #[cfg(feature = "exporters")]
         Commands::Latex {
             constraints_filename,
         } => {
@@ -804,9 +785,6 @@ fn main() -> Result<()> {
                 &cs,
                 &only,
                 &skip,
-                args.verbose.log_level_filter() >= log::Level::Warn
-                    && std::io::stdout().is_terminal(),
-                ExpansionLevel::from(args.expand) >= ExpansionLevel::ExpandInvs,
                 check::DebugSettings::new()
                     .unclutter(unclutter)
                     .dim(dim)

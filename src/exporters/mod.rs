@@ -5,7 +5,7 @@ pub mod besu;
 #[cfg(feature = "conflater")]
 pub mod conflater;
 pub(crate) mod debugger;
-#[cfg(all(feature = "parser", feature = "exporters"))]
+#[cfg(feature = "exporters")]
 pub mod latex;
 #[cfg(feature = "exporters")]
 pub mod wizardiop;

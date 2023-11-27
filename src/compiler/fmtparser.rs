@@ -1,4 +1,3 @@
-#![cfg(feature = "parser")]
 use super::Ast;
 use crate::compiler::Token;
 use crate::pretty::Base;

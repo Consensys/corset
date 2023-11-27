@@ -1,6 +1,4 @@
 use cached::SizedCache;
-#[cfg(feature = "interactive")]
-use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rayon::prelude::*;
@@ -474,8 +472,6 @@ pub fn check(
     cs: &ConstraintSet,
     only: &Option<Vec<String>>,
     skip: &[String],
-    with_bar: bool,
-    expand: bool,
     settings: DebugSettings,
 ) -> Result<()> {
     if cs.columns.is_empty() {
@@ -483,21 +479,6 @@ pub fn check(
         return Ok(());
     }
 
-    #[cfg(feature = "interactive")]
-    let bar = if with_bar {
-        {
-            Some(
-                ProgressBar::new(cs.constraints.len() as u64).with_style(
-                    ProgressStyle::default_bar()
-                        .template("Validating {msg} {bar:40} {pos}/{len}")
-                        .unwrap()
-                        .progress_chars("##-"),
-                ),
-            )
-        }
-    } else {
-        None
-    };
     let todo = cs
         .constraints
         .iter()
@@ -509,17 +490,7 @@ pub fn check(
     }
 
     let failed = todo
-        // .par_iter()
-        // .with_max_len(1)
-        .iter()
-        .inspect(|_| {
-            #[cfg(feature = "interactive")]
-            {
-                if let Some(b) = &bar {
-                    b.inc(1)
-                }
-            }
-        })
+        .par_iter()
         .filter_map(|c| {
             match c {
                 Constraint::Vanishes {
@@ -531,9 +502,7 @@ pub fn check(
                         return None;
                     }
 
-                    if name.name == "INV_CONSTRAINTS" && !expand {
-                        return None;
-                    }
+                    info!("Checking {}", name.pretty());
 
                     match expr.as_ref().e() {
                         Expression::List(es) => {
