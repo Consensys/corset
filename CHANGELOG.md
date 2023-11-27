@@ -2,6 +2,50 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.0] - 2023-11-27
+
+### Bug Fixes
+
+- Globally rename plookup to lookup
+- Ensure that inspector colors are readable
+- Sort constraints
+- Importing traces as native values
+- Conditioning of guards
+- Concretize computations
+- Escaping function
+- Correctly mark used columns
+- Render permutations & domains
+- Apply all auto-constraints
+- Adapt default Value to native/non-native
+- Columns import/export for BLS
+- Lookup checking on non-expanded constraints
+- Build process
+- Improve checking error reporting
+
+### Features
+
+- Add an option do display module spillings
+- Switch from BN to BLS
+- Implement :comp columns
+- Adapt for MMAP export in Besu
+- Flat binary file parser
+
+### Miscellaneous Tasks
+
+- Update dependencies
+- Clippy
+- Update dependencies
+- Update tui-textarea
+
+### Performance
+
+- Improve flat file importing performances
+- Optimize register parsing
+
+### Build
+
+- Streamline the build process
+
 ## [9.0.0-alpha] - 2023-11-02
 
 ### Bug Fixes
@@ -13,6 +57,10 @@ All notable changes to this project will be documented in this file.
 - Add vertical scrolling
 - Prettier plookups
 - Introduce field-agnosticity and related type-system revision ([#40](https://github.com/orhun/git-cliff/issues/40))
+
+### Miscellaneous Tasks
+
+- Release corset version 9.0.0-alpha
 
 ### Besu
 
