@@ -1,18 +1,25 @@
-use cached::SizedCache;
-use itertools::Itertools;
-use owo_colors::OwoColorize;
-use rayon::prelude::*;
-use std::collections::HashSet;
-
-use anyhow::*;
-use log::*;
-
 use crate::{
     column::{ColumnSet, Value},
     compiler::{Constraint, ConstraintSet, Domain, EvalSettings, Expression, Node},
     pretty::*,
     structs::Handle,
 };
+use anyhow::*;
+use cached::SizedCache;
+use itertools::Itertools;
+use log::*;
+use owo_colors::OwoColorize;
+use rayon::prelude::*;
+use std::collections::HashSet;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+enum CheckingError {
+    #[error("columns for {} not found in trace file", .0.pretty())]
+    NoColumnsFound(Handle),
+    #[error("")]
+    FailingConstraint(Handle, String),
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct DebugSettings {
@@ -342,30 +349,32 @@ fn check_constraint(
             }
             None => {
                 for i in 0..l as isize {
-                    let err = check_constraint_at(cs, expr, i, false, false, &mut cache, settings);
+                    let err = check_constraint_at(cs, expr, i, false, false, &mut cache, settings)
+                        .map_err(|e| CheckingError::FailingConstraint(name.clone(), e.to_string()));
 
                     if err.is_err() {
                         if settings.continue_on_error {
                             eprintln!("{:?}", err);
                         } else {
-                            return err;
+                            bail!(err.err().unwrap());
                         }
                     }
                 }
             }
         };
-        trace!("{} validated", name.pretty());
+        info!("{} validated", name.pretty());
         Ok(())
     } else {
-        warn!(
-            "constraint {} will not be checked, because it does not involve any column",
-            name.pretty()
-        );
-        Ok(())
+        bail!(CheckingError::NoColumnsFound(name.clone()))
     }
 }
 
-fn check_lookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Result<()> {
+fn check_lookup(
+    cs: &ConstraintSet,
+    handle: &Handle,
+    parents: &[Node],
+    children: &[Node],
+) -> Result<()> {
     // Compute the LC \sum_k (k+1) × x_k[i]
     fn pseudo_rlc(exps: &[Node], i: usize, cs: &ColumnSet) -> Value {
         let mut ax = Value::zero();
@@ -408,7 +417,7 @@ fn check_lookup(cs: &ConstraintSet, parents: &[Node], children: &[Node]) -> Resu
         .all(|l| l == 0);
     match (children_empty, parent_empty) {
         (true, true) | (true, false) => {
-            warn!("empty lookup found; skipping");
+            warn!("skipping empty lookup {}", handle.pretty());
             return Ok(());
         }
         (false, true) => bail!(
@@ -507,30 +516,45 @@ pub fn check(
                     match expr.as_ref().e() {
                         Expression::List(es) => {
                             for e in es {
-                                if let Err(trace) = check_constraint(cs, e, domain, name, settings)
-                                {
-                                    if settings.report {
-                                        println!(
-                                            "{} failed:\n{}\n",
-                                            name.to_string().red().bold(),
-                                            trace
-                                        );
+                                if let Err(err) = check_constraint(cs, e, domain, name, settings) {
+                                    match err.downcast_ref::<CheckingError>().unwrap() {
+                                        CheckingError::NoColumnsFound(_) => {
+                                            warn!("{}", err);
+                                            break;
+                                        }
+                                        CheckingError::FailingConstraint(handle, trace) => {
+                                            if settings.report {
+                                                println!(
+                                                    "{} failed:\n{}\n",
+                                                    handle.to_string().red().bold(),
+                                                    trace
+                                                );
+                                            }
+                                            return Some(name.to_owned());
+                                        }
                                     }
-                                    return Some(name.to_owned());
                                 }
                             }
                             None
                         }
                         _ => {
-                            if let Err(trace) = check_constraint(cs, expr, domain, name, settings) {
-                                if settings.report {
-                                    println!(
-                                        "{} failed:\n{}\n",
-                                        name.to_string().red().bold(),
-                                        trace
-                                    );
+                            if let Err(err) = check_constraint(cs, expr, domain, name, settings) {
+                                match err.downcast_ref::<CheckingError>().unwrap() {
+                                    CheckingError::NoColumnsFound(_) => {
+                                        warn!("{}", err);
+                                        None
+                                    }
+                                    CheckingError::FailingConstraint(handle, trace) => {
+                                        if settings.report {
+                                            println!(
+                                                "{} failed:\n{}\n",
+                                                handle.to_string().red().bold(),
+                                                trace
+                                            );
+                                        }
+                                        Some(name.to_owned())
+                                    }
                                 }
-                                Some(name.to_owned())
                             } else {
                                 None
                             }
@@ -538,15 +562,15 @@ pub fn check(
                     }
                 }
                 Constraint::Lookup {
-                    handle: name,
-                    including: parents,
-                    included: children,
+                    handle,
+                    including,
+                    included,
                 } => {
-                    if let Err(trace) = check_lookup(cs, parents, children) {
+                    if let Err(trace) = check_lookup(cs, handle, including, included) {
                         if settings.report {
-                            println!("{} failed:\n{:?}\n", name, trace);
+                            println!("{} failed:\n{:?}\n", handle, trace);
                         }
-                        Some(name.to_owned())
+                        Some(handle.to_owned())
                     } else {
                         None
                     }
