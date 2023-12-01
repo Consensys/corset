@@ -36,6 +36,7 @@ All notable changes to this project will be documented in this file.
 - Clippy
 - Update dependencies
 - Update tui-textarea
+- Release corset version 9.0.0
 
 ### Performance
 
