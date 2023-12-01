@@ -24,7 +24,6 @@ struct BesuColumn {
     corset_name: String,
     java_name: String,
     appender: String,
-    updater: String,
     tupe: String,
     register: String,
     putter: String,
@@ -60,8 +59,8 @@ fn magma_to_java_type(m: Magma) -> String {
         RawMagma::Binary => "Boolean",
         RawMagma::Nibble => "UnsignedByte",
         RawMagma::Byte => "UnsignedByte",
-        RawMagma::Native => "BigInteger",
-        RawMagma::Integer(_) => "BigInteger",
+        RawMagma::Native => "Bytes",
+        RawMagma::Integer(_) => "Bytes",
         RawMagma::Any => unreachable!(),
     }
     .to_string()
@@ -73,8 +72,8 @@ fn magma_to_java_zero(m: Magma) -> String {
         RawMagma::Binary => "false",
         RawMagma::Nibble => "UnsignedByte.of(0)",
         RawMagma::Byte => "UnsignedByte.of(0)",
-        RawMagma::Native => "BigInteger.ZERO",
-        RawMagma::Integer(_) => "BigInteger.ZERO",
+        RawMagma::Native => "Bytes.EMPTY",
+        RawMagma::Integer(_) => "Bytes.EMPTY",
         RawMagma::Any => unreachable!(),
     }
     .to_string()
@@ -150,18 +149,23 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                     corset_name: c.handle.to_string(),
                     java_name: c.handle.name.to_case(Case::Camel),
                     appender: handle_to_appender(&c.handle),
-                    updater: handle_to_updater(&c.handle),
                     tupe: magma_to_java_type(c.t),
-                    register,
+                    register: register.clone(),
                     reg_id: r,
                     putter: match c.t.rm() {
-                        RawMagma::Binary => "put((byte) (b ? 1 : 0))",
-                        RawMagma::Nibble => "put(b.toByte())",
-                        RawMagma::Byte => "put(b.toByte())",
-                        RawMagma::Native => "put(UInt256.valueOf(b).toBytes().toArray())",
+                        RawMagma::Binary => format!("{}.put((byte) (b ? 1 : 0));", &register),
+                        RawMagma::Nibble => format!("{}.put(b.toByte());", &register),
+                        RawMagma::Byte => format!("{}.put(b.toByte());", &register),
+                        RawMagma::Native => format!(
+                            r#"final byte[] bs = b.toArrayUnsafe();
+    for (int i = bs.length; i < 32; i++) {{
+      {0}.put((byte) 0);
+    }}
+    {0}.put(b.toArrayUnsafe());"#,
+                            &register
+                        ),
                         _ => unreachable!(),
-                    }
-                    .to_string(),
+                    },
                 })
             } else {
                 None
@@ -194,7 +198,8 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
         .sorted_by_cached_key(|c| c.name.to_owned())
         .collect::<Vec<_>>();
 
-    let handlebars = Handlebars::new();
+    let mut handlebars = Handlebars::new();
+    handlebars.register_escape_fn(handlebars::no_escape);
 
     let template_data = TemplateData {
         module: package.to_owned(),

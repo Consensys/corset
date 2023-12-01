@@ -15,14 +15,13 @@
 
 package net.consensys.linea.zktracer.module.{{ module }};
 
-import java.math.BigInteger;
 import java.nio.MappedByteBuffer;
 import java.util.BitSet;
 import java.util.List;
 
 import net.consensys.linea.zktracer.ColumnHeader;
 import net.consensys.linea.zktracer.types.UnsignedByte;
-import org.apache.tuweni.units.bigints.UInt256;
+import org.apache.tuweni.bytes.Bytes;
 
 /**
  * WARNING: This code is generated automatically.
@@ -71,7 +70,7 @@ public class Trace {
       filled.set({{ this.reg_id }});
     }
 
-    {{ this.register }}.{{ this.putter }};
+    {{ this.putter }}
 
     return this;
   }
