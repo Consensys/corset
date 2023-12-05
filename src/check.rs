@@ -511,8 +511,6 @@ pub fn check(
                         return None;
                     }
 
-                    info!("Checking {}", name.pretty());
-
                     match expr.as_ref().e() {
                         Expression::List(es) => {
                             for e in es {
