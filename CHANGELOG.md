@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.1.1] - 2023-12-06
+
+### Bug Fixes
+
+- Superfluous logs
+- Unwrap
+
+### Features
+
+- Sort module tabs
+- Add `o/open` flag to directly go to a module tab
+
+## [9.1.0] - 2023-12-01
+
+### Miscellaneous Tasks
+
+- Release corset version 9.1.0
+
 ## [9.0.0] - 2023-11-27
 
 ### Bug Fixes
