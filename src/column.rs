@@ -448,7 +448,9 @@ impl Pretty for Value {
                     .iter()
                     .map(|b| format!("{b:0>2x}"))
                     .join(" "),
-                Base::OpCode => opcodes::to_str(i.to_usize().unwrap().try_into().unwrap()),
+                Base::OpCode => {
+                    opcodes::to_str(i.to_usize().unwrap_or(0xfe).try_into().unwrap_or(0xfe))
+                }
             }
             .to_string(),
             Value::Native(f) => f.pretty_with_base(base),
