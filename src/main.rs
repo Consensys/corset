@@ -243,6 +243,13 @@ enum Commands {
             help = "execute computations in target Galois field"
         )]
         native_arithmetic: bool,
+
+        #[arg(
+            long = "open",
+            short = 'o',
+            help = "directly open the specified module"
+        )]
+        open_module: Option<String>,
     },
     /// Display the compiled the constraint system
     Debug {
@@ -555,6 +562,8 @@ impl ConstraintSetBuilder {
 
 #[cfg(feature = "cli")]
 fn main() -> Result<()> {
+    use crate::inspect::InspectorSettings;
+
     let args = Args::parse();
     buche::new()
         .verbosity(args.verbose.log_level_filter())
@@ -803,6 +812,7 @@ fn main() -> Result<()> {
         Commands::Inspect {
             tracefile,
             native_arithmetic,
+            open_module,
         } => {
             if utils::is_file_empty(&tracefile)? {
                 warn!("`{}` is empty, exiting", tracefile);
@@ -816,7 +826,7 @@ fn main() -> Result<()> {
                 transformer::concretize(&mut cs);
             }
 
-            inspect::inspect(&cs)
+            inspect::inspect(&cs, InspectorSettings { open_module })
                 .with_context(|| format!("while checking {}", tracefile.bright_white().bold()))?;
             info!("{}: SUCCESS", tracefile)
         }

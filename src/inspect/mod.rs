@@ -261,6 +261,16 @@ impl<'a> Inspector<'a> {
         }
     }
 
+    fn open_module(&mut self, module: &str) {
+        self.current_module = self
+            .modules
+            .iter()
+            .enumerate()
+            .find(|(_, m)| m.name == module)
+            .map(|(i, _)| i)
+            .unwrap_or_default();
+    }
+
     fn current_module(&self) -> &ModuleView {
         self.modules.get(self.current_module).unwrap()
     }
@@ -360,7 +370,7 @@ impl<'a> Inspector<'a> {
         self.current_module = (self.current_module + 1) % self.modules.len();
     }
 
-    fn run(&mut self, terminal: &mut StdTerminal) -> Result<()> {
+    fn run(&mut self, terminal: &mut StdTerminal, settings: InspectorSettings) -> Result<()> {
         loop {
             terminal.draw(|term| self.render(term))?;
             if let Event::Key(key) = event::read()? {
@@ -496,10 +506,17 @@ impl<'a> Inspector<'a> {
     }
 }
 
-pub(crate) fn inspect(cs: &ConstraintSet) -> Result<()> {
+pub(crate) struct InspectorSettings {
+    pub open_module: Option<String>,
+}
+
+pub(crate) fn inspect(cs: &ConstraintSet, settings: InspectorSettings) -> Result<()> {
     let mut inspector = Inspector::from_cs(cs)?;
+    if let Some(module) = settings.open_module.as_ref() {
+        inspector.open_module(module);
+    }
     let mut terminal = setup_terminal()?;
-    inspector.run(&mut terminal)?;
+    inspector.run(&mut terminal, settings)?;
     restore_terminal(&mut terminal)?;
     Ok(())
 }
