@@ -248,6 +248,7 @@ impl<'a> Inspector<'a> {
                 .modules()
                 .iter()
                 .map(|n| ModuleView::from_cs(cs, n))
+                .sorted_by(|m1, m2| m1.name.cmp(&m2.name))
                 .collect(),
             current_module: 0,
             minibuffer: Default::default(),
