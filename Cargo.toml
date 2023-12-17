@@ -53,6 +53,7 @@ tui-textarea = { version = "0.4", optional = true }
 ellipse = "0.2.0"
 ark-ff = "0.4.2"
 memmap2 = "0.9.0"
+rusqlite = "0.30.0"
 
 [target.'cfg(all(target_arch = "x86_64", target_feature = "avx"))'.dependencies]
 simd-json = "0.13"

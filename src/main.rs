@@ -130,6 +130,29 @@ enum Commands {
         constraints_filename: Option<String>,
     },
     /// Given a set of constraints and a trace file, fill the computed columns
+    Convert {
+        #[arg(
+            short = 'T',
+            long = "trace",
+            required = true,
+            help = "the trace to convert"
+        )]
+        tracefile: String,
+
+        #[arg(
+            long = "exclude",
+            help = "do not export these modules",
+            value_delimiter = ','
+        )]
+        exclude: Option<Vec<String>>,
+
+        #[arg(short = 'o', long = "out", help = "where to write the computed trace")]
+        outfile: Option<String>,
+
+        #[arg(short='f', long="format", value_parser=["sorts", "nhood"], value_delimiter=',', global=true)]
+        auto_constraints: Vec<String>,
+    },
+    /// Given a set of constraints and a trace file, fill the computed columns
     Compute {
         #[arg(
             short = 'T',
@@ -660,6 +683,28 @@ fn main() -> Result<()> {
                     .collect::<Vec<_>>()
                     .as_slice(),
                 constraints_filename,
+            )?;
+        }
+        Commands::Convert {
+            tracefile,
+            outfile,
+            auto_constraints,
+            exclude,
+        } => {
+            // if auto_constraints {
+            //     builder.auto_constraints(AutoConstraint::all());
+            // }
+
+            let mut cs = builder.into_constraint_set()?;
+            compute::compute_trace(&tracefile, &mut cs, false)
+                .with_context(|| format!("while computing from `{}`", tracefile))?;
+            exporters::convert::to_sqlite(
+                &cs,
+                &exclude.unwrap_or_default(),
+                outfile
+                    .as_ref()
+                    .map(String::as_str)
+                    .unwrap_or("trace.sqlite"),
             )?;
         }
         Commands::Compute {
