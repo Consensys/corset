@@ -17,12 +17,12 @@
 (defpurefun (and a b) (* a b))
 (defpurefun ((~and :@bool) a b) (~ (and a b)))
 (defpurefun ((and! :@loob) a b) (+ a b))
-(defpurefun ((~and! :@bool) a b) (~ (and! a b)))
+(defpurefun ((~and! :binary@loob) a b) (~ (and! a b)))
 
 (defpurefun (or a b) (+ a b))
 (defpurefun ((~or :@boolean) a b) (~ (or a b)))
 (defpurefun ((or! :@loob) a b) (* a b))
-(defpurefun ((~or! :@boolean) a b) (~ (or! a b)))
+(defpurefun ((~or! :binary@loob) a b) (~ (or! a b)))
 
 (defpurefun ((not :@boolean :nowarn) (x :binary)) (- 1 x))
 
