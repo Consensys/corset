@@ -4,6 +4,7 @@ use log::*;
 pub mod besu;
 #[cfg(feature = "conflater")]
 pub mod conflater;
+#[cfg(feature = "sqlite")]
 pub mod convert;
 pub(crate) mod debugger;
 #[cfg(feature = "exporters")]

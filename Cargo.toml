@@ -53,7 +53,7 @@ tui-textarea = { version = "0.4", optional = true }
 ellipse = "0.2.0"
 ark-ff = "0.4.2"
 memmap2 = "0.9.0"
-rusqlite = "0.30.0"
+rusqlite = { version = "0.30.0", optional = true }
 
 [target.'cfg(all(target_arch = "x86_64", target_feature = "avx"))'.dependencies]
 simd-json = "0.13"
@@ -65,6 +65,7 @@ default = ["cli", "exporters", "inspector"]
 exporters = ["dep:handlebars"]
 inspector = ["dep:crossterm", "dep:ratatui", "dep:tui-textarea", "cli"]
 postgres = ["dep:postgres"]
+sqlite = ["dep:rusqlite"]
 
 [package.metadata.release]
 tag-prefix = ""

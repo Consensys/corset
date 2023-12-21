@@ -130,6 +130,7 @@ enum Commands {
         constraints_filename: Option<String>,
     },
     /// Given a set of constraints and a trace file, fill the computed columns
+    #[cfg(feature = "sqlite")]
     Convert {
         #[arg(
             short = 'T',
@@ -685,6 +686,7 @@ fn main() -> Result<()> {
                 constraints_filename,
             )?;
         }
+        #[cfg(feature = "sqlite")]
         Commands::Convert {
             tracefile,
             outfile,
