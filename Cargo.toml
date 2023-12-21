@@ -28,7 +28,7 @@ either = { version = "1.8.1", features = ["serde"] }
 errno = "0.3.0"
 flate2 = "1"
 handlebars = { version = "4.3.6", default-features = false, optional = true }
-itertools = "0.11"
+itertools = "0.12"
 lazy_static = "1.4"
 libc = {version = "0.2.139", default-features = false }
 log = "0.4"
@@ -37,11 +37,11 @@ maplit = "1.0"
 md5 = "0.7"
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
-owo-colors = "3.5.0"
+owo-colors = "4"
 pest = "2.4"
 pest_derive = "2.4"
 postgres = { version = "0.19", optional = true }
-ratatui = {version = "0.24", optional = true }
+ratatui = {version = "0.25", optional = true }
 rayon = "1.5"
 regex-lite = "0.1"
 ron = "^0.7.0"

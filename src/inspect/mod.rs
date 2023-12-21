@@ -139,8 +139,15 @@ impl ModuleView {
 
         let block = Block::new().borders(Borders::NONE);
 
-        let table = Table::new(self.current_columns().skip(self.v_shift as usize).map(
-            |(column_ref, h)| {
+        let widths = maxes
+            .iter()
+            .map(|w| Constraint::Length(*w as u16))
+            .collect::<Vec<_>>();
+
+        let rows = self
+            .current_columns()
+            .skip(self.v_shift as usize)
+            .map(|(column_ref, h)| {
                 maxes[0] = maxes[0].max(h.name.len());
                 Row::new(
                     std::iter::once(
@@ -214,19 +221,13 @@ impl ModuleView {
                     })),
                 )
                 .style(Style::default().white())
-            },
-        ));
+            });
 
-        let widths = maxes
-            .iter()
-            .map(|w| Constraint::Length(*w as u16))
-            .collect::<Vec<_>>();
-        let table = table
+        let table = Table::new(rows, widths)
             .header(
                 Row::new(std::iter::once(String::new()).chain(span.map(|i| i.to_string())))
                     .style(Style::default().bold().blue()),
             )
-            .widths(&widths)
             .block(block);
         f.render_widget(table, target);
     }
