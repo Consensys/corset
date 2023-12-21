@@ -201,13 +201,13 @@ impl From<Expression> for Node {
 impl Node {
     pub fn from_expr(e: Expression) -> Node {
         Node {
-            /// the expresssion contained within the node
+            // the expresssion contained within the node
             _e: e,
-            /// if set, the type of the node; it wil be computed on the fly
-            /// otherwise
+            // if set, the type of the node; it will be computed on the fly
+            // otherwise
             _t: None,
-            /// if set, a string containing the original code of the node for
-            /// debugging purposes
+            // if set, a string containing the original code of the node for
+            // debugging purposes
             dbg: None,
         }
     }
@@ -336,9 +336,9 @@ impl Node {
     pub fn t(&self) -> Type {
         self._t
             .unwrap_or_else(|| match &self.e() {
-                Expression::Funcall { func, args } => {
-                    func.typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
-                }
+                Expression::Funcall { func, args } => func
+                    .typing(&args.iter().map(|a| a.t()).collect::<Vec<_>>())
+                    .unwrap(),
                 Expression::Const(ref x) => {
                     if x.is_zero() || x.is_one() {
                         Type::Scalar(Magma::binary())
@@ -353,7 +353,7 @@ impl Node {
                 Expression::ArrayColumn { .. } => unreachable!("ARRAYCOLUMN SHOULD BE TYPED"),
                 Expression::List(xs) => {
                     let l_types = xs.iter().map(|x| x.t()).collect::<Vec<_>>();
-                    super::max_type(l_types.iter())
+                    super::max_type(l_types.iter()).unwrap()
                 }
                 Expression::Void => Type::Void,
             })

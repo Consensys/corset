@@ -6,8 +6,8 @@ use std::{cmp::Ordering, sync::OnceLock};
 
 use crate::{column::Value, errors::RuntimeError};
 
-pub fn max_type<'a, TS: IntoIterator<Item = &'a Type>>(ts: TS) -> Type {
-    ts.into_iter().fold(Type::INFIMUM, |a, b| a.maxed(b))
+pub fn max_type<'a, TS: IntoIterator<Item = &'a Type>>(ts: TS) -> Result<Type> {
+    ts.into_iter().try_fold(Type::INFIMUM, |a, b| a.maxed(b))
 }
 
 /// The type of a column in the IR. This struct contains both the dimensionality
@@ -85,8 +85,7 @@ impl Type {
             bail!("should never happen");
         }
 
-        let larger_conditioning = self.c().max(other.c());
-        Ok(self.with_magma(self.m().with_conditioning(larger_conditioning)))
+        Ok(self.with_magma(self.m().with_conditioning(self.c().max(&other.c())?)))
     }
 
     pub(crate) fn force_with_conditioning_of(self, other: &Type) -> Type {
@@ -177,8 +176,8 @@ impl Type {
         }
     }
 
-    pub(crate) fn maxed(&self, other: &Type) -> Type {
-        self.max(other).with_magma(self.m().maxed(&other.m()))
+    pub(crate) fn maxed(&self, other: &Type) -> Result<Type> {
+        Ok(self.max(other).with_magma(self.m().maxed(&other.m())?))
     }
 }
 impl std::cmp::PartialOrd for Type {
@@ -234,24 +233,36 @@ impl std::cmp::Ord for Type {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum Conditioning {
     None,
     Boolean,
     Loobean,
 }
-impl std::cmp::Ord for Conditioning {
-    fn cmp(&self, other: &Self) -> Ordering {
+impl Conditioning {
+    fn max(&self, other: &Conditioning) -> Result<Conditioning> {
+        if let Some(ord) = self.partial_cmp(other) {
+            Ok(match ord {
+                Ordering::Less => *other,
+                _ => *self,
+            })
+        } else {
+            Err(anyhow!("unable to mix conditionings"))
+        }
+    }
+}
+impl std::cmp::PartialOrd for Conditioning {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (Conditioning::None, Conditioning::None) => Ordering::Equal,
-            (Conditioning::None, Conditioning::Boolean) => Ordering::Less,
-            (Conditioning::None, Conditioning::Loobean) => Ordering::Less,
-            (Conditioning::Boolean, Conditioning::None) => Ordering::Greater,
-            (Conditioning::Boolean, Conditioning::Boolean) => Ordering::Equal,
-            (Conditioning::Boolean, Conditioning::Loobean) => unreachable!(),
-            (Conditioning::Loobean, Conditioning::None) => Ordering::Greater,
-            (Conditioning::Loobean, Conditioning::Boolean) => unreachable!(),
-            (Conditioning::Loobean, Conditioning::Loobean) => Ordering::Equal,
+            (Conditioning::None, Conditioning::None) => Some(Ordering::Equal),
+            (Conditioning::None, Conditioning::Boolean) => Some(Ordering::Less),
+            (Conditioning::None, Conditioning::Loobean) => Some(Ordering::Less),
+            (Conditioning::Boolean, Conditioning::None) => Some(Ordering::Greater),
+            (Conditioning::Boolean, Conditioning::Boolean) => Some(Ordering::Equal),
+            (Conditioning::Boolean, Conditioning::Loobean) => None,
+            (Conditioning::Loobean, Conditioning::None) => Some(Ordering::Greater),
+            (Conditioning::Loobean, Conditioning::Boolean) => None,
+            (Conditioning::Loobean, Conditioning::Loobean) => Some(Ordering::Equal),
         }
     }
 }
@@ -526,11 +537,11 @@ impl Magma {
     pub fn any() -> Magma {
         RawMagma::Any.into()
     }
-    pub(crate) fn maxed(&self, other: &Magma) -> Magma {
-        Magma {
+    pub(crate) fn maxed(&self, other: &Magma) -> Result<Magma> {
+        Ok(Magma {
             m: self.m.max(other.m),
-            c: self.c.max(other.c),
-        }
+            c: self.c.max(&other.c)?,
+        })
     }
 }
 impl std::convert::TryFrom<&str> for Magma {

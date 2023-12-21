@@ -1375,7 +1375,7 @@ fn apply_intrinsic(
                     }
                 },
             )))
-            .with_type(super::max_type(&traversed_args_t)),
+            .with_type(super::max_type(&traversed_args_t)?),
         )),
 
         b @ Intrinsic::IfZero | b @ Intrinsic::IfNotZero => {

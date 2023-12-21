@@ -138,12 +138,6 @@ impl ModuleView {
         let mut maxes = vec![3; span.len() + 1];
 
         let block = Block::new().borders(Borders::NONE);
-
-        let widths = maxes
-            .iter()
-            .map(|w| Constraint::Length(*w as u16))
-            .collect::<Vec<_>>();
-
         let rows = self
             .current_columns()
             .skip(self.v_shift as usize)
@@ -221,7 +215,12 @@ impl ModuleView {
                     })),
                 )
                 .style(Style::default().white())
-            });
+            })
+            .collect::<Vec<_>>();
+        let widths = maxes
+            .iter()
+            .map(|w| Constraint::Length(*w as u16))
+            .collect::<Vec<_>>();
 
         let table = Table::new(rows, widths)
             .header(

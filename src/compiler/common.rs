@@ -73,28 +73,28 @@ impl Intrinsic {
         }
     }
 
-    pub fn typing(&self, argtype: &[Type]) -> Type {
-        match self {
+    pub fn typing(&self, argtype: &[Type]) -> Result<Type> {
+        Ok(match self {
             Intrinsic::Inv => argtype[0],
             Intrinsic::Normalize => argtype[0].with_raw_magma(RawMagma::Binary),
             Intrinsic::Add | Intrinsic::Sub | Intrinsic::Neg => {
                 // Boolean is a corner case, as it is not stable under these operations
-                let max_t = max_type(argtype);
+                let max_t = max_type(argtype)?;
                 match max_t.m().rm() {
                     RawMagma::Binary => max_t.with_raw_magma(RawMagma::Native),
                     _ => max_t,
                 }
             }
             Intrinsic::VectorAdd | Intrinsic::VectorSub | Intrinsic::VectorMul => {
-                super::max_type(argtype.iter())
+                super::max_type(argtype.iter())?
             }
             Intrinsic::Exp => argtype[0],
             Intrinsic::Mul => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
             Intrinsic::IfZero | Intrinsic::IfNotZero => {
                 argtype[1].max(argtype.get(2).cloned().unwrap_or(Type::INFIMUM))
             }
-            Intrinsic::Begin => Type::List(max_type(argtype).m()),
-        }
+            Intrinsic::Begin => Type::List(max_type(argtype)?.m()),
+        })
     }
 }
 impl std::fmt::Display for Intrinsic {

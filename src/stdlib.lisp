@@ -42,8 +42,9 @@
 (defunalias all! +)
 
 ;; Boolean functions
-(defpurefun ((is-not-zero :binary@boolean) e0) (~ e0))
-(defpurefun ((is-zero :binary@boolean :nowarn) e0) (- 1 (~ e0)))
+(defpurefun ((is-not-zero :binary@boolean) x) (~ x))
+(defpurefun ((is-not-zero! :binary@loobean :nowarn) x) (- 1 (is-not-zero x)))
+(defpurefun ((is-zero :binary@boolean :nowarn) x) (- 1 (~ x)))
 
 
 
