@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.1.2] - 2023-12-21
+
+### Bug Fixes
+
+- Correct types for `~or!` and `~and!` ([#57](https://github.com/orhun/git-cliff/issues/57))
+- Conditioning should never be mixed
+
+### Documentation
+
+- Add inspector demo
+
+### Features
+
+- The `convert` command converts trace files to sqlite database
+
+### Miscellaneous Tasks
+
+- Update dependencies
+
+### Build
+
+- Bump zerocopy from 0.7.26 to 0.7.31 ([#54](https://github.com/orhun/git-cliff/issues/54))
+
 ## [9.1.1] - 2023-12-06
 
 ### Bug Fixes
@@ -13,6 +36,10 @@ All notable changes to this project will be documented in this file.
 
 - Sort module tabs
 - Add `o/open` flag to directly go to a module tab
+
+### Miscellaneous Tasks
+
+- Release corset version 9.1.1
 
 ## [9.1.0] - 2023-12-01
 
