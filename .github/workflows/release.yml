@@ -2,6 +2,7 @@
 name: Build binaries
 
 on:
+  workflow_call:
   release:
     types: [created]
 

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.1.3] - 2023-12-21
+
+### Build
+
+- Feature-gate sqlite export
+- Generate binaries on release
+
 ## [9.1.2] - 2023-12-21
 
 ### Bug Fixes
@@ -20,6 +27,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous Tasks
 
 - Update dependencies
+- Release corset version 9.1.2
 
 ### Build
 
