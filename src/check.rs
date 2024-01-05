@@ -515,22 +515,28 @@ pub fn check(
                         Expression::List(es) => {
                             for e in es {
                                 if let Err(err) = check_constraint(cs, e, domain, name, settings) {
-                                    match err.downcast_ref::<CheckingError>().unwrap() {
-                                        CheckingError::NoColumnsFound(_) => {
+                                    match err.downcast_ref::<CheckingError>() {
+                                        Some(err) => match err {
+                                            CheckingError::NoColumnsFound(_) => {
+                                                warn!("{}", err);
+                                                break;
+                                            }
+                                            CheckingError::FailingConstraint(handle, trace) => {
+                                                if settings.report {
+                                                    println!(
+                                                        "{} failed:\n{}\n",
+                                                        handle.to_string().red().bold(),
+                                                        trace
+                                                    );
+                                                }
+                                                return Some(name.to_owned());
+                                            }
+                                        },
+                                        None => {
                                             warn!("{}", err);
                                             break;
                                         }
-                                        CheckingError::FailingConstraint(handle, trace) => {
-                                            if settings.report {
-                                                println!(
-                                                    "{} failed:\n{}\n",
-                                                    handle.to_string().red().bold(),
-                                                    trace
-                                                );
-                                            }
-                                            return Some(name.to_owned());
-                                        }
-                                    }
+    }                                    }
                                 }
                             }
                             None
