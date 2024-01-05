@@ -156,7 +156,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                         RawMagma::Binary => format!("{}.put((byte) (b ? 1 : 0));", &register),
                         RawMagma::Nibble => format!("{}.put(b.toByte());", &register),
                         RawMagma::Byte => format!("{}.put(b.toByte());", &register),
-                        RawMagma::Native => format!(
+                        RawMagma::Native | RawMagma::Integer(_) => format!(
                             r#"final byte[] bs = b.toArrayUnsafe();
     for (int i = bs.length; i < 32; i++) {{
       {0}.put((byte) 0);
