@@ -536,7 +536,7 @@ pub fn check(
                                             warn!("{}", err);
                                             break;
                                         }
-    }                                    }
+                                    }
                                 }
                             }
                             None
