@@ -2,19 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## [9.1.3] - 2023-12-21
-
-### Build
-
-- Feature-gate sqlite export
-- Generate binaries on release
-
-## [9.1.2] - 2023-12-21
+## [9.1.4] - 2024-01-05
 
 ### Bug Fixes
 
 - Correct types for `~or!` and `~and!` ([#57](https://github.com/orhun/git-cliff/issues/57))
 - Conditioning should never be mixed
+- Handle all errors while checking
+- Handle Integer magma in Besu export
 
 ### Documentation
 
@@ -28,10 +23,13 @@ All notable changes to this project will be documented in this file.
 
 - Update dependencies
 - Release corset version 9.1.2
+- Release corset version 9.1.3
 
 ### Build
 
 - Bump zerocopy from 0.7.26 to 0.7.31 ([#54](https://github.com/orhun/git-cliff/issues/54))
+- Feature-gate sqlite export
+- Generate binaries on release
 
 ## [9.1.1] - 2023-12-06
 
