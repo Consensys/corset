@@ -6,7 +6,7 @@
 (defpurefun (if-not-zero cond then) (if (force-bool cond) then))
 (defpurefun (if-not-zero cond then else) (if (force-bool cond) then else))
 
-(defpurefun ((force-bool :@boolean :nowarn) x) x)
+(defpurefun ((force-bool :@bool :nowarn) x) x)
 (defpurefun ((is-binary :@loob :nowarn) e0) (* e0 (- 1 e0)))
 
 ;;
@@ -20,19 +20,19 @@
 (defpurefun ((~and! :binary@loob) a b) (~ (and! a b)))
 
 (defpurefun (or a b) (+ a b))
-(defpurefun ((~or :@boolean) a b) (~ (or a b)))
+(defpurefun ((~or :@bool) a b) (~ (or a b)))
 (defpurefun ((or! :@loob) a b) (* a b))
 (defpurefun ((~or! :binary@loob) a b) (~ (or! a b)))
 
-(defpurefun ((not :@boolean :nowarn) (x :binary)) (- 1 x))
+(defpurefun ((not :@bool :nowarn) (x :binary)) (- 1 x))
 
-(defpurefun ((eq! :@loobean :nowarn) x y) (~>> (-. x y)))
-(defpurefun ((neq! :@loobean :nowarn) x y) (not (~ (eq! x y))))
+(defpurefun ((eq! :@loob :nowarn) x y) (~>> (-. x y)))
+(defpurefun ((neq! :@loob :nowarn) x y) (not (~ (eq! x y))))
 (defunalias = eq!)
 
-(defpurefun ((eq :@boolean :nowarn) (x :@boolean) (y :@boolean)) (^ (- x y) 2))
-(defpurefun ((eq :@boolean :nowarn) x y) (- 1 (eq! x y)))
-(defpurefun ((neq :@boolean :nowarn) x y) (eq! x y))
+(defpurefun ((eq :@bool :nowarn) (x :@bool) (y :@bool)) (^ (- x y) 2))
+(defpurefun ((eq :@bool :nowarn) x y) (- 1 (eq! x y)))
+(defpurefun ((neq :@bool :nowarn) x y) (eq! x y))
 
 
 ;; Variadic versions of and/or
@@ -42,9 +42,9 @@
 (defunalias all! +)
 
 ;; Boolean functions
-(defpurefun ((is-not-zero :binary@boolean) x) (~ x))
-(defpurefun ((is-not-zero! :binary@loobean :nowarn) x) (- 1 (is-not-zero x)))
-(defpurefun ((is-zero :binary@boolean :nowarn) x) (- 1 (~ x)))
+(defpurefun ((is-not-zero :binary@bool) x) (~ x))
+(defpurefun ((is-not-zero! :binary@loob :nowarn) x) (- 1 (is-not-zero x)))
+(defpurefun ((is-zero :binary@bool :nowarn) x) (- 1 (~ x)))
 
 
 
