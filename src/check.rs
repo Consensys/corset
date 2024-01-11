@@ -543,12 +543,12 @@ pub fn check(
                         }
                         _ => {
                             if let Err(err) = check_constraint(cs, expr, domain, name, settings) {
-                                match err.downcast_ref::<CheckingError>().unwrap() {
-                                    CheckingError::NoColumnsFound(_) => {
+                                match err.downcast_ref::<CheckingError>() {
+                                    Some(CheckingError::NoColumnsFound(_)) => {
                                         warn!("{}", err);
                                         None
                                     }
-                                    CheckingError::FailingConstraint(handle, trace) => {
+                                    Some(CheckingError::FailingConstraint(handle, trace)) => {
                                         if settings.report {
                                             println!(
                                                 "{} failed:\n{}\n",
@@ -557,6 +557,10 @@ pub fn check(
                                             );
                                         }
                                         Some(name.to_owned())
+                                    }
+                                    None => {
+                                        warn!("{}", err);
+                                        None
                                     }
                                 }
                             } else {
