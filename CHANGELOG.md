@@ -2,14 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
-## [9.1.4] - 2024-01-05
+## [9.1.5] - 2024-01-11
 
 ### Bug Fixes
 
-- Correct types for `~or!` and `~and!` ([#57](https://github.com/orhun/git-cliff/issues/57))
-- Conditioning should never be mixed
 - Handle all errors while checking
 - Handle Integer magma in Besu export
+- Type compatibily error
+
+### Miscellaneous Tasks
+
+- Release corset version 9.1.3
+- Release corset version 9.1.4
+
+### Styling
+
+- Only use `@loob` and `@bool` ([#62](https://github.com/Consensys/corset/issues/62))
+
+### Build
+
+- Feature-gate sqlite export
+- Generate binaries on release
+- Fix git-cliff configuration
+
+## [9.1.2] - 2023-12-21
+
+### Bug Fixes
+
+- Correct types for `~or!` and `~and!` ([#57](https://github.com/Consensys/corset/issues/57))
+- Conditioning should never be mixed
 
 ### Documentation
 
@@ -23,13 +44,10 @@ All notable changes to this project will be documented in this file.
 
 - Update dependencies
 - Release corset version 9.1.2
-- Release corset version 9.1.3
 
 ### Build
 
-- Bump zerocopy from 0.7.26 to 0.7.31 ([#54](https://github.com/orhun/git-cliff/issues/54))
-- Feature-gate sqlite export
-- Generate binaries on release
+- Bump zerocopy from 0.7.26 to 0.7.31 ([#54](https://github.com/Consensys/corset/issues/54))
 
 ## [9.1.1] - 2023-12-06
 
@@ -108,7 +126,7 @@ All notable changes to this project will be documented in this file.
 
 - Add vertical scrolling
 - Prettier plookups
-- Introduce field-agnosticity and related type-system revision ([#40](https://github.com/orhun/git-cliff/issues/40))
+- Introduce field-agnosticity and related type-system revision ([#40](https://github.com/Consensys/corset/issues/40))
 
 ### Miscellaneous Tasks
 
@@ -346,9 +364,9 @@ All notable changes to this project will be documented in this file.
 ### Bug Fixes
 
 - Columns have a magma, not a type
-- Add SPDX field in zkBesu template file ([#19](https://github.com/orhun/git-cliff/issues/19))
-- Perspective guard should not alter constraint type ([#21](https://github.com/orhun/git-cliff/issues/21))
-- AVX-specific argument type ([#17](https://github.com/orhun/git-cliff/issues/17))
+- Add SPDX field in zkBesu template file ([#19](https://github.com/Consensys/corset/issues/19))
+- Perspective guard should not alter constraint type ([#21](https://github.com/Consensys/corset/issues/21))
+- AVX-specific argument type ([#17](https://github.com/Consensys/corset/issues/17))
 
 ### Features
 
@@ -448,7 +466,7 @@ All notable changes to this project will be documented in this file.
 - Homogeneize column create API
 - Drop the `--allow-dups` flag
 - Implement `SelfInv` in Corset
-- Replace `:interleaved` by `definterleaved` ([#14](https://github.com/orhun/git-cliff/issues/14))
+- Replace `:interleaved` by `definterleaved` ([#14](https://github.com/Consensys/corset/issues/14))
 - Implement the new sizes system in WizardIOP exporter
 - Go -> zkGeth
 
