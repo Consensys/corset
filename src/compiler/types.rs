@@ -493,6 +493,7 @@ impl Magma {
 
             (_, RawMagma::Integer(_)) => self.m.bit_size() >= other.m.bit_size(),
 
+            (RawMagma::Any, RawMagma::Any) => true,
             (RawMagma::Any, _) => false,
             (_, RawMagma::Any) => true,
         }
