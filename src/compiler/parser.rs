@@ -697,7 +697,7 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
                                 })?;
                                 ColumnParser::Begin
                             }
-                            Err(_) => bail!("unexpected keyword found: {}", kw),
+                            Err(e) => bail!(e),
                         },
                     }
                 }

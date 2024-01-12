@@ -1,1 +1,1 @@
-(defcolumns A (B :BOOLEAN) (C :ARRAY [3] :NATURAL) D (E :BYTE) (F :NIBBLE))
+(defcolumns A (B :binary) (C :array [3] :native@loob) D (E :byte@bool) (F :nibble))

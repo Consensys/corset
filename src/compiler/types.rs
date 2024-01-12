@@ -374,7 +374,7 @@ impl TryFrom<&str> for RawMagma {
             "byte" => Ok(RawMagma::Byte),
             "nibble" => Ok(RawMagma::Nibble),
             "native" => Ok(RawMagma::Native),
-            _ => bail!("unknown magma: {}", s.red().bold()),
+            _ => bail!("unknown magma: {}", s.yellow().bold()),
         }
     }
 }
@@ -566,8 +566,9 @@ impl std::convert::TryFrom<&str> for Magma {
                 RawMagma::Integer(bit_size)
             } else {
                 caps.name("RawMagma")
-                    .map_or(Ok(RawMagma::None), |s| s.as_str().try_into())?
+                    .map_or(Ok(RawMagma::Native), |s| s.as_str().try_into())?
             };
+
             if matches!(raw_magma, RawMagma::None) && matches!(conditioning, Conditioning::None) {
                 bail!("unknown type: {}", s.bold().red())
             } else {
