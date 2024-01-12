@@ -3,13 +3,10 @@ package define
 import (
 	_ "embed"
 
-	"github.com/consensys/accelerated-crypto-monorepo/symbolic"
-	"github.com/consensys/accelerated-crypto-monorepo/zkevm"
+	"github.com/consensys/zkevm-monorepo/prover/symbolic"
 )
 
-func ZkEVMDefine(build *zkevm.Builder) {
-	
-	
+func ZkEVMDefine(build *Builder) {
 	//
 	// Corset-computed columns
 	//
@@ -22,7 +19,7 @@ func ZkEVMDefine(build *zkevm.Builder) {
 	// Interleaved columns
 	//
 	{{ #each interleaved }}
-	{{ go_id }} := zkevm.Interleave({{ interleaving }})
+	{{ go_id }} := build.Interleave({{ interleaving }})
 	{{ /each }}
 
 

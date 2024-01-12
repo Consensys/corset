@@ -12,8 +12,6 @@ use crate::{column::Computation, compiler::*, pretty::Pretty, structs::Handle};
 
 const TEMPLATE: &str = include_str!("wizardiop.go");
 
-// const SIZE: usize = 4_194_304;
-
 fn make_chain(cs: &ConstraintSet, xs: &[Node], operand: &str, surround: bool) -> String {
     let head = render_expression(cs, &xs[0]);
     if xs.len() > 1 {
@@ -155,7 +153,7 @@ fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
                 including,
                 included,
             } => vec![format!(
-                "build.Inclusion(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
+                "build.Inclusion(\"{}\", []Handle{{{}}}, []Handle{{{}}})",
                 handle,
                 including
                     .iter()
@@ -171,7 +169,7 @@ fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
             Constraint::Permutation {
                 handle, from, to, ..
             } => vec![format!(
-                "build.Permutation(\"{}\", []zkevm.Handle{{{}}}, []zkevm.Handle{{{}}})",
+                "build.Permutation(\"{}\", []Handle{{{}}}, []Handle{{{}}})",
                 handle.mangle().to_case(Case::Snake),
                 from.iter()
                     .map(|c| reg_mangle(cs, c).unwrap())
@@ -199,7 +197,10 @@ fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
 }
 
 fn make_size(h: &Handle, sizes: &mut HashSet<String>) -> String {
-    let r = format!("build.{}", h.mangled_module().to_case(Case::ScreamingSnake));
+    let r = format!(
+        "build.Settings.Traces.{}",
+        h.mangled_module().to_case(Case::Pascal)
+    );
     sizes.insert(r.clone());
     r
 }
