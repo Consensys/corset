@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.2.1] - 2024-01-12
+
+### Bug Fixes
+
+- Type parsing
+
 ## [9.2.0] - 2024-01-12
 
 ### Bug Fixes
@@ -32,6 +38,7 @@ All notable changes to this project will be documented in this file.
 - Release corset version 9.1.4
 - Release corset version 9.1.5
 - Update the WizardIOP exporter
+- Release corset version 9.2.0
 
 ### Styling
 
