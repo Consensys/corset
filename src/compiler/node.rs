@@ -252,7 +252,7 @@ impl Node {
         t: Option<Magma>,
     ) -> Node {
         let magma = t.unwrap_or(Magma::native());
-        if magma > Magma::native() {
+        if magma.bit_size() > Magma::NATIVE.bit_size() {
             Node {
                 _e: Expression::ExoColumn {
                     handle: handle.clone(),
