@@ -19,7 +19,7 @@ func ZkEVMDefine(build *Builder) {
 	// Interleaved columns
 	//
 	{{ #each interleaved }}
-	{{ go_id }} := build.Interleave({{ interleaving }})
+	{{ go_id }} := Interleave({{ interleaving }})
 	{{ /each }}
 
 
