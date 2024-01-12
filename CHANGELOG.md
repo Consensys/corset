@@ -2,11 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.2.2] - 2024-01-12
+
+### Bug Fixes
+
+- Interleaved columns definition in WizardIOP
+
 ## [9.2.1] - 2024-01-12
 
 ### Bug Fixes
 
 - Type parsing
+
+### Miscellaneous Tasks
+
+- Release corset version 9.2.1
 
 ## [9.2.0] - 2024-01-12
 
