@@ -2,35 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [9.1.5] - 2024-01-11
-
-### Bug Fixes
-
-- Handle all errors while checking
-- Handle Integer magma in Besu export
-- Type compatibily error
-
-### Miscellaneous Tasks
-
-- Release corset version 9.1.3
-- Release corset version 9.1.4
-
-### Styling
-
-- Only use `@loob` and `@bool` ([#62](https://github.com/Consensys/corset/issues/62))
-
-### Build
-
-- Feature-gate sqlite export
-- Generate binaries on release
-- Fix git-cliff configuration
-
-## [9.1.2] - 2023-12-21
+## [9.2.0] - 2024-01-12
 
 ### Bug Fixes
 
 - Correct types for `~or!` and `~and!` ([#57](https://github.com/Consensys/corset/issues/57))
 - Conditioning should never be mixed
+- Handle all errors while checking
+- Handle Integer magma in Besu export
+- Type compatibily error
+- Error handling
+- Exo-column conversion criterion
+- Fail on erroneous types
 
 ### Documentation
 
@@ -39,15 +22,27 @@ All notable changes to this project will be documented in this file.
 ### Features
 
 - The `convert` command converts trace files to sqlite database
+- Add a CSV conversion option
 
 ### Miscellaneous Tasks
 
 - Update dependencies
 - Release corset version 9.1.2
+- Release corset version 9.1.3
+- Release corset version 9.1.4
+- Release corset version 9.1.5
+- Update the WizardIOP exporter
+
+### Styling
+
+- Only use `@loob` and `@bool` ([#62](https://github.com/Consensys/corset/issues/62))
 
 ### Build
 
 - Bump zerocopy from 0.7.26 to 0.7.31 ([#54](https://github.com/Consensys/corset/issues/54))
+- Feature-gate sqlite export
+- Generate binaries on release
+- Fix git-cliff configuration
 
 ## [9.1.1] - 2023-12-06
 
