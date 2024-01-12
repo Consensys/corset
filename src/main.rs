@@ -150,7 +150,10 @@ enum Commands {
         #[arg(short = 'o', long = "out", help = "where to write the computed trace")]
         outfile: Option<String>,
 
-        #[arg(short='f', long="format", value_parser=["sorts", "nhood"], value_delimiter=',', global=true)]
+        #[arg(short='F', long="format", help="output format", value_parser=["csv", "sqlite"], default_value="sqlite")]
+        format: String,
+
+        #[arg(long="auto-constraints", value_parser=["sorts", "nhood"], value_delimiter=',', global=true)]
         auto_constraints: Vec<String>,
     },
     /// Given a set of constraints and a trace file, fill the computed columns
@@ -690,6 +693,7 @@ fn main() -> Result<()> {
         Commands::Convert {
             tracefile,
             outfile,
+            format,
             auto_constraints,
             exclude,
         } => {
@@ -700,14 +704,25 @@ fn main() -> Result<()> {
             let mut cs = builder.into_constraint_set()?;
             compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while computing from `{}`", tracefile))?;
-            exporters::convert::to_sqlite(
-                &cs,
-                &exclude.unwrap_or_default(),
-                outfile
-                    .as_ref()
-                    .map(String::as_str)
-                    .unwrap_or("trace.sqlite"),
-            )?;
+            match format.as_str() {
+                "csv" => exporters::convert::to_csv(
+                    &cs,
+                    &exclude.unwrap_or_default(),
+                    outfile
+                        .as_ref()
+                        .map(String::as_str)
+                        .unwrap_or("trace.sqlite"),
+                ),
+                "sqlite" => exporters::convert::to_sqlite(
+                    &cs,
+                    &exclude.unwrap_or_default(),
+                    outfile
+                        .as_ref()
+                        .map(String::as_str)
+                        .unwrap_or("trace.sqlite"),
+                ),
+                _ => unreachable!(),
+            }?;
         }
         Commands::Compute {
             tracefile,

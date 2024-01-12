@@ -5,7 +5,12 @@ use crate::{
 };
 use anyhow::*;
 use itertools::Itertools;
+use log::*;
+use rayon::prelude::*;
 use rusqlite::Connection;
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::Path;
 
 pub(crate) fn to_sqlite(cs: &ConstraintSet, exclude: &[String], filename: &str) -> Result<()> {
     let db = Connection::open(filename)?;
@@ -14,7 +19,7 @@ pub(crate) fn to_sqlite(cs: &ConstraintSet, exclude: &[String], filename: &str) 
         if exclude.contains(&module) {
             continue;
         }
-        println!("Exporting {}", &module);
+        info!("Exporting {}", &module);
         let column_names = cs
             .columns
             .iter_module(&module)
@@ -65,4 +70,55 @@ pub(crate) fn to_sqlite(cs: &ConstraintSet, exclude: &[String], filename: &str) 
     }
 
     Ok(())
+}
+
+pub(crate) fn to_csv(cs: &ConstraintSet, exclude: &[String], filename: &str) -> Result<()> {
+    let base_filename = Path::new(filename);
+
+    cs.columns
+        .modules()
+        // .iter()
+        .par_iter()
+        .map(|module| {
+            if exclude.contains(&module) {
+                return Ok(());
+            }
+
+            let filename = base_filename.with_file_name(format!(
+                "{}_{}",
+                base_filename.file_name().unwrap().to_str().unwrap(),
+                module
+            ));
+
+            let mut file = BufWriter::new(File::create(&filename)?);
+
+            info!("Exporting {}", module);
+            let column_names = cs
+                .columns
+                .iter_module(&module)
+                .map(|c| cs.handle(&c.0))
+                .collect::<Vec<_>>();
+
+            file.write(column_names.iter().map(|h| &h.name).join(",").as_bytes())?;
+            file.write(&[b'\n'])?;
+            let max_i = cs.iter_len(&module);
+            for i in 0..max_i {
+                file.write(
+                    cs.columns
+                        .iter_module(&module)
+                        .map(|col| {
+                            cs.columns
+                                .get(&col.0, i.try_into().unwrap(), false)
+                                .unwrap_or_default()
+                                .pretty_with_base(col.1.base)
+                        })
+                        .join(",")
+                        .as_bytes(),
+                )?;
+                file.write(&[b'\n'])?;
+            }
+
+            Ok(file.flush()?)
+        })
+        .collect::<Result<_>>()
 }
