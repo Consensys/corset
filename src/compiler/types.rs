@@ -4,7 +4,7 @@ use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, sync::OnceLock};
 
-use crate::{column::Value, errors::RuntimeError};
+use crate::{column::Value, constants, errors::RuntimeError};
 
 pub fn max_type<'a, TS: IntoIterator<Item = &'a Type>>(ts: TS) -> Result<Type> {
     ts.into_iter().try_fold(Type::INFIMUM, |a, b| a.maxed(b))
@@ -560,13 +560,13 @@ impl std::convert::TryFrom<&str> for Magma {
 
             let raw_magma = if let Some(integer) = caps.name("Integer") {
                 let bit_size = integer.as_str().parse::<usize>().unwrap();
-                if bit_size >= 250 {
+                if bit_size > constants::FIELD_BITSIZE {
                     panic!("Not yet :(");
                 }
                 RawMagma::Integer(bit_size)
             } else {
                 caps.name("RawMagma")
-                    .map_or(Ok(RawMagma::Any), |s| s.as_str().try_into())?
+                    .map_or(Ok(RawMagma::None), |s| s.as_str().try_into())?
             };
             if matches!(raw_magma, RawMagma::None) && matches!(conditioning, Conditioning::None) {
                 bail!("unknown type: {}", s.bold().red())
