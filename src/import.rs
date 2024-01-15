@@ -15,7 +15,7 @@ use serde_json::Value;
 use simd_json::BorrowedValue as Value;
 use std::{
     fs::File,
-    io::{BufReader, Read, Seek},
+    io::{BufReader, Seek},
 };
 
 use crate::{

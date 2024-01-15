@@ -248,7 +248,7 @@ fn check_constraint_at(
     Ok(())
 }
 
-fn check_inrange(name: &Handle, expr: &Node, cs: &ConstraintSet, max: &Value) -> Result<()> {
+fn check_inrange(expr: &Node, cs: &ConstraintSet, max: &Value) -> Result<()> {
     let l = cs.columns_len(expr, false)?;
     if let Some(l) = l {
         for i in 0..l as isize {
@@ -537,7 +537,7 @@ pub fn check(
                     None
                 }
                 Constraint::InRange { handle, exp, max } => {
-                    if let Err(trace) = check_inrange(handle, exp, &cs, max) {
+                    if let Err(trace) = check_inrange(exp, &cs, max) {
                         if settings.report {
                             println!("{} failed:\n{:?}\n", handle, trace);
                         }

@@ -26,19 +26,22 @@ impl Node {
 }
 
 impl ConstraintSet {
-    fn concretize_constraints(&mut self) {
+    fn make_constraints_native(&mut self) {
         for c in self.constraints.iter_mut() {
             match c {
                 Constraint::Vanishes { expr, .. } => expr.concretize(),
                 Constraint::Lookup { .. } => {}
                 Constraint::Permutation { .. } => {}
-                Constraint::InRange { exp, .. } => exp.concretize(),
+                Constraint::InRange { exp, max, .. } => {
+                    exp.concretize();
+                    max.to_native();
+                }
                 Constraint::Normalization { .. } => {}
             }
         }
     }
 
-    fn concretize_computations(&mut self) {
+    fn make_computations_native(&mut self) {
         for c in self.computations.iter_mut() {
             match c {
                 Computation::Composite { exp, .. } => exp.concretize(),
@@ -47,7 +50,7 @@ impl ConstraintSet {
         }
     }
 
-    fn concretize_registers(&mut self) {
+    fn make_registers_native(&mut self) {
         for r in self.columns.registers.iter_mut() {
             r.concretize();
         }
@@ -56,7 +59,7 @@ impl ConstraintSet {
 
 pub fn concretize(cs: &mut ConstraintSet) {
     *crate::IS_NATIVE.write().unwrap() = true;
-    cs.concretize_registers();
-    cs.concretize_constraints();
-    cs.concretize_computations();
+    cs.make_registers_native();
+    cs.make_constraints_native();
+    cs.make_computations_native();
 }

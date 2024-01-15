@@ -28,7 +28,7 @@ pub enum RuntimeError<'a> {
     #[error("{} not found in the given trace", .0.pretty())]
     EmptyColumn(Handle),
 
-    #[error("{} could not be computed", .0.pretty())]
+    #[error("{} has not been computed", .0.pretty())]
     NotComputed(Handle),
 
     #[error("expected a {} value, found {}", .0.white().bold(), .1.pretty().red())]

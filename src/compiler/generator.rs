@@ -1,5 +1,4 @@
 use anyhow::*;
-use ark_bls12_377::Fr;
 use cached::Cached;
 use itertools::Itertools;
 use log::*;
@@ -1750,7 +1749,7 @@ fn reduce_toplevel(
             Ok(Some(Constraint::InRange {
                 handle,
                 exp: reduce(e, ctx, settings)?.unwrap(),
-                max: Fr::from(*range).into(),
+                max: Value::from(*range).into(),
             }))
         }
         Token::DefColumns(columns) => {

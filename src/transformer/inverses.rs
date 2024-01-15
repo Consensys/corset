@@ -195,5 +195,9 @@ fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Res
 }
 
 pub fn expand_invs(cs: &mut ConstraintSet) -> Result<()> {
-    cs.expand_normalizations()
+    if *crate::IS_NATIVE.read().unwrap() {
+        cs.expand_normalizations()
+    } else {
+        Ok(())
+    }
 }

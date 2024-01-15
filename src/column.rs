@@ -24,6 +24,7 @@ pub type ColumnID = usize;
 
 static POW_2_256: OnceLock<BigInt> = OnceLock::new();
 fn clamp_bi(bi: &mut BigInt) {
+    // TODO: adapt to field size
     *bi = bi.rem_euclid(POW_2_256.get_or_init(|| {
         BigInt::from_str_radix(
             "10000000000000000000000000000000000000000000000000000000000000000",
@@ -334,31 +335,6 @@ impl Value {
         }
     }
 }
-// impl Serialize for Value {
-//     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         match self {
-//             Value::BigInt(bi) => serializer.serialize_newtype_variant("Value", 0, "BigInt", &bi),
-//             Value::Native(_fr) => {
-//                 // serializer.serialize_newtype_variant("Value", 1, "Native", &fr.0 .0)
-//                 unimplemented!()
-//             }
-//             Value::ExoNative(_frs) => {
-//                 unimplemented!()
-//             }
-//         }
-//     }
-// }
-// impl<'de> Deserialize<'de> for Value {
-//     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-//     where
-//         D: serde::Deserializer<'de>,
-//     {
-//         todo!()
-//     }
-// }
 impl std::default::Default for Value {
     fn default() -> Value {
         Value::zero()
@@ -366,12 +342,20 @@ impl std::default::Default for Value {
 }
 impl From<BigInt> for Value {
     fn from(int: BigInt) -> Self {
-        Value::BigInt(int)
+        let mut v = Value::BigInt(int);
+        if *crate::IS_NATIVE.read().unwrap() {
+            v.to_native();
+        }
+        v
     }
 }
 impl From<&BigInt> for Value {
     fn from(int: &BigInt) -> Self {
-        Value::BigInt(int.clone())
+        let mut v = Value::BigInt(int.clone());
+        if *crate::IS_NATIVE.read().unwrap() {
+            v.to_native();
+        }
+        v
     }
 }
 impl From<Fr> for Value {
@@ -394,6 +378,15 @@ impl From<isize> for Value {
             Value::Native(Fr::from(x as i64))
         } else {
             Value::BigInt(BigInt::from_isize(x).unwrap())
+        }
+    }
+}
+impl From<u64> for Value {
+    fn from(x: u64) -> Self {
+        if *crate::IS_NATIVE.read().unwrap() {
+            Value::Native(Fr::from(x))
+        } else {
+            Value::BigInt(BigInt::from_u64(x).unwrap())
         }
     }
 }
