@@ -109,62 +109,6 @@ impl DebugSettings {
     }
 }
 
-fn columns_len(
-    expr: &Node,
-    columns: &ColumnSet,
-    name: &Handle,
-    with_padding: bool,
-) -> Result<Option<usize>> {
-    let cols_lens = expr
-        .dependencies()
-        .into_iter()
-        .map(|handle| {
-            if with_padding {
-                columns.padded_len(&handle)
-            } else {
-                columns.len(&handle)
-            }
-        })
-        .collect::<Vec<_>>();
-    if cols_lens.is_empty() {
-        return Ok(None);
-    }
-
-    if cols_lens.iter().all(|l| l.is_none()) {
-        debug!("Skipping constraint `{}` with empty columns", name);
-        return Ok(None);
-    }
-
-    if !cols_lens
-        .iter()
-        .filter(|l| l.is_some())
-        .all(|&l| l.unwrap_or_default() == cols_lens[0].unwrap_or_default())
-    {
-        error!(
-            "all columns in {} are not of the same length:\n{}",
-            expr,
-            expr.dependencies()
-                .iter()
-                .map(|handle| format!(
-                    "\t{}: {}",
-                    handle,
-                    columns
-                        .padded_len(handle)
-                        .map(|x| x.to_string())
-                        .unwrap_or_else(|| "nil".into()),
-                ))
-                .collect::<Vec<_>>()
-                .join("\n")
-        );
-    }
-    let l = cols_lens[0].unwrap_or(0);
-    if l == 0 {
-        bail!("empty trace, aborting")
-    } else {
-        Ok(Some(l))
-    }
-}
-
 /// Pretty print an expresion and all its intermediate value for debugging (or
 /// eye-candy) purposes
 ///
@@ -304,14 +248,14 @@ fn check_constraint_at(
     Ok(())
 }
 
-fn check_inrange(name: &Handle, expr: &Node, columns: &ColumnSet, max: &Value) -> Result<()> {
-    let l = columns_len(expr, columns, name, false)?;
+fn check_inrange(name: &Handle, expr: &Node, cs: &ConstraintSet, max: &Value) -> Result<()> {
+    let l = cs.columns_len(expr, false)?;
     if let Some(l) = l {
         for i in 0..l as isize {
             let r = expr
                 .eval(
                     i,
-                    |handle, i, wrap| columns.get_raw(handle, i, wrap),
+                    |handle, i, wrap| cs.columns.get_raw(handle, i, wrap),
                     &mut None,
                     &Default::default(),
                 )
@@ -338,7 +282,7 @@ fn check_constraint(
     name: &Handle,
     settings: DebugSettings,
 ) -> Result<()> {
-    let l = columns_len(expr, &cs.columns, name, true)?;
+    let l = cs.columns_len(expr, true)?;
     if let Some(l) = l {
         let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
         match domain {
@@ -593,7 +537,7 @@ pub fn check(
                     None
                 }
                 Constraint::InRange { handle, exp, max } => {
-                    if let Err(trace) = check_inrange(handle, exp, &cs.columns, max) {
+                    if let Err(trace) = check_inrange(handle, exp, &cs, max) {
                         if settings.report {
                             println!("{} failed:\n{:?}\n", handle, trace);
                         }

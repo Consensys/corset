@@ -154,7 +154,7 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
             match r {
                 Ok(xs) => {
                     for (h, backing) in xs.into_iter() {
-                        trace!("Filling {}", h.pretty());
+                        trace!("Filling {} ({})", h.pretty(), backing.len().unwrap());
                         cs.columns
                             .set_backing(&h, backing)
                             .with_context(|| anyhow!("while filling {}", h.pretty()))?;
@@ -372,7 +372,7 @@ fn compute_cyclic(
 }
 
 type ComputedColumn = (ColumnRef, ValueBacking);
-pub fn compute_composite(
+pub fn compute_expression(
     cs: &ConstraintSet,
     exp: &Node,
     target: &ColumnRef,
@@ -392,7 +392,8 @@ pub fn compute_composite(
             ValueBacking::from_fn(Box::new(move |_, _: &ColumnSet| Some(v.clone())), spilling)
         } else {
             let captured_exp = exp.clone();
-            ValueBacking::from_expression(captured_exp, spilling)
+            let length = cs.columns_len(exp, false).unwrap().unwrap();
+            ValueBacking::from_expression(captured_exp, length, spilling)
         },
     )])
 }
@@ -517,7 +518,7 @@ pub fn apply_computation(
     match computation {
         Computation::Composite { target, exp } => {
             if !cs.columns.is_computed(target) {
-                Some(compute_composite(cs, exp, target))
+                Some(compute_expression(cs, exp, target))
             } else {
                 None
             }

@@ -304,14 +304,12 @@ impl Value {
     ///  * each element recursively normalized for exo-values
     pub(crate) fn normalize(&self) -> Value {
         match &self {
-            Value::Native(f) => {
-                let mut r = f.inverse().unwrap_or_else(Fr::zero);
-                r.mul_assign(f);
-                Value::Native(r)
-            }
-            Value::ExoNative(fs) => {
-                Value::ExoNative(fs.iter().map(|f| f.inverse().unwrap()).collect())
-            }
+            Value::Native(f) => Value::Native(if f.is_zero() { Fr::zero() } else { Fr::one() }),
+            Value::ExoNative(fs) => Value::ExoNative(
+                fs.iter()
+                    .map(|f| if f.is_zero() { Fr::zero() } else { Fr::one() })
+                    .collect(),
+            ),
             Value::BigInt(i) => Value::BigInt(if i.is_zero() {
                 BigInt::zero()
             } else {
@@ -519,6 +517,7 @@ pub enum ValueBacking {
     },
     Expression {
         e: Node,
+        len: usize,
         spilling: isize,
     },
     Function {
@@ -558,8 +557,8 @@ impl ValueBacking {
         ValueBacking::Vector { v, spilling }
     }
 
-    pub fn from_expression(e: Node, spilling: isize) -> Self {
-        ValueBacking::Expression { e, spilling }
+    pub fn from_expression(e: Node, len: usize, spilling: isize) -> Self {
+        ValueBacking::Expression { e, len, spilling }
     }
 
     pub fn from_fn<F: Fn(isize, &'_ ColumnSet) -> Option<Value> + Sync + 'static + Send>(
@@ -572,14 +571,16 @@ impl ValueBacking {
     pub fn len(&self) -> Option<usize> {
         match self {
             ValueBacking::Vector { v, spilling } => Some(v.len() - *spilling as usize),
-            ValueBacking::Expression { .. } | ValueBacking::Function { .. } => None,
+            ValueBacking::Expression { len, .. } => Some(*len),
+            ValueBacking::Function { .. } => None,
         }
     }
 
     fn padded_len(&self) -> Option<usize> {
         match self {
             ValueBacking::Vector { v, .. } => Some(v.len()),
-            ValueBacking::Expression { .. } | ValueBacking::Function { .. } => None,
+            ValueBacking::Expression { len, spilling, .. } => Some(len + *spilling as usize),
+            ValueBacking::Function { .. } => None,
         }
     }
 

@@ -691,6 +691,56 @@ impl ConstraintSet {
         Ok(r)
     }
 
+    pub fn columns_len(&self, expr: &Node, with_padding: bool) -> Result<Option<usize>> {
+        let cols_lens = expr
+            .dependencies()
+            .into_iter()
+            .map(|handle| {
+                if with_padding {
+                    self.columns.padded_len(&handle)
+                } else {
+                    self.columns.len(&handle)
+                }
+            })
+            .collect::<Vec<_>>();
+        if cols_lens.is_empty() {
+            return Ok(None);
+        }
+
+        if cols_lens.iter().all(|l| l.is_none()) {
+            return Ok(None);
+        }
+
+        if !cols_lens
+            .iter()
+            .filter(|l| l.is_some())
+            .all(|&l| l.unwrap_or_default() == cols_lens[0].unwrap_or_default())
+        {
+            bail!(
+                "all columns in {} are not of the same length:\n{}",
+                expr,
+                expr.dependencies()
+                    .iter()
+                    .map(|handle| format!(
+                        "\t{}: {}",
+                        handle,
+                        self.columns
+                            .padded_len(handle)
+                            .map(|x| x.to_string())
+                            .unwrap_or_else(|| "nil".into()),
+                    ))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        }
+        let l = cols_lens[0].unwrap_or(0);
+        if l == 0 {
+            bail!("empty trace, aborting")
+        } else {
+            Ok(Some(l))
+        }
+    }
+
     pub(crate) fn get_perspective(&self, module: &str, name: &str) -> Result<&Node> {
         self.perspectives
             .get(module)
