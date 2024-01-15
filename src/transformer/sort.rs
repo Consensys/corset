@@ -92,6 +92,7 @@ fn create_sort_constraint(
                     .handle(Handle::new(&module, format!("__SRT__Delta_{i}_{suffix}")))
                     .kind(Kind::Phantom)
                     .t(Magma::byte())
+                    .base(Base::Hex)
                     .intrinsic_size_factor(cs.length_multiplier(&froms[0]))
                     .build(),
             )
@@ -126,7 +127,7 @@ fn create_sort_constraint(
 
     // Create the byte decomposition constraint
     cs.insert_constraint(Constraint::Vanishes {
-        handle: Handle::new(&module, format!("{}-is-binary", cs.handle(&delta).name)),
+        handle: Handle::new(&module, format!("{}-decomposition", cs.handle(&delta).name)),
         domain: None,
         expr: Box::new(
             Intrinsic::Sub.call(&[

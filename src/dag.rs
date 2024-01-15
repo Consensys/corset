@@ -88,15 +88,16 @@ impl ComputationDag {
                 eq,
                 delta,
                 delta_bytes,
-                froms,
                 sorted,
                 ..
             } => {
-                for from in froms {
-                    self.depends(from, eq);
-                    self.depends(from, delta);
-                    for x in sorted.iter().chain(ats.iter()).chain(delta_bytes.iter()) {
-                        self.depends(from, x);
+                // The sorted already depends on from due to the associated
+                // Computations::Sorted, so no need to worry about them.
+                for s in sorted {
+                    self.depends(s, eq);
+                    self.depends(s, delta);
+                    for x in ats.iter().chain(delta_bytes.iter()) {
+                        self.depends(s, x);
                     }
                 }
             }

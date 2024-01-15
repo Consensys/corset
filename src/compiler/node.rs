@@ -213,7 +213,7 @@ impl Node {
     }
     pub fn from_const(x: isize) -> Node {
         Node {
-            _e: Expression::Const(x.into()),
+            _e: Expression::Const(Value::from(x)),
             _t: Some(Type::Scalar(match x {
                 0 | 1 => Magma::binary(),
                 _ => Magma::native(),
@@ -228,7 +228,7 @@ impl Node {
             Magma::native()
         };
         Node {
-            _e: Expression::Const(x.into()),
+            _e: Expression::Const(Value::from(x)),
             _t: Some(Type::Scalar(magma)),
             dbg: None,
         }
@@ -629,6 +629,9 @@ impl Node {
                 Intrinsic::Mul => {
                     let mut ax = args[0].eval_fold(i, get, cache, settings, f)?;
                     for arg in args.iter().skip(1) {
+                        if ax.is_zero() {
+                            return Some(ax);
+                        }
                         ax.mul_assign(&arg.eval_fold(i, get, cache, settings, f)?)
                     }
                     Some(ax)

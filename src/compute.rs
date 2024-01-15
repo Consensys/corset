@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
+use itertools::Itertools;
 use log::*;
 use logging_timer::time;
 use owo_colors::OwoColorize;
@@ -135,7 +136,10 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
     let mut exo_operations = HashSet::new();
 
     for processing_slice in jobs.job_slices() {
-        trace!("Processing computation slice {:?}", processing_slice);
+        trace!(
+            "Processing computation slice {}",
+            processing_slice.iter().join(" ")
+        );
         let comps = processing_slice
             .iter()
             .filter_map(|h| cs.computations.computation_idx_for(h))
@@ -429,20 +433,30 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
                 .collect::<Vec<_>>();
         for i in 0..len as isize {
             // Compute @s
-            let mut found = false;
-            for l in 0..ats.len() {
-                let eq = cs
-                    .columns
-                    .get(&sorted[l], i, false)
-                    .zip(cs.columns.get(&sorted[l], i - 1, false)) // may fail @0 if no padding; in this case, @ = 0
-                    .map(|(v1, v2)| v1.eq(&v2))
-                    .unwrap_or(true);
+            let eqs = (0..ats.len())
+                .map(|l| {
+                    cs.columns
+                        .get(&sorted[l], i, false)
+                        .zip(cs.columns.get(&sorted[l], i - 1, false)) // may fail @0 if no padding; in this case, @ = 0
+                        .map(|(v1, v2)| v1.eq(&v2))
+                        .unwrap_or(true)
+                })
+                .collect::<Vec<_>>();
 
-                let v = if !eq {
+            let mut found = false;
+            let mut delta = Value::zero();
+            for l in 0..ats.len() {
+                let v = if !eqs[l] {
+                    // Compute Delta
                     if found {
                         Value::zero()
                     } else {
                         found = true;
+                        delta = cs.columns.get(&sorted[l], i, false).unwrap().clone();
+                        delta.sub_assign(&cs.columns.get(&sorted[l], i - 1, false).unwrap());
+                        if !signs[l] {
+                            delta.negate();
+                        }
                         Value::one()
                     }
                 } else {
@@ -451,29 +465,18 @@ fn compute_sorting_auxs(cs: &ConstraintSet, comp: &Computation) -> Result<Vec<Co
 
                 at_values[l].push(v);
             }
+            delta_values.push(delta.clone());
 
             // Compute Eq
             eq_values.push(if found { Value::zero() } else { Value::one() });
 
-            // Compute Delta
-            let mut delta = Value::zero();
-            if eq_values.last().unwrap().is_zero() {
-                for l in 0..ats.len() {
-                    let mut term = cs.columns.get(&sorted[l], i, false).unwrap().clone();
-                    term.sub_assign(&cs.columns.get(&sorted[l], i - 1, false).unwrap());
-                    term.mul_assign(at_values[l].last().unwrap());
-                    if !signs[l] {
-                        term.negate();
-                    }
-                    delta.add_assign(&term);
-                }
-            }
-            delta_values.push(delta.clone());
-
+            // Compute delta bytes-decomposition
             delta
                 .to_bytes()
                 .into_iter()
+                .rev()
                 .map(|i| Value::from(i as usize))
+                .chain(std::iter::repeat(Value::zero()))
                 .enumerate()
                 .take(16) // TODO: ensure that stays coherent with field size
                 .for_each(|(i, b)| delta_bytes_values[i].push(b));
