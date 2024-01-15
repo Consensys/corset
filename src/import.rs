@@ -3,6 +3,7 @@ use crate::column::Value as CValue;
 use anyhow::*;
 use cached::Cached;
 use flate2::bufread::GzDecoder;
+use itertools::Itertools;
 use log::*;
 use logging_timer::time;
 use num_bigint::{BigInt, Sign};
@@ -29,6 +30,44 @@ struct RegisterHeader {
     handle: Handle,
     bytes_per_element: usize,
     length: i32,
+}
+
+struct TraceMap {
+    headers: Vec<RegisterHeader>,
+}
+impl TraceMap {
+    fn size(&self) -> usize {
+        4 + self
+            .headers
+            .iter()
+            .map(|h| {
+                2  // i16: name length
+                    + h.handle.name.len()
+                    +1 
+                    + h.handle.name.len() // [u8]: name bytes
+                    + 1 // u8: BPE
+                    + 4 // i32: elt count
+                    + h.bytes_per_element * h.length as usize
+            })
+            .sum::<usize>()
+    }
+}
+impl std::fmt::Debug for TraceMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (module, columns) in &self.headers.iter().group_by(|c| &c.handle.module) {
+            writeln!(f, "== {} ==", module)?;
+            for c in columns {
+                writeln!(
+                    f,
+                    "  {}: {}×{}B",
+                    c.handle.name, c.length, c.bytes_per_element
+                )?;
+            }
+            writeln!(f, "")?;
+        }
+
+        Result::Ok(())
+    }
 }
 
 struct TraceReader<Data: AsRef<[u8]>> {
@@ -109,17 +148,28 @@ impl<Data: AsRef<[u8]>> TraceReader<Data> {
         })
     }
 
-    fn map(&mut self) -> Result<Vec<RegisterHeader>> {
+    fn map(&mut self) -> Result<TraceMap> {
         let register_count = self.i32().with_context(|| "parsing register count")?;
-        (0..register_count).map(|_| self.header()).collect()
+        Ok(TraceMap {
+            headers: (0..register_count)
+                .map(|_| self.header())
+                .collect::<Result<Vec<_>>>()?,
+        })
     }
 }
 
 #[time("info", "Parsing binary traces")]
 pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
-    let mut trace_reader =
-        TraceReader::from(unsafe { memmap2::MmapOptions::new().map(&File::open(tracefile)?)? });
-    for register in trace_reader.map()?.into_iter() {
+    let mut file = File::open(tracefile)
+        .with_context(|| anyhow!("opening {}", tracefile.bright_white().bold()))?;
+    let file_size = file.metadata()?.len();
+    let mut trace_reader = TraceReader::from(unsafe {
+        memmap2::MmapOptions::new()
+            .map(&file)
+            .with_context(|| anyhow!("memory mapping {}", tracefile.bright_white().bold()))?
+    });
+    let trace_map = trace_reader.map()?;
+    for register in trace_map.headers.into_iter() {
         let column_ref: ColumnRef = register.handle.clone().into();
         let register_bytes =
             trace_reader.slice(register.length as usize * register.bytes_per_element)?;
