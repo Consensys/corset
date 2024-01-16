@@ -15,24 +15,24 @@
 ;; !-suffix denotes loobean algebra (i.e. 0 == true)
 ;; ~-prefix denotes normalized-functions (i.e. output is 0/1)
 (defpurefun (and a b) (* a b))
-(defpurefun ((~and :@bool) a b) (~ (and a b)))
+(defpurefun ((~and :binary@bool) a b) (~ (and a b)))
 (defpurefun ((and! :@loob) a b) (+ a b))
 (defpurefun ((~and! :binary@loob) a b) (~ (and! a b)))
 
 (defpurefun (or a b) (+ a b))
-(defpurefun ((~or :@bool) a b) (~ (or a b)))
+(defpurefun ((~or :binary@bool) a b) (~ (or a b)))
 (defpurefun ((or! :@loob) a b) (* a b))
 (defpurefun ((~or! :binary@loob) a b) (~ (or! a b)))
 
-(defpurefun ((not :@bool :nowarn) (x :binary)) (- 1 x))
+(defpurefun ((not :binary@bool :nowarn) (x :binary)) (- 1 x))
 
-(defpurefun ((eq! :@loob :nowarn) x y) (~>> (-. x y)))
-(defpurefun ((neq! :@loob :nowarn) x y) (not (~ (eq! x y))))
+(defpurefun ((eq! :binary@loob :nowarn) x y) (~>> (-. x y)))
+(defpurefun ((neq! :binary@loob :nowarn) x y) (not (~ (eq! x y))))
 (defunalias = eq!)
 
 (defpurefun ((eq :@bool :nowarn) (x :@bool) (y :@bool)) (^ (- x y) 2))
-(defpurefun ((eq :@bool :nowarn) x y) (- 1 (eq! x y)))
-(defpurefun ((neq :@bool :nowarn) x y) (eq! x y))
+(defpurefun ((eq :binary@bool :nowarn) x y) (- 1 (eq! x y)))
+(defpurefun ((neq :binary@bool :nowarn) x y) (eq! x y))
 
 
 ;; Variadic versions of and/or
