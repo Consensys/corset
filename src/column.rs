@@ -589,7 +589,13 @@ impl ValueBacking {
         match self {
             ValueBacking::Vector { v, spilling } => {
                 assert!(*spilling == _spilling);
-                assert!(v.len() == _v.len());
+                if v.len() != _v.len() {
+                    bail!(
+                        "unable to merge a {}-long backing into a {}-long one",
+                        _v.len(),
+                        v.len()
+                    );
+                }
                 for (x, y) in v.iter_mut().zip(_v.iter()) {
                     if !x.is_zero() {
                         bail!("overwriting non-zero value in shared register")
