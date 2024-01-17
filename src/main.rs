@@ -66,6 +66,14 @@ pub struct Args {
     )]
     threads: usize,
 
+    #[arg(
+        long = "native",
+        short = 'N',
+        help = "execute computations in target Galois field",
+        global = true
+    )]
+    native_arithmetic: bool,
+
     #[arg(long = "no-stdlib")]
     no_stdlib: bool,
 
@@ -188,13 +196,6 @@ enum Commands {
         tracefile: String,
 
         #[arg(
-            long = "native",
-            short = 'N',
-            help = "execute computations in target Galois field"
-        )]
-        native_arithmetic: bool,
-
-        #[arg(
             short = 'F',
             long = "trace-full",
             help = "print all the module columns on error"
@@ -265,13 +266,6 @@ enum Commands {
         tracefile: String,
 
         #[arg(
-            long = "native",
-            short = 'N',
-            help = "execute computations in target Galois field"
-        )]
-        native_arithmetic: bool,
-
-        #[arg(
             long = "open",
             short = 'o',
             help = "directly open the specified module"
@@ -280,12 +274,6 @@ enum Commands {
     },
     /// Display the compiled the constraint system
     Debug {
-        #[arg(
-            long = "native",
-            short = 'N',
-            help = "execute computations in target Galois field"
-        )]
-        native_arithmetic: bool,
         #[arg(
             short = 'm',
             long = "modules",
@@ -583,15 +571,17 @@ impl ConstraintSetBuilder {
         }?;
 
         transformer::expand_to(&mut cs, self.expand_to, &self.auto_constraints)?;
+        transformer::concretize(&mut cs);
         Ok(cs)
     }
 }
 
 #[cfg(feature = "cli")]
 fn main() -> Result<()> {
-    use crate::inspect::InspectorSettings;
+    use crate::{inspect::InspectorSettings, transformer::concretize};
 
     let args = Args::parse();
+    *crate::IS_NATIVE.write().unwrap() = args.native_arithmetic;
     buche::new()
         .verbosity(args.verbose.log_level_filter())
         .quiet(args.verbose.is_silent())
@@ -669,9 +659,11 @@ fn main() -> Result<()> {
         }
         #[cfg(feature = "exporters")]
         Commands::WizardIOP { out_filename } => {
+            *crate::IS_NATIVE.write().unwrap() = true;
             builder.expand_to(ExpansionLevel::top());
             builder.auto_constraints(AutoConstraint::all());
-            let cs = builder.into_constraint_set()?;
+            let mut cs = builder.into_constraint_set()?;
+            concretize(&mut cs);
 
             exporters::wizardiop::render(&cs, &out_filename)?;
         }
@@ -708,10 +700,7 @@ fn main() -> Result<()> {
                 "csv" => exporters::convert::to_csv(
                     &cs,
                     &exclude.unwrap_or_default(),
-                    outfile
-                        .as_ref()
-                        .map(String::as_str)
-                        .unwrap_or("trace.sqlite"),
+                    outfile.as_ref().map(String::as_str).unwrap_or("trace.csv"),
                 ),
                 "sqlite" => exporters::convert::to_sqlite(
                     &cs,
@@ -827,7 +816,6 @@ fn main() -> Result<()> {
         }
         Commands::Check {
             tracefile,
-            native_arithmetic,
             full_trace,
             report,
             only,
@@ -849,9 +837,6 @@ fn main() -> Result<()> {
 
             compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
-            if native_arithmetic {
-                transformer::concretize(&mut cs);
-            }
             check::check(
                 &cs,
                 &only,
@@ -873,7 +858,6 @@ fn main() -> Result<()> {
         #[cfg(feature = "inspector")]
         Commands::Inspect {
             tracefile,
-            native_arithmetic,
             open_module,
         } => {
             if utils::is_file_empty(&tracefile)? {
@@ -884,16 +868,12 @@ fn main() -> Result<()> {
 
             compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
-            if native_arithmetic {
-                transformer::concretize(&mut cs);
-            }
 
             inspect::inspect(&cs, InspectorSettings { open_module })
                 .with_context(|| format!("while checking {}", tracefile.bright_white().bold()))?;
             info!("{}: SUCCESS", tracefile)
         }
         Commands::Debug {
-            native_arithmetic,
             show_modules,
             show_constants,
             show_columns,
@@ -906,9 +886,6 @@ fn main() -> Result<()> {
             skip,
         } => {
             let mut cs = builder.into_constraint_set()?;
-            if native_arithmetic {
-                transformer::concretize(&mut cs);
-            }
 
             exporters::debugger::debug(
                 &cs,

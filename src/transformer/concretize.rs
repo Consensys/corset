@@ -58,8 +58,9 @@ impl ConstraintSet {
 }
 
 pub fn concretize(cs: &mut ConstraintSet) {
-    *crate::IS_NATIVE.write().unwrap() = true;
-    cs.make_registers_native();
-    cs.make_constraints_native();
-    cs.make_computations_native();
+    if *crate::IS_NATIVE.read().unwrap() {
+        cs.make_registers_native();
+        cs.make_constraints_native();
+        cs.make_computations_native();
+    }
 }

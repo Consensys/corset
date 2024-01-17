@@ -77,7 +77,6 @@ pub(crate) fn to_csv(cs: &ConstraintSet, exclude: &[String], filename: &str) -> 
 
     cs.columns
         .modules()
-        // .iter()
         .par_iter()
         .map(|module| {
             if exclude.contains(&module) {
@@ -89,6 +88,7 @@ pub(crate) fn to_csv(cs: &ConstraintSet, exclude: &[String], filename: &str) -> 
                 base_filename.file_name().unwrap().to_str().unwrap(),
                 module
             ));
+            info!("Writing {}", filename.display());
 
             let mut file = BufWriter::new(File::create(&filename)?);
 
@@ -97,6 +97,7 @@ pub(crate) fn to_csv(cs: &ConstraintSet, exclude: &[String], filename: &str) -> 
                 .columns
                 .iter_module(&module)
                 .map(|c| cs.handle(&c.0))
+                .sorted()
                 .collect::<Vec<_>>();
 
             file.write(column_names.iter().map(|h| &h.name).join(",").as_bytes())?;
