@@ -491,7 +491,7 @@ checksum = "e496a50fda8aacccc86d7529e2c1e0892dbd0f898a6b5645b5561b89c3210efa"
 
 [[package]]
 name = "corset"
-version = "9.2.2"
+version = "9.2.3"
 dependencies = [
  "anyhow",
  "ark-bls12-377",
