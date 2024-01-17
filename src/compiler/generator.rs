@@ -1493,13 +1493,17 @@ fn apply(
 pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<Option<Node>> {
     match &e.class {
         Token::Keyword(_) | Token::Domain(_) => Ok(None),
-        Token::Value(x) => Ok(Some(Node::from(Expression::Const(x.into())).with_type(
-            if *x >= Zero::zero() && *x <= One::one() {
-                Type::Scalar(Magma::binary())
-            } else {
-                Type::Scalar(Magma::native())
-            },
-        ))),
+        Token::Value(x) => Ok(Some(
+            // We want the value to specifically be a BigInt here, as we may
+            // have negative ones, e.g. as shift arguments.
+            Node::from(Expression::Const(Value::big_int(x.clone()))).with_type(
+                if *x >= Zero::zero() && *x <= One::one() {
+                    Type::Scalar(Magma::binary())
+                } else {
+                    Type::Scalar(Magma::native())
+                },
+            ),
+        )),
         Token::Symbol(name) => Ok(Some(
             ctx.resolve_symbol(name)
                 .with_context(|| make_ast_error(e))?,

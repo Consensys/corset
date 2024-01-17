@@ -78,6 +78,10 @@ impl Value {
         }
     }
 
+    pub fn big_int(bi: BigInt) -> Self {
+        Value::BigInt(bi)
+    }
+
     pub(crate) fn zero() -> Self {
         if *crate::IS_NATIVE.read().unwrap() {
             Value::Native(Fr::zero())
