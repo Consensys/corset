@@ -134,7 +134,6 @@ impl Trace {
 
                 let column = c.columns.column(cref).unwrap();
                 let handle = &column.handle;
-                let module_size = c.iter_len(&handle.module);
                 trace!("Writing {}", handle);
                 let backing = c.columns.backing(cref).unwrap_or(&empty_backing);
                 let padding: Value = if let Some(v) = column.padding_value.as_ref() {
@@ -157,7 +156,7 @@ impl Trace {
                                 Computation::CyclicFrom { .. } => Value::zero(),
                                 Computation::SortingConstraints { .. } => Value::zero(),
                                 Computation::ExoOperation { .. } => Value::zero(), // TODO: FIXME:
-                                Computation::ExoConstant { .. } => Value::zero(),  // TODO: FIXME:
+                                Computation::ExoConstant { value, .. } => value.clone(),
                             })
                             .unwrap_or_else(Value::zero)
                     })
@@ -165,7 +164,7 @@ impl Trace {
                 (
                     ComputedColumn {
                         values: backing
-                            .iter(&c.columns, module_size as isize)
+                            .iter(&c.columns)
                             .map(|x| x.to_bytes().try_into().unwrap())
                             .collect(),
                         padding_value: { padding.to_bytes().try_into().unwrap() },

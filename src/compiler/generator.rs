@@ -690,7 +690,7 @@ impl ConstraintSet {
         Ok(r)
     }
 
-    pub fn columns_len(&self, expr: &Node, with_padding: bool) -> Result<Option<usize>> {
+    pub fn dependencies_len(&self, expr: &Node, with_padding: bool) -> Result<Option<usize>> {
         let cols_lens = expr
             .dependencies()
             .into_iter()
@@ -970,7 +970,7 @@ impl ConstraintSet {
                 out.write_all(format!("\"{}\":{{\n", handle).as_bytes())?;
                 out.write_all("\"values\":[".as_bytes())?;
 
-                let mut value = backing.iter(&self.columns, module_size).peekable();
+                let mut value = backing.iter(&self.columns).peekable();
                 while let Some(x) = value.next() {
                     out.write_all(
                         cache

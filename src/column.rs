@@ -521,6 +521,7 @@ pub enum ValueBacking {
         /// if i >= 0, shall return the expected actual value; if i < 0, shall
         /// return the adequate padding value
         f: Box<dyn Fn(isize, &ColumnSet) -> Option<Value> + Sync + Send>,
+        len: usize,
         spilling: isize,
     },
 }
@@ -528,15 +529,13 @@ impl std::fmt::Debug for ValueBacking {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ValueBacking::Vector { v, spilling } => {
-                write!(
-                    f,
-                    "Vector-backed: len = {}, spilling = {}",
-                    v.len(),
-                    spilling
-                )
+                write!(f, "Vector-backed: len = {} + {}", v.len(), spilling)
             }
-            ValueBacking::Expression { spilling, .. } | ValueBacking::Function { spilling, .. } => {
-                write!(f, "Function-backed: spilling = {}", spilling)
+            ValueBacking::Function { len, spilling, .. } => {
+                write!(f, "Function-backed: len = {} + {}", len, spilling)
+            }
+            ValueBacking::Expression { e, len, spilling } => {
+                write!(f, "{}: len = {} + {}", e.pretty(), len, spilling)
             }
         }
     }
@@ -560,24 +559,25 @@ impl ValueBacking {
 
     pub fn from_fn<F: Fn(isize, &'_ ColumnSet) -> Option<Value> + Sync + 'static + Send>(
         f: Box<F>,
+        len: usize,
         spilling: isize,
     ) -> Self {
-        ValueBacking::Function { f, spilling }
+        ValueBacking::Function { f, len, spilling }
     }
 
-    pub fn len(&self) -> Option<usize> {
+    pub fn len(&self) -> usize {
         match self {
-            ValueBacking::Vector { v, spilling } => Some(v.len() - *spilling as usize),
-            ValueBacking::Expression { len, .. } => Some(*len),
-            ValueBacking::Function { .. } => None,
+            ValueBacking::Vector { v, spilling } => v.len() - *spilling as usize,
+            ValueBacking::Expression { len, .. } => *len,
+            ValueBacking::Function { len, .. } => *len,
         }
     }
 
-    fn padded_len(&self) -> Option<usize> {
+    fn padded_len(&self) -> usize {
         match self {
-            ValueBacking::Vector { v, .. } => Some(v.len()),
-            ValueBacking::Expression { len, spilling, .. } => Some(len + *spilling as usize),
-            ValueBacking::Function { .. } => None,
+            ValueBacking::Vector { v, .. } => v.len(),
+            ValueBacking::Expression { len, spilling, .. }
+            | ValueBacking::Function { len, spilling, .. } => len + *spilling as usize,
         }
     }
 
@@ -678,11 +678,11 @@ impl ValueBacking {
         }
     }
 
-    pub fn iter<'a>(&'a self, columns: &'a ColumnSet, len: isize) -> ValueBackingIter<'a> {
+    pub fn iter<'a>(&'a self, columns: &'a ColumnSet) -> ValueBackingIter<'a> {
         ValueBackingIter {
             value: self,
             i: 0,
-            len,
+            len: self.len() as isize,
             columns,
         }
     }
@@ -697,7 +697,7 @@ impl ValueBacking {
                 e.concretize();
                 self
             }
-            ValueBacking::Function { f, spilling } => ValueBacking::Function {
+            ValueBacking::Function { f, len, spilling } => ValueBacking::Function {
                 f: Box::new(move |i, columns: &ColumnSet| {
                     let mut v = f(i, columns);
                     if let Some(x) = v.as_mut() {
@@ -705,6 +705,7 @@ impl ValueBacking {
                     }
                     v
                 }),
+                len,
                 spilling,
             },
         }
@@ -816,11 +817,11 @@ impl Register {
     }
 
     pub fn padded_len(&self) -> Option<usize> {
-        self.value.as_ref().and_then(|v| v.padded_len())
+        self.value.as_ref().map(|v| v.padded_len())
     }
 
     pub fn len(&self) -> Option<usize> {
-        self.value.as_ref().and_then(|v| v.len())
+        self.value.as_ref().map(|v| v.len())
     }
 
     pub fn get(&self, i: isize, wrap: bool, columns: &ColumnSet) -> Option<Value> {

@@ -249,7 +249,7 @@ fn check_constraint_at(
 }
 
 fn check_inrange(expr: &Node, cs: &ConstraintSet, max: &Value) -> Result<()> {
-    let l = cs.columns_len(expr, false)?;
+    let l = cs.dependencies_len(expr, false)?;
     if let Some(l) = l {
         for i in 0..l as isize {
             let r = expr
@@ -282,7 +282,7 @@ fn check_constraint(
     name: &Handle,
     settings: DebugSettings,
 ) -> Result<()> {
-    let l = cs.columns_len(expr, true)?;
+    let l = cs.dependencies_len(expr, true)?;
     if let Some(l) = l {
         let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
         match domain {

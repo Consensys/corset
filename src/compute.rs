@@ -158,7 +158,7 @@ fn compute_all(cs: &mut ConstraintSet) -> Result<()> {
             match r {
                 Ok(xs) => {
                     for (h, backing) in xs.into_iter() {
-                        trace!("Filling {} ({})", h.pretty(), backing.len().unwrap());
+                        trace!("Filling {} ({})", h.pretty(), backing.len());
                         cs.columns
                             .set_backing(&h, backing)
                             .with_context(|| anyhow!("while filling {}", h.pretty()))?;
@@ -393,52 +393,57 @@ pub fn compute_expression(
         target.to_owned(),
         if let Result::Ok(cst) = exp.pure_eval() {
             let v = Value::from(cst);
-            ValueBacking::from_fn(Box::new(move |_, _: &ColumnSet| Some(v.clone())), spilling)
+            ValueBacking::from_fn(
+                Box::new(move |_, _: &ColumnSet| Some(v.clone())),
+                cs.iter_len(&module),
+                spilling,
+            )
         } else {
-            let length = cs.columns_len(exp, false).unwrap().unwrap();
+            let length = cs.dependencies_len(exp, false).unwrap().unwrap();
             let captured_exp = exp.clone();
-            if false {
-                ValueBacking::from_expression(captured_exp, length, spilling)
-            } else {
-                let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
-                let values = (-spilling..length as isize)
-                    .map(|i| {
-                        let r = exp.eval(
-                            i,
-                            |handle, j, _| {
-                                Some(
-                                    cs.columns
-                                        .get(handle, j, false)
-                                        .clone()
-                                        .or_else(|| {
-                                            // This is triggered when filling the spilling
-                                            // of an expression with past spilling. In this
-                                            // case, the expression will overflow past the
-                                            // past spilling, and None should be converted
-                                            // to the padding value or 0.
-                                            cs.columns
-                                                .column(handle)
-                                                .unwrap()
-                                                .padding_value
-                                                .as_ref()
-                                                .cloned()
-                                        })
-                                        .unwrap_or_else(Value::zero),
-                                )
-                            },
-                            &mut cache,
-                            &EvalSettings { wrap: false },
-                        );
-                        // This should never fail, as we always provide a default value for
-                        // column accesses
-                        r.unwrap()
-                    })
-                    .collect();
-                ValueBacking::Vector {
-                    v: values,
-                    spilling,
-                }
-            }
+            ValueBacking::from_expression(captured_exp, length, spilling)
+
+            //
+            // The old way of doing things
+            //
+            //     let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
+            //     let values = (-spilling..length as isize)
+            //         .map(|i| {
+            //             let r = exp.eval(
+            //                 i,
+            //                 |handle, j, _| {
+            //                     Some(
+            //                         cs.columns
+            //                             .get(handle, j, false)
+            //                             .clone()
+            //                             .or_else(|| {
+            //                                 // This is triggered when filling the spilling
+            //                                 // of an expression with past spilling. In this
+            //                                 // case, the expression will overflow past the
+            //                                 // past spilling, and None should be converted
+            //                                 // to the padding value or 0.
+            //                                 cs.columns
+            //                                     .column(handle)
+            //                                     .unwrap()
+            //                                     .padding_value
+            //                                     .as_ref()
+            //                                     .cloned()
+            //                             })
+            //                             .unwrap_or_else(Value::zero),
+            //                     )
+            //                 },
+            //                 &mut cache,
+            //                 &EvalSettings { wrap: false },
+            //             );
+            //             // This should never fail, as we always provide a default value for
+            //             // column accesses
+            //             r.unwrap()
+            //         })
+            //         .collect();
+            //     ValueBacking::Vector {
+            //         v: values,
+            //         spilling,
+            //     }
         },
     )])
 }
