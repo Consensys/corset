@@ -529,7 +529,13 @@ impl std::fmt::Debug for ValueBacking {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ValueBacking::Vector { v, spilling } => {
-                write!(f, "Vector-backed: len = {} + {}", v.len(), spilling)
+                write!(
+                    f,
+                    "Vector-backed: len ({}) = {} + {}",
+                    v.len(),
+                    v.len() - *spilling as usize,
+                    spilling
+                )
             }
             ValueBacking::Function { len, spilling, .. } => {
                 write!(f, "Function-backed: len = {} + {}", len, spilling)
@@ -629,7 +635,7 @@ impl ValueBacking {
                         }
                         v.get((v.len() as isize + i) as usize)
                     } else if i < -spilling {
-                        None
+                        Some(v.get(0).unwrap())
                     } else {
                         v.get((i + spilling) as usize)
                     }
@@ -678,15 +684,6 @@ impl ValueBacking {
         }
     }
 
-    pub fn iter<'a>(&'a self, columns: &'a ColumnSet) -> ValueBackingIter<'a> {
-        ValueBackingIter {
-            value: self,
-            i: 0,
-            len: self.len() as isize,
-            columns,
-        }
-    }
-
     fn concretize(mut self) -> Self {
         match self {
             ValueBacking::Vector { mut v, spilling } => {
@@ -710,12 +707,23 @@ impl ValueBacking {
             },
         }
     }
+
+    pub fn iter<'a>(&'a self, columns: &'a ColumnSet) -> ValueBackingIter<'a> {
+        ValueBackingIter {
+            value: self,
+            i: -self.spilling(),
+            len: self.len() as isize,
+            spilling: self.spilling(),
+            columns,
+        }
+    }
 }
 
 pub struct ValueBackingIter<'a> {
     value: &'a ValueBacking,
     columns: &'a ColumnSet,
     len: isize,
+    spilling: isize,
     i: isize,
 }
 
@@ -725,12 +733,11 @@ impl<'a> Iterator for ValueBackingIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.value {
             ValueBacking::Vector { v, .. } => {
-                let i = self.i as usize;
-                if i >= v.len() {
+                if self.i >= (v.len() as isize) {
                     None
                 } else {
                     self.i += 1;
-                    v.get(self.i as usize).cloned()
+                    v.get(self.i as usize - 1 + self.spilling as usize).cloned()
                 }
             }
             ValueBacking::Expression { .. } => {

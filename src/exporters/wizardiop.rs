@@ -190,8 +190,44 @@ fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
                 handle,
                 reference,
                 inverted,
-                normalized,
-            } => todo!(),
+            } => {
+                let mut r = Vec::new();
+                let x = reference.clone();
+                let inv_x = Node::column().handle(inverted.clone()).build();
+                let x_times_inv_x = Intrinsic::Mul.call(&[x.clone(), inv_x.clone()]).unwrap();
+                let one = Node::from_const(1);
+
+                // X × (1 - X × /X)
+                r.append(&mut render_constraint(
+                    cs,
+                    &format!("{}#1", handle),
+                    None,
+                    &Intrinsic::Mul
+                        .call(&[
+                            x.clone(),
+                            Intrinsic::Sub
+                                .call(&[one.clone(), x_times_inv_x.clone()])
+                                .unwrap(),
+                        ])
+                        .unwrap(),
+                ));
+                // /X × (1 - X × /X)
+                r.append(&mut render_constraint(
+                    cs,
+                    &format!("{}#2", handle),
+                    None,
+                    &Intrinsic::Mul
+                        .call(&[
+                            inv_x.clone(),
+                            Intrinsic::Sub
+                                .call(&[one.clone(), x_times_inv_x.clone()])
+                                .unwrap(),
+                        ])
+                        .unwrap(),
+                ));
+
+                r
+            }
         })
         .collect()
 }

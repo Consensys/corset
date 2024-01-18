@@ -53,13 +53,12 @@ pub fn maybe_warn(t: Magma, xs: &[Value], h: &Handle) -> Result<()> {
 pub fn purify(s: &str) -> String {
     s.replace(
         [
-            '(', ')', '{', '}', '[', ']', '<', '>', ':', '%', '.', '-', '#', ' ',
+            '(', ')', '{', '}', '[', ']', '<', '>', ':', '%', '.', '-', '#', ' ', '/',
         ],
         "_",
     )
     .replace('*', "mul")
     .replace('+', "add")
-    .replace('/', "div")
     .replace('^', "pow")
     .replace('~', "norm")
     .replace('α', "alpha")

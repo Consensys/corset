@@ -547,7 +547,8 @@ pub fn check(
                     }
                 }
                 Constraint::Normalization { .. } => {
-                    todo!()
+                    // We trust ourselves
+                    None
                 }
             }
         })

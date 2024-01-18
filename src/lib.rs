@@ -134,39 +134,45 @@ impl Trace {
 
                 let column = c.columns.column(cref).unwrap();
                 let handle = &column.handle;
-                trace!("Writing {}", handle);
+                let spilling = c.spilling_of(&handle.module).unwrap_or(0);
                 let backing = c.columns.backing(cref).unwrap_or(&empty_backing);
                 let padding: Value = if let Some(v) = column.padding_value.as_ref() {
                     v.clone()
                 } else {
-                    backing.get(0, false, &c.columns).unwrap_or_else(|| {
-                        c.computations
-                            .computation_for(cref)
-                            .map(|c| match c {
-                                Computation::Composite { exp, .. } => exp
-                                    .eval(
-                                        0,
-                                        |_, _, _| Some(Value::zero()),
-                                        &mut None,
-                                        &EvalSettings::default(),
-                                    )
-                                    .unwrap_or_else(Value::zero),
-                                Computation::Interleaved { .. } => Value::zero(),
-                                Computation::Sorted { .. } => Value::zero(),
-                                Computation::CyclicFrom { .. } => Value::zero(),
-                                Computation::SortingConstraints { .. } => Value::zero(),
-                                Computation::ExoOperation { .. } => Value::zero(), // TODO: FIXME:
-                                Computation::ExoConstant { value, .. } => value.clone(),
-                            })
-                            .unwrap_or_else(Value::zero)
-                    })
+                    backing
+                        .get(-spilling, false, &c.columns)
+                        .unwrap_or_else(|| {
+                            c.computations
+                                .computation_for(cref)
+                                .map(|c| match c {
+                                    Computation::Composite { exp, .. } => exp
+                                        .eval(
+                                            0,
+                                            |_, _, _| Some(Value::zero()),
+                                            &mut None,
+                                            &EvalSettings::default(),
+                                        )
+                                        .unwrap_or_else(Value::zero),
+                                    Computation::Interleaved { .. } => Value::zero(),
+                                    Computation::Sorted { .. } => Value::zero(),
+                                    Computation::CyclicFrom { .. } => Value::zero(),
+                                    Computation::SortingConstraints { .. } => Value::zero(),
+                                    Computation::ExoOperation { .. } => Value::zero(), // TODO: FIXME:
+                                    Computation::ExoConstant { value, .. } => value.clone(),
+                                })
+                                .unwrap_or_else(Value::zero)
+                        })
                 };
+
+                let values: Vec<[u8; 32]> = backing
+                    .iter(&c.columns)
+                    .map(|x| x.to_bytes().try_into().unwrap())
+                    .collect::<Vec<_>>();
+
+                trace!("Writing {}", handle);
                 (
                     ComputedColumn {
-                        values: backing
-                            .iter(&c.columns)
-                            .map(|x| x.to_bytes().try_into().unwrap())
-                            .collect(),
+                        values,
                         padding_value: { padding.to_bytes().try_into().unwrap() },
                     },
                     c.handle(cref).to_string(),

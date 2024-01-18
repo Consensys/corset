@@ -403,47 +403,32 @@ pub fn compute_expression(
             let captured_exp = exp.clone();
             ValueBacking::from_expression(captured_exp, length, spilling)
 
-            //
             // The old way of doing things
-            //
-            //     let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
-            //     let values = (-spilling..length as isize)
-            //         .map(|i| {
-            //             let r = exp.eval(
-            //                 i,
-            //                 |handle, j, _| {
-            //                     Some(
-            //                         cs.columns
-            //                             .get(handle, j, false)
-            //                             .clone()
-            //                             .or_else(|| {
-            //                                 // This is triggered when filling the spilling
-            //                                 // of an expression with past spilling. In this
-            //                                 // case, the expression will overflow past the
-            //                                 // past spilling, and None should be converted
-            //                                 // to the padding value or 0.
-            //                                 cs.columns
-            //                                     .column(handle)
-            //                                     .unwrap()
-            //                                     .padding_value
-            //                                     .as_ref()
-            //                                     .cloned()
-            //                             })
-            //                             .unwrap_or_else(Value::zero),
-            //                     )
-            //                 },
-            //                 &mut cache,
-            //                 &EvalSettings { wrap: false },
-            //             );
-            //             // This should never fail, as we always provide a default value for
-            //             // column accesses
-            //             r.unwrap()
-            //         })
-            //         .collect();
-            //     ValueBacking::Vector {
-            //         v: values,
-            //         spilling,
-            //     }
+            // let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
+            // let values: Vec<_> = (-spilling..length as isize)
+            //     .map(|i| {
+            //         exp.eval(
+            //             i,
+            //             |handle, j, _| {
+            //                 cs.columns.get(handle, j, false).or_else(|| {
+            //                     cs.columns
+            //                         .column(handle)
+            //                         .unwrap()
+            //                         .padding_value
+            //                         .as_ref()
+            //                         .cloned()
+            //                 })
+            //             },
+            //             &mut cache,
+            //             &EvalSettings { wrap: false },
+            //         )
+            //         .unwrap_or_else(Value::zero)
+            //     })
+            //     .collect();
+            // ValueBacking::Vector {
+            //     v: values,
+            //     spilling: spilling,
+            // }
         },
     )])
 }

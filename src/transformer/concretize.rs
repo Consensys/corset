@@ -36,7 +36,7 @@ impl ConstraintSet {
                     exp.concretize();
                     max.to_native();
                 }
-                Constraint::Normalization { .. } => {}
+                Constraint::Normalization { reference, .. } => reference.concretize(),
             }
         }
     }

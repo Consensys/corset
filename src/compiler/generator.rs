@@ -60,12 +60,11 @@ pub enum Constraint {
         exp: Node,
         max: Value,
     },
-    // Ensures that normalized = reference × invert
+    // Ensures that 1 = reference × invert
     Normalization {
         handle: Handle,
         reference: Node,
         inverted: ColumnRef,
-        normalized: ColumnRef,
     },
 }
 impl Constraint {
@@ -97,12 +96,10 @@ impl Constraint {
             Constraint::Normalization {
                 reference,
                 inverted,
-                normalized,
                 ..
             } => {
                 reference.add_id_to_handles(set_id);
                 set_id(inverted);
-                set_id(normalized);
             }
         }
     }
@@ -1052,11 +1049,9 @@ impl ConstraintSet {
                     handle,
                     reference,
                     inverted,
-                    normalized,
                 } => {
                     if !(reference.dependencies().into_iter().any(|h| h.is_id())
-                        && inverted.is_id()
-                        && normalized.is_id())
+                        && inverted.is_id())
                     {
                         bail!(errors::compiler::Error::ConstraintWithHandles(
                             handle.to_string()

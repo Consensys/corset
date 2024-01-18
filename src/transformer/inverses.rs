@@ -140,58 +140,20 @@ impl ConstraintSet {
                         exp: invert_expr(&normalized_expr),
                     },
                 )?;
+
+                self.constraints.push(Constraint::Normalization {
+                    handle: Handle::new(
+                        &inverted_handle.module,
+                        format!("NORM[{}]", normalized_expr),
+                    ),
+                    reference: normalized_expr.clone(),
+                    inverted: inverted_id,
+                })
             }
         }
 
         Ok(())
     }
-}
-
-// TODO: move that into the Wizard
-fn validate_inv(cs: &mut Vec<Node>, x_expr: &Node, inv_x_col: &ColumnRef) -> Result<()> {
-    // X × (X × /X - 1)
-    cs.push(
-        Intrinsic::Mul.call(&[
-            x_expr.clone(),
-            Intrinsic::Sub.call(&[
-                Intrinsic::Mul.call(&[
-                    x_expr.clone(),
-                    Node::column()
-                        .handle(inv_x_col.clone())
-                        .kind(Kind::Phantom)
-                        .t(Magma::native())
-                        .build(),
-                ])?,
-                Node::one(),
-            ])?,
-        ])?,
-    );
-
-    // /X × (X × /X - 1)
-    cs.push(
-        Intrinsic::Mul.call(&[
-            Node::column()
-                .handle(inv_x_col.clone())
-                .kind(Kind::Phantom)
-                .base(Base::Hex)
-                .t(Magma::native())
-                .build(),
-            Intrinsic::Sub.call(&[
-                Intrinsic::Mul.call(&[
-                    x_expr.clone(),
-                    Node::column()
-                        .handle(inv_x_col.clone())
-                        .kind(Kind::Phantom)
-                        .base(Base::Hex)
-                        .t(Magma::native())
-                        .build(),
-                ])?,
-                Node::one(),
-            ])?,
-        ])?,
-    );
-
-    Ok(())
 }
 
 pub fn expand_invs(cs: &mut ConstraintSet) -> Result<()> {
