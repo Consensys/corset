@@ -850,6 +850,7 @@ pub struct Column {
     pub shift: i16,
     pub padding_value: Option<Value>,
     pub used: bool,
+    pub must_prove: bool,
     pub kind: Kind<()>,
     pub t: Magma,
     pub intrinsic_size_factor: Option<usize>,
@@ -865,6 +866,7 @@ impl Column {
         shift: Option<i16>,
         padding_value: Option<i64>, // TODO: Value
         used: Option<bool>,
+        must_prove: Option<bool>,
         kind: Option<Kind<()>>,
         t: Option<Magma>,
         intrinsic_size_factor: Option<usize>,
@@ -876,6 +878,7 @@ impl Column {
             shift: shift.unwrap_or(0),
             padding_value: padding_value.map(|v| Value::from(v as usize)),
             used: used.unwrap_or(true),
+            must_prove: must_prove.unwrap_or(false),
             kind: kind.unwrap_or(Kind::Phantom),
             t: t.unwrap_or(Magma::native()),
             intrinsic_size_factor,

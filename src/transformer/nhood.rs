@@ -10,6 +10,27 @@ use crate::{
     structs::Handle,
 };
 
+fn process_binarity(column_refs: &[ColumnRef], cs: &mut ConstraintSet) {
+    for column_ref in column_refs {
+        let handle = cs.handle(column_ref);
+        let x = Node::column().handle(column_ref.clone()).build();
+        cs.insert_constraint(Constraint::Vanishes {
+            handle: Handle::new(handle.module.clone(), format!("{}-binarity", handle.name)),
+            domain: None,
+            expr: Box::new(
+                Intrinsic::Mul
+                    .call(&[
+                        x.clone(),
+                        Intrinsic::Sub
+                            .call(&[Node::from_const(1), x.clone()])
+                            .unwrap(),
+                    ])
+                    .unwrap(),
+            ),
+        })
+    }
+}
+
 fn process_nhood(
     module: &str,
     handles: &[ColumnRef],
@@ -123,6 +144,7 @@ fn process_nhood(
 }
 
 pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
+    let mut binary_columns = Vec::new();
     let mut nibble_columns = HashMap::<String, Vec<ColumnRef>>::new();
     let mut byte_columns = HashMap::<String, Vec<ColumnRef>>::new();
 
@@ -130,6 +152,11 @@ pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
         // only atomic columns (i.e. filled from traces) are of interest here
         if c.kind == Kind::Atomic {
             match c.t.rm() {
+                RawMagma::Binary => {
+                    if c.must_prove {
+                        binary_columns.push(h.clone())
+                    }
+                }
                 RawMagma::Nibble => nibble_columns
                     .entry(c.handle.module.to_owned())
                     .or_default()
@@ -142,6 +169,8 @@ pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
             }
         }
     }
+
+    process_binarity(&binary_columns, cs);
 
     for (module, handles) in nibble_columns.iter() {
         process_nhood(module, handles, 4, cs)?;

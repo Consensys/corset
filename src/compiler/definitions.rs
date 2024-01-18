@@ -41,6 +41,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
             t,
             kind,
             padding_value,
+            must_prove,
             base,
         } => {
             let module_name = ctx.module();
@@ -56,6 +57,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     Kind::Phantom => Kind::Phantom,
                     Kind::Computed(_) => Kind::Phantom,
                 })
+                .must_prove(*must_prove)
                 .and_padding_value(*padding_value)
                 .t(t.m())
                 .build();

@@ -162,14 +162,16 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
                         kind: k,
                         padding_value,
                         base,
+                        must_prove,
                         ..
                     } => {
                         let column = Column::builder()
                             .handle(handle.as_handle().clone())
                             .and_padding_value(padding_value.to_owned())
-                            .used(*used)
                             .kind(k.to_nil())
                             .t(symbol.t().m())
+                            .must_prove(*must_prove)
+                            .used(*used)
                             .base(*base)
                             .build();
                         let id = columns.insert_column(column)?;

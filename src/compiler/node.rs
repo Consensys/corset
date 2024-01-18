@@ -168,6 +168,7 @@ pub enum Expression {
         handle: ColumnRef,
         shift: i16,
         kind: Kind<Node>,
+        must_prove: bool,
         padding_value: Option<i64>,
         base: Base,
     },
@@ -249,6 +250,7 @@ impl Node {
         base: Option<Base>,
         kind: Option<Kind<Node>>,
         padding_value: Option<i64>,
+        must_prove: Option<bool>,
         t: Option<Magma>,
     ) -> Node {
         let magma = t.unwrap_or(Magma::native());
@@ -269,6 +271,7 @@ impl Node {
                     handle: handle.clone(),
                     shift: shift.unwrap_or(0),
                     kind: kind.unwrap_or(Kind::Phantom),
+                    must_prove: must_prove.unwrap_or(false),
                     padding_value,
                     base: base.unwrap_or_else(|| t.unwrap_or(Magma::native()).into()),
                 },

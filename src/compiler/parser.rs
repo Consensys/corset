@@ -1,7 +1,9 @@
+use crate::compiler::{Conditioning, RawMagma};
 use crate::{errors, pretty::Base};
 use anyhow::{anyhow, bail, Context, Result};
 use itertools::Itertools;
 use num_bigint::BigInt;
+use owo_colors::OwoColorize;
 use pest::{iterators::Pair, Parser};
 use serde::{Deserialize, Serialize};
 use std::cell::OnceCell;
@@ -232,6 +234,8 @@ pub enum Token {
         kind: Kind<AstNode>,
         /// the value to pad the column with; defaults to 0 if None
         padding_value: Option<i64>,
+        /// if set, generate constraint to prove the column type
+        must_prove: bool,
         /// which numeric base should be used to display column values; this is a purely aesthetic setting
         base: Base,
     },
@@ -613,6 +617,7 @@ fn parse_defperspective<I: Iterator<Item = Result<AstNode>>>(mut tokens: I) -> R
 struct ColumnAttributes {
     name: String,
     t: OnceCell<Magma>,
+    must_prove: bool,
     range: OnceCell<Domain>,
     padding_value: OnceCell<i64>,
     base: OnceCell<Base>,
@@ -649,6 +654,9 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
         PaddingValue,
         Base,
     }
+    let re_type = regex_lite::Regex::new(
+        r":(?<RawMagma>i(?<Integer>\d+)|[a-z]+)?(@(?<Conditioning>bool|loob))?(?<Proven>@prove)?",
+    )?;
     let mut attributes = ColumnAttributes::default();
     let mut state = ColumnParser::Begin;
 
@@ -685,20 +693,50 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
                         ":padding" => ColumnParser::PaddingValue,
                         // how to display the column values in debug
                         ":display" => ColumnParser::Base,
-                        _ => match kw.as_str().try_into() {
-                            Ok(m) => {
-                                attributes.t.set(m).map_err(|_| {
-                                    anyhow!(
-                                        "trying to redefine column {} of type {:?} as {}",
-                                        attributes.name,
-                                        attributes.t.get().unwrap(),
-                                        kw
-                                    )
-                                })?;
+                        _ => {
+                            if let Some(caps) = re_type.captures(kw) {
+                                let raw_magma = if let Some(integer) = caps.name("Integer") {
+                                    let bit_size = integer.as_str().parse::<usize>().unwrap();
+                                    if bit_size > crate::constants::FIELD_BITSIZE {
+                                        panic!("Not yet :(");
+                                    }
+                                    RawMagma::Integer(bit_size)
+                                } else {
+                                    caps.name("RawMagma")
+                                        .map_or(Ok(RawMagma::Native), |s| s.as_str().try_into())?
+                                };
+
+                                let conditioning = caps
+                                    .name("Conditioning")
+                                    .map_or(Ok(Conditioning::None), |s| s.as_str().try_into())?;
+
+                                let must_prove = caps.name("Proven").is_some();
+
+                                if must_prove && raw_magma != RawMagma::Binary {
+                                    bail!(
+                                        "unprovable type {:?} for column {}",
+                                        raw_magma,
+                                        attributes.name.bright_white()
+                                    );
+                                }
+
+                                attributes.must_prove = must_prove;
+                                attributes
+                                    .t
+                                    .set(Magma::new(raw_magma, conditioning))
+                                    .map_err(|_| {
+                                        anyhow!(
+                                            "trying to redefine column {} of type {:?} as {}",
+                                            attributes.name,
+                                            attributes.t.get().unwrap(),
+                                            kw
+                                        )
+                                    })?;
                                 ColumnParser::Begin
+                            } else {
+                                bail!("invalid type declaration: {}", kw)
                             }
-                            Err(e) => bail!(e),
-                        },
+                        }
                     }
                 }
                 // A range alone treated as if it were preceded by :array
@@ -815,6 +853,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                 .map(|c| Kind::Computed(Box::new(c)))
                                 .unwrap_or(Kind::Atomic),
                             padding_value: column_attributes.padding_value.get().cloned(),
+                            must_prove: column_attributes.must_prove,
                             base,
                         }
                     },

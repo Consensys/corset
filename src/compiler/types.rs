@@ -425,6 +425,10 @@ impl Magma {
         c: Conditioning::None,
     };
 
+    pub fn new(m: RawMagma, c: Conditioning) -> Magma {
+        Magma { m, c }
+    }
+
     pub fn or_magma(mut self, r: RawMagma) -> Magma {
         if self.m == RawMagma::None {
             self.m = r;
@@ -550,7 +554,7 @@ impl std::convert::TryFrom<&str> for Magma {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         let re_global = regex_lite::Regex::new(
-            r":(?<RawMagma>i(?<Integer>\d+)|[a-z]+)?(@(?<Conditioning>loobean|boolean|bool|loob))?",
+            r":(?<RawMagma>i(?<Integer>\d+)|[a-z]+)?(@(?<Conditioning>bool|loob))?",
         )?;
 
         if let Some(caps) = re_global.captures(s) {
