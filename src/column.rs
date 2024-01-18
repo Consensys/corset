@@ -259,7 +259,7 @@ impl Value {
         }
     }
 
-    pub(crate) fn into_bi(&mut self) {
+    pub(crate) fn make_bi(&mut self) {
         match self {
             Value::BigInt(_) => {}
             _ => *self = Value::BigInt(BigInt::from_bytes_le(Sign::Plus, &self.to_bytes())),
@@ -777,10 +777,6 @@ impl Register {
 
     pub fn width(&self) -> usize {
         self.width
-    }
-
-    pub fn spilling(&self) -> Option<isize> {
-        self.value.as_ref().map(|v| v.spilling())
     }
 
     fn set_value(&mut self, v: Vec<Value>, spilling: isize) -> Result<()> {

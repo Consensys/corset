@@ -92,7 +92,7 @@ impl Constraint {
                 .for_each(|e| e.add_id_to_handles(set_id)),
             Constraint::Permutation {
                 from: hs1, to: hs2, ..
-            } => hs1.iter_mut().chain(hs2.iter_mut()).for_each(|h| set_id(h)),
+            } => hs1.iter_mut().chain(hs2.iter_mut()).for_each(set_id),
             Constraint::InRange { exp, .. } => exp.add_id_to_handles(set_id),
             Constraint::Normalization {
                 reference,
@@ -938,7 +938,6 @@ impl ConstraintSet {
             let empty_backing: ValueBacking = ValueBacking::default();
             while let Some((r, column)) = current_col.next() {
                 let handle = &column.handle;
-                let module_size = self.effective_len_for(&handle.module).unwrap();
                 trace!("Writing {}", handle);
                 let backing = self.columns.backing(&r).unwrap_or(&empty_backing);
                 let padding: Value = if let Some(v) = column.padding_value.as_ref() {
@@ -1753,7 +1752,7 @@ fn reduce_toplevel(
             Ok(Some(Constraint::InRange {
                 handle,
                 exp: reduce(e, ctx, settings)?.unwrap(),
-                max: Value::from(*range).into(),
+                max: Value::from(*range),
             }))
         }
         Token::DefColumns(columns) => {

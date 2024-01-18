@@ -126,7 +126,7 @@ impl Pretty for Fr {
                 Base::Bool => if self.is_zero() { "false" } else { "true" }.to_string(),
                 Base::Loob => if self.is_zero() { "true" } else { "false" }.to_string(),
                 Base::OpCode => to_byte(self)
-                    .map(|b| opcodes::to_str(b))
+                    .map(opcodes::to_str)
                     .unwrap_or_else(|| self.pretty()),
             }
         }

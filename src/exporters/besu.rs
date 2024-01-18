@@ -86,14 +86,6 @@ fn handle_to_appender(h: &Handle) -> String {
     }
 }
 
-fn handle_to_updater(h: &Handle) -> String {
-    match h.perspective.as_ref() {
-        None => h.name.to_case(Case::Camel),
-        Some(p) => perspectivize_name(h, p),
-    }
-    .to_case(Case::Pascal)
-}
-
 fn perspectivize_name(h: &Handle, p: &str) -> String {
     format!(
         "p{}{}",

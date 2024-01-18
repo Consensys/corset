@@ -885,7 +885,7 @@ fn main() -> Result<()> {
             only,
             skip,
         } => {
-            let mut cs = builder.into_constraint_set()?;
+            let cs = builder.into_constraint_set()?;
 
             exporters::debugger::debug(
                 &cs,

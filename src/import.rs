@@ -63,7 +63,7 @@ impl std::fmt::Debug for TraceMap {
                     c.handle.name, c.length, c.bytes_per_element
                 )?;
             }
-            writeln!(f, "")?;
+            writeln!(f)?;
         }
 
         Result::Ok(())
@@ -160,9 +160,8 @@ impl<Data: AsRef<[u8]>> TraceReader<Data> {
 
 #[time("info", "Parsing binary traces")]
 pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
-    let mut file = File::open(tracefile)
+    let file = File::open(tracefile)
         .with_context(|| anyhow!("opening {}", tracefile.bright_white().bold()))?;
-    let file_size = file.metadata()?.len();
     let mut trace_reader = TraceReader::from(unsafe {
         memmap2::MmapOptions::new()
             .map(&file)
@@ -182,7 +181,7 @@ pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
                     let i = i as usize;
                     register_bytes
                         .get(i * register.bytes_per_element..(i + 1) * register.bytes_per_element)
-                        .map(|bs| CValue::from(BigInt::from_bytes_be(Sign::Plus, &bs)))
+                        .map(|bs| CValue::from(BigInt::from_bytes_be(Sign::Plus, bs)))
                         .with_context(|| anyhow!("reading {}th element", i))
                 }
             })
