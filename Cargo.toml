@@ -1,6 +1,6 @@
 [package]
 name = "corset"
-version = "9.2.3"
+version = "9.3.0"
 edition = "2021"
 rust-version = "1.70.0"
 authors = [ "Franklin Delehelle <franklin.delehelle@consensys.net>" ]

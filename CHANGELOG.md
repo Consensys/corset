@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.3.0] - 2024-01-18
+
+### Bug Fixes
+
+- Ensure all backings have the correct length
+- Message on conditioning error
+
+### Features
+
+- Generate normalization constraints
+- Generate binarity constraints for `@prove`-annotated type
+
+### Miscellaneous Tasks
+
+- Clippy
+
 ## [9.2.3] - 2024-01-17
 
 ### Bug Fixes
@@ -13,6 +29,10 @@ All notable changes to this project will be documented in this file.
 ### Features
 
 - Better error messages on erroneous value updating
+
+### Miscellaneous Tasks
+
+- Release corset version 9.2.3
 
 ### Refactor
 
