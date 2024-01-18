@@ -1393,7 +1393,9 @@ fn apply_builtin(
             }
         }
         Builtin::If => match traversed_args[0].t().c() {
-            super::Conditioning::None => unreachable!(),
+            super::Conditioning::None => {
+                bail!("{} is not a valid condition", traversed_args[0].pretty())
+            }
             super::Conditioning::Boolean => Ok(Some(Intrinsic::IfNotZero.call(&traversed_args)?)),
             super::Conditioning::Loobean => Ok(Some(Intrinsic::IfZero.call(&traversed_args)?)),
         },
