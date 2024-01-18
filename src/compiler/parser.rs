@@ -655,7 +655,7 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
         Base,
     }
     let re_type = regex_lite::Regex::new(
-        r":(?<RawMagma>i(?<Integer>\d+)|[a-z]+)?(@(?<Conditioning>bool|loob))?(?<Proven>@prove)?",
+        r"^:(?<RawMagma>i(?<Integer>\d+)|[a-z]+)?(@(?<Conditioning>bool|loob))?(?<Proven>@prove)?$",
     )?;
     let mut attributes = ColumnAttributes::default();
     let mut state = ColumnParser::Begin;
