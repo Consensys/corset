@@ -2,8 +2,7 @@ use std::collections::HashSet;
 
 use crate::{
     column::{Column, Computation},
-    compiler::{ColumnRef, Constraint, ConstraintSet, Expression, Intrinsic, Kind, Magma, Node},
-    pretty::Base,
+    compiler::{ColumnRef, Constraint, ConstraintSet, Expression, Intrinsic, Kind, Node},
     structs::Handle,
 };
 use anyhow::*;

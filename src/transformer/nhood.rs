@@ -1,4 +1,5 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
+use owo_colors::OwoColorize;
 use std::collections::HashMap;
 
 use crate::{
@@ -34,15 +35,14 @@ fn process_binarity(column_refs: &[ColumnRef], cs: &mut ConstraintSet) {
 fn process_nhood(
     module: &str,
     handles: &[ColumnRef],
-    n: u32,
+    modulo: usize,
     cs: &mut ConstraintSet,
 ) -> Result<()> {
-    let modulo = 2usize.pow(n);
     let _aux_id = cs.columns.insert_column_and_register(
         Column::builder()
-            .handle(Handle::new(module, format!("AUX_2_{}_HOOD", n)))
+            .handle(Handle::new(module, format!("AUX_{modulo}_HOOD")))
             .kind(Kind::Phantom)
-            .t(Magma::integer(n as usize + 1))
+            .t(Magma::native())
             .build(),
     )?;
     cs.computations.insert(
@@ -60,7 +60,7 @@ fn process_nhood(
         .collect::<Vec<_>>();
     let _intrld_aux_xs_id = cs.columns.insert_column_and_register(
         Column::builder()
-            .handle(Handle::new(module, format!("INTRLD_AUX_2_{}_HOOD", n)))
+            .handle(Handle::new(module, format!("INTRLD_AUX_{modulo}_HOOD")))
             .kind(Kind::Phantom)
             .build(),
     )?;
@@ -74,7 +74,7 @@ fn process_nhood(
 
     let srt_intrld_aux_xs_id = cs.columns.insert_column_and_register(
         Column::builder()
-            .handle(Handle::new(module, format!("SRT_INTRLD_AUX_2_{}_HOOD", n)))
+            .handle(Handle::new(module, format!("SRT_INTRLD_AUX_{modulo}_HOOD")))
             .kind(Kind::Phantom)
             .build(),
     )?;
@@ -103,13 +103,13 @@ fn process_nhood(
         .build();
 
     cs.insert_constraint(Constraint::Vanishes {
-        handle: Handle::new(module, format!("2^{n}-hood-start")),
+        handle: Handle::new(module, format!("{modulo}-hood-start")),
         domain: Some(Domain::Set(vec![0])),
         expr: Box::new(srt_intrld_aux_xs_node.clone()),
     });
 
     cs.insert_constraint(Constraint::Vanishes {
-        handle: Handle::new(module, format!("2^{n}-hood-end")),
+        handle: Handle::new(module, format!("{modulo}-hood-end")),
         domain: Some(Domain::Set(vec![-1])),
         expr: Box::new(
             Intrinsic::Sub.call(&[
@@ -118,13 +118,13 @@ fn process_nhood(
                     .kind(Kind::Phantom)
                     .base(Base::Dec)
                     .build(),
-                Node::from_const((modulo - 1).try_into().unwrap()),
+                Node::from_const(modulo.try_into().unwrap()),
             ])?,
         ),
     });
 
     cs.insert_constraint(Constraint::Vanishes {
-        handle: Handle::new(module, format!("2^{n}-hood-middle")),
+        handle: Handle::new(module, format!("{modulo}-hood-middle")),
         domain: None,
         expr: Box::new(Intrinsic::Mul.call(&[
             // SRT_ILD_[i+1] - SRT_ILD_[i]
@@ -145,41 +145,39 @@ fn process_nhood(
 
 pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
     let mut binary_columns = Vec::new();
-    let mut nibble_columns = HashMap::<String, Vec<ColumnRef>>::new();
-    let mut byte_columns = HashMap::<String, Vec<ColumnRef>>::new();
+    let mut constrained_columns = HashMap::<String, HashMap<u32, Vec<ColumnRef>>>::new();
 
     for (h, c) in cs.columns.iter() {
         // only atomic columns (i.e. filled from traces) are of interest here
-        if c.kind == Kind::Atomic {
+        if c.kind == Kind::Atomic && c.must_prove {
             match c.t.rm() {
-                RawMagma::Binary => {
-                    if c.must_prove {
-                        binary_columns.push(h.clone())
-                    }
-                }
-                RawMagma::Nibble => nibble_columns
+                RawMagma::Binary => binary_columns.push(h.clone()),
+                _ => constrained_columns
                     .entry(c.handle.module.to_owned())
                     .or_default()
-                    .push(h.clone()),
-                RawMagma::Byte => byte_columns
-                    .entry(c.handle.module.to_owned())
+                    .entry(c.t.bit_size() as u32)
                     .or_default()
                     .push(h.clone()),
-                _ => (),
             }
         }
     }
 
+    // Binary columns are a special case. As they only generate a single
+    // constraint and *do not create new columns* in their module.
     process_binarity(&binary_columns, cs);
 
-    for (module, handles) in nibble_columns.iter() {
-        process_nhood(module, handles, 4, cs)?;
-        cs.columns.set_min_len(module, 2usize.pow(4));
-    }
-
-    for (module, handles) in byte_columns.iter() {
-        process_nhood(module, handles, 8, cs)?;
-        cs.columns.set_min_len(module, 2usize.pow(8));
+    for (module, columns) in dbg!(constrained_columns).iter() {
+        for (&bit_size, handles) in columns.iter() {
+            if bit_size > 16 {
+                bail!(
+                    "do you really want to prove a {}-bits integer?",
+                    bit_size.yellow().bold()
+                );
+            }
+            let modulo = 2usize.pow(bit_size) - 1;
+            process_nhood(module, handles, modulo, cs)?;
+            cs.columns.set_min_len(module, modulo);
+        }
     }
 
     Ok(())

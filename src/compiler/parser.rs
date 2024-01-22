@@ -712,14 +712,6 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
 
                                 let must_prove = caps.name("Proven").is_some();
 
-                                if must_prove && raw_magma != RawMagma::Binary {
-                                    bail!(
-                                        "unprovable type {:?} for column {}",
-                                        raw_magma,
-                                        attributes.name.bright_white()
-                                    );
-                                }
-
                                 attributes.must_prove = must_prove;
                                 attributes
                                     .t
@@ -734,7 +726,7 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
                                     })?;
                                 ColumnParser::Begin
                             } else {
-                                bail!("invalid type declaration: {}", kw)
+                                bail!("invalid type declaration: {}", kw.red().bold())
                             }
                         }
                     }

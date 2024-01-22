@@ -370,7 +370,7 @@ impl<'a> Inspector<'a> {
         self.current_module = (self.current_module + 1) % self.modules.len();
     }
 
-    fn run(&mut self, terminal: &mut StdTerminal, settings: InspectorSettings) -> Result<()> {
+    fn run(&mut self, terminal: &mut StdTerminal, _settings: InspectorSettings) -> Result<()> {
         loop {
             terminal.draw(|term| self.render(term))?;
             if let Event::Key(key) = event::read()? {
