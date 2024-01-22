@@ -12,6 +12,8 @@ use rayon::prelude::*;
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
 use serde_json::Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
+use std::io::Read;
+#[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
 use simd_json::BorrowedValue as Value;
 use std::{
     fs::File,
