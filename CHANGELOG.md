@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.5.0] - 2024-01-24
+
+### Bug Fixes
+
+- Homogeneize arrays and columns
+
 ## [9.4.0] - 2024-01-23
 
 ### Bug Fixes
@@ -24,6 +30,7 @@ All notable changes to this project will be documented in this file.
 - Release corset version 9.2.3
 - Clippy
 - Release corset version 9.3.0
+- Release corset version 9.4.0
 
 ### Refactor
 
