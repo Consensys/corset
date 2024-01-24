@@ -51,17 +51,54 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                     name,
                     ctx.perspective(),
                 ))
-                .base(*base)
                 .kind(match kind {
                     Kind::Atomic => Kind::Atomic,
-                    Kind::Phantom => Kind::Phantom,
+                    Kind::Phantom => Kind::Phantom, // unreachable?
                     Kind::Computed(_) => Kind::Phantom,
                 })
-                .must_prove(*must_prove)
                 .and_padding_value(*padding_value)
                 .t(t.m())
+                .must_prove(*must_prove)
+                .base(*base)
                 .build();
             ctx.insert_symbol(name, symbol)
+        }
+        Token::DefArrayColumn {
+            name,
+            domain,
+            t,
+            padding_value,
+            must_prove,
+            base,
+        } => {
+            let handle = Handle::maybe_with_perspective(ctx.module(), name, ctx.perspective());
+            // those are inserted for symbol lookups
+            for i in domain.iter() {
+                let ith_handle = handle.ith(i.try_into().unwrap());
+                ctx.insert_used_symbol(
+                    &ith_handle.name,
+                    Node::column()
+                        .handle(ith_handle.clone())
+                        .kind(Kind::Atomic)
+                        .and_padding_value(*padding_value)
+                        .t(t.m())
+                        .must_prove(*must_prove)
+                        .base(*base)
+                        .build(),
+                )?;
+            }
+
+            // and this one for validating calls to `nth`
+            ctx.insert_symbol(
+                name,
+                Node::array_column()
+                    .handle(handle)
+                    .domain(domain.to_owned())
+                    .base(*base)
+                    .t(t.m())
+                    .build(),
+            )?;
+            Ok(())
         }
         Token::DefInterleaving { target, froms: _ } => {
             let node = Node::column()
@@ -76,39 +113,6 @@ fn reduce(e: &AstNode, ctx: &mut Scope) -> Result<()> {
                 .build();
 
             ctx.insert_symbol(&target.name, node)
-        }
-        Token::DefArrayColumn {
-            name,
-            domain: range,
-            t,
-            base,
-        } => {
-            let handle = Handle::maybe_with_perspective(ctx.module(), name, ctx.perspective());
-            // those are inserted for symbol lookups
-            for i in range.iter() {
-                let ith_handle = handle.ith(i.try_into().unwrap());
-                ctx.insert_used_symbol(
-                    &ith_handle.name,
-                    Node::column()
-                        .handle(ith_handle.clone())
-                        .kind(Kind::Atomic)
-                        .base(*base)
-                        .t(t.m())
-                        .build(),
-                )?;
-            }
-
-            // and this one for validating calls to `nth`
-            ctx.insert_symbol(
-                name,
-                Node::array_column()
-                    .handle(handle)
-                    .domain(range.to_owned())
-                    .base(*base)
-                    .t(t.m())
-                    .build(),
-            )?;
-            Ok(())
         }
         Token::DefConsts(cs) => {
             // The actual value will be filled later on by the compile-time pass

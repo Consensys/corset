@@ -241,9 +241,16 @@ pub enum Token {
     },
     /// defines an array
     DefArrayColumn {
+        /// name of the array; unique in its module
         name: String,
+        /// where is the array defined
         domain: Domain,
+        /// type of the array
         t: Type,
+        /// the value to pad the column with; defaults to 0 if None
+        padding_value: Option<i64>,
+        /// if set, generate constraint to prove the column type
+        must_prove: bool,
         /// which numeric base should be used to display column values; this is a purely aesthetic setting
         base: Base,
     },
@@ -827,7 +834,9 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                     .cloned()
                                     .unwrap_or(Magma::native()),
                             ),
+                            padding_value: column_attributes.padding_value.get().cloned(),
                             domain: range.clone(),
+                            must_prove: column_attributes.must_prove,
                             base,
                         }
                     } else {
