@@ -124,7 +124,11 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                 tupe: magma_to_java_type(r.magma),
                 id: i,
                 zero_value: magma_to_java_zero(r.magma),
-                bytes_width: r.magma.byte_size() as i16,
+                bytes_width: match r.magma.rm() {
+                    RawMagma::Binary | RawMagma::Nibble | RawMagma::Byte => 1,
+                    RawMagma::Native | RawMagma::Integer(_) => 32,
+                    _ => unreachable!(),
+                },
             }
         })
         .sorted_by_key(|f| f.java_name.clone())
@@ -146,15 +150,16 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                     reg_id: r,
                     putter: match c.t.rm() {
                         RawMagma::Binary => format!("{}.put((byte) (b ? 1 : 0));", &register),
-                        RawMagma::Nibble => format!("{}.put(b.toByte());", &register),
-                        RawMagma::Byte => format!("{}.put(b.toByte());", &register),
+                        RawMagma::Nibble | RawMagma::Byte => {
+                            format!("{}.put(b.toByte());", &register)
+                        }
                         RawMagma::Native | RawMagma::Integer(_) => format!(
                             r#"final byte[] bs = b.toArrayUnsafe();
     for (int i = bs.length; i < 32; i++) {{
       {0}.put((byte) 0);
     }}
     {0}.put(b.toArrayUnsafe());"#,
-                            &register
+                            &register,
                         ),
                         _ => unreachable!(),
                     },

@@ -166,7 +166,7 @@ pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
     // constraint and *do not create new columns* in their module.
     process_binarity(&binary_columns, cs);
 
-    for (module, columns) in dbg!(constrained_columns).iter() {
+    for (module, columns) in constrained_columns.iter() {
         for (&bit_size, handles) in columns.iter() {
             if bit_size > 16 {
                 bail!(
