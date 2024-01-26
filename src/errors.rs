@@ -75,6 +75,12 @@ pub(crate) mod compiler {
     }
 
     pub(crate) fn type_comparison_message(expected: &[Type], found: &[Type]) -> (String, String) {
+        if found.len() < expected.len() {
+            return (
+                format!("{} arguments", expected.len()).blue().to_string(),
+                format!("{} arguments", found.len()).red().to_string(),
+            );
+        }
         let expected_str = format!(
             "({})",
             expected

@@ -155,6 +155,8 @@ pub enum FunctionClass {
     Alias(String),
 }
 
+/// A user-defined function is defined by its specializations, of which
+/// (hopefully) one must fit with the provided argument to validate the call.
 #[derive(Debug, Clone)]
 pub struct Defined {
     pub specializations: Vec<Specialization>,
@@ -197,13 +199,24 @@ impl Defined {
 // User-defined function do not need to implement [`FunctionVerifier`], because
 // their lookup would fail in any case if it is incompatible with the given
 // arguments
+/// A Specialization defines one of the implementations of a (polymorphic) function.
+/// A non-polymorphic function will have one and only one Specialization.
 #[derive(Debug, Clone)]
 pub struct Specialization {
+    // whether the function can escape its symbol table and access global
+    // symbols -- other than constants, which are always available
     pub pure: bool,
+    // the names of the function arguments
     pub args: Vec<String>,
+    // the types of the function arguments, which must uniquely identify an
+    // (polymorphic) implementation of a function
     pub in_types: Vec<Type>,
+    // the return type of this specialization of the function
     pub out_type: Option<Type>,
+    // the body type of this specialization of the function
     pub body: AstNode,
+    // if set, then suppress warnings if there is a mismatch between the defined
+    // & found return types at a callsite of this specialization
     pub nowarn: bool,
 }
 impl std::fmt::Display for Specialization {
