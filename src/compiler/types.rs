@@ -647,7 +647,7 @@ impl std::fmt::Display for Magma {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.m {
             RawMagma::None => write!(f, "NONE"),
-            RawMagma::Binary => write!(f, "B"),
+            RawMagma::Binary => write!(f, "𝟙"),
             RawMagma::Nibble => write!(f, "𝟜"),
             RawMagma::Byte => write!(f, "𝟠"),
             RawMagma::Native => write!(f, "𝔽"),
