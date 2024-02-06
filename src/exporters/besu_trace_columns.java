@@ -31,7 +31,7 @@ import org.apache.tuweni.bytes.Bytes;
  */
 public class Trace {
   {{#each constants}}
-  static final {{ this.tupe }} {{ this.name }} = {{ this.value }};
+  public static final {{ this.tupe }} {{ this.name }} = {{ this.value }};
   {{/each}}
 
   private final BitSet filled = new BitSet();
