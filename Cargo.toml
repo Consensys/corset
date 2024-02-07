@@ -19,7 +19,7 @@ ark-bls12-377 = "0.4.0"
 ark-serialize = { version = "0.4", features = ["derive"] }
 buche = "0.7"
 buildstructor = "0.5.2"
-cached = { version = "0.46", default-features = false }
+cached = { version = "0.48", default-features = false }
 clap = { version = "4", features = ["derive", "wrap_help", "cargo"], optional = true }
 clap-verbosity-flag = { version = "2", optional = true }
 convert_case = "0.6"
@@ -27,7 +27,7 @@ crossterm = { version = "0.27.0", optional = true }
 either = { version = "1.8.1", features = ["serde"] }
 errno = "0.3.0"
 flate2 = "1"
-handlebars = { version = "4.3.6", default-features = false, optional = true }
+handlebars = { version = "5.1", default-features = false, optional = true }
 itertools = "0.12"
 lazy_static = "1.4"
 libc = {version = "0.2.139", default-features = false }
@@ -41,7 +41,7 @@ owo-colors = "4"
 pest = "2.4"
 pest_derive = "2.4"
 postgres = { version = "0.19", optional = true }
-ratatui = {version = "0.25", optional = true }
+ratatui = {version = "0.26", optional = true }
 rayon = "1.5"
 regex-lite = "0.1"
 ron = "^0.7.0"

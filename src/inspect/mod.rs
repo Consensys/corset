@@ -280,7 +280,11 @@ impl<'a> Inspector<'a> {
     }
 
     fn render_tabs(&self, f: &mut Frame, place: Rect) {
-        let titles = self.modules.iter().map(|t| t.name.clone()).collect();
+        let titles = self
+            .modules
+            .iter()
+            .map(|t| t.name.clone())
+            .collect::<Vec<_>>();
         let tabs = Tabs::new(titles)
             .block(
                 Block::default()
