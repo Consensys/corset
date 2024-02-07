@@ -53,6 +53,7 @@ struct TemplateData {
     constants: Vec<BesuConstant>,
 }
 
+/// Return the Java type used to encode the given Magma
 fn magma_to_java_type(m: Magma) -> String {
     match m.rm() {
         RawMagma::None => unreachable!(),
@@ -60,12 +61,19 @@ fn magma_to_java_type(m: Magma) -> String {
         RawMagma::Nibble => "UnsignedByte",
         RawMagma::Byte => "UnsignedByte",
         RawMagma::Native => "Bytes",
-        RawMagma::Integer(_) => "Bytes",
+        RawMagma::Integer(w) => match w {
+            1 => "boolean",
+            2..=15 => "short",
+            16..=31 => "int",
+            32..=63 => "long",
+            _ => "Bytes",
+        },
         RawMagma::Any => unreachable!(),
     }
     .to_string()
 }
 
+/// Generate the Java 0-value of the given Magma
 fn magma_to_java_zero(m: Magma) -> String {
     match m.rm() {
         RawMagma::None => unreachable!(),
@@ -73,12 +81,69 @@ fn magma_to_java_zero(m: Magma) -> String {
         RawMagma::Nibble => "UnsignedByte.of(0)",
         RawMagma::Byte => "UnsignedByte.of(0)",
         RawMagma::Native => "Bytes.EMPTY",
-        RawMagma::Integer(_) => "Bytes.EMPTY",
+        RawMagma::Integer(w) => match w {
+            1 => "false",
+            2..=31 => "0",
+            32..=63 => "0L",
+            _ => "Bytes.EMPTY",
+        },
         RawMagma::Any => unreachable!(),
     }
     .to_string()
 }
 
+/// Return the chosen java byte width for the given Magma
+fn magma_to_java_bytewidth(m: Magma) -> i16 {
+    match m.rm() {
+        RawMagma::Binary | RawMagma::Nibble | RawMagma::Byte => 1,
+        RawMagma::Native => 32,
+        RawMagma::Integer(w) => match w {
+            1 => 1,
+            2..=15 => 2,
+            16..=31 => 4,
+            32..=63 => 8,
+            _ => 32,
+        },
+        _ => unreachable!(),
+    }
+}
+
+/// Generate the Java code to add an element in a trace register
+fn magma_to_java_putter(m: Magma, register: &str) -> String {
+    match m.rm() {
+        RawMagma::Binary => format!("{}.put((byte) (b ? 1 : 0));", &register),
+        RawMagma::Nibble | RawMagma::Byte => {
+            format!("{}.put(b.toByte());", &register)
+        }
+        RawMagma::Integer(w) => match w {
+            1 => format!("{}.put((byte) (b ? 1 : 0));", &register),
+            2..=15 => format!("{}.putShort(b);", &register),
+            16..=31 => format!("{}.putInt(b);", &register),
+            32..=63 => format!("{}.putLong(b);", &register),
+            _ => {
+                format!(
+                    r#"final byte[] bs = b.toArrayUnsafe();
+    for (int i = bs.length; i < 32; i++) {{
+      {0}.put((byte) 0);
+    }}
+    {0}.put(b.toArrayUnsafe());"#,
+                    &register,
+                )
+            }
+        },
+        RawMagma::Native => format!(
+            r#"final byte[] bs = b.toArrayUnsafe();
+    for (int i = bs.length; i < 32; i++) {{
+      {0}.put((byte) 0);
+    }}
+    {0}.put(b.toArrayUnsafe());"#,
+            &register,
+        ),
+        _ => unreachable!(),
+    }
+}
+
+/// Return the conventional method name to add an element to a trace register
 fn handle_to_appender(h: &Handle) -> String {
     match h.perspective.as_ref() {
         None => h.name.to_case(Case::Camel),
@@ -92,17 +157,6 @@ fn perspectivize_name(h: &Handle, p: &str) -> String {
         p.to_case(Case::Pascal),
         h.name.to_case(Case::Pascal)
     )
-}
-
-fn fill_file(file_path: PathBuf, contents: String) -> Result<(), Error> {
-    // Create a new file with the provided name
-    let mut file = File::create(file_path)?;
-
-    // Write the provided contents into the file
-    file.write_all(contents.as_bytes())?;
-
-    // Return Ok if everything was successful
-    Ok(())
 }
 
 pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -> Result<()> {
@@ -124,11 +178,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                 tupe: magma_to_java_type(r.magma),
                 id: i,
                 zero_value: magma_to_java_zero(r.magma),
-                bytes_width: match r.magma.rm() {
-                    RawMagma::Binary | RawMagma::Nibble | RawMagma::Byte => 1,
-                    RawMagma::Native | RawMagma::Integer(_) => 32,
-                    _ => unreachable!(),
-                },
+                bytes_width: magma_to_java_bytewidth(r.magma),
             }
         })
         .sorted_by_key(|f| f.java_name.clone())
@@ -148,21 +198,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                     tupe: magma_to_java_type(c.t),
                     register: register.clone(),
                     reg_id: r,
-                    putter: match c.t.rm() {
-                        RawMagma::Binary => format!("{}.put((byte) (b ? 1 : 0));", &register),
-                        RawMagma::Nibble | RawMagma::Byte => {
-                            format!("{}.put(b.toByte());", &register)
-                        }
-                        RawMagma::Native | RawMagma::Integer(_) => format!(
-                            r#"final byte[] bs = b.toArrayUnsafe();
-    for (int i = bs.length; i < 32; i++) {{
-      {0}.put((byte) 0);
-    }}
-    {0}.put(b.toArrayUnsafe());"#,
-                            &register,
-                        ),
-                        _ => unreachable!(),
-                    },
+                    putter: magma_to_java_putter(c.t, &register),
                 })
             } else {
                 None
@@ -177,9 +213,9 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
         .map(|c| BesuConstant {
             name: crate::utils::purify(&c.0.name),
             value: if c.1.bits() <= 31 {
-                c.1.to_string()
+                format!("0x{:x}", c.1)
             } else if c.1.bits() <= 63 {
-                format!("{}L", c.1)
+                format!("0x{:x}L", c.1)
             } else {
                 format!("new BigInteger(\"{}\")", c.1)
             },
@@ -218,8 +254,9 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
 
             let trace_columns_java_filepath = Path::new(f).join("Trace.java");
 
-            fill_file(trace_columns_java_filepath, trace_columns_render)
-                .expect("error creating trace columns java file for Besu");
+            File::create(&trace_columns_java_filepath)?
+                .write_all(trace_columns_render.as_bytes())
+                .with_context(|| anyhow!("writing to {:?}", trace_columns_java_filepath))?;
         }
         None => {
             println!("{trace_columns_render}");
