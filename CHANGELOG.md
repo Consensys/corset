@@ -2,11 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.6.0] - 2024-02-07
+
+### Bug Fixes
+
+- Column sizes
+- Better error messages when function arguments count is wrong
+- Text representation of binary magma
+- Type error message
+
+### Features
+
+- Expose constant as public
+- Use fitting types to avoid wasting space in trace files
+
+### Miscellaneous Tasks
+
+- Update dependencies
+
 ## [9.5.0] - 2024-01-24
 
 ### Bug Fixes
 
 - Homogeneize arrays and columns
+
+### Miscellaneous Tasks
+
+- Release corset version 9.5.0
 
 ## [9.4.0] - 2024-01-23
 
