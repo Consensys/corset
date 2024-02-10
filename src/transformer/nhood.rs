@@ -41,7 +41,7 @@ fn process_nhood(
     let _aux_id = cs.columns.insert_column_and_register(
         Column::builder()
             .handle(Handle::new(module, format!("AUX_{modulo}_HOOD")))
-            .kind(Kind::Phantom)
+            .kind(Kind::Computed)
             .t(Magma::native())
             .build(),
     )?;
@@ -61,7 +61,7 @@ fn process_nhood(
     let _intrld_aux_xs_id = cs.columns.insert_column_and_register(
         Column::builder()
             .handle(Handle::new(module, format!("INTRLD_AUX_{modulo}_HOOD")))
-            .kind(Kind::Phantom)
+            .kind(Kind::Computed)
             .build(),
     )?;
     cs.computations.insert(
@@ -75,7 +75,7 @@ fn process_nhood(
     let srt_intrld_aux_xs_id = cs.columns.insert_column_and_register(
         Column::builder()
             .handle(Handle::new(module, format!("SRT_INTRLD_AUX_{modulo}_HOOD")))
-            .kind(Kind::Phantom)
+            .kind(Kind::Computed)
             .build(),
     )?;
     cs.computations.insert(
@@ -97,7 +97,7 @@ fn process_nhood(
 
     let srt_intrld_aux_xs_node = Node::column()
         .handle(srt_intrld_aux_xs_id.clone())
-        .kind(Kind::Phantom)
+        .kind(Kind::Computed)
         .base(Base::Dec)
         .t(Magma::byte())
         .build();
@@ -115,7 +115,7 @@ fn process_nhood(
             Intrinsic::Sub.call(&[
                 Node::column()
                     .handle(srt_intrld_aux_xs_id.clone())
-                    .kind(Kind::Phantom)
+                    .kind(Kind::Computed)
                     .base(Base::Dec)
                     .build(),
                 Node::from_const(modulo.try_into().unwrap()),
@@ -149,7 +149,7 @@ pub fn validate_nhood(cs: &mut ConstraintSet) -> Result<()> {
 
     for (h, c) in cs.columns.iter() {
         // only atomic columns (i.e. filled from traces) are of interest here
-        if c.kind == Kind::Atomic && c.must_prove {
+        if c.kind == Kind::Commitment && c.must_prove {
             match c.t.rm() {
                 RawMagma::Binary => binary_columns.push(h.clone()),
                 _ => constrained_columns

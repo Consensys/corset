@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+use std::fmt::Display;
+
 use anyhow::*;
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +8,114 @@ use crate::errors::CompileError;
 
 use super::parser::{AstNode, Token};
 use super::{max_type, Expression, Magma, Node, RawMagma, Type};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Kind<T> {
+    /// an commitment is directly filled from trace files
+    Commitment,
+    /// a computed column will be filled later on from a Computation targetting
+    /// it
+    Computed,
+    /// a composite column is similar to a phantom column, but the expression
+    /// computing it is known at parsing time (i.e. defined in the Corset code)
+    Expression(T),
+}
+impl<T> Kind<T> {
+    pub fn to_nil(&self) -> Kind<()> {
+        match self {
+            Kind::Commitment => Kind::Commitment,
+            Kind::Computed => Kind::Computed,
+            Kind::Expression(_) => Kind::Expression(()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Domain<T> {
+    Range(T, T),
+    SteppedRange(T, T, T),
+    Set(Vec<T>),
+}
+impl<T> Domain<T> {
+    pub fn iter_nodes(&self) -> Box<dyn Iterator<Item = &T> + '_> {
+        match self {
+            Domain::Range(start, stop) => Box::new([start, stop].into_iter()),
+            Domain::SteppedRange(start, step, stop) => {
+                Box::new(Box::new([start, step, stop].into_iter()))
+            }
+            Domain::Set(is) => Box::new(is.iter()),
+        }
+    }
+}
+
+impl Domain<AstNode> {
+    pub fn concretize<F: Fn(&AstNode) -> Result<isize>>(&self, reduce: F) -> Result<Domain<isize>> {
+        match self {
+            Domain::Range(start, stop) => Ok(Domain::Range(reduce(start)?, reduce(stop)?)),
+            Domain::SteppedRange(start, step, stop) => Ok(Domain::SteppedRange(
+                reduce(start)?,
+                reduce(step)?,
+                reduce(stop)?,
+            )),
+            Domain::Set(is) => Ok(Domain::Set(
+                is.iter().map(reduce).collect::<Result<Vec<_>>>()?,
+            )),
+        }
+    }
+}
+
+impl<T: Display> Display for Domain<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Domain::Range(start, stop) => write!(f, "{}:{}", start, stop),
+            Domain::SteppedRange(start, step, stop) => write!(f, "{}:{}:{}", start, step, stop),
+            Domain::Set(is) => {
+                write!(f, "{{ ")?;
+                for i in is {
+                    write!(f, "{} ", i)?;
+                }
+                write!(f, "}}")
+            }
+        }
+    }
+}
+
+impl Domain<isize> {
+    pub fn iter(&self) -> Box<dyn Iterator<Item = isize> + '_> {
+        match self {
+            Domain::Range(start, stop) => Box::new(*start..=*stop),
+            Domain::SteppedRange(start, step, stop) => {
+                Box::new((*start..=*stop).step_by((*step).try_into().unwrap()))
+            }
+            Domain::Set(is) => Box::new(is.iter().cloned()),
+        }
+    }
+
+    pub fn contains(&self, x: isize) -> bool {
+        match self {
+            Domain::Range(start, stop) | Domain::SteppedRange(start, _, stop) => {
+                x >= *start && x <= *stop
+            }
+            Domain::Set(is) => is.contains(&x),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Domain::Range(start, stop) | Domain::SteppedRange(start, _, stop) => {
+                (stop - start + 1).try_into().unwrap()
+            }
+            Domain::Set(is) => is.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Domain::Range(start, stop) | Domain::SteppedRange(start, _, stop) => start >= stop,
+            Domain::Set(x) => x.is_empty(),
+        }
+    }
+}
 
 /// A form is an applicable that operates directly on the AST
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

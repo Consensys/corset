@@ -879,7 +879,7 @@ impl Column {
             padding_value: padding_value.map(|v| Value::from(v as usize)),
             used: used.unwrap_or(true),
             must_prove: must_prove.unwrap_or(false),
-            kind: kind.unwrap_or(Kind::Phantom),
+            kind: kind.unwrap_or(Kind::Computed),
             t: t.unwrap_or(Magma::native()),
             intrinsic_size_factor,
             base: base.unwrap_or(Base::Dec),

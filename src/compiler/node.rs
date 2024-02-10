@@ -1,5 +1,4 @@
 use crate::column::{ColumnID, Value};
-use crate::compiler::Domain;
 use anyhow::*;
 use cached::Cached;
 use num_bigint::BigInt;
@@ -16,7 +15,7 @@ use crate::compiler::codetyper::Tty;
 use crate::pretty::{Base, Pretty, COLORS};
 use crate::structs::Handle;
 
-use super::{ConstraintSet, EvalSettings, Intrinsic, Kind, Magma, Type};
+use super::{ConstraintSet, Domain, EvalSettings, Intrinsic, Kind, Magma, Type};
 
 #[derive(Clone, Serialize, Deserialize, Debug, Eq)]
 pub struct ColumnRef {
@@ -167,14 +166,14 @@ pub enum Expression {
     Column {
         handle: ColumnRef,
         shift: i16,
-        kind: Kind<Node>,
+        kind: Kind<Box<Node>>,
         must_prove: bool,
         padding_value: Option<i64>,
         base: Base,
     },
     ArrayColumn {
         handle: ColumnRef,
-        domain: Domain,
+        domain: Domain<isize>,
         base: Base,
     },
     ExoColumn {
@@ -248,7 +247,7 @@ impl Node {
         handle: ColumnRef,
         shift: Option<i16>,
         base: Option<Base>,
-        kind: Option<Kind<Node>>,
+        kind: Option<Kind<Box<Node>>>,
         padding_value: Option<i64>,
         must_prove: Option<bool>,
         t: Option<Magma>,
@@ -270,7 +269,7 @@ impl Node {
                 _e: Expression::Column {
                     handle: handle.clone(),
                     shift: shift.unwrap_or(0),
-                    kind: kind.unwrap_or(Kind::Phantom),
+                    kind: kind.unwrap_or(Kind::Computed),
                     must_prove: must_prove.unwrap_or(false),
                     padding_value,
                     base: base.unwrap_or_else(|| t.unwrap_or(Magma::native()).into()),
@@ -283,7 +282,7 @@ impl Node {
     #[builder(entry = "array_column", exit = "build", visibility = "pub")]
     fn new_array_column(
         handle: ColumnRef,
-        domain: Domain,
+        domain: Domain<isize>,
         base: Option<Base>,
         t: Option<Magma>,
     ) -> Node {

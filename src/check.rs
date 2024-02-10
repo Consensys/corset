@@ -278,7 +278,7 @@ fn check_inrange(expr: &Node, cs: &ConstraintSet, max: &Value) -> Result<()> {
 fn check_constraint(
     cs: &ConstraintSet,
     expr: &Node,
-    domain: &Option<Domain>,
+    domain: &Option<Domain<isize>>,
     name: &Handle,
     settings: DebugSettings,
 ) -> Result<()> {

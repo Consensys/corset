@@ -45,7 +45,7 @@ impl Node {
                                 arg.to_owned(),
                                 Node::column()
                                     .handle(inverted_handle)
-                                    .kind(Kind::Phantom)
+                                    .kind(Kind::Computed)
                                     .t(self.t().m().invert())
                                     .build(),
                             ])
@@ -128,7 +128,7 @@ impl ConstraintSet {
                 let inverted_id = self.columns.insert_column_and_register(
                     Column::builder()
                         .handle(inverted_handle.clone())
-                        .kind(Kind::Computed(Box::new(())))
+                        .kind(Kind::Computed)
                         .build(),
                 )?;
 

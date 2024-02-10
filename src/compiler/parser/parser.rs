@@ -1,168 +1,21 @@
-use crate::compiler::{Conditioning, RawMagma};
+use crate::compiler::{Conditioning, Magma, RawMagma, Type};
 use crate::{errors, pretty::Base};
 use anyhow::{anyhow, bail, Context, Result};
 use itertools::Itertools;
 use num_bigint::BigInt;
+use num_traits::One;
 use owo_colors::OwoColorize;
 use pest::{iterators::Pair, Parser};
-use serde::{Deserialize, Serialize};
 use std::cell::OnceCell;
 use std::fmt::Debug;
+use std::str::FromStr;
 use std::{fmt, vec};
 
-use super::{Magma, Type};
+use super::{Ast, AstNode, Domain, Kind, Token};
 
 #[derive(Parser)]
 #[grammar = "corset.pest"]
 struct CorsetParser;
-
-#[derive(Debug)]
-pub struct Ast {
-    pub exprs: Vec<AstNode>,
-}
-
-type LinCol = (usize, usize);
-#[derive(Clone)]
-pub struct AstNode {
-    /// the token in which this node devolves
-    pub class: Token,
-    /// the piece of code that produced this node
-    pub src: String,
-    /// position in the source file of the code of this node
-    pub lc: LinCol,
-}
-impl AstNode {
-    pub fn depth(&self) -> usize {
-        self.class.depth()
-    }
-    pub fn as_i64(&self) -> Result<i64> {
-        if let Token::Value(r) = &self.class {
-            r.try_into().map_err(|e| anyhow!("{:?}", e))
-        } else {
-            bail!("expected i64, found `{:?}`", self)
-        }
-    }
-    pub fn as_u64(&self) -> Result<u64> {
-        if let Token::Value(r) = &self.class {
-            r.try_into().map_err(|e| anyhow!("{:?}", e))
-        } else {
-            bail!("expected usize, found `{:?}`", self)
-        }
-    }
-    pub fn as_range(&self) -> Result<&Domain> {
-        if let Token::Domain(r) = &self.class {
-            Ok(r)
-        } else {
-            bail!("expected range, found `{:?}`", self)
-        }
-    }
-    pub fn as_symbol(&self) -> Result<&str> {
-        if let Token::Symbol(x) = &self.class {
-            Ok(x)
-        } else {
-            bail!("expected symbol, found `{:?}`", self)
-        }
-    }
-    pub fn as_list(&self) -> Result<&[AstNode]> {
-        if let Token::List(xs) = &self.class {
-            Ok(xs)
-        } else {
-            bail!("expected list, found `{:?}`", self)
-        }
-    }
-    /// A formatting function optimizing for debug informations
-    pub fn debug_info(&self) -> Option<String> {
-        self.class.debug_info()
-    }
-
-    pub fn is_symbol(&self) -> bool {
-        matches!(self.class, Token::Symbol(_))
-    }
-    pub fn is_comment(&self) -> bool {
-        matches!(self.class, Token::BlockComment(_) | Token::InlineComment(_))
-    }
-    pub fn is_block_comment(&self) -> bool {
-        matches!(self.class, Token::BlockComment(_))
-    }
-    pub fn is_inline_comment(&self) -> bool {
-        matches!(self.class, Token::InlineComment(_))
-    }
-}
-impl Debug for AstNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Debug::fmt(&self.class, f)
-    }
-}
-impl std::fmt::Display for AstNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Debug::fmt(&self.class, f)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Domain {
-    Range(isize, isize),
-    SteppedRange(isize, isize, isize),
-    Set(Vec<isize>),
-}
-impl Domain {
-    pub fn iter(&self) -> Box<dyn Iterator<Item = isize> + '_> {
-        match self {
-            Domain::Range(start, stop) => Box::new(*start..=*stop),
-            Domain::SteppedRange(start, step, stop) => {
-                Box::new((*start..=*stop).step_by((*step).try_into().unwrap()))
-            }
-            Domain::Set(is) => Box::new(is.iter().cloned()),
-        }
-    }
-
-    pub fn contains(&self, x: isize) -> bool {
-        match self {
-            Domain::Range(start, stop) | Domain::SteppedRange(start, _, stop) => {
-                x >= *start && x <= *stop
-            }
-            Domain::Set(is) => is.contains(&x),
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        match self {
-            Domain::Range(start, stop) | Domain::SteppedRange(start, _, stop) => {
-                (stop - start + 1).try_into().unwrap()
-            }
-            Domain::Set(is) => is.len(),
-        }
-    }
-}
-impl std::fmt::Display for Domain {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Domain::Range(start, stop) => write!(f, "{}:{}", start, stop),
-            Domain::SteppedRange(start, step, stop) => write!(f, "{}:{}:{}", start, step, stop),
-            Domain::Set(is) => write!(f, "{:?}", is),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Kind<T> {
-    /// an atomic column is directly filled from traces and has a padding value
-    Atomic,
-    /// a phantom column is present, but will be filled later on
-    Phantom,
-    /// a composite column is similar to a phantom column, but the expression
-    /// computing it is known
-    Computed(Box<T>),
-}
-impl<T> Kind<T> {
-    pub fn to_nil(&self) -> Kind<()> {
-        match self {
-            Kind::Atomic => Kind::Atomic,
-            Kind::Phantom => Kind::Phantom,
-            Kind::Computed(_) => Kind::Computed(Box::new(())),
-        }
-    }
-}
 
 #[allow(dead_code)]
 #[derive(PartialEq, Eq, Clone)]
@@ -188,298 +41,6 @@ pub struct DisplayableColumn {
     pub name: String,
     /// which numeric base should be used to display column values; this is a purely aesthetic setting
     pub base: Base,
-}
-
-#[derive(Clone)]
-pub enum Token {
-    /// an immediate value; can be “arbitrarily” large
-    Value(BigInt),
-    /// a symbol referencing another element of the tree
-    Symbol(String),
-    /// a comment
-    BlockComment(String),
-    /// a comment
-    InlineComment(String),
-    /// obtained by the syntax `[symbol index]` in the lisp
-    IndexedSymbol {
-        name: String,
-        index: Box<AstNode>,
-    },
-    /// a keyword (typically a def*) that will be interpreted later on
-    Keyword(String),
-    /// a list of nodes
-    List(Vec<AstNode>),
-    /// a range; typically used in discrete constraints declaration and loops
-    Domain(Domain),
-
-    /// definition of a module; this will derive a symbol table
-    DefModule(String),
-    /// a list of constant definition: (name, value)
-    DefConsts(Vec<(String, Box<AstNode>)>),
-    /// a list of columns declaration, normally only DefColumn
-    DefColumns(Vec<AstNode>),
-    /// a list of columns declaration, normally only DefColumn, only enabled when trigger is non-zero
-    DefPerspective {
-        name: String,
-        trigger: Box<AstNode>,
-        columns: Vec<AstNode>,
-    },
-    /// defines an atomic column
-    DefColumn {
-        /// name of the column; unique in its module
-        name: String,
-        /// type of the column
-        t: Type,
-        /// how the values of the column are filled
-        kind: Kind<AstNode>,
-        /// the value to pad the column with; defaults to 0 if None
-        padding_value: Option<i64>,
-        /// if set, generate constraint to prove the column type
-        must_prove: bool,
-        /// which numeric base should be used to display column values; this is a purely aesthetic setting
-        base: Base,
-    },
-    /// defines an array
-    DefArrayColumn {
-        /// name of the array; unique in its module
-        name: String,
-        /// where is the array defined
-        domain: Domain,
-        /// type of the array
-        t: Type,
-        /// the value to pad the column with; defaults to 0 if None
-        padding_value: Option<i64>,
-        /// if set, generate constraint to prove the column type
-        must_prove: bool,
-        /// which numeric base should be used to display column values; this is a purely aesthetic setting
-        base: Base,
-    },
-    /// definition of a function
-    Defun {
-        /// name of the function; must be unique in its module
-        name: String,
-        /// the arguments are free strings, that will be resolved at evaluation
-        args: Vec<String>,
-        /// the magmas of the arguments
-        in_types: Vec<Type>,
-        /// the output magma
-        out_type: Option<Type>,
-        /// the body is any reasonable expression (should it be enforced?)
-        body: Box<AstNode>,
-        /// if set, do not warn on type override
-        nowarn: bool,
-    },
-    Defpurefun {
-        name: String,
-        args: Vec<String>,
-        in_types: Vec<Type>,
-        out_type: Option<Type>,
-        body: Box<AstNode>,
-        nowarn: bool,
-    },
-    /// a list of aliases declaration, normally only DefAlias -- FIXME: should probably be removed
-    DefAliases(Vec<AstNode>),
-    DefAlias(String, String),
-    /// Declaration of a function alias -- FIXME: should probably be removed
-    DefunAlias(String, String),
-
-    /// Declaration of a constraint;
-    DefConstraint {
-        /// the given name of the constraint -- TODO enforce uniqueness
-        name: String,
-        /// if the domain of the constraint is `None`, it is supposed to hold everywhere
-        domain: Option<Domain>,
-        /// an expression that enables the constraint only when it is non zero
-        guard: Option<Box<AstNode>>,
-        /// if the constraint is set in a perspective, it is automatically
-        /// guarded and additional rules are applied to symbol resolution
-        perspective: Option<String>,
-        /// this expression has to reduce to 0 for the constraint to be satisfied
-        body: Box<AstNode>,
-    },
-    /// declaration of a permutation constraint between two sets of columns
-    DefPermutation {
-        from: Vec<AstNode>,
-        to: Vec<DisplayableColumn>,
-        signs: Vec<bool>,
-    },
-    DefInterleaving {
-        /// new column, which will be filled by the interleaving of the source columns
-        target: DisplayableColumn,
-        /// the source columns to be interleaved
-        froms: Vec<AstNode>, // either Token::Symbol or Token::IndexedSymbol
-    },
-    /// declaration of a lookup constraint between two sets of columns
-    DefLookup {
-        name: String,
-        including: Vec<AstNode>,
-        included: Vec<AstNode>,
-    },
-    /// this constraint ensures that exp remains lesser than max
-    DefInrange(Box<AstNode>, u64),
-}
-const LIST_DISPLAY_THRESHOLD: usize = 4;
-impl Token {
-    pub fn depth(&self) -> usize {
-        match self {
-            Token::List(xs) => {
-                (if xs.len() > 1 { 1 } else { 0 }) + xs.iter().map(|x| x.depth()).max().unwrap_or(0)
-            }
-            _ => 0,
-        }
-    }
-
-    pub fn debug_info(&self) -> Option<String> {
-        match self {
-            Token::Value(x) => Some(format!("{}", x)),
-            Token::Symbol(ref name) => Some(name.to_string()),
-            Token::Keyword(ref name) => Some(name.to_string()),
-            Token::List(ref args) => {
-                if let Some(verb) = args.get(0) {
-                    if let Ok(verb) = verb.as_symbol() {
-                        match verb {
-                            "if-zero" | "if-not-zero" => {
-                                Some(format!("({})", Token::format_list_debug(args, 2)))
-                            }
-                            "if-eq" | "if-eq-else" => {
-                                Some(format!("({})", Token::format_list_debug(args, 3)))
-                            }
-                            _ => Some(format!(
-                                "({})",
-                                Token::format_list_debug(args, LIST_DISPLAY_THRESHOLD)
-                            )),
-                        }
-                    } else {
-                        Some(format!(
-                            "({})",
-                            Token::format_list_debug(args, LIST_DISPLAY_THRESHOLD)
-                        ))
-                    }
-                } else {
-                    Some(format!(
-                        "({})",
-                        Token::format_list_debug(args, LIST_DISPLAY_THRESHOLD)
-                    ))
-                }
-            }
-            Token::Domain(ref args) => Some(format!("{:?}", args)),
-            _ => None,
-        }
-    }
-
-    fn format_list(cs: &[AstNode], list_cut: usize) -> String {
-        if cs.len() <= list_cut {
-            cs.iter()
-                .map(|c| format!("{:?}", c))
-                .collect::<Vec<_>>()
-                .join(" ")
-        } else {
-            cs.iter()
-                .take(list_cut)
-                .map(|c| format!("{:?}", c))
-                .collect::<Vec<_>>()
-                .join(" ")
-                + " [...]"
-        }
-    }
-
-    fn format_list_debug(cs: &[AstNode], list_cut: usize) -> String {
-        if cs.len() <= list_cut {
-            cs.iter()
-                .filter_map(|c| c.debug_info())
-                .collect::<Vec<_>>()
-                .join(" ")
-        } else {
-            cs.iter()
-                .take(list_cut)
-                .filter_map(|c| c.debug_info())
-                .collect::<Vec<_>>()
-                .join(" ")
-                + " [...]"
-        }
-    }
-}
-impl Debug for Token {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Token::Value(x) => write!(f, "{}", x),
-            Token::Symbol(ref name) => write!(f, "{}", name),
-            Token::IndexedSymbol {
-                ref name,
-                ref index,
-            } => write!(f, "[{} {}]", name, index),
-            Token::Keyword(ref name) => write!(f, "{}", name),
-            Token::List(ref args) => {
-                write!(f, "({})", Token::format_list(args, LIST_DISPLAY_THRESHOLD))
-            }
-            Token::Domain(ref args) => write!(f, "{:?}", args),
-
-            Token::DefModule(name) => write!(f, "MODULE {}", name),
-            Token::DefConsts(v) => {
-                write!(
-                    f,
-                    "{}",
-                    v.iter().fold(String::new(), |mut ax, c| {
-                        ax.push_str(&format!("{}:CONST({:?})", c.0, c.1));
-                        ax
-                    })
-                )
-            }
-            Token::DefColumns(cols) => write!(f, "DECLARATIONS {:?}", cols),
-            Token::DefColumn { name, t, kind, .. } => {
-                write!(f, "DECLARATION {}:{:?}{:?}", name, t, kind)
-            }
-            Token::DefPermutation { from, to, .. } => {
-                write!(f, "({:?}):PERMUTATION({:?})", to, from)
-            }
-            Token::DefInrange(exp, max) => write!(f, "{:?}E{}", exp, max),
-            Token::DefArrayColumn {
-                name,
-                domain: range,
-                t,
-                ..
-            } => {
-                write!(f, "DECLARATION {}{:?}{{{:?}}}", name, range, t)
-            }
-            Token::DefConstraint { name, .. } => write!(f, "{:?}:CONSTRAINT", name),
-            Token::Defun {
-                name,
-                args,
-                body: content,
-                ..
-            } => {
-                write!(f, "{}:({:?}) -> {:?}", name, args, content)
-            }
-            Token::Defpurefun {
-                name, args, body, ..
-            } => {
-                write!(f, "{}:({:?}) -> {:?}", name, args, body)
-            }
-            Token::DefAliases(cols) => write!(f, "ALIASES {:?}", cols),
-            Token::DefAlias(from, to) => write!(f, "{} -> {}", from, to),
-            Token::DefunAlias(from, to) => write!(f, "{} -> {}", from, to),
-            Token::DefLookup {
-                name,
-                including,
-                included,
-            } => {
-                write!(f, "{}: {:?} ⊂ {:?}", name, including, included)
-            }
-            Token::DefPerspective {
-                name,
-                trigger,
-                columns,
-            } => write!(f, "SET {}/{:?} {:?}", name, trigger, columns),
-            Token::DefInterleaving {
-                target,
-                froms: sources,
-                ..
-            } => {
-                write!(f, "Interleaving {} by {:?}", target.name, sources)
-            }
-            Token::BlockComment(s) | Token::InlineComment(s) => write!(f, "{}", s),
-        }
-    }
 }
 
 fn parse_defconstraint<I: Iterator<Item = Result<AstNode>>>(
@@ -625,7 +186,7 @@ struct ColumnAttributes {
     name: String,
     t: OnceCell<Magma>,
     must_prove: bool,
-    range: OnceCell<Domain>,
+    range: OnceCell<Box<Domain<AstNode>>>,
     padding_value: OnceCell<i64>,
     base: OnceCell<Base>,
     computation: Option<AstNode>,
@@ -756,13 +317,13 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
             ColumnParser::Array => {
                 attributes
                     .range
-                    .set(x.as_range()?.to_owned())
+                    .set(Box::new(x.as_domain()?))
                     .map_err(|_| {
                         anyhow!(
                             "trying to redefine column {} of type {:?} as {:?}",
                             attributes.name,
                             attributes.range.get().unwrap(),
-                            x.as_range().unwrap()
+                            x.as_domain().unwrap()
                         )
                     })?;
                 ColumnParser::Begin
@@ -851,8 +412,8 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                             ),
                             kind: column_attributes
                                 .computation
-                                .map(|c| Kind::Computed(Box::new(c)))
-                                .unwrap_or(Kind::Atomic),
+                                .map(|c| Kind::Expression(Box::new(c)))
+                                .unwrap_or(Kind::Commitment),
                             padding_value: column_attributes.padding_value.get().cloned(),
                             must_prove: column_attributes.must_prove,
                             base,
@@ -1251,36 +812,34 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
         }
         Rule::interval => {
             let mut pairs = pair.into_inner();
-            let x1 = pairs
-                .next()
-                .map(|x| x.as_str())
-                .and_then(|x| x.parse::<isize>().ok());
-            let x2 = pairs
-                .next()
-                .map(|x| x.as_str())
-                .and_then(|x| x.parse::<isize>().ok());
-            let x3 = pairs
-                .next()
-                .map(|x| x.as_str())
-                .and_then(|x| x.parse::<isize>().ok());
+            let x1 = pairs.next().map(rec_parse).transpose()?;
+            let x2 = pairs.next().map(rec_parse).transpose()?;
+            let x3 = pairs.next().map(rec_parse).transpose()?;
             let range = match (x1, x2, x3) {
-                (Some(length), None, None) => Domain::Range(1, length),
+                (Some(length), None, None) => Domain::Range(
+                    AstNode {
+                        class: Token::Value(BigInt::one()),
+                        src: length.src.clone(),
+                        lc,
+                    },
+                    length,
+                ),
                 (Some(start), Some(stop), None) => Domain::Range(start, stop),
                 (Some(start), Some(stop), Some(step)) => Domain::SteppedRange(start, step, stop),
                 x => unimplemented!("{} -> {:?}", src, x),
             };
             Ok(AstNode {
-                class: Token::Domain(range),
+                class: Token::Domain(Box::new(range)),
                 lc,
                 src,
             })
         }
         Rule::immediate_range => Ok(AstNode {
-            class: Token::Domain(Domain::Set(
+            class: Token::Domain(Box::new(Domain::Set(
                 pair.into_inner()
-                    .map(|x| x.as_str().parse::<isize>().unwrap())
-                    .collect(),
-            )),
+                    .map(rec_parse)
+                    .collect::<Result<Vec<_>>>()?,
+            ))),
             lc,
             src,
         }),
@@ -1302,6 +861,11 @@ fn rec_parse(pair: Pair<Rule>) -> Result<AstNode> {
                 src,
             })
         }
+        Rule::natural => Ok(AstNode {
+            class: Token::Value(BigInt::from_str(pair.as_str()).unwrap()),
+            src: src,
+            lc: lc,
+        }),
         x => {
             unimplemented!("{:?}", x)
         }

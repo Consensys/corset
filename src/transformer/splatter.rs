@@ -73,7 +73,7 @@ impl Node {
             // TODO: add magma
             Column::builder()
                 .handle(target.clone())
-                .kind(Kind::Phantom)
+                .kind(Kind::Computed)
                 .base(Base::Hex)
                 .build(),
             Computation::ExoConstant {
@@ -82,7 +82,7 @@ impl Node {
             },
         ));
 
-        *self = Node::column().handle(target).kind(Kind::Phantom).build();
+        *self = Node::column().handle(target).kind(Kind::Computed).build();
     }
 
     fn do_splatter(
@@ -126,7 +126,7 @@ impl Node {
                                 .handle(new_handle)
                                 .t(new_magma)
                                 .base(Base::Hex)
-                                .kind(Kind::Phantom)
+                                .kind(Kind::Computed)
                                 .build();
                         }
                         Intrinsic::Inv => {}
@@ -196,7 +196,7 @@ impl ConstraintSet {
                 Column::builder()
                     .t(Magma::binary())
                     .handle(Handle::new(ADDER_MODULE, "done"))
-                    .kind(Kind::Phantom)
+                    .kind(Kind::Computed)
                     .build(),
             )
             .unwrap();
@@ -233,7 +233,7 @@ impl ConstraintSet {
                 Column::builder()
                     .t(Magma::binary())
                     .handle(Handle::new(MULER_MODULE, "done"))
-                    .kind(Kind::Phantom)
+                    .kind(Kind::Computed)
                     .build(),
             )
             .unwrap();
@@ -277,7 +277,7 @@ impl ConstraintSet {
                             .handle(new_handle.to_owned())
                             .t(new_magma)
                             .base(Base::Hex)
-                            .kind(Kind::Computed(Box::new(())))
+                            .kind(Kind::Computed)
                             .build(),
                     )
                     .unwrap();
@@ -301,30 +301,33 @@ impl ConstraintSet {
                         including: vec![
                             Node::column()
                                 .handle(Handle::new(module, "op"))
-                                .kind(Kind::Phantom)
+                                .kind(Kind::Computed)
                                 .build(),
                             Node::column()
                                 .handle(Handle::new(module, "arg-1"))
-                                .kind(Kind::Phantom)
+                                .kind(Kind::Computed)
                                 .build(),
                             Node::column()
                                 .handle(Handle::new(module, "arg-2"))
-                                .kind(Kind::Phantom)
+                                .kind(Kind::Computed)
                                 .build(),
                             Node::column()
                                 .handle(Handle::new(module, "result"))
-                                .kind(Kind::Phantom)
+                                .kind(Kind::Computed)
                                 .build(),
                             Node::column()
                                 .handle(Handle::new(module, "done"))
-                                .kind(Kind::Phantom)
+                                .kind(Kind::Computed)
                                 .build(),
                         ],
                         included: vec![
                             Node::from_const(if func == ExoOperation::Add { 1 } else { 0 }),
                             args.0.clone(),
                             args.1.clone(),
-                            Node::column().handle(new_handle).kind(Kind::Atomic).build(),
+                            Node::column()
+                                .handle(new_handle)
+                                .kind(Kind::Commitment)
+                                .build(),
                             Node::from_const(1),
                         ],
                     })
@@ -336,25 +339,28 @@ impl ConstraintSet {
                         including: vec![
                             Node::column()
                                 .handle(Handle::new(module, "arg-1"))
-                                .kind(Kind::Phantom)
+                                .kind(Kind::Computed)
                                 .build(),
                             Node::column()
                                 .handle(Handle::new(module, "arg-2"))
-                                .kind(Kind::Phantom)
+                                .kind(Kind::Computed)
                                 .build(),
                             Node::column()
                                 .handle(Handle::new(module, "result"))
-                                .kind(Kind::Phantom)
+                                .kind(Kind::Computed)
                                 .build(),
                             Node::column()
                                 .handle(Handle::new(module, "done"))
-                                .kind(Kind::Phantom)
+                                .kind(Kind::Computed)
                                 .build(),
                         ],
                         included: vec![
                             args.0.clone(),
                             args.1.clone(),
-                            Node::column().handle(new_handle).kind(Kind::Atomic).build(),
+                            Node::column()
+                                .handle(new_handle)
+                                .kind(Kind::Commitment)
+                                .build(),
                             Node::from_const(1),
                         ],
                     })

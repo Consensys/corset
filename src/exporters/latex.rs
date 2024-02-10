@@ -1,6 +1,11 @@
 #![allow(dead_code)] // TODO
-use crate::compiler::{Ast, AstNode, Token, Type};
-use crate::structs::Handle;
+use crate::{
+    compiler::{
+        parser::{Ast, AstNode, Token},
+        Type,
+    },
+    structs::Handle,
+};
 use anyhow::*;
 use convert_case::{Case, Casing};
 use handlebars::Handlebars;
@@ -265,16 +270,17 @@ fn render_node(n: &AstNode, state: State) -> Result<String> {
             if domain.is_none() {
                 "".to_owned()
             } else {
-                format!("({})",
-                        domain
-                        .as_ref()
-                        .map(|d| d
-                             .iter()
-                             .map(|x| x.to_string())
-                             .collect::<Vec<_>>()
-                             .join(", "))
-                        .unwrap_or_else(|| "".into())
-                )
+                // format!("({})",
+                //         domain
+                //         .as_ref()
+                //         .map(|d| d
+                //              .iter()
+                //              .map(|x| x.to_string())
+                //              .collect::<Vec<_>>()
+                //              .join(", "))
+                //         .unwrap_or_else(|| "".into())
+                // )
+                todo!()
             },
             render_node(body, state.in_maths(false))?,
         )),

@@ -2,7 +2,8 @@
 #[macro_use]
 extern crate pest_derive;
 use anyhow::*;
-use compiler::{Ast, ConstraintSet};
+use compiler::parser::Ast;
+use compiler::ConstraintSet;
 use either::Either;
 use log::*;
 use owo_colors::OwoColorize;
@@ -511,6 +512,12 @@ impl ConstraintSetBuilder {
         Ok(sources)
     }
 
+    /// Add a source to the sources to compile:
+    ///   - if it's a filename, add its content;
+    ///   - if it's a path, tries to parse it following the standardized
+    ///     hierarchy;
+    ///   - if it's `-`, plug in STDIN;
+    ///   - otherwise, just include it as an immediate expression.
     fn add_source(&mut self, src: &str) -> Result<()> {
         if let Either::Left(ref mut sources) = self.source {
             let as_path = std::path::Path::new(src);
@@ -535,6 +542,8 @@ impl ConstraintSetBuilder {
         }
     }
 
+    /// Pre-process the sources before compilation:
+    ///   - insert the stdlib if it is enabled
     fn prepare_sources(&self, sources: &[(String, String)]) -> Vec<(String, String)> {
         let mut sources = sources.to_vec();
         if !self.no_stdlib {
@@ -546,16 +555,20 @@ impl ConstraintSetBuilder {
         sources
     }
 
+    /// Builds a simple AST that will be used by the formatter
     fn to_simple_ast(&self) -> Result<Vec<(String, Ast)>> {
         match self.source.as_ref() {
-            Either::Left(sources) => compiler::parse_simple_ast(&self.prepare_sources(sources)),
+            Either::Left(sources) => {
+                compiler::parser::parse_simple_ast(&self.prepare_sources(sources))
+            }
             Either::Right(_) => bail!("unable to retrieve AST from compiled CponstraintSet"),
         }
     }
 
+    /// Builds a standard AST that will be used for compilation
     fn to_ast(&self) -> Result<Vec<(String, Ast)>> {
         match self.source.as_ref() {
-            Either::Left(sources) => compiler::parse_ast(&self.prepare_sources(sources)),
+            Either::Left(sources) => compiler::parser::parse_ast(&self.prepare_sources(sources)),
             Either::Right(_) => bail!("unable to retrieve AST from compiled CponstraintSet"),
         }
     }

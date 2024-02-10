@@ -17,10 +17,10 @@ use std::io::Write;
 use std::sync::atomic::AtomicUsize;
 
 use super::node::ColumnRef;
+use super::parser::{Ast, AstNode, Token};
 use super::tables::{ComputationTable, Scope};
 use super::{common::*, CompileSettings, Conditioning, Expression, Magma, Node, Type};
 use crate::column::{Column, ColumnSet, Computation, RegisterID, Value, ValueBacking};
-use crate::compiler::parser::*;
 use crate::dag::ComputationDag;
 use crate::errors::{self, CompileError, RuntimeError};
 use crate::pretty::Pretty;
@@ -42,7 +42,7 @@ fn uniquify(n: String) -> String {
 pub enum Constraint {
     Vanishes {
         handle: Handle,
-        domain: Option<Domain>,
+        domain: Option<Domain<isize>>,
         expr: Box<Node>,
     },
     Lookup {
@@ -400,7 +400,7 @@ impl ConstraintSet {
             .iter()
             .sorted_by(|a, b| a.1.handle.cmp(&b.1.handle))
         {
-            if col.kind == Kind::Atomic {
+            if col.kind == Kind::Commitment {
                 match &col.handle.perspective {
                     Some(name) => {
                         let module = col.handle.module.to_string();
@@ -552,14 +552,14 @@ impl ConstraintSet {
                                     .columns
                                     .insert_column_and_register(
                                         Column::builder()
-                                            .kind(Kind::Phantom)
+                                            .kind(Kind::Computed)
                                             .handle(srt_guard_col_handle)
                                             .build(),
                                     )
                                     .unwrap();
                                 let srt_guard = Node::column()
                                     .handle(srt_guard_id.clone())
-                                    .kind(Kind::Phantom)
+                                    .kind(Kind::Computed)
                                     .build();
                                 let srt_guard_name = format!("{}-intrld", perspective);
                                 self.computations.insert(
@@ -596,14 +596,14 @@ impl ConstraintSet {
                                         .columns
                                         .insert_column_and_register(
                                             Column::builder()
-                                                .kind(Kind::Phantom)
+                                                .kind(Kind::Computed)
                                                 .handle(srt_guard_col_handle)
                                                 .build(),
                                         )
                                         .unwrap();
                                     let srt_guard = Node::column()
                                         .handle(srt_guard_id.clone())
-                                        .kind(Kind::Phantom)
+                                        .kind(Kind::Computed)
                                         .build();
                                     let srt_guard_name = format!("{}-srt", perspective);
 
@@ -1227,6 +1227,13 @@ fn apply_form(
             if let (Token::Symbol(i_name), Token::Domain(is), body) =
                 (&args[0].class, &args[1].class, &args[2])
             {
+                let is = is.concretize(|n| {
+                    crate::compiler::generator::reduce(n, &mut ctx.clone(), settings)
+                        .transpose()
+                        .unwrap()
+                        .and_then(|r| r.pure_eval())
+                        .and_then(|bi| bi.to_isize().ok_or_else(|| anyhow!("{} is not an i64", bi)))
+                })?;
                 let mut l = vec![];
                 let mut t = Type::INFIMUM;
                 for i in is.iter() {
@@ -1518,7 +1525,8 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                 .with_context(|| make_ast_error(e))?,
         )),
         Token::IndexedSymbol { name, index } => {
-            if let Expression::ArrayColumn { handle, .. } = ctx.resolve_symbol(name)?.e() {
+            let symbol = ctx.resolve_symbol(name)?;
+            if let Expression::ArrayColumn { handle, .. } = symbol.e() {
                 let i = reduce(index, ctx, settings)?
                     .and_then(|n| n.pure_eval().ok())
                     .and_then(|b| b.to_usize())
@@ -1534,7 +1542,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                             Ok(Some(
                                 Node::column()
                                     .handle(handle.as_handle().ith(i))
-                                    .kind(Kind::Atomic)
+                                    .kind(Kind::Commitment)
                                     .base(*base)
                                     .t(array.t().m())
                                     .build(),
@@ -1546,7 +1554,11 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                     _ => unimplemented!(),
                 }
             } else {
-                unreachable!()
+                bail!(anyhow!(
+                    "{} of type {} is not indexable",
+                    name.red().bold(),
+                    symbol.t()
+                ))
             }
         }
         Token::List(args) => {
@@ -1574,11 +1586,11 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
             kind: k,
             ..
         } => match k {
-            Kind::Computed(e) => {
+            Kind::Expression(e) => {
                 let n = reduce(e, ctx, settings)?.unwrap();
                 ctx.edit_symbol(name, &|x| {
                     if let Expression::Column { kind, .. } = x {
-                        *kind = Kind::Computed(Box::new(n.clone()))
+                        *kind = Kind::Expression(Box::new(n.clone()))
                     }
                 })?;
                 Ok(None)
@@ -1654,7 +1666,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
     .with_context(|| make_ast_error(e))
 }
 
-fn reduce_toplevel(
+pub(crate) fn reduce_toplevel(
     e: &AstNode,
     ctx: &mut Scope,
     settings: &CompileSettings,
@@ -1720,9 +1732,23 @@ fn reduce_toplevel(
                         body.t().red().bold()
                     )
                 }
+                let domain = if let Some(d) = domain {
+                    Some(d.concretize(|n| {
+                        crate::compiler::generator::reduce(n, &mut ctx.clone(), settings)
+                            .transpose()
+                            .unwrap()
+                            .and_then(|r| r.pure_eval())
+                            .and_then(|bi| {
+                                bi.to_isize().ok_or_else(|| anyhow!("{} is not an i64", bi))
+                            })
+                    })?)
+                } else {
+                    None
+                };
+
                 Ok(Some(Constraint::Vanishes {
                     handle,
-                    domain: domain.to_owned(),
+                    domain,
                     expr: Box::new(body),
                 }))
             }
@@ -1871,25 +1897,11 @@ pub fn make_ast_error(exp: &AstNode) -> String {
     errors::parser::make_src_error(&exp.src, exp.lc)
 }
 
-pub fn pass(
-    ast: &Ast,
-    ctx: Scope,
-    source_name: &str,
-    settings: &CompileSettings,
-) -> Vec<Result<Constraint>> {
+pub fn pass(ast: &Ast, ctx: Scope, settings: &CompileSettings) -> Vec<Result<Constraint>> {
     let mut module = ctx;
 
     ast.exprs
         .iter()
-        .filter_map(|exp| {
-            reduce_toplevel(exp, &mut module, settings)
-                .with_context(|| {
-                    anyhow!(
-                        "compiling constraints in {}",
-                        source_name.bright_white().bold()
-                    )
-                })
-                .transpose()
-        })
+        .filter_map(|exp| reduce_toplevel(exp, &mut module, settings).transpose())
         .collect()
 }

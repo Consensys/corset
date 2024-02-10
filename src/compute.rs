@@ -8,7 +8,7 @@ use std::{cmp::Ordering, collections::HashSet};
 
 use crate::{
     column::{ColumnSet, Computation, ExoOperation, Value, ValueBacking},
-    compiler::{ColumnRef, ConstraintSet, EvalSettings, Node},
+    compiler::{ColumnRef, ConstraintSet, EvalSettings, Kind, Node},
     dag::ComputationDag,
     errors::RuntimeError,
     import,
@@ -614,7 +614,7 @@ pub fn apply_computation(
 }
 
 fn err_missing_column<'a>(c: &crate::column::Column) -> RuntimeError<'a> {
-    if matches!(c.kind, crate::compiler::Kind::Atomic) {
+    if matches!(c.kind, Kind::Commitment) {
         RuntimeError::EmptyColumn(c.handle.clone())
     } else {
         RuntimeError::NotComputed(c.handle.clone())

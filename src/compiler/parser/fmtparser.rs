@@ -1,8 +1,7 @@
-use super::Ast;
-use crate::compiler::Token;
-use crate::pretty::Base;
+use super::{Ast, Token};
 use anyhow::Result;
 use num_bigint::BigInt;
+use num_traits::One;
 use pest::{
     iterators::{Pair, Pairs},
     Parser,
@@ -31,14 +30,6 @@ impl std::fmt::Display for Symbol {
             Symbol::Path(ss) => write!(f, "{}", ss.join(":")),
         }
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct DisplayableColumn {
-    /// name of the column
-    pub name: String,
-    /// which numeric base should be used to display column values; this is a purely aesthetic setting
-    pub base: Base,
 }
 
 struct Commenter<'i> {
@@ -170,36 +161,34 @@ fn rec_parse(source: &str, pair: Pair<Rule>) -> Result<AstNode> {
         }
         Rule::interval => {
             let mut pairs = pair.into_inner();
-            let x1 = pairs
-                .next()
-                .map(|x| x.as_str())
-                .and_then(|x| x.parse::<isize>().ok());
-            let x2 = pairs
-                .next()
-                .map(|x| x.as_str())
-                .and_then(|x| x.parse::<isize>().ok());
-            let x3 = pairs
-                .next()
-                .map(|x| x.as_str())
-                .and_then(|x| x.parse::<isize>().ok());
+            let x1 = pairs.next().map(|x| rec_parse(source, x)).transpose()?;
+            let x2 = pairs.next().map(|x| rec_parse(source, x)).transpose()?;
+            let x3 = pairs.next().map(|x| rec_parse(source, x)).transpose()?;
             let range = match (x1, x2, x3) {
-                (Some(length), None, None) => Domain::Range(1, length),
+                (Some(length), None, None) => Domain::Range(
+                    AstNode {
+                        class: Token::Value(BigInt::one()),
+                        src: length.src.clone(),
+                        lc,
+                    },
+                    length,
+                ),
                 (Some(start), Some(stop), None) => Domain::Range(start, stop),
                 (Some(start), Some(stop), Some(step)) => Domain::SteppedRange(start, step, stop),
                 x => unimplemented!("{} -> {:?}", src, x),
             };
             Ok(AstNode {
-                class: Token::Domain(range),
+                class: Token::Domain(Box::new(range)),
                 lc,
                 src,
             })
         }
         Rule::immediate_range => Ok(AstNode {
-            class: Token::Domain(Domain::Set(
+            class: Token::Domain(Box::new(Domain::Set(
                 pair.into_inner()
-                    .map(|x| x.as_str().parse::<isize>().unwrap())
-                    .collect(),
-            )),
+                    .map(|x| rec_parse(source, x))
+                    .collect::<Result<Vec<_>>>()?,
+            ))),
             lc,
             src,
         }),

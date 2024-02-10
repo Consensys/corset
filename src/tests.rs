@@ -1,8 +1,4 @@
-use crate::{
-    compiler::{self, CompileSettings},
-    transformer::ExpansionLevel,
-    ConstraintSetBuilder,
-};
+use crate::{transformer::ExpansionLevel, ConstraintSetBuilder};
 use anyhow::*;
 
 fn make(name: &str, source: &str) -> Result<()> {
@@ -208,6 +204,30 @@ fn base_declaration() {
         "cannot redefine base",
         "(defcolumns (A :display :hex :display :dec))",
     );
+}
+
+#[test]
+fn computed_range_def() {
+    must_run(
+        "can use const. expr. in ranges",
+        "(defcolumns (A :array[0:(+ 3 2)]))",
+    )
+}
+
+#[test]
+fn complex_range_def() {
+    must_run(
+        "can use const. expr. in ranges",
+        "(defpurefun (f x) (+ 2 x))(defconst A 3 B (f A)) (defcolumns (X :array[(* 2 A):(* 2 B):(+ 1 1)]))",
+    )
+}
+
+#[test]
+fn complex_for() {
+    must_run(
+        "can use const. expr. in ranges",
+        "(defconst A 3 B (* 2 A)) (defcolumns (X :array[A:B])) (defconstraint asdf () (for i [A:(+ (- A 1) (len X))] (vanishes! [X i])))",
+    )
 }
 
 // #[test]

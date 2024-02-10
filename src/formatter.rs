@@ -2,10 +2,10 @@ use std::matches;
 use std::unreachable;
 
 use crate::compiler::codetyper::Tty;
+use crate::compiler::parser::Ast;
+use crate::compiler::parser::AstNode;
+use crate::compiler::parser::Token;
 use crate::compiler::tables::BUILTINS;
-use crate::compiler::Ast;
-use crate::compiler::AstNode;
-use crate::compiler::Token;
 
 /// Number of empty lines between top-level definitions
 const TOPLEVEL_SPACING: usize = 1;
@@ -558,7 +558,7 @@ impl AstNode {
             Token::List(ns) => ns.iter().map(|n| n.len() + 1).sum::<usize>() + 2,
             Token::Domain(domain) => {
                 domain
-                    .iter()
+                    .iter_nodes()
                     .map(|d| d.to_string().len() + 1)
                     .sum::<usize>()
                     + 1

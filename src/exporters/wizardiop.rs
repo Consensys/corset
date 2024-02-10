@@ -61,8 +61,7 @@ fn render_maybe_exo_handle(cs: &ConstraintSet, e: &Node) -> String {
     match e.e() {
         Expression::Column { handle, .. } => reg_mangle(cs, handle).unwrap(),
         Expression::ExoColumn { handle, .. } => {
-            dbg!(&cs.columns);
-            let register = cs.columns.register(dbg!(handle)).unwrap();
+            let register = cs.columns.register(handle).unwrap();
             let width = register.width();
             (0..width)
                 .map(|i| reg_mangle_ith(cs, handle, i).unwrap())
@@ -402,7 +401,7 @@ fn render_interleaved(cs: &ConstraintSet, _sizes: &mut HashSet<String>) -> Vec<W
 fn render_constraint(
     cs: &ConstraintSet,
     name: &str,
-    domain: Option<Domain>,
+    domain: Option<Domain<isize>>,
     expr: &Node,
 ) -> Vec<String> {
     match expr.e() {

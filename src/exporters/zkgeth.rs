@@ -32,7 +32,7 @@ pub fn render(cs: &ConstraintSet, package: &str, outfile: Option<&String>) -> Re
         .columns
         .iter_cols()
         .filter_map(|c| {
-            if matches!(c.kind, Kind::Atomic) {
+            if matches!(c.kind, Kind::Commitment) {
                 let r = c.register.unwrap();
                 let register = super::reg_to_string(&cs.columns.registers[r], r);
                 Some(GoColumn {

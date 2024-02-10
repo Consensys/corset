@@ -12,8 +12,8 @@ expr = { integer | symbol | sexpr | nth }
 nth = { "[" ~ symbol ~ expr ~ "]" }
 
 range = _{ immediate_range | interval }
-immediate_range = { "{" ~ integer+ ~ "}" }
-interval = { "[" ~ (natural ~ (":" ~ natural ~ (":" ~ natural)?)?) ~ "]" }
+immediate_range = { "{" ~ expr+ ~ "}" }
+interval = { "[" ~ (expr ~ (":" ~ expr ~ (":" ~ expr)?)?) ~ "]" }
 
 integer = @{ "-"? ~ natural }
 natural = @{ "0x" ~ ASCII_HEX_DIGIT+ | "0b" ~ ASCII_BIN_DIGIT+ | ASCII_DIGIT+ }

@@ -28,7 +28,7 @@ fn do_expand_expr(
                 .insert_column_and_register(
                     Column::builder()
                         .handle(new_handle.clone())
-                        .kind(Kind::Phantom)
+                        .kind(Kind::Computed)
                         .build(),
                 )
                 .is_ok()
@@ -45,7 +45,7 @@ fn do_expand_expr(
 
             Ok(Node::column()
                 .handle(new_handle)
-                .kind(Kind::Phantom)
+                .kind(Kind::Computed)
                 .base(Base::Dec)
                 .t(Magma::native())
                 .build())

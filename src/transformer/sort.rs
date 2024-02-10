@@ -60,7 +60,7 @@ fn create_sort_constraint(
             cs.columns.insert_column_and_register(
                 Column::builder()
                     .handle(Handle::new(&module, format!("__SRT__at_{i}_{suffix}")))
-                    .kind(Kind::Phantom)
+                    .kind(Kind::Computed)
                     .t(Magma::binary())
                     .intrinsic_size_factor(size)
                     .build(),
@@ -73,14 +73,14 @@ fn create_sort_constraint(
             .handle(Handle::new(&module, format!("__SRT__Eq_{suffix}")))
             .t(Magma::binary())
             .intrinsic_size_factor(eq_size)
-            .kind(Kind::Phantom)
+            .kind(Kind::Computed)
             .padding_value(1)
             .build(),
     )?;
     let delta = cs.columns.insert_column_and_register(
         Column::builder()
             .handle(Handle::new(&module, format!("__SRT__Delta_{suffix}")))
-            .kind(Kind::Phantom)
+            .kind(Kind::Computed)
             .intrinsic_size_factor(cs.length_multiplier(&froms[0]))
             .base(Base::Hex)
             .build(),
@@ -90,7 +90,7 @@ fn create_sort_constraint(
             cs.columns.insert_column_and_register(
                 Column::builder()
                     .handle(Handle::new(&module, format!("__SRT__Delta_{i}_{suffix}")))
-                    .kind(Kind::Phantom)
+                    .kind(Kind::Computed)
                     .t(Magma::byte())
                     .base(Base::Hex)
                     .intrinsic_size_factor(cs.length_multiplier(&froms[0]))

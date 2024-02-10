@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::println;
 
 use crate::compiler::RawMagma;
@@ -188,7 +188,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
         .columns
         .iter_cols()
         .filter_map(|c| {
-            if matches!(c.kind, Kind::Atomic) {
+            if matches!(c.kind, Kind::Commitment) {
                 let r = c.register.unwrap();
                 let register = reg_to_string(&cs.columns.registers[r], r).to_case(Case::Camel);
                 Some(BesuColumn {
