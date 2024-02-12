@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.7.0] - 2024-02-12
+
+### Features
+
+- Allow for any const. expr. in domains
+
 ## [9.6.0] - 2024-02-07
 
 ### Bug Fixes
@@ -19,6 +25,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous Tasks
 
 - Update dependencies
+- Release corset version 9.6.0
 
 ## [9.5.0] - 2024-01-24
 
