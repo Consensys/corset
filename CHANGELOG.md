@@ -2,11 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.7.2] - 2024-02-12
+
+### Bug Fixes
+
+- Stepped ranges inclusion check
+
 ## [9.7.1] - 2024-02-12
 
 ### Bug Fixes
 
 - Correct in-boundness check for stepped ranges
+
+### Miscellaneous Tasks
+
+- Release corset version 9.7.1
 
 ## [9.7.0] - 2024-02-12
 
