@@ -94,7 +94,7 @@ impl Domain<isize> {
     pub fn contains(&self, x: isize) -> bool {
         match self {
             Domain::Range(start, stop) => x >= *start && x <= *stop,
-            Domain::SteppedRange(start, stop, step) => {
+            Domain::SteppedRange(start, step, stop) => {
                 x >= *start && x <= *stop && (x - *start) % *step == 0
             }
             Domain::Set(is) => is.contains(&x),
