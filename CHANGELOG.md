@@ -2,11 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.7.1] - 2024-02-12
+
+### Bug Fixes
+
+- Correct in-boundness check for stepped ranges
+
 ## [9.7.0] - 2024-02-12
 
 ### Features
 
 - Allow for any const. expr. in domains
+
+### Miscellaneous Tasks
+
+- Release corset version 9.7.0
 
 ## [9.6.0] - 2024-02-07
 
