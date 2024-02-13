@@ -2,11 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.7.3] - 2024-02-13
+
+### Bug Fixes
+
+- Specialization selection mechanism
+
 ## [9.7.2] - 2024-02-12
 
 ### Bug Fixes
 
 - Stepped ranges inclusion check
+
+### Miscellaneous Tasks
+
+- Release corset version 9.7.2
 
 ## [9.7.1] - 2024-02-12
 
@@ -61,31 +71,45 @@ All notable changes to this project will be documented in this file.
 
 ### Bug Fixes
 
-- Sort constraints auxiliary columns computation
-- Fr/BigInt criss-crossing
-- Parsed value can be negative
 - Ensure all backings have the correct length
 - Message on conditioning error
 - Architecture-dependent build
 
 ### Features
 
-- Better error messages on erroneous value updating
 - Generate normalization constraints
 - Generate binarity constraints for `@prove`-annotated type
 
 ### Miscellaneous Tasks
 
-- Release corset version 9.2.3
 - Clippy
 - Release corset version 9.3.0
 - Release corset version 9.4.0
 
 ### Refactor
 
+- Homogeneize column types proving
+
+## [9.2.3] - 2024-01-17
+
+### Bug Fixes
+
+- Sort constraints auxiliary columns computation
+- Fr/BigInt criss-crossing
+- Parsed value can be negative
+
+### Features
+
+- Better error messages on erroneous value updating
+
+### Miscellaneous Tasks
+
+- Release corset version 9.2.3
+
+### Refactor
+
 - Move columns_len to ConstraintSet
 - Streamline concretization
-- Homogeneize column types proving
 
 ### Fest
 
@@ -119,14 +143,49 @@ All notable changes to this project will be documented in this file.
 
 ### Bug Fixes
 
-- Correct types for `~or!` and `~and!` ([#57](https://github.com/Consensys/corset/issues/57))
-- Conditioning should never be mixed
-- Handle all errors while checking
-- Handle Integer magma in Besu export
-- Type compatibily error
 - Error handling
 - Exo-column conversion criterion
 - Fail on erroneous types
+
+### Features
+
+- Add a CSV conversion option
+
+### Miscellaneous Tasks
+
+- Update the WizardIOP exporter
+- Release corset version 9.2.0
+
+## [9.1.5] - 2024-01-11
+
+### Bug Fixes
+
+- Handle all errors while checking
+- Handle Integer magma in Besu export
+- Type compatibily error
+
+### Miscellaneous Tasks
+
+- Release corset version 9.1.3
+- Release corset version 9.1.4
+- Release corset version 9.1.5
+
+### Styling
+
+- Only use `@loob` and `@bool` ([#62](https://github.com/Consensys/corset/issues/62))
+
+### Build
+
+- Feature-gate sqlite export
+- Generate binaries on release
+- Fix git-cliff configuration
+
+## [9.1.2] - 2023-12-21
+
+### Bug Fixes
+
+- Correct types for `~or!` and `~and!` ([#57](https://github.com/Consensys/corset/issues/57))
+- Conditioning should never be mixed
 
 ### Documentation
 
@@ -135,28 +194,15 @@ All notable changes to this project will be documented in this file.
 ### Features
 
 - The `convert` command converts trace files to sqlite database
-- Add a CSV conversion option
 
 ### Miscellaneous Tasks
 
 - Update dependencies
 - Release corset version 9.1.2
-- Release corset version 9.1.3
-- Release corset version 9.1.4
-- Release corset version 9.1.5
-- Update the WizardIOP exporter
-- Release corset version 9.2.0
-
-### Styling
-
-- Only use `@loob` and `@bool` ([#62](https://github.com/Consensys/corset/issues/62))
 
 ### Build
 
 - Bump zerocopy from 0.7.26 to 0.7.31 ([#54](https://github.com/Consensys/corset/issues/54))
-- Feature-gate sqlite export
-- Generate binaries on release
-- Fix git-cliff configuration
 
 ## [9.1.1] - 2023-12-06
 
