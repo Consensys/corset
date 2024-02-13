@@ -487,7 +487,7 @@ impl Magma {
             (RawMagma::Native, RawMagma::Any) => true,
 
             (RawMagma::Integer(_), RawMagma::None) => false,
-            (RawMagma::Integer(_), RawMagma::Binary) => true,
+            (RawMagma::Integer(x), RawMagma::Binary) => x == 1,
             (RawMagma::Integer(_), RawMagma::Nibble)
             | (RawMagma::Integer(_), RawMagma::Byte)
             | (RawMagma::Integer(_), RawMagma::Native)

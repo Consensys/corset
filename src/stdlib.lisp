@@ -30,8 +30,8 @@
 (defpurefun ((neq! :binary@loob :nowarn) x y) (not (~ (eq! x y))))
 (defunalias = eq!)
 
-(defpurefun ((eq :@bool :nowarn) (x :@bool) (y :@bool)) (^ (- x y) 2))
-(defpurefun ((eq :binary@bool :nowarn) x y) (- 1 (eq! x y)))
+(defpurefun ((eq :binary@bool :nowarn) (x :binary) (y :binary)) (^ (- x y) 2))
+(defpurefun ((eq :binary@bool :nowarn) x y) (- 1 (~ (eq! x y))))
 (defpurefun ((neq :binary@bool :nowarn) x y) (eq! x y))
 
 
