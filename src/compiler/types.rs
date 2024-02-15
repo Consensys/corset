@@ -82,7 +82,7 @@ impl Type {
             && other.c() != Conditioning::None
             && self.c() != other.c()
         {
-            bail!("should never happen");
+            panic!("should never happen");
         }
 
         Ok(self.with_magma(self.m().with_conditioning(self.c().max(&other.c())?)))

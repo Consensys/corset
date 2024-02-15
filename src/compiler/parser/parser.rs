@@ -478,9 +478,20 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             src,
         }),
         kw @ ("defun" | "defpurefun") => {
-            fn parse_typed_symbols(l: AstNode) -> Result<(String, Option<Type>, bool)> {
+            /// A symbol, potentially with a type and an ignore-casting attribute
+            struct TypedSymbol {
+                name: String,
+                t: Option<Type>,
+                warn: bool,
+            }
+
+            fn parse_typed_symbols(l: AstNode) -> Result<TypedSymbol> {
                 match l.class {
-                    Token::Symbol(s) => Ok((s, None, false)),
+                    Token::Symbol(s) => Ok(TypedSymbol {
+                        name: s,
+                        t: None,
+                        warn: true,
+                    }),
                     Token::List(xs) => match xs.as_slice() {
                         [AstNode {
                             class: Token::Symbol(s),
@@ -488,11 +499,11 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                         }, AstNode {
                             class: Token::Keyword(t),
                             ..
-                        }] => Ok((
-                            s.to_owned(),
-                            Some(Type::Any(Magma::try_from(t.as_str())?)),
-                            false,
-                        )),
+                        }] => Ok(TypedSymbol {
+                            name: s.to_owned(),
+                            t: Some(Type::Any(Magma::try_from(t.as_str())?)),
+                            warn: false,
+                        }),
                         [AstNode {
                             class: Token::Symbol(s),
                             ..
@@ -504,13 +515,13 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                             ..
                         }] => {
                             if n == ":nowarn" {
-                                Ok((
-                                    s.to_owned(),
-                                    Some(Type::Any(Magma::try_from(t.as_str())?)),
-                                    true,
-                                ))
+                                Ok(TypedSymbol {
+                                    name: s.to_owned(),
+                                    t: Some(Type::Any(Magma::try_from(t.as_str())?)),
+                                    warn: false,
+                                })
                             } else {
-                                bail!("SCREW YOU {}", n)
+                                bail!("unexpected keyword {}", n.bold().red())
                             }
                         }
                         _ => Err(anyhow!(
@@ -529,18 +540,20 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                 .to_vec()
                 .into_iter();
 
-            let (name, out_type, nowarn) = parse_typed_symbols(
+            // Try to parse the function name, bail out if it fails...
+            let function_name = parse_typed_symbols(
                 decl.next()
                     .with_context(|| anyhow!("missing function name"))?,
             )
             .with_context(|| anyhow!("invalid function declaration"))?;
 
+            // ...then parse the arguments, bailing out on failure
             let (args, in_types): (Vec<String>, Vec<Type>) = decl
                 .map(parse_typed_symbols)
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 // if an argument type is unspecified, it can be of any type
-                .map(|x| (x.0, x.1.unwrap_or(Type::Any(Magma::any()))))
+                .map(|x| (x.name, x.t.unwrap_or(Type::Any(Magma::any()))))
                 .unzip();
 
             let body = Box::new(
@@ -550,27 +563,30 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             );
 
             if let Some(last) = tokens.next() {
-                bail!("too many arguments found for DEFUN: {}", last?.src)
+                bail!(
+                    "too many arguments found in function definition: {}",
+                    last?.src
+                )
             }
 
             Ok(AstNode {
                 class: if kw == "defun" {
                     Token::Defun {
-                        name,
+                        name: function_name.name,
                         args,
                         in_types,
-                        out_type,
+                        out_type: function_name.t,
                         body,
-                        nowarn,
+                        nowarn: !function_name.warn,
                     }
                 } else {
                     Token::Defpurefun {
-                        name,
+                        name: function_name.name,
                         args,
                         in_types,
-                        out_type,
+                        out_type: function_name.t,
                         body,
-                        nowarn,
+                        nowarn: !function_name.warn,
                     }
                 },
                 src,
