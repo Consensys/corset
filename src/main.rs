@@ -272,6 +272,9 @@ enum Commands {
             help = "directly open the specified module"
         )]
         open_module: Option<String>,
+
+        #[arg(long = "high-contrast", help = "avoid low-contrast colors")]
+        high_contrast: bool,
     },
     /// Display the compiled the constraint system
     Debug {
@@ -872,6 +875,7 @@ fn main() -> Result<()> {
         Commands::Inspect {
             tracefile,
             open_module,
+            high_contrast,
         } => {
             if utils::is_file_empty(&tracefile)? {
                 warn!("`{}` is empty, exiting", tracefile);
@@ -882,8 +886,14 @@ fn main() -> Result<()> {
             compute::compute_trace(&tracefile, &mut cs, false)
                 .with_context(|| format!("while expanding `{}`", tracefile))?;
 
-            inspect::inspect(&cs, InspectorSettings { open_module })
-                .with_context(|| format!("while checking {}", tracefile.bright_white().bold()))?;
+            inspect::inspect(
+                &cs,
+                InspectorSettings {
+                    open_module,
+                    high_contrast,
+                },
+            )
+            .with_context(|| format!("while checking {}", tracefile.bright_white().bold()))?;
             info!("{}: SUCCESS", tracefile)
         }
         Commands::Debug {

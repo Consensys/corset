@@ -42,9 +42,12 @@ struct ModuleView {
 
     /// If any, the latest used Forth/scan expression
     last_scan: String,
+
+    /// If set, avoid low-constrast colors
+    high_contrast: bool,
 }
 impl ModuleView {
-    fn from_cs(cs: &ConstraintSet, name: &str) -> ModuleView {
+    fn from_cs(cs: &ConstraintSet, name: &str, high_contrast: bool) -> ModuleView {
         let mut max_size = 0;
         let columns: Vec<(ColumnRef, Handle)> = cs
             .columns
@@ -67,6 +70,7 @@ impl ModuleView {
             to_show: currently_shown,
 
             last_scan: String::new(),
+            high_contrast,
         }
     }
 
@@ -137,6 +141,17 @@ impl ModuleView {
             .unwrap_or_default();
         let mut maxes = vec![3; span.len() + 1];
 
+        let active_white_value = if self.high_contrast {
+            Color::White
+        } else {
+            Color::DarkGray
+        };
+        let dimmed_value = if self.high_contrast {
+            Color::Gray
+        } else {
+            Color::White
+        };
+
         let block = Block::new().borders(Borders::NONE);
         let rows = self
             .current_columns()
@@ -173,7 +188,7 @@ impl ModuleView {
                                 let corrected_fg_color = if bg_color % 36 > 18 {
                                     Color::Black
                                 } else if bg_color == 0 {
-                                    Color::DarkGray
+                                    active_white_value
                                 } else {
                                     Color::White
                                 };
@@ -199,7 +214,7 @@ impl ModuleView {
                                 // render the cell
                                 Cell::from(x_str)
                                     .fg(if dim {
-                                        Color::Black
+                                        dimmed_value
                                     } else {
                                         corrected_fg_color
                                     })
@@ -241,14 +256,14 @@ struct Inspector<'a> {
     message: Span<'a>,
 }
 impl<'a> Inspector<'a> {
-    fn from_cs(cs: &'a ConstraintSet) -> Result<Self> {
+    fn from_cs(cs: &'a ConstraintSet, high_contrast: bool) -> Result<Self> {
         let r = Inspector {
             cs,
             modules: cs
                 .columns
                 .modules()
                 .iter()
-                .map(|n| ModuleView::from_cs(cs, n))
+                .map(|n| ModuleView::from_cs(cs, n, high_contrast))
                 .sorted_by(|m1, m2| m1.name.cmp(&m2.name))
                 .collect(),
             current_module: 0,
@@ -513,10 +528,11 @@ impl<'a> Inspector<'a> {
 
 pub(crate) struct InspectorSettings {
     pub open_module: Option<String>,
+    pub high_contrast: bool,
 }
 
 pub(crate) fn inspect(cs: &ConstraintSet, settings: InspectorSettings) -> Result<()> {
-    let mut inspector = Inspector::from_cs(cs)?;
+    let mut inspector = Inspector::from_cs(cs, settings.high_contrast)?;
     if let Some(module) = settings.open_module.as_ref() {
         inspector.open_module(module);
     }
