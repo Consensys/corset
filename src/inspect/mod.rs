@@ -142,7 +142,7 @@ impl ModuleView {
             .current_columns()
             .skip(self.v_shift as usize)
             .map(|(column_ref, h)| {
-                maxes[0] = maxes[0].max(h.name.len());
+                maxes[0] = maxes[0].max(h.name.len() + max_perspective_len);
                 Row::new(
                     std::iter::once(
                         Cell::from(format!(
@@ -219,7 +219,7 @@ impl ModuleView {
             .collect::<Vec<_>>();
         let widths = maxes
             .iter()
-            .map(|w| Constraint::Length(*w as u16))
+            .map(|w| Constraint::Min(*w as u16))
             .collect::<Vec<_>>();
 
         let table = Table::new(rows, widths)
@@ -227,6 +227,7 @@ impl ModuleView {
                 Row::new(std::iter::once(String::new()).chain(span.map(|i| i.to_string())))
                     .style(Style::default().bold().blue()),
             )
+            .flex(layout::Flex::Legacy)
             .block(block);
         f.render_widget(table, target);
     }
