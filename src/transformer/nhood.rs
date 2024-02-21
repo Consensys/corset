@@ -23,7 +23,7 @@ fn process_binarity(column_refs: &[ColumnRef], cs: &mut ConstraintSet) {
                     .call(&[
                         x.clone(),
                         Intrinsic::Sub
-                            .call(&[Node::from_const(1), x.clone()])
+                            .call(&[Node::from_isize(1), x.clone()])
                             .unwrap(),
                     ])
                     .unwrap(),
@@ -118,7 +118,7 @@ fn process_nhood(
                     .kind(Kind::Computed)
                     .base(Base::Dec)
                     .build(),
-                Node::from_const(modulo.try_into().unwrap()),
+                Node::from_isize(modulo.try_into().unwrap()),
             ])?,
         ),
     });
@@ -135,7 +135,7 @@ fn process_nhood(
             // SRT_ILD_[i+1] - (SRT_ILD_[i] + 1)
             Intrinsic::Sub.call(&[
                 srt_intrld_aux_xs_node.clone().shift(1),
-                Intrinsic::Add.call(&[srt_intrld_aux_xs_node, Node::from_const(1)])?,
+                Intrinsic::Add.call(&[srt_intrld_aux_xs_node, Node::from_isize(1)])?,
             ])?,
         ])?),
     });

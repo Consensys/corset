@@ -194,7 +194,7 @@ fn render_constraints(cs: &ConstraintSet) -> Vec<String> {
                 let x = reference.clone();
                 let inv_x = Node::column().handle(inverted.clone()).build();
                 let x_times_inv_x = Intrinsic::Mul.call(&[x.clone(), inv_x.clone()]).unwrap();
-                let one = Node::from_const(1);
+                let one = Node::from_isize(1);
 
                 // X × (1 - X × /X)
                 r.append(&mut render_constraint(

@@ -22,56 +22,61 @@ impl Node {
         get_module: &dyn Fn(&HashSet<ColumnRef>) -> String,
         new_cols: &mut Vec<(Handle, Node)>,
     ) {
-        match self.e_mut() {
-            Expression::List(es) => {
-                for e in es.iter_mut() {
-                    e.do_normalize(get_module, new_cols);
-                }
-            }
-            Expression::Funcall { func, args, .. } => {
-                for e in args.iter_mut() {
-                    e.do_normalize(get_module, new_cols);
-                }
-                if matches!(func, Intrinsic::Normalize) {
-                    // Intrinsic::Inv should never have more than one argument
-                    assert!(args.len() == 1);
-                    let arg = &args[0];
-                    if true {
-                        let module = get_module(&arg.dependencies());
-                        let inverted_handle = Handle::new(module, expression_to_name(arg, "INV"));
-                        new_cols.push((inverted_handle.clone(), arg.to_owned()));
-                        *self = Intrinsic::Mul
-                            .call(&[
-                                arg.to_owned(),
-                                Node::column()
-                                    .handle(inverted_handle)
-                                    .kind(Kind::Computed)
-                                    .t(self.t().m().invert())
-                                    .build(),
-                            ])
-                            .unwrap();
-                    } else {
-                        todo!("exo-value case");
-                        // let module = get_module(&args[0].dependencies());
-                        // let normalized_handle =
-                        //     Handle::new(module, expression_to_name(&args[0], "NORM"));
-                        // new_cols.push((normalized_handle.clone(), args[0].to_owned()));
-                        // let old_node = self.clone();
-                        // *self = Intrinsic::Mul
-                        //     .call(&[
-                        //         old_node,
-                        //         Node::column()
-                        //             .handle(normalized_handle)
-                        //             .kind(Kind::Phantom)
-                        //             .t(self.t().m().invert())
-                        //             .build(),
-                        //     ])
-                        //     .unwrap()
-                        //     .into();
+        if let Result::Ok(x) = self.pure_eval() {
+            *self = Node::from_value(crate::column::Value::from(x).inverse());
+        } else {
+            match self.e_mut() {
+                Expression::List(es) => {
+                    for e in es.iter_mut() {
+                        e.do_normalize(get_module, new_cols);
                     }
                 }
+                Expression::Funcall { func, args, .. } => {
+                    for e in args.iter_mut() {
+                        e.do_normalize(get_module, new_cols);
+                    }
+                    if matches!(func, Intrinsic::Normalize) {
+                        // Intrinsic::Inv should never have more than one argument
+                        assert!(args.len() == 1);
+                        let arg = &args[0];
+                        if true {
+                            let module = get_module(&arg.dependencies());
+                            let inverted_handle =
+                                Handle::new(module, expression_to_name(arg, "INV"));
+                            new_cols.push((inverted_handle.clone(), arg.to_owned()));
+                            *self = Intrinsic::Mul
+                                .call(&[
+                                    arg.to_owned(),
+                                    Node::column()
+                                        .handle(inverted_handle)
+                                        .kind(Kind::Computed)
+                                        .t(self.t().m().invert())
+                                        .build(),
+                                ])
+                                .unwrap();
+                        } else {
+                            todo!("exo-value case");
+                            // let module = get_module(&args[0].dependencies());
+                            // let normalized_handle =
+                            //     Handle::new(module, expression_to_name(&args[0], "NORM"));
+                            // new_cols.push((normalized_handle.clone(), args[0].to_owned()));
+                            // let old_node = self.clone();
+                            // *self = Intrinsic::Mul
+                            //     .call(&[
+                            //         old_node,
+                            //         Node::column()
+                            //             .handle(normalized_handle)
+                            //             .kind(Kind::Phantom)
+                            //             .t(self.t().m().invert())
+                            //             .build(),
+                            //     ])
+                            //     .unwrap()
+                            //     .into();
+                        }
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         }
     }
 }

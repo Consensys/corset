@@ -211,7 +211,7 @@ impl Node {
             dbg: None,
         }
     }
-    pub fn from_const(x: isize) -> Node {
+    pub fn from_isize(x: isize) -> Node {
         Node {
             _e: Expression::Const(Value::from(x)),
             _t: Some(Type::Scalar(match x {
@@ -229,6 +229,18 @@ impl Node {
         };
         Node {
             _e: Expression::Const(Value::from(x)),
+            _t: Some(Type::Scalar(magma)),
+            dbg: None,
+        }
+    }
+    pub fn from_value(x: Value) -> Node {
+        let magma = if x.is_one() || x.is_zero() {
+            Magma::binary()
+        } else {
+            Magma::native()
+        };
+        Node {
+            _e: Expression::Const(x),
             _t: Some(Type::Scalar(magma)),
             dbg: None,
         }
@@ -552,14 +564,16 @@ impl Node {
     pub fn pure_eval(&self) -> Result<BigInt> {
         match self.e() {
             Expression::Funcall { func, args } => match func {
-                Intrinsic::Add => {
+                // Here the vector operations behave like the normal ones, as we are sure to
+                // be working with BigInt, as per the definition of pure_eval
+                Intrinsic::Add | Intrinsic::VectorAdd => {
                     let args = args
                         .iter()
                         .map(|x| x.pure_eval())
                         .collect::<Result<Vec<_>>>()?;
                     Ok(args.iter().fold(BigInt::zero(), |ax, x| ax + x))
                 }
-                Intrinsic::Sub => {
+                Intrinsic::Sub | Intrinsic::VectorSub => {
                     let args = args
                         .iter()
                         .map(|x| x.pure_eval())
@@ -570,12 +584,20 @@ impl Node {
                     }
                     Ok(ax)
                 }
-                Intrinsic::Mul => {
+                Intrinsic::Mul | Intrinsic::VectorMul => {
                     let args = args
                         .iter()
                         .map(|x| x.pure_eval())
                         .collect::<Result<Vec<_>>>()?;
                     Ok(args.iter().fold(BigInt::one(), |ax, x| ax * x))
+                }
+                Intrinsic::Normalize => {
+                    let x = args[0].pure_eval()?;
+                    Ok(if x.is_zero() {
+                        BigInt::zero()
+                    } else {
+                        BigInt::one()
+                    })
                 }
                 Intrinsic::Neg => Ok(-args[0].pure_eval()?),
                 Intrinsic::Exp => {

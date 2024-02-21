@@ -1391,7 +1391,7 @@ fn apply_builtin(
                 base: _,
             } = traversed_args[0].e()
             {
-                Ok(Some(Node::from_const(domain.len().try_into().unwrap())))
+                Ok(Some(Node::from_isize(domain.len().try_into().unwrap())))
             } else {
                 bail!(RuntimeError::NotAnArray(traversed_args[0].e().clone()))
             }
@@ -1716,7 +1716,7 @@ pub(crate) fn reduce_toplevel(
             };
 
             if body.t() == Type::Void {
-                error!(
+                warn!(
                     "constraint {} should be of type {}, found {}",
                     handle.pretty(),
                     "Loobean".yellow().bold(),

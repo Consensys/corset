@@ -321,14 +321,14 @@ impl ConstraintSet {
                                 .build(),
                         ],
                         included: vec![
-                            Node::from_const(if func == ExoOperation::Add { 1 } else { 0 }),
+                            Node::from_isize(if func == ExoOperation::Add { 1 } else { 0 }),
                             args.0.clone(),
                             args.1.clone(),
                             Node::column()
                                 .handle(new_handle)
                                 .kind(Kind::Commitment)
                                 .build(),
-                            Node::from_const(1),
+                            Node::from_isize(1),
                         ],
                     })
                 }
@@ -361,7 +361,7 @@ impl ConstraintSet {
                                 .handle(new_handle)
                                 .kind(Kind::Commitment)
                                 .build(),
-                            Node::from_const(1),
+                            Node::from_isize(1),
                         ],
                     })
                 }

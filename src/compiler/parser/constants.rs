@@ -18,7 +18,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
                     Token::Symbol(x) if ["iota", "ι", "ɩ"].contains(&x.as_str()) => {
                         let mut hasher = std::collections::hash_map::DefaultHasher::new();
                         std::hash::Hash::hash(&name, &mut hasher);
-                        Node::from_const((std::hash::Hasher::finish(&hasher) >> 1) as isize)
+                        Node::from_isize((std::hash::Hasher::finish(&hasher) >> 1) as isize)
                     }
                     _ => crate::compiler::generator::reduce(exp, ctx, settings)?.unwrap(),
                 };

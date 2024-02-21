@@ -106,7 +106,7 @@ fn create_sort_constraint(
         expr: Box::new(Intrinsic::Mul.call(&[
             Node::column().handle(eq.clone()).t(Magma::binary()).build(),
             Intrinsic::Sub.call(&[
-                Node::from_const(1),
+                Node::from_isize(1),
                 Node::column().handle(eq.clone()).t(Magma::binary()).build(),
             ])?,
         ])?),
@@ -118,7 +118,7 @@ fn create_sort_constraint(
             expr: Box::new(Intrinsic::Mul.call(&[
                 Node::column().handle(at.clone()).t(Magma::binary()).build(),
                 Intrinsic::Sub.call(&[
-                    Node::from_const(1),
+                    Node::from_isize(1),
                     Node::column().handle(at.clone()).t(Magma::binary()).build(),
                 ])?,
             ])?),
@@ -168,7 +168,7 @@ fn create_sort_constraint(
         // ∑_k=0^i-1 @_k = 0...
         let sum_ats = if i > 0 {
             Intrinsic::Sub.call(&[
-                Node::from_const(1),
+                Node::from_isize(1),
                 Intrinsic::Add.call(
                     &(0..i)
                         .map(|j| {
@@ -182,7 +182,7 @@ fn create_sort_constraint(
             ])?
         } else {
             // meaningless branch required for @_0
-            Node::from_const(1)
+            Node::from_isize(1)
         };
 
         let sorted_t = cs.columns.column(&sorted[i])?.t;
@@ -195,7 +195,7 @@ fn create_sort_constraint(
                     sum_ats.clone(),
                     // && @ = 0 ...
                     Intrinsic::Sub.call(&[
-                        Node::from_const(1),
+                        Node::from_isize(1),
                         Node::column().handle(at.clone()).t(Magma::binary()).build(),
                     ])?,
                     // => sorted_i = sorted_i[-1]
@@ -229,7 +229,7 @@ fn create_sort_constraint(
                             .build(),
                     ])?;
                     Intrinsic::Sub
-                        .call(&[Node::from_const(1), Intrinsic::Normalize.call(&[diff])?])?
+                        .call(&[Node::from_isize(1), Intrinsic::Normalize.call(&[diff])?])?
                 },
             ])?),
         });
@@ -241,7 +241,7 @@ fn create_sort_constraint(
         domain: None,
         expr: Box::new(
             Intrinsic::Sub.call(&[
-                Node::from_const(1),
+                Node::from_isize(1),
                 Intrinsic::Add.call(
                     &std::iter::once(Node::column().handle(eq.clone()).t(Magma::binary()).build())
                         .chain(
@@ -263,7 +263,7 @@ fn create_sort_constraint(
             Intrinsic::Mul.call(&[
                 // Eq = 0
                 Intrinsic::Sub.call(&[
-                    Node::from_const(1),
+                    Node::from_isize(1),
                     Node::column().handle(eq.clone()).t(Magma::binary()).build(),
                 ])?,
                 // Δ = ∑ ε_i × @_i × δSorted_i
@@ -289,9 +289,9 @@ fn create_sort_constraint(
                                 ])?;
                                 Intrinsic::Mul.call(&[
                                     if !signs[l] {
-                                        Node::from_const(-1)
+                                        Node::from_isize(-1)
                                     } else {
-                                        Node::from_const(1)
+                                        Node::from_isize(1)
                                     },
                                     Node::column()
                                         .handle(ats[l].clone())
