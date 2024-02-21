@@ -59,20 +59,34 @@
 (defpurefun (will-inc! e0 offset) (will-eq! e0 (+ e0 offset)))
 (defpurefun (will-dec! e0 offset) (eq! (next e0) (- e0 offset)))
 
-;; Ensure (in loobean logic) that e0 remained (resp. will be) constant
+(defpurefun (did-inc e0 offset) (eq e0 (+ (prev e0) offset)))
+(defpurefun (did-dec e0 offset) (eq  e0 (- (prev e0) offset)))
+(defpurefun (will-inc e0 offset) (will-eq e0 (+ e0 offset)))
+(defpurefun (will-dec e0 offset) (eq (next e0) (- e0 offset)))
+
+;; Ensure that e0 remained (resp. will be) constant
 ;; with regards to the previous (resp. next) row.
 (defpurefun (remained-constant! e0) (eq! e0 (prev e0)))
 (defpurefun (will-remain-constant! e0) (will-eq! e0 e0))
+
+(defpurefun (remained-constant e0) (eq e0 (prev e0)))
+(defpurefun (will-remain-constant e0) (will-eq e0 e0))
 
 ;; Ensure (in loobean logic) that e0 has changed (resp. will change) its value
 ;; with regards to the previous (resp. next) row.
 (defpurefun (did-change! e0) (neq! e0 (prev e0)))
 (defpurefun (will-change! e0) (neq! e0 (next e0)))
 
+(defpurefun (did-change e0) (neq e0 (prev e0)))
+(defpurefun (will-change e0) (neq e0 (next e0)))
+
 ;; Ensure (in loobean logic) that e0 was (resp. will be) equal to e1 in the
 ;; previous (resp. next) row.
-(defpurefun (was-eq! e0 e1) (eq! (prev e0) e1))
-(defpurefun (will-eq! e0 e1) (eq! (next e0) e1))
+(defpurefun (was-eq! e0 e1) (eq (prev e0) e1))
+(defpurefun (will-eq! e0 e1) (eq (next e0) e1))
+
+(defpurefun (was-eq e0 e1) (eq (prev e0) e1))
+(defpurefun (will-eq e0 e1) (eq (next e0) e1))
 
 
 ;; Helpers
