@@ -82,8 +82,8 @@
 
 ;; Ensure (in loobean logic) that e0 was (resp. will be) equal to e1 in the
 ;; previous (resp. next) row.
-(defpurefun (was-eq! e0 e1) (eq (prev e0) e1))
-(defpurefun (will-eq! e0 e1) (eq (next e0) e1))
+(defpurefun (was-eq! e0 e1) (eq! (prev e0) e1))
+(defpurefun (will-eq! e0 e1) (eq! (next e0) e1))
 
 (defpurefun (was-eq e0 e1) (eq (prev e0) e1))
 (defpurefun (will-eq e0 e1) (eq (next e0) e1))
