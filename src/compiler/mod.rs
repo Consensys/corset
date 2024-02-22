@@ -43,9 +43,9 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
     let mut constraints = vec![];
     for (name, ast) in asts.iter() {
         for constraint in generator::pass(ast, ctx.clone(), settings) {
-            constraints.push(constraint.with_context(|| {
-                anyhow!("compiling constraints in {}", name.bright_white().bold())
-            })?);
+            constraints.push(
+                constraint.with_context(|| anyhow!("compiling {}", name.bright_white().bold()))?,
+            );
         }
     }
     // Sort by decreasing complexity for more efficient multi-threaded computation

@@ -437,12 +437,7 @@ impl ConstraintSetBuilder {
                 .with_context(|| anyhow!("reading {}", section_str.yellow().bold()))?;
             info!("adding {}", section_str.bright_white().bold());
             Ok(Some(vec![(
-                section_file
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_owned(),
+                section_file.to_str().unwrap().to_owned(),
                 content,
             )]))
             // 2. Fail is the file is actually a directory
