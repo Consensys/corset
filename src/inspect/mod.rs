@@ -144,12 +144,12 @@ impl ModuleView {
         let active_white_value = if self.high_contrast {
             Color::White
         } else {
-            Color::DarkGray
+            Color::Gray
         };
         let dimmed_value = if self.high_contrast {
             Color::Gray
         } else {
-            Color::White
+            Color::DarkGray
         };
 
         let block = Block::new().borders(Borders::NONE);
