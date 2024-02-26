@@ -2,11 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.7.4] - 2024-02-26
+
+### Bug Fixes
+
+- Wrong table layout obsucring elements
+- Bool -> loob
+- Display full file path on compile errors
+- Wrong perspective colors
+
+### Features
+
+- Add a high contrast setting
+- Add boolean version of chronologic testing operators
+- Inverse pure expressions in place
+
+### Refactor
+
+- Streamline function declaration parsing
+
 ## [9.7.3] - 2024-02-13
 
 ### Bug Fixes
 
 - Specialization selection mechanism
+
+### Miscellaneous Tasks
+
+- Release corset version 9.7.3
 
 ## [9.7.2] - 2024-02-12
 
