@@ -383,38 +383,36 @@ fn check_lookup(
 
     for i in 0..child_len {
         if !parent_hashes.contains(&pseudo_rlc(children, i, &cs.columns)) {
-            bail!(
-                "@{}: {{\n{}\n}} not found in {{{}}}",
-                i,
-                children
-                    .iter()
-                    .zip(children.iter().map(|e| {
-                        e.eval(
-                            i as isize,
-                            |handle, j, _| {
-                                cs.columns.get(handle, j, false).or_else(|| {
-                                    cs.columns
-                                        .column(handle)
-                                        .unwrap()
-                                        .padding_value
-                                        .as_ref()
-                                        .cloned()
-                                })
-                            },
-                            &mut None,
-                            &EvalSettings::default(),
-                        )
-                        .unwrap()
-                    }))
-                    .map(|(handle, value)| format!("{}: {}", handle.pretty(), value.pretty()))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-                parents
-                    .iter()
-                    .map(|handle| handle.pretty())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
+            let pretty_expected_matches = parents
+                .iter()
+                .zip(children.iter().zip(children.iter().map(|e| {
+                    e.eval(
+                        i as isize,
+                        |handle, j, _| {
+                            cs.columns.get(handle, j, false).or_else(|| {
+                                cs.columns
+                                    .column(handle)
+                                    .unwrap()
+                                    .padding_value
+                                    .as_ref()
+                                    .cloned()
+                            })
+                        },
+                        &mut None,
+                        &EvalSettings::default(),
+                    )
+                    .unwrap()
+                })))
+                .map(|(parent, (child, value))| {
+                    format!(
+                        "{} - {}: {}",
+                        parent.pretty(),
+                        child.pretty(),
+                        value.pretty()
+                    )
+                })
+                .join("\n");
+            bail!("mismatch line {}:\n{}", i, pretty_expected_matches);
         }
     }
 
