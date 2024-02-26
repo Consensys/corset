@@ -1,6 +1,6 @@
 use crate::{
     compiler::{ColumnRef, EvalSettings, Intrinsic, Kind, Magma, Node},
-    errors,
+    constants, errors,
     pretty::{opcodes, Base, Pretty},
     structs::Handle,
 };
@@ -344,22 +344,39 @@ impl std::default::Default for Value {
         Value::zero()
     }
 }
-impl From<BigInt> for Value {
-    fn from(int: BigInt) -> Self {
+
+impl TryFrom<BigInt> for Value {
+    type Error = errors::RuntimeError;
+
+    fn try_from(int: BigInt) -> Result<Self, Self::Error> {
+        if int.bits() as usize > constants::FIELD_BITSIZE {
+            return Err(errors::RuntimeError::InvalidValue(
+                "field element",
+                Value::BigInt(int),
+            ));
+        }
         let mut v = Value::BigInt(int);
         if *crate::IS_NATIVE.read().unwrap() {
             v.to_native();
         }
-        v
+        Result::Ok(v)
     }
 }
-impl From<&BigInt> for Value {
-    fn from(int: &BigInt) -> Self {
-        let mut v = Value::BigInt(int.clone());
+impl TryFrom<&BigInt> for Value {
+    type Error = errors::RuntimeError;
+
+    fn try_from(int: &BigInt) -> Result<Self, Self::Error> {
+        if int.bits() as usize > constants::FIELD_BITSIZE {
+            return Err(errors::RuntimeError::InvalidValue(
+                "field element",
+                Value::BigInt(int.to_owned()),
+            ));
+        }
+        let mut v = Value::BigInt(int.to_owned());
         if *crate::IS_NATIVE.read().unwrap() {
             v.to_native();
         }
-        v
+        Result::Ok(v)
     }
 }
 impl From<Fr> for Value {

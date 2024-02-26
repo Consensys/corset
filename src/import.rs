@@ -170,44 +170,53 @@ pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
             .with_context(|| anyhow!("memory mapping {}", tracefile.bright_white().bold()))?
     });
     let trace_map = trace_reader.map()?;
-    for register in trace_map.headers.into_iter() {
-        let column_ref: ColumnRef = register.handle.clone().into();
-        let register_bytes =
-            trace_reader.slice(register.length as usize * register.bytes_per_element)?;
-        let mut xs = (-1..register.length)
-            .into_par_iter()
-            .map(|i| {
-                if i == -1 {
-                    Ok(CValue::zero())
-                } else {
-                    let i = i as usize;
-                    register_bytes
-                        .get(i * register.bytes_per_element..(i + 1) * register.bytes_per_element)
-                        .map(|bs| CValue::from(BigInt::from_bytes_be(Sign::Plus, bs)))
-                        .with_context(|| anyhow!("reading {}th element", i))
-                }
-            })
-            .collect::<Result<Vec<_>>>()
-            .with_context(|| {
-                anyhow!(
-                    "reading data for {} ({} elts. expected)",
-                    register.handle.pretty(),
-                    register.length
-                )
+    for trace_register in trace_map.headers.into_iter() {
+        let column_ref: ColumnRef = trace_register.handle.clone().into();
+        if let Some(Register { magma, .. }) = cs.columns.register(&column_ref) {
+            let register_bytes = trace_reader
+                .slice(trace_register.length as usize * trace_register.bytes_per_element)?;
+            let mut xs = (-1..trace_register.length)
+                .into_par_iter()
+                .map(|i| {
+                    if i == -1 {
+                        Ok(CValue::zero())
+                    } else {
+                        let i = i as usize;
+                        register_bytes
+                            .get(
+                                i * trace_register.bytes_per_element
+                                    ..(i + 1) * trace_register.bytes_per_element,
+                            )
+                            .ok_or_else(|| anyhow!("error reading {}th element", i))
+                            .and_then(|bs| {
+                                CValue::try_from(BigInt::from_bytes_be(Sign::Plus, bs))
+                                    .with_context(|| anyhow!("while parsing {}th element", i))
+                                    .and_then(|x| magma.rm().validate(x))
+                            })
+                            .with_context(|| anyhow!("reading {}th element", i))
+                    }
+                })
+                .collect::<Result<Vec<_>>>()
+                .with_context(|| {
+                    anyhow!(
+                        "reading data for {} ({} elts. expected)",
+                        trace_register.handle.pretty(),
+                        trace_register.length
+                    )
+                })?;
+
+            let module_min_len = cs
+                .columns
+                .min_len
+                .get(&trace_register.handle.module)
+                .cloned()
+                .unwrap_or(0);
+
+            debug!("Importing {}", trace_register.handle.pretty());
+            let module_spilling = cs.spilling_for_column(&column_ref).ok_or_else(|| {
+                anyhow!("no spilling found for {}", trace_register.handle.pretty())
             })?;
 
-        let module_min_len = cs
-            .columns
-            .min_len
-            .get(&register.handle.module)
-            .cloned()
-            .unwrap_or(0);
-
-        if let Some(Register { magma, .. }) = cs.columns.register(&column_ref) {
-            debug!("Importing {}", register.handle.pretty());
-            let module_spilling = cs
-                .spilling_for_column(&column_ref)
-                .ok_or_else(|| anyhow!("no spilling found for {}", register.handle.pretty()))?;
             // If the parsed column is not long enought w.r.t. the
             // minimal module length, prepend it with as many zeroes as
             // required.
@@ -220,20 +229,20 @@ pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
             }
 
             let module_raw_size =
-                cs.effective_len_or_set(&register.handle.module, xs.len() as isize);
+                cs.effective_len_or_set(&trace_register.handle.module, xs.len() as isize);
             if xs.len() as isize != module_raw_size {
                 bail!(
                     "{} has an incorrect length: expected {}, found {}",
-                    register.handle.to_string().blue(),
+                    trace_register.handle.to_string().blue(),
                     module_raw_size.to_string().red().bold(),
                     xs.len().to_string().yellow().bold(),
                 );
             }
 
             cs.columns
-                .set_register_value(&register.handle.into(), xs, module_spilling)?
+                .set_register_value(&trace_register.handle.into(), xs, module_spilling)?
         } else {
-            debug!("ignoring unknown column {}", register.handle.pretty());
+            bail!("unknown column {}", trace_register.handle.pretty());
         }
     }
 

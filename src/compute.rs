@@ -392,7 +392,7 @@ pub fn compute_expression(
     Ok(vec![(
         target.to_owned(),
         if let Result::Ok(cst) = exp.pure_eval() {
-            let v = Value::from(cst);
+            let v = Value::try_from(cst).unwrap();
             ValueBacking::from_fn(
                 Box::new(move |_, _: &ColumnSet| Some(v.clone())),
                 cs.iter_len(&module),
@@ -613,7 +613,7 @@ pub fn apply_computation(
     }
 }
 
-fn err_missing_column<'a>(c: &crate::column::Column) -> RuntimeError<'a> {
+fn err_missing_column(c: &crate::column::Column) -> RuntimeError {
     if matches!(c.kind, Kind::Commitment) {
         RuntimeError::EmptyColumn(c.handle.clone())
     } else {

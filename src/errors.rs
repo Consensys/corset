@@ -24,7 +24,7 @@ pub(crate) enum CompileError<'a> {
 }
 
 #[derive(Error, Debug)]
-pub enum RuntimeError<'a> {
+pub enum RuntimeError {
     #[error("{} not found in the given trace", .0.pretty())]
     EmptyColumn(Handle),
 
@@ -32,7 +32,7 @@ pub enum RuntimeError<'a> {
     NotComputed(Handle),
 
     #[error("expected a {} value, found {}", .0.white().bold(), .1.pretty().red())]
-    InvalidValue(&'a str, Value),
+    InvalidValue(&'static str, Value),
 
     #[error("expected an array, found {:?}", .0)]
     NotAnArray(Expression),

@@ -823,7 +823,7 @@ impl Scope {
             data_mut!(self).symbols.insert(
                 name.to_owned(),
                 Symbol::Final(
-                    Node::from_expr(Expression::Const(value.into())).with_type(t),
+                    Node::from_expr(Expression::Const(value.try_into().unwrap())).with_type(t),
                     false,
                 ),
             );

@@ -353,7 +353,13 @@ impl RawMagma {
                     bail!(RuntimeError::InvalidValue("byte", x))
                 }
             }
-            RawMagma::Native => Ok(x),
+            RawMagma::Native => {
+                if x.bit_size() > constants::FIELD_BITSIZE {
+                    bail!(RuntimeError::InvalidValue("field element", x))
+                } else {
+                    Ok(x)
+                }
+            }
             RawMagma::Integer(b) => {
                 if x.bit_size() > *b {
                     bail!(RuntimeError::InvalidValue("integer", x))

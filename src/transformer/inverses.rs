@@ -23,7 +23,7 @@ impl Node {
         new_cols: &mut Vec<(Handle, Node)>,
     ) {
         if let Result::Ok(x) = self.pure_eval() {
-            *self = Node::from_value(crate::column::Value::from(x).inverse());
+            *self = Node::from_value(crate::column::Value::try_from(x).unwrap().inverse());
         } else {
             match self.e_mut() {
                 Expression::List(es) => {

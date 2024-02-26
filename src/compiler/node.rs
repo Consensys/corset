@@ -228,7 +228,7 @@ impl Node {
             Magma::native()
         };
         Node {
-            _e: Expression::Const(Value::from(x)),
+            _e: Expression::Const(Value::try_from(x).unwrap()),
             _t: Some(Type::Scalar(magma)),
             dbg: None,
         }
