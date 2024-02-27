@@ -639,7 +639,7 @@ fn prepare(cs: &mut ConstraintSet, fail_on_missing: bool) -> Result<()> {
 
 pub fn compute_trace(tracefile: &str, cs: &mut ConstraintSet, fail_on_missing: bool) -> Result<()> {
     if tracefile.ends_with("lt") {
-        import::parse_flat_trace(tracefile, cs, false)?;
+        import::parse_binary_trace(tracefile, cs, false)?;
     } else {
         import::parse_json_trace(tracefile, cs, false)?;
     }

@@ -161,7 +161,7 @@ impl<Data: AsRef<[u8]>> TraceReader<Data> {
 }
 
 #[time("info", "Parsing binary traces")]
-pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet, keep_raw: bool) -> Result<()> {
+pub fn parse_binary_trace(tracefile: &str, cs: &mut ConstraintSet, keep_raw: bool) -> Result<()> {
     let file = File::open(tracefile)
         .with_context(|| anyhow!("opening {}", tracefile.bright_white().bold()))?;
     let mut trace_reader = TraceReader::from(unsafe {
@@ -172,9 +172,10 @@ pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet, keep_raw: bool)
     let trace_map = trace_reader.map()?;
     for trace_register in trace_map.headers.into_iter() {
         let column_ref: ColumnRef = trace_register.handle.clone().into();
+        let register_bytes = trace_reader
+            .slice(trace_register.length as usize * trace_register.bytes_per_element)?;
+
         if let Some(Register { magma, .. }) = cs.columns.register(&column_ref) {
-            let register_bytes = trace_reader
-                .slice(trace_register.length as usize * trace_register.bytes_per_element)?;
             let mut xs = (if keep_raw { 0 } else { -1 }..trace_register.length)
                 .into_par_iter()
                 .map(|i| {
@@ -242,7 +243,7 @@ pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet, keep_raw: bool)
             cs.columns
                 .set_register_value(&trace_register.handle.into(), xs, module_spilling)?
         } else {
-            bail!("unknown column {}", trace_register.handle.pretty());
+            info!("unknown column {}", trace_register.handle.pretty());
         }
     }
 

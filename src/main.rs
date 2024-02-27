@@ -696,7 +696,7 @@ fn main() -> Result<()> {
         } => {
             let mut cs = builder.into_constraint_set()?;
             if tracefile.ends_with("lt") {
-                import::parse_flat_trace(&tracefile, &mut cs, true)
+                import::parse_binary_trace(&tracefile, &mut cs, true)
             } else {
                 import::parse_json_trace(&tracefile, &mut cs, true)
             }
