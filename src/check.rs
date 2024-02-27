@@ -408,7 +408,7 @@ fn check_lookup(
                         "{} - {}: {}",
                         parent.pretty(),
                         child.pretty(),
-                        value.pretty()
+                        value.pretty_with_base(Base::Hex)
                     )
                 })
                 .join("\n");

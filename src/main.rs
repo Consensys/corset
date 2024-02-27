@@ -139,7 +139,6 @@ enum Commands {
         constraints_filename: Option<String>,
     },
     /// Given a set of constraints and a trace file, fill the computed columns
-    #[cfg(feature = "sqlite")]
     Convert {
         #[arg(
             short = 'T',
@@ -159,11 +158,8 @@ enum Commands {
         #[arg(short = 'o', long = "out", help = "where to write the computed trace")]
         outfile: Option<String>,
 
-        #[arg(short='F', long="format", help="output format", value_parser=["csv", "sqlite"], default_value="sqlite")]
+        #[arg(short='F', long="format", help="output format", value_parser=["csv", "json", "lt"], default_value="sqlite")]
         format: String,
-
-        #[arg(long="auto-constraints", value_parser=["sorts", "nhood"], value_delimiter=',', global=true)]
-        auto_constraints: Vec<String>,
     },
     /// Given a set of constraints and a trace file, fill the computed columns
     Compute {
@@ -692,35 +688,36 @@ fn main() -> Result<()> {
                 constraints_filename,
             )?;
         }
-        #[cfg(feature = "sqlite")]
         Commands::Convert {
             tracefile,
             outfile,
             format,
-            auto_constraints,
             exclude,
         } => {
-            // if auto_constraints {
-            //     builder.auto_constraints(AutoConstraint::all());
-            // }
-
             let mut cs = builder.into_constraint_set()?;
-            compute::compute_trace(&tracefile, &mut cs, false)
-                .with_context(|| format!("while computing from `{}`", tracefile))?;
+            if tracefile.ends_with("lt") {
+                import::parse_flat_trace(&tracefile, &mut cs, true)
+            } else {
+                import::parse_json_trace(&tracefile, &mut cs, true)
+            }
+            .with_context(|| format!("while computing from `{}`", tracefile))?;
+
             match format.as_str() {
                 "csv" => exporters::convert::to_csv(
                     &cs,
                     &exclude.unwrap_or_default(),
                     outfile.as_ref().map(String::as_str).unwrap_or("trace.csv"),
                 ),
-                "sqlite" => exporters::convert::to_sqlite(
+                "json" => exporters::convert::to_json(
                     &cs,
                     &exclude.unwrap_or_default(),
-                    outfile
-                        .as_ref()
-                        .map(String::as_str)
-                        .unwrap_or("trace.sqlite"),
+                    outfile.as_ref().map(String::as_str).unwrap_or("trace.json"),
                 ),
+                // "lt" => exporters::convert::to_lt(
+                //     &cs,
+                //     &exclude.unwrap_or_default(),
+                //     outfile.as_ref().map(String::as_str).unwrap_or("trace.csv"),
+                // ),
                 _ => unreachable!(),
             }?;
         }

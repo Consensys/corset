@@ -161,7 +161,7 @@ impl<Data: AsRef<[u8]>> TraceReader<Data> {
 }
 
 #[time("info", "Parsing binary traces")]
-pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
+pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet, keep_raw: bool) -> Result<()> {
     let file = File::open(tracefile)
         .with_context(|| anyhow!("opening {}", tracefile.bright_white().bold()))?;
     let mut trace_reader = TraceReader::from(unsafe {
@@ -175,7 +175,7 @@ pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
         if let Some(Register { magma, .. }) = cs.columns.register(&column_ref) {
             let register_bytes = trace_reader
                 .slice(trace_register.length as usize * trace_register.bytes_per_element)?;
-            let mut xs = (-1..trace_register.length)
+            let mut xs = (if keep_raw { 0 } else { -1 }..trace_register.length)
                 .into_par_iter()
                 .map(|i| {
                     if i == -1 {
@@ -222,7 +222,7 @@ pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
             // required.
             // Atomic columns are always padded with zeroes, so there is
             // no need to trigger a more complex padding system.
-            if xs.len() < module_min_len {
+            if !keep_raw && xs.len() < module_min_len {
                 xs.reverse();
                 xs.resize(module_min_len, CValue::zero()); // TODO: register padding values
                 xs.reverse();
@@ -250,7 +250,7 @@ pub fn parse_flat_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
 }
 
 #[time("info", "Parsing trace from JSON file with SIMD")]
-pub fn parse_json_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
+pub fn parse_json_trace(tracefile: &str, cs: &mut ConstraintSet, keep_raw: bool) -> Result<()> {
     let mut f = File::open(tracefile).with_context(|| format!("while opening `{}`", tracefile))?;
 
     #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
@@ -267,7 +267,7 @@ pub fn parse_json_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
         .with_context(|| format!("while reading `{}`", tracefile))?;
         let v = simd_json::to_borrowed_value(&mut content)
             .map_err(|e| anyhow!("while parsing json: {}", e))?;
-        fill_traces_from_json(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
+        fill_traces_from_json(&v, vec![], cs, &mut None, keep_raw).with_context(|| "while reading columns")
     }
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
     {
@@ -280,12 +280,13 @@ pub fn parse_json_trace(tracefile: &str, cs: &mut ConstraintSet) -> Result<()> {
             }
         }
         .with_context(|| format!("while reading `{}`", tracefile))?;
-        fill_traces_from_json(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
+        fill_traces_from_json(&v, vec![], cs, &mut None, keep_raw)
+            .with_context(|| "while reading columns")
     }
 }
 
 #[time("info", "Parsing trace from JSON with SIMD")]
-pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
+pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet, keep_raw: bool) -> Result<()> {
     #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
     {
         let mut content = Vec::new();
@@ -300,7 +301,7 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
         };
         let v = simd_json::to_borrowed_value(&mut content)
             .map_err(|e| anyhow!("while parsing json: {}", e))?;
-        fill_traces_from_json(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
+        fill_traces_from_json(&v, vec![], cs, &mut None, keep_raw).with_context(|| "while reading columns")
     }
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
     {
@@ -309,15 +310,20 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet) -> Result<()> {
             Some(_) => serde_json::from_reader(gz),
             None => serde_json::from_reader(BufReader::new(tracestr)),
         }?;
-        fill_traces_from_json(&v, vec![], cs, &mut None).with_context(|| "while reading columns")
+        fill_traces_from_json(&v, vec![], cs, &mut None, keep_raw)
+            .with_context(|| "while reading columns")
     }
 }
 
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
-fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
+fn parse_column(xs: &[Value], h: &Handle, t: Magma, keep_raw: bool) -> Result<Vec<CValue>> {
     let mut cache_num = cached::SizedCache::with_size(200000); // ~1.60MB cache
     let mut cache_str = cached::SizedCache::with_size(200000); // ~1.60MB cache
-    let mut r = vec![CValue::zero()];
+    let mut r = if keep_raw {
+        Vec::new()
+    } else {
+        vec![CValue::zero()]
+    };
     let xs = xs
         .iter()
         .map(|x| match x {
@@ -343,9 +349,13 @@ fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
 }
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
-fn parse_column(xs: &[Value], h: &Handle, t: Magma) -> Result<Vec<CValue>> {
+fn parse_column(xs: &[Value], h: &Handle, t: Magma, keep_raw: bool) -> Result<Vec<CValue>> {
     let mut cache = cached::SizedCache::with_size(200000); // ~1.60MB cache
-    let mut r = vec![CValue::zero()];
+    let mut r = if keep_raw {
+        Vec::new()
+    } else {
+        vec![CValue::zero()]
+    };
     let xs = xs
         .iter()
         .map(|x| {
@@ -379,6 +389,7 @@ pub fn fill_traces_from_json(
     path: Vec<String>,
     cs: &mut ConstraintSet,
     initiator: &mut Option<&mut String>,
+    keep_raw: bool,
 ) -> Result<()> {
     match v {
         Value::Object(map) => {
@@ -387,11 +398,11 @@ pub fn fill_traces_from_json(
                     debug!("Importing {}", path[path.len() - 1]);
                     let mut first_column = String::new();
                     let mut initiator = Some(&mut first_column);
-                    fill_traces_from_json(v, path.clone(), cs, &mut initiator)?;
+                    fill_traces_from_json(v, path.clone(), cs, &mut initiator, keep_raw)?;
                 } else {
                     let mut path = path.clone();
                     path.push(k.to_string());
-                    fill_traces_from_json(v, path, cs, initiator)?;
+                    fill_traces_from_json(v, path, cs, initiator, keep_raw)?;
                 }
             }
             Ok(())
@@ -420,15 +431,15 @@ pub fn fill_traces_from_json(
                     let module_spilling = module_spilling
                         .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 
-                    let mut xs = parse_column(xs, handle.as_handle(), *t)
-                        .with_context(|| anyhow!("importing {}", handle))?;
+                    let mut xs = parse_column(xs, handle.as_handle(), *t, keep_raw)
+                        .with_context(|| anyhow!("importing {}", handle.pretty()))?;
 
                     // If the parsed column is not long enought w.r.t. the
                     // minimal module length, prepend it with as many zeroes as
                     // required.
                     // Atomic columns are always padded with zeroes, so there is
                     // no need to trigger a more complex padding system.
-                    if xs.len() < module_min_len {
+                    if !keep_raw && xs.len() < module_min_len {
                         xs.reverse();
                         xs.resize_with(module_min_len, || {
                             padding_value.clone().unwrap_or_default()
@@ -453,8 +464,8 @@ pub fn fill_traces_from_json(
                     let module_spilling = module_spilling
                         .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 
-                    let mut xs = parse_column(xs, handle.as_handle(), *magma)
-                        .with_context(|| anyhow!("importing {}", handle))?;
+                    let mut xs = parse_column(xs, handle.as_handle(), *magma, keep_raw)
+                        .with_context(|| anyhow!("importing {}", handle.pretty()))?;
 
                     // If the parsed column is not long enought w.r.t. the
                     // minimal module length, prepend it with as many zeroes as

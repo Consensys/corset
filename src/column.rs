@@ -734,6 +734,16 @@ impl ValueBacking {
             columns,
         }
     }
+
+    pub fn iter_without_spilling<'a>(&'a self, columns: &'a ColumnSet) -> ValueBackingIter<'a> {
+        ValueBackingIter {
+            value: self,
+            i: 0,
+            len: self.len() as isize,
+            spilling: self.spilling(),
+            columns,
+        }
+    }
 }
 
 pub struct ValueBackingIter<'a> {

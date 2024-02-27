@@ -1,5 +1,5 @@
 use super::pretty::Pretty;
-use crate::column::Value;
+use crate::{column::Value, pretty::Base};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
@@ -31,7 +31,7 @@ pub enum RuntimeError {
     #[error("{} has not been computed", .0.pretty())]
     NotComputed(Handle),
 
-    #[error("expected a {} value, found {}", .0.white().bold(), .1.pretty().red())]
+    #[error("expected a {} value, found {}", .0.white().bold(), .1.pretty_with_base(Base::Hex).red())]
     InvalidValue(&'static str, Value),
 
     #[error("expected an array, found {:?}", .0)]

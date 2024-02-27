@@ -354,8 +354,10 @@ impl RawMagma {
                 }
             }
             RawMagma::Native => {
-                if x.bit_size() > constants::FIELD_BITSIZE {
-                    bail!(RuntimeError::InvalidValue("field element", x))
+                let bit_size = x.bit_size();
+                if bit_size > constants::FIELD_BITSIZE {
+                    Err(anyhow!(RuntimeError::InvalidValue("field element", x)))
+                        .with_context(|| format!("{}b > {}b", bit_size, constants::FIELD_BITSIZE))
                 } else {
                     Ok(x)
                 }
