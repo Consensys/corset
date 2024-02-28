@@ -19,6 +19,8 @@ enum CheckingError {
     NoColumnsFound(Handle),
     #[error("")]
     FailingConstraint(Handle, String),
+    #[error("")]
+    MismatchingLengths(Error),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -282,7 +284,9 @@ fn check_constraint(
     name: &Handle,
     settings: DebugSettings,
 ) -> Result<()> {
-    let l = cs.dependencies_len(expr, true)?;
+    let l = cs
+        .dependencies_len(expr, true)
+        .map_err(CheckingError::MismatchingLengths)?;
     if let Some(l) = l {
         let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
         match domain {
@@ -401,7 +405,7 @@ fn check_lookup(
                         &mut None,
                         &EvalSettings::default(),
                     )
-                    .unwrap()
+                    .unwrap_or_default()
                 })))
                 .map(|(parent, (child, value))| {
                     format!(
@@ -473,6 +477,10 @@ pub fn check(
                                                 }
                                                 return Some(name.to_owned());
                                             }
+                                            CheckingError::MismatchingLengths(err) => {
+                                                error!("{err}");
+                                                return Some(name.to_owned());
+                                            }
                                         },
                                         None => {
                                             warn!("{}", err);
@@ -499,6 +507,10 @@ pub fn check(
                                             );
                                         }
                                         Some(name.to_owned())
+                                    }
+                                    Some(CheckingError::MismatchingLengths(err)) => {
+                                        error!("{err}");
+                                        return Some(name.to_owned());
                                     }
                                     None => {
                                         warn!("{}", err);

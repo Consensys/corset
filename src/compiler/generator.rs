@@ -727,7 +727,7 @@ impl ConstraintSet {
         {
             bail!(
                 "all columns in {} are not of the same length:\n{}",
-                expr,
+                expr.pretty(),
                 expr.dependencies()
                     .iter()
                     .map(|handle| format!(
