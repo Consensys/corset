@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.7.5] - 2024-02-28
+
+### Bug Fixes
+
+- Refuse to import erroneous values for Fr elements
+- Allow for unknown columns in binary trace
+
+### Features
+
+- Clearer lookup error messages
+- Add conversion to JSON
+- Make mismatching column lengths a non-recoverable error
+
 ## [9.7.4] - 2024-02-26
 
 ### Bug Fixes
@@ -16,6 +29,10 @@ All notable changes to this project will be documented in this file.
 - Add a high contrast setting
 - Add boolean version of chronologic testing operators
 - Inverse pure expressions in place
+
+### Miscellaneous Tasks
+
+- Release corset version 9.7.4
 
 ### Refactor
 
