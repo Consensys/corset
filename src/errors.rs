@@ -183,6 +183,12 @@ pub mod symbols {
 
     #[derive(Error, Debug)]
     pub enum Error {
+        #[error("expected {}, found {}", .0.blue(), .1.yellow())]
+        NotASomethings(&'static str, String),
+
+        #[error("unable to convert {} to {}", .1.yellow(), .0.blue())]
+        InvalidConversion(&'static str, String),
+
         #[error("module {} not found in {}", .0.red(), .1.blue())]
         ModuleNotFound(String, String),
 

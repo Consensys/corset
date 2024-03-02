@@ -7,6 +7,7 @@ use self::parser::DisplayableColumn;
 
 use crate::{
     compiler::{tables::Scope, Type},
+    errors::symbols,
     pretty::Base,
 };
 
@@ -42,43 +43,57 @@ impl AstNode {
         self.class.depth()
     }
     /// If possible, returns the i64 encoded by this node
-    pub fn as_i64(&self) -> Result<i64> {
+    pub fn as_i64(&self) -> Result<i64, symbols::Error> {
         if let Token::Value(r) = &self.class {
-            r.try_into().map_err(|e| anyhow!("{:?}", e))
+            r.try_into()
+                .map_err(|_| symbols::Error::InvalidConversion("i64", format!("{:?}", self)))
         } else {
-            bail!("expected i64, found `{:?}`", self)
+            Err(symbols::Error::NotASomethings("i64", format!("{:?}", self)))
         }
     }
     /// If possible, returns the u64 encoded by this node
-    pub fn as_u64(&self) -> Result<u64> {
+    pub fn as_u64(&self) -> Result<u64, symbols::Error> {
         if let Token::Value(r) = &self.class {
-            r.try_into().map_err(|e| anyhow!("{:?}", e))
+            r.try_into()
+                .map_err(|_| symbols::Error::InvalidConversion("u64", format!("{:?}", self)))
         } else {
-            bail!("expected usize, found `{:?}`", self)
+            Err(symbols::Error::NotASomethings(
+                "usize",
+                format!("{:?}", self),
+            ))
         }
     }
     /// If possible, returns the symbol encoded by this node
-    pub fn as_symbol(&self) -> Result<&str> {
+    pub fn as_symbol(&self) -> Result<&str, symbols::Error> {
         if let Token::Symbol(x) = &self.class {
-            Ok(x)
+            Result::Ok(x)
         } else {
-            bail!("expected symbol, found `{:?}`", self)
+            Err(symbols::Error::NotASomethings(
+                "symbol",
+                format!("{:?}", self),
+            ))
         }
     }
     /// If possible, returns the list of nodes encoded by this node
-    pub fn as_list(&self) -> Result<&[AstNode]> {
+    pub fn as_list(&self) -> Result<&[AstNode], symbols::Error> {
         if let Token::List(xs) = &self.class {
-            Ok(xs)
+            Result::Ok(xs)
         } else {
-            bail!("expected list, found `{:?}`", self)
+            Err(symbols::Error::NotASomethings(
+                "list",
+                format!("{:?}", self),
+            ))
         }
     }
     /// If possible, returns the domain/range encoded by this node
-    pub fn as_domain(&self) -> Result<Domain<AstNode>> {
+    pub fn as_domain(&self) -> Result<Domain<AstNode>, symbols::Error> {
         if let Token::Domain(d) = &self.class {
-            Ok(*d.clone())
+            Result::Ok(*d.clone())
         } else {
-            bail!("expected range, found `{:?}`", self)
+            Err(symbols::Error::NotASomethings(
+                "range",
+                format!("{:?}", self),
+            ))
         }
     }
     /// A formatting function optimizing for debug informations

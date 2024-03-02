@@ -1,3 +1,4 @@
+use anyhow::Context;
 use anyhow::*;
 use crossterm::style::Stylize;
 use num_traits::ToPrimitive;
@@ -120,7 +121,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
             )?;
             Ok(())
         }
-        Token::DefInterleaving { target, froms: _ } => {
+        Token::DefInterleaving { target, froms } => {
             let node = Node::column()
                 .handle(Handle::maybe_with_perspective(
                     // TODO unsure about this
@@ -130,6 +131,11 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
                 ))
                 .kind(Kind::Computed)
                 .base(target.base)
+                .t(froms.iter().try_fold(Magma::BINARY, |ax, f| {
+                    f.as_symbol()
+                        .and_then(|s| ctx.resolve_symbol(s))
+                        .map(|s| s.t().m().max(ax))
+                })?)
                 .build();
 
             ctx.insert_symbol(&target.name, node)
@@ -147,13 +153,20 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
                 );
             }
 
-            for to in tos {
+            for pair in tos.iter().zip(froms.iter()) {
+                let to = pair.0;
+                let from = pair.1.as_symbol().unwrap();
+                let from_m = ctx
+                    .resolve_symbol(from)
+                    .with_context(|| format!("symbol {} unknown", from.bold().yellow()))?
+                    .t()
+                    .m();
                 ctx.insert_symbol(
                     &to.name,
                     Node::column()
                         .handle(Handle::new(ctx.module(), to.name.clone()))
                         .kind(Kind::Computed)
-                        .t(Magma::native()) // TODO: previously we took the type of the corresponding 'from' column, is that a problem?
+                        .t(from_m)
                         .base(to.base)
                         .build(),
                 )

@@ -241,11 +241,7 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
         .next()
         .ok_or_else(|| anyhow!("expected column name, found empty list"))?;
     // The first element of the llist *has* to be the name of the column
-    if let Token::Symbol(ref _name) = name_token.class {
-        attributes.name = _name.to_owned();
-    } else {
-        bail!("expected column name, found `{:?}`", name_token)
-    }
+    attributes.name = name_token.as_symbol()?.to_owned();
     // Then can come all the attributes, in no particular order.
     for x in tokens {
         state = match state {
