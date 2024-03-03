@@ -4,7 +4,7 @@ use crossterm::style::Stylize;
 use num_traits::ToPrimitive;
 use owo_colors::OwoColorize;
 
-use crate::compiler::generator::{Defined, Function, FunctionClass, Specialization};
+use crate::compiler::generator::{self, Defined, Function, FunctionClass, Specialization};
 use crate::compiler::tables::Scope;
 use crate::compiler::{CompileSettings, Magma, Node};
 use crate::structs::Handle;
@@ -132,8 +132,9 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
                 .kind(Kind::Computed)
                 .base(target.base)
                 .t(froms.iter().try_fold(Magma::BINARY, |ax, f| {
-                    f.as_symbol()
-                        .and_then(|s| ctx.resolve_symbol(s))
+                    generator::reduce(f, ctx, settings)
+                        .transpose()
+                        .unwrap()
                         .map(|s| s.t().m().max(ax))
                 })?)
                 .build();
@@ -155,12 +156,11 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
 
             for pair in tos.iter().zip(froms.iter()) {
                 let to = pair.0;
-                let from = pair.1.as_symbol().unwrap();
-                let from_m = ctx
-                    .resolve_symbol(from)
-                    .with_context(|| format!("symbol {} unknown", from.bold().yellow()))?
-                    .t()
-                    .m();
+                let from = pair.1;
+                let from_m = generator::reduce(from, ctx, settings)
+                    .transpose()
+                    .unwrap()
+                    .map(|s| s.t().m())?;
                 ctx.insert_symbol(
                     &to.name,
                     Node::column()
