@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.7.7] - 2024-03-03
+
+### Bug Fixes
+
+- Permutations & interleave over expressions
+
 ## [9.7.6] - 2024-03-02
 
 ### Bug Fixes
@@ -27,6 +33,7 @@ All notable changes to this project will be documented in this file.
 
 - Release corset version 9.7.4
 - Release corset version 9.7.5
+- Release corset version 9.7.6
 
 ### Refactor
 
