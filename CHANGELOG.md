@@ -2,11 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.7.8] - 2024-03-05
+
+### Bug Fixes
+
+- Allow the use of array columns in perspectivized interleaving
+
 ## [9.7.7] - 2024-03-03
 
 ### Bug Fixes
 
 - Permutations & interleave over expressions
+
+### Miscellaneous Tasks
+
+- Release corset version 9.7.7
 
 ## [9.7.6] - 2024-03-02
 
