@@ -172,6 +172,10 @@ fn definterleave() {
         "definterleave ok",
         "(defcolumns A B (C :array [1:4])) (definterleaved (D :display :hex) (A [C 2] B ))",
     );
+    must_run(
+        "interleaved, perspective & arrays",
+        "(defcolumns X) (defperspective asdf X (A B (C [2]))) (definterleaved ABC (asdf/A asdf/B [asdf/C 2]))"
+    );
     must_fail(
         "cannot specify type in :definterleaved",
         "(defcolumns A (B :byte) (C :array [1:4])) (definterleaved (D :byte) (A [C 2] B ))",

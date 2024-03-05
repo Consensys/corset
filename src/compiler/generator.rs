@@ -573,7 +573,10 @@ impl ConstraintSet {
                                 self.insert_perspective(&module, &srt_guard_name, srt_guard)?;
                                 self.columns.set_perspective(&target, &srt_guard_name)?;
                             } else {
-                                unreachable!()
+                                bail!(
+                                    "perspective {} is not defined by a column",
+                                    perspective.yellow().bold()
+                                )
                             }
                         }
                     }
@@ -1531,7 +1534,17 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                     .and_then(|n| n.pure_eval().ok())
                     .and_then(|b| b.to_usize())
                     .ok_or_else(|| anyhow!("{:?} is not a valid index", index))?;
-                let array = ctx.resolve_handle(handle.as_handle())?;
+                let handle = handle.as_handle();
+                let symbol_name = format!(
+                    "{}{}",
+                    handle
+                        .perspective
+                        .as_ref()
+                        .map(|p| format!("{p}/"))
+                        .unwrap_or_default(),
+                    handle.name,
+                );
+                let array = ctx.resolve_symbol(&symbol_name)?;
                 match array.e() {
                     Expression::ArrayColumn {
                         handle,

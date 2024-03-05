@@ -539,15 +539,6 @@ impl Scope {
         self.root()._resolve_symbol_with_path(&components)
     }
 
-    pub fn resolve_handle(&mut self, h: &Handle) -> Result<Node, symbols::Error> {
-        let global = data!(self).global;
-        if global {
-            self.resolve_symbol(&h.to_string())
-        } else {
-            self.resolve_symbol(&h.name)
-        }
-    }
-
     fn _resolve_symbol(
         n: usize,
         tree: &mut SymbolTableTree,
