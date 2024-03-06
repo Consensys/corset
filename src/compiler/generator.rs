@@ -1363,7 +1363,13 @@ fn apply_defined(
         let final_type = if let Some(expected_type) = b.out_type {
             if found_type > expected_type {
                 if b.force {
-                    expected_type.with_scale(found_type)
+                    if !expected_type.is_conditioned() {
+                        expected_type
+                            .with_scale(found_type)
+                            .force_with_conditioning_of(&found_type)
+                    } else {
+                        expected_type.with_scale(found_type)
+                    }
                 } else {
                     bail!(
                     "in call to {} with {}: inferred output type {} is incompatible with declared return type {}",
@@ -1374,7 +1380,7 @@ fn apply_defined(
                 )
                 }
             } else {
-                found_type
+                found_type.force_with_conditioning_of(&expected_type)
             }
         } else {
             r.t()

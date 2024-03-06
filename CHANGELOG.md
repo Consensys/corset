@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.7.10] - 2024-03-06
+
+### Features
+
+- Add force-bin
+
+### Refactor
+
+- :nowarn -> :force
+
 ## [9.7.9] - 2024-03-06
 
 ### Bug Fixes
@@ -12,6 +22,10 @@ All notable changes to this project will be documented in this file.
 ### Features
 
 - Better error message on erroneous module access
+
+### Miscellaneous Tasks
+
+- Release corset version 9.7.9
 
 ## [9.7.8] - 2024-03-05
 
