@@ -496,7 +496,9 @@ impl Scope {
             if global {
                 self.resolve_symbol_with_path(name)
             } else {
-                Err(symbols::Error::NotAGlobalScope)
+                Err(symbols::Error::NotAGlobalScope(
+                    name.split('.').next().unwrap().to_owned(),
+                ))
             }
         } else if name.contains(PERSPECTIVE_SEPARATOR) {
             let mut s = name.split(PERSPECTIVE_SEPARATOR);
