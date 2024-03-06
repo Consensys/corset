@@ -8,6 +8,7 @@ use crate::compiler::generator::{self, Defined, Function, FunctionClass, Special
 use crate::compiler::tables::Scope;
 use crate::compiler::{CompileSettings, Magma, Node};
 use crate::structs::Handle;
+use crate::utils::hash_strings;
 
 use super::{Ast, AstNode, Kind, Token};
 
@@ -153,18 +154,33 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
                     froms
                 );
             }
-
+            let froms = froms
+                .iter()
+                .map(|f| generator::reduce(f, ctx, settings).transpose().unwrap())
+                .collect::<Result<Vec<_>>>()?;
+            let suffix = hash_strings(froms.iter().map(|f| match f.e() {
+                crate::compiler::Expression::Const(_) => todo!(),
+                crate::compiler::Expression::Funcall { .. } => todo!(),
+                crate::compiler::Expression::Column { handle, .. }
+                | crate::compiler::Expression::ArrayColumn { handle, .. }
+                | crate::compiler::Expression::ExoColumn { handle, .. } => {
+                    handle.as_handle().name.to_owned()
+                }
+                crate::compiler::Expression::List(_) => todo!(),
+                crate::compiler::Expression::Void => todo!(),
+            }));
             for pair in tos.iter().zip(froms.iter()) {
                 let to = pair.0;
                 let from = pair.1;
-                let from_m = generator::reduce(from, ctx, settings)
-                    .transpose()
-                    .unwrap()
-                    .map(|s| s.t().m())?;
+                let from_m = from.t().m();
                 ctx.insert_symbol(
                     &to.name,
                     Node::column()
-                        .handle(Handle::new(ctx.module(), to.name.clone()))
+                        .handle(Handle::maybe_with_perspective(
+                            ctx.module(),
+                            to.name.clone(),
+                            from.perspective().map(|p| format!("{p}-srt-{suffix}")),
+                        ))
                         .kind(Kind::Computed)
                         .t(from_m)
                         .base(to.base)

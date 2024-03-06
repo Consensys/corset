@@ -6,6 +6,7 @@ use crate::{
     compiler::{ColumnRef, Constraint, ConstraintSet, Intrinsic, Kind, Magma, Node},
     pretty::{Base, Pretty},
     structs::Handle,
+    utils::hash_strings,
 };
 
 fn create_sort_constraint(
@@ -41,17 +42,7 @@ fn create_sort_constraint(
     }
 
     // the suffix is required, in case a single module contains multiple sorts
-    let mut suffix = format!(
-        "{:x}",
-        &md5::compute(
-            sorted
-                .iter()
-                .map(|t| t.to_string())
-                .collect::<Vec<_>>()
-                .join("_"),
-        )
-    );
-    suffix.truncate(6);
+    let suffix = hash_strings(sorted.iter());
 
     // Create the columns
     let ats = (0..signs.len())

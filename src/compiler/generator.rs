@@ -25,6 +25,7 @@ use crate::dag::ComputationDag;
 use crate::errors::{self, CompileError, RuntimeError};
 use crate::pretty::Pretty;
 use crate::structs::Handle;
+use crate::utils::hash_strings;
 
 static COUNTER: OnceLock<AtomicUsize> = OnceLock::new();
 
@@ -548,30 +549,29 @@ impl ConstraintSet {
                                         self.columns.column(&handle).unwrap().handle.name,
                                     ),
                                 );
-                                let srt_guard_id = self
-                                    .columns
-                                    .insert_column_and_register(
+                                if let Some(srt_guard_id) =
+                                    self.columns.maybe_insert_column_and_register(
                                         Column::builder()
                                             .kind(Kind::Computed)
                                             .handle(srt_guard_col_handle)
                                             .build(),
                                     )
-                                    .unwrap();
-                                let srt_guard = Node::column()
-                                    .handle(srt_guard_id.clone())
-                                    .kind(Kind::Computed)
-                                    .build();
-                                let srt_guard_name = format!("{}-intrld", perspective);
-                                self.computations.insert(
-                                    &srt_guard_id,
-                                    Computation::Interleaved {
-                                        target: srt_guard_id.to_owned(),
-                                        froms: vec![handle; froms.len()],
-                                    },
-                                )?;
-
-                                self.insert_perspective(&module, &srt_guard_name, srt_guard)?;
-                                self.columns.set_perspective(&target, &srt_guard_name)?;
+                                {
+                                    let srt_guard = Node::column()
+                                        .handle(srt_guard_id.clone())
+                                        .kind(Kind::Computed)
+                                        .build();
+                                    let srt_guard_name = format!("{}-intrld", perspective);
+                                    self.computations.insert(
+                                        &srt_guard_id,
+                                        Computation::Interleaved {
+                                            target: srt_guard_id.to_owned(),
+                                            froms: vec![handle; froms.len()],
+                                        },
+                                    )?;
+                                    self.insert_perspective(&module, &srt_guard_name, srt_guard)?;
+                                    self.columns.set_perspective(&target, &srt_guard_name)?;
+                                }
                             } else {
                                 bail!(
                                     "perspective {} is not defined by a column",
@@ -580,53 +580,60 @@ impl ConstraintSet {
                             }
                         }
                     }
-                    Computation::Sorted { froms, tos, .. } => {
-                        for (j, from) in froms.clone().iter().enumerate() {
-                            if let Some(perspective) = self.columns.perspective(from)?.cloned() {
-                                let from_handle = self.columns.column(from)?.handle.to_owned();
-                                let module = from_handle.module.to_owned();
-                                if let Expression::Column { handle, .. } =
-                                    self.get_perspective(&module, &perspective)?.e().clone()
-                                {
-                                    let srt_guard_col_handle = Handle::new(
-                                        &module,
-                                        format!(
-                                            "{}%srt",
-                                            self.columns.column(&handle).unwrap().handle.name,
-                                        ),
-                                    );
-                                    let srt_guard_id = self
-                                        .columns
-                                        .insert_column_and_register(
-                                            Column::builder()
-                                                .kind(Kind::Computed)
-                                                .handle(srt_guard_col_handle)
-                                                .build(),
-                                        )
-                                        .unwrap();
-                                    let srt_guard = Node::column()
-                                        .handle(srt_guard_id.clone())
-                                        .kind(Kind::Computed)
-                                        .build();
-                                    let srt_guard_name = format!("{}-srt", perspective);
+                    Computation::Sorted {
+                        mut froms,
+                        mut tos,
+                        mut signs,
+                    } => {
+                        if let Some(perspective) = froms
+                            .iter()
+                            .find_map(|f| self.columns.perspective(f).unwrap())
+                        {
+                            let suffix =
+                                hash_strings(froms.iter().map(|f| f.as_handle().name.clone()));
+                            let module = self.columns.column(&froms[0])?.handle.module.to_owned();
+                            if let Expression::Column { handle, .. } =
+                                self.get_perspective(&module, &perspective)?.e().clone()
+                            {
+                                let srt_guard_col_handle = Handle::new(
+                                    &module,
+                                    format!(
+                                        "{}-for-srt-{suffix}",
+                                        self.columns.column(&handle).unwrap().handle.name,
+                                    ),
+                                );
 
-                                    self.insert_perspective(&module, &srt_guard_name, srt_guard)?;
-                                    self.columns.set_perspective(&tos[j], &srt_guard_name)?;
-                                    if let Computation::Sorted { froms, tos, signs } =
-                                        self.computations.get_mut(i).unwrap()
-                                    {
-                                        froms.insert(0, handle.clone());
-                                        tos.insert(0, srt_guard_id.clone());
-                                        signs.insert(0, true);
-                                    } else {
-                                        unreachable!()
-                                    }
-                                    self.computations.add_dependency(srt_guard_id, i)?;
-                                } else {
-                                    unimplemented!("non-column perspectives not yet supported");
-                                };
+                                let srt_guard_id = self
+                                    .columns
+                                    .insert_column_and_register(
+                                        Column::builder()
+                                            .kind(Kind::Computed)
+                                            .handle(srt_guard_col_handle.clone())
+                                            .build(),
+                                    )
+                                    .unwrap();
+                                let srt_guard = Node::column()
+                                    .handle(srt_guard_id.clone())
+                                    .kind(Kind::Computed)
+                                    .build();
+                                self.insert_perspective(
+                                    &module,
+                                    &srt_guard_col_handle.name,
+                                    srt_guard,
+                                )?;
+
+                                for to in tos.iter() {
+                                    self.columns
+                                        .force_perspective(to, &srt_guard_col_handle.name);
+                                }
+                                froms.insert(0, handle.clone());
+                                tos.insert(0, srt_guard_id.clone());
+                                signs.insert(0, true);
+                                self.computations.add_dependency(srt_guard_id, i)?;
+                            } else {
+                                unimplemented!("non-column perspectives not yet supported");
                             };
-                        }
+                        };
                     }
                     _ => {}
                 }
@@ -1850,13 +1857,20 @@ pub(crate) fn reduce_toplevel(
                 .map(|f| ctx.resolve_symbol(&f.name))
                 .collect::<Result<Vec<_>, errors::symbols::Error>>()
                 .with_context(|| anyhow!("while defining permutation"))?;
+            let suffix = hash_strings(froms.iter().map(|f| f.as_handle().name.clone()));
 
             let tos = to
                 .iter()
                 .enumerate()
                 .map(|(i, t)| {
                     Handle::new(ctx.module(), &t.name)
-                        .and_with_perspective(froms[i].as_handle().perspective.clone())
+                        .and_with_perspective(
+                            froms[i]
+                                .as_handle()
+                                .perspective
+                                .as_ref()
+                                .map(|p| format!("{p}-srt-{suffix}")),
+                        )
                         .into()
                 })
                 .collect::<Vec<ColumnRef>>();

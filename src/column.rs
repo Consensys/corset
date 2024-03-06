@@ -962,14 +962,28 @@ impl ColumnSet {
             .get_col_mut(h)
             .ok_or_else(|| anyhow!("TODO: create message"))?
             .handle
-            .perspective;
+            .perspective
+            .clone();
 
-        if current.is_some() {
-            bail!("perspective already set")
+        if let Some(current_p) = current.as_ref() {
+            if current_p != p {
+                bail!(
+                    "perspective already set for {}: {} ≠ {}",
+                    self.column(h).unwrap().handle.pretty(),
+                    current_p.blue(),
+                    p.yellow()
+                )
+            } else {
+                Ok(())
+            }
         } else {
             *current = Some(p.to_string());
             Ok(())
         }
+    }
+
+    pub fn force_perspective(&mut self, h: &ColumnRef, p: &str) {
+        self.get_col_mut(h).unwrap().handle.perspective = Some(p.to_string());
     }
 
     pub fn column(&self, h: &ColumnRef) -> Result<&Column> {
@@ -1068,6 +1082,7 @@ impl ColumnSet {
 
         Ok(ps.into_iter().next())
     }
+
     pub fn id_of(&self, h: &ColumnRef) -> usize {
         if h.is_id() {
             h.as_id()
@@ -1075,7 +1090,7 @@ impl ColumnSet {
             *self
                 .cols
                 .get(h.as_handle())
-                .unwrap_or_else(|| panic!("{}", h.to_string()))
+                .unwrap_or_else(|| panic!("unknown column: {:?} in {:?}", h, self.cols))
         } else {
             unreachable!()
         }
@@ -1139,9 +1154,30 @@ impl ColumnSet {
         }
     }
 
+    pub fn maybe_insert_column(&mut self, column: Column) -> Option<ColumnRef> {
+        if let Some(id) = self.cols.get(&column.handle) {
+            None
+        } else {
+            let id = self._cols.len();
+            self.cols.insert(column.handle.to_owned(), id);
+            self._cols.push(column);
+
+            Some(ColumnRef::from_id(id))
+        }
+    }
+
     pub fn insert_column_and_register(&mut self, mut column: Column) -> Result<ColumnRef> {
         column.register = Some(self.new_register(column.handle.clone(), column.t));
         self.insert_column(column)
+    }
+
+    pub fn maybe_insert_column_and_register(&mut self, mut column: Column) -> Option<ColumnRef> {
+        if self.cols.contains_key(&column.handle) {
+            None
+        } else {
+            column.register = Some(self.new_register(column.handle.clone(), column.t));
+            self.maybe_insert_column(column)
+        }
     }
 
     pub fn is_empty(&self) -> bool {

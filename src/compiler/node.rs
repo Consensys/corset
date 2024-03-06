@@ -373,6 +373,16 @@ impl Node {
             })
             .to_owned()
     }
+    pub fn perspective(&self) -> Option<String> {
+        match self.e() {
+            Expression::Funcall { args, .. } | Expression::List(args) => todo!(),
+            Expression::Const(_) => None,
+            Expression::Column { handle, .. }
+            | Expression::ExoColumn { handle, .. }
+            | Expression::ArrayColumn { handle, .. } => handle.as_handle().perspective.to_owned(),
+            Expression::Void => None,
+        }
+    }
     pub fn dbg(&self) -> Option<&String> {
         self.dbg.as_ref()
     }

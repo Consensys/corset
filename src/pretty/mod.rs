@@ -179,7 +179,15 @@ impl Pretty for Node {
 impl Pretty for Handle {
     fn pretty(&self) -> String {
         if self.module != crate::compiler::MAIN_MODULE {
-            format!("{}.{}", self.module.blue(), self.name.white().bold())
+            format!(
+                "{}.{}{}",
+                self.module.blue(),
+                self.name.white().bold(),
+                self.perspective
+                    .as_ref()
+                    .map(|p| format!("%{}", p.blue()))
+                    .unwrap_or_default()
+            )
         } else {
             format!("{}", self.name.white().bold())
         }

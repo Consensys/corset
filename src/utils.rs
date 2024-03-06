@@ -1,4 +1,5 @@
 use anyhow::*;
+use itertools::Itertools;
 #[cfg(feature = "postgres")]
 use postgres::Client;
 #[cfg(feature = "postgres")]
@@ -85,4 +86,13 @@ pub fn purify(s: &str) -> String {
     .replace('₈', "8")
     .replace('₉', "9")
     .replace(|c: char| !c.is_ascii(), "_")
+}
+
+pub fn hash_strings<S: ToString, I: Iterator<Item = S>>(xs: I) -> String {
+    let mut s = format!(
+        "{:x}",
+        &md5::compute(xs.into_iter().map(|x| x.to_string()).join("-"))
+    );
+    s.truncate(6);
+    s
 }
