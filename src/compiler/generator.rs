@@ -218,7 +218,7 @@ pub struct Specialization {
     pub body: AstNode,
     // if set, then suppress warnings if there is a mismatch between the defined
     // & found return types at a callsite of this specialization
-    pub nowarn: bool,
+    pub force: bool,
 }
 impl std::fmt::Display for Specialization {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1361,20 +1361,20 @@ fn apply_defined(
     Ok(if let Some(r) = reduce(&b.body, &mut f_ctx, settings)? {
         let found_type = r.t();
         let final_type = if let Some(expected_type) = b.out_type {
-            if found_type > expected_type && !b.nowarn {
-                warn!(
-                    "in call to {} with {}: inferred output type {} is incompatible with declared type {}",
+            if found_type > expected_type {
+                if b.force {
+                    expected_type.with_scale(found_type)
+                } else {
+                    bail!(
+                    "in call to {} with {}: inferred output type {} is incompatible with declared return type {}",
                     h.pretty(),
                     traversed_args.iter().map(|x| x.pretty()).join(" "),
                     found_type.yellow().bold(),
                     expected_type.blue().bold()
                 )
-            }
-
-            if b.nowarn {
-                found_type.force_with_conditioning_of(&expected_type)
+                }
             } else {
-                found_type.with_conditioning_of(&expected_type)?
+                found_type
             }
         } else {
             r.t()

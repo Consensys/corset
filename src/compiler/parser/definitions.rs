@@ -199,7 +199,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
             body,
             in_types,
             out_type,
-            nowarn,
+            force,
         } => {
             let module_name = ctx.module();
             ctx.insert_function(
@@ -213,7 +213,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
                             in_types: in_types.to_vec(),
                             out_type: *out_type,
                             body: *body.clone(),
-                            nowarn: *nowarn,
+                            force: *force,
                         }],
                     }),
                 },

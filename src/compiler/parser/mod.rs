@@ -205,7 +205,7 @@ pub enum Token {
         /// the body is any reasonable expression (should it be enforced?)
         body: Box<AstNode>,
         /// if set, do not warn on type override
-        nowarn: bool,
+        force: bool,
     },
     Defpurefun {
         name: String,
@@ -213,7 +213,7 @@ pub enum Token {
         in_types: Vec<Type>,
         out_type: Option<Type>,
         body: Box<AstNode>,
-        nowarn: bool,
+        force: bool,
     },
     /// a list of aliases declaration, normally only DefAlias -- FIXME: should probably be removed
     DefAliases(Vec<AstNode>),

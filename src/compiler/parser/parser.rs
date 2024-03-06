@@ -478,7 +478,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
             struct TypedSymbol {
                 name: String,
                 t: Option<Type>,
-                warn: bool,
+                force: bool,
             }
 
             fn parse_typed_symbols(l: AstNode) -> Result<TypedSymbol> {
@@ -486,7 +486,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                     Token::Symbol(s) => Ok(TypedSymbol {
                         name: s,
                         t: None,
-                        warn: true,
+                        force: false,
                     }),
                     Token::List(xs) => match xs.as_slice() {
                         [AstNode {
@@ -498,7 +498,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                         }] => Ok(TypedSymbol {
                             name: s.to_owned(),
                             t: Some(Type::Any(Magma::try_from(t.as_str())?)),
-                            warn: false,
+                            force: false,
                         }),
                         [AstNode {
                             class: Token::Symbol(s),
@@ -510,11 +510,11 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                             class: Token::Keyword(n),
                             ..
                         }] => {
-                            if n == ":nowarn" {
+                            if n == ":nowarn" || n == ":force" {
                                 Ok(TypedSymbol {
                                     name: s.to_owned(),
                                     t: Some(Type::Any(Magma::try_from(t.as_str())?)),
-                                    warn: false,
+                                    force: true,
                                 })
                             } else {
                                 bail!("unexpected keyword {}", n.bold().red())
@@ -573,7 +573,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                         in_types,
                         out_type: function_name.t,
                         body,
-                        nowarn: !function_name.warn,
+                        force: function_name.force,
                     }
                 } else {
                     Token::Defpurefun {
@@ -582,7 +582,7 @@ fn parse_definition(pair: Pair<Rule>) -> Result<AstNode> {
                         in_types,
                         out_type: function_name.t,
                         body,
-                        nowarn: !function_name.warn,
+                        force: function_name.force,
                     }
                 },
                 src,
