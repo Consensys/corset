@@ -45,6 +45,7 @@
 (defpurefun ((is-not-zero :binary@bool) x) (~ x))
 (defpurefun ((is-not-zero! :binary@loob :nowarn) x) (- 1 (is-not-zero x)))
 (defpurefun ((is-zero :binary@bool :nowarn) x) (- 1 (~ x)))
+(defpurefun ((is-zero! :binary@loob :nowarn) x) (~ x))
 
 
 
