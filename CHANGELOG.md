@@ -2,11 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.7.9] - 2024-03-06
+
+### Bug Fixes
+
+- Symbol resolving in array indexing operation
+- Refactor perspectives in interleavings & sorts
+
+### Features
+
+- Better error message on erroneous module access
+
 ## [9.7.8] - 2024-03-05
 
 ### Bug Fixes
 
 - Allow the use of array columns in perspectivized interleaving
+
+### Miscellaneous Tasks
+
+- Release corset version 9.7.8
 
 ## [9.7.7] - 2024-03-03
 
@@ -22,28 +37,47 @@ All notable changes to this project will be documented in this file.
 
 ### Bug Fixes
 
-- Wrong table layout obsucring elements
-- Bool -> loob
-- Display full file path on compile errors
-- Wrong perspective colors
+- Carry typing information over interleaving & permutations
+
+### Miscellaneous Tasks
+
+- Release corset version 9.7.6
+
+## [9.7.5] - 2024-02-28
+
+### Bug Fixes
+
 - Refuse to import erroneous values for Fr elements
 - Allow for unknown columns in binary trace
-- Carry typing information over interleaving & permutations
 
 ### Features
 
-- Add a high contrast setting
-- Add boolean version of chronologic testing operators
-- Inverse pure expressions in place
 - Clearer lookup error messages
 - Add conversion to JSON
 - Make mismatching column lengths a non-recoverable error
 
 ### Miscellaneous Tasks
 
-- Release corset version 9.7.4
 - Release corset version 9.7.5
-- Release corset version 9.7.6
+
+## [9.7.4] - 2024-02-26
+
+### Bug Fixes
+
+- Wrong table layout obsucring elements
+- Bool -> loob
+- Display full file path on compile errors
+- Wrong perspective colors
+
+### Features
+
+- Add a high contrast setting
+- Add boolean version of chronologic testing operators
+- Inverse pure expressions in place
+
+### Miscellaneous Tasks
+
+- Release corset version 9.7.4
 
 ### Refactor
 
