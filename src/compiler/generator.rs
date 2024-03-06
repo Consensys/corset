@@ -1529,42 +1529,27 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
         )),
         Token::IndexedSymbol { name, index } => {
             let symbol = ctx.resolve_symbol(name)?;
-            if let Expression::ArrayColumn { handle, .. } = symbol.e() {
+            if let Expression::ArrayColumn {
+                handle,
+                domain,
+                base,
+            } = symbol.e()
+            {
                 let i = reduce(index, ctx, settings)?
                     .and_then(|n| n.pure_eval().ok())
                     .and_then(|b| b.to_usize())
                     .ok_or_else(|| anyhow!("{:?} is not a valid index", index))?;
-                let handle = handle.as_handle();
-                let symbol_name = format!(
-                    "{}{}",
-                    handle
-                        .perspective
-                        .as_ref()
-                        .map(|p| format!("{p}/"))
-                        .unwrap_or_default(),
-                    handle.name,
-                );
-                let array = ctx.resolve_symbol(&symbol_name)?;
-                match array.e() {
-                    Expression::ArrayColumn {
-                        handle,
-                        domain,
-                        base,
-                    } => {
-                        if domain.contains(i.try_into().unwrap()) {
-                            Ok(Some(
-                                Node::column()
-                                    .handle(handle.as_handle().ith(i))
-                                    .kind(Kind::Commitment)
-                                    .base(*base)
-                                    .t(array.t().m())
-                                    .build(),
-                            ))
-                        } else {
-                            bail!("tried to access {} at index {}", array.pretty().bold(), i)
-                        }
-                    }
-                    _ => unimplemented!(),
+                if domain.contains(i.try_into().unwrap()) {
+                    Ok(Some(
+                        Node::column()
+                            .handle(handle.as_handle().ith(i))
+                            .kind(Kind::Commitment)
+                            .base(*base)
+                            .t(symbol.t().m())
+                            .build(),
+                    ))
+                } else {
+                    bail!("tried to access {} at index {}", symbol.pretty().bold(), i)
                 }
             } else {
                 bail!(anyhow!(
