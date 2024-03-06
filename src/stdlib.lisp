@@ -9,6 +9,8 @@
 (defpurefun ((force-bool :@bool :force) x) x)
 (defpurefun ((is-binary :@loob :force) e0) (* e0 (- 1 e0)))
 
+(defpurefun ((force-bin :binary :force) x) x)
+
 ;;
 ;; Boolean functions
 ;;
