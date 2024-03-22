@@ -133,6 +133,9 @@ pub enum Form {
 pub enum Builtin {
     Len,
     Shift,
+    /// This represents normalisation in the presence of
+    /// field agnosticity.  Perhaps it might be considered
+    /// "vector normalisation"?    
     NormFlat,
     If,
 }
@@ -144,9 +147,6 @@ impl std::fmt::Display for Builtin {
             match self {
                 Builtin::Len => "len",
                 Builtin::Shift => "shift",
-                /// This represents normalisation in the presence of
-                /// field agnosticity.  Perhaps it might be considered
-                /// "vector normalisation"?
                 Builtin::NormFlat => "~>>",
                 Builtin::If => "if?",
             }
