@@ -144,6 +144,9 @@ impl std::fmt::Display for Builtin {
             match self {
                 Builtin::Len => "len",
                 Builtin::Shift => "shift",
+                /// This represents normalisation in the presence of
+                /// field agnosticity.  Perhaps it might be considered
+                /// "vector normalisation"?
                 Builtin::NormFlat => "~>>",
                 Builtin::If => "if?",
             }
@@ -158,8 +161,11 @@ pub enum Intrinsic {
     Add,
     Sub,
     Mul,
+    /// Vector addition is required for field agnosticity.
     VectorAdd,
+    /// Vector subtraction is required for field agnosticity.    
     VectorSub,
+    /// Vector multiplication is required for field agnosticity.        
     VectorMul,
     Exp,
     Neg,
