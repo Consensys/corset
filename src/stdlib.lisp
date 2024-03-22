@@ -18,9 +18,15 @@
 ;; ~-prefix denotes normalized-functions (i.e. output is 0/1)
 (defpurefun (and a b) (* a b))
 (defpurefun ((~and :binary@bool) a b) (~ (and a b)))
+;; WARNING: the "and!" function is unsafe when a and b can be
+;; arbirarily large.  Unfortunately, Corset has not mechanism for
+;; checking this.
 (defpurefun ((and! :@loob) a b) (+ a b))
 (defpurefun ((~and! :binary@loob) a b) (~ (and! a b)))
 
+;; WARNING: the "or" function is unsafe when a and b can be
+;; arbirarily large.  Unfortunately, Corset has not mechanism for
+;; checking this.
 (defpurefun (or a b) (+ a b))
 (defpurefun ((~or :binary@bool) a b) (~ (or a b)))
 (defpurefun ((or! :@loob) a b) (* a b))
@@ -38,9 +44,16 @@
 
 
 ;; Variadic versions of and/or
+
+;; WARNING: the "any" function is unsafe when a and b can be
+;; arbirarily large.  Unfortunately, Corset has not mechanism for
+;; checking this.
 (defunalias any +)
 (defunalias any! *)
 (defunalias all *)
+;; WARNING: the "all" function is unsafe when a and b can be
+;; arbirarily large.  Unfortunately, Corset has not mechanism for
+;; checking this.
 (defunalias all! +)
 
 ;; Boolean functions
