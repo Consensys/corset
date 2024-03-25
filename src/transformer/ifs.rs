@@ -96,13 +96,13 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
 /// positions.  Specifically, something like this:
 ///
 /// ```lisp
-/// (defconstraint test () (eq! (if A B) C))
+/// (defconstraint test () (+ (if A B) C))
 /// ```
 ///
 /// Has the nested `if` raised into the following position:
 ///
 /// ```lisp
-/// (defconstraint test () (if A (eq! B C)))
+/// (defconstraint test () (if A (+ B C)))
 /// ```
 ///
 /// The purpose of this is to sanitize the structure of `if`
@@ -173,6 +173,25 @@ fn raise_ifs(mut e: Node) -> Node {
     }
 }
 
+/// Responsible for lowering `if` expressions into a multiplication
+/// over the normalised condition.  For example, this constraint:
+///
+/// ```lisp
+/// (defconstraint test () (if A B))
+/// ```
+///
+/// Would be compiled as follows:
+///
+/// ```
+/// (1 - ~A) * B
+/// ```
+///
+/// Where `~A` is the normalised values of `A` (i.e. is `0` when `A=0`
+/// otherwise is `1`).
+///
+/// **NOTE:** When the `if` condition is a constant expression, then
+/// it is evaluated at compile time and the entire `if` expression is
+/// eliminated.
 pub fn expand_ifs(cs: &mut ConstraintSet) {
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr, .. } = c {
