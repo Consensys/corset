@@ -5,7 +5,7 @@ use crate::{compiler::MAIN_MODULE, utils::purify};
 use super::{ARRAY_SEPARATOR, MODULE_SEPARATOR};
 
 /// A handle uniquely and absolutely defines a symbol
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct Handle {
     /// the module to which the symbol belongs
     /// NOTE multi-level paths are not yet implemented
@@ -168,5 +168,39 @@ impl std::fmt::Display for Handle {
                 self.name,
             )
         }
+    }
+}
+
+#[cfg(feature="json-bin")]
+impl Serialize for Handle {
+    fn serialize<S: serde::ser::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        // Sanity checks
+        assert!(!self.module.contains(":"),"JSON deserisalisation conflict on module");
+        assert!(!self.name.contains(":"),"JSON deserisalisation conflict on name");
+        assert!(!self.perspective.as_ref().map_or(false, |s| s.contains(":")),"JSON deserisalisation conflict on perspective");
+        // Compute format string
+        let fmt_str = match &self.perspective {
+            None => format!("{}:{}", self.module,self.name),
+            Some(p) => format!("{}:{}:{}", self.module,self.name,p),
+        };
+        // Done
+        serializer.serialize_str(&fmt_str)
+    }
+}
+
+#[cfg(not(feature="json-bin"))]
+use serde::ser::{SerializeStruct};
+
+#[cfg(not(feature="json-bin"))]
+impl Serialize for Handle {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        let mut handle = serializer.serialize_struct("Handle", 3)?;
+        handle.serialize_field("module", &self.module)?;
+        handle.serialize_field("name", &self.name)?;
+        handle.serialize_field("perspective", &self.perspective)?;
+        handle.end()
     }
 }

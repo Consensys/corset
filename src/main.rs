@@ -12,6 +12,8 @@ use std::{
     io::{Read, Write},
     path::Path,
 };
+use serde::{Serialize};
+use serde_json::{Value};
 use transformer::{AutoConstraint, ExpansionLevel};
 
 use clap::{Parser, Subcommand};
@@ -378,6 +380,9 @@ enum Commands {
 
         #[arg(long, help = "human-readably serialize the constraint system")]
         pretty: bool,
+        
+        #[arg(long, help = "generate output as JSON instead of in the Rusty Object Notation (RON)")]
+        json: bool
     },
 }
 
@@ -930,17 +935,24 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Compile { outfile, pretty } => {
+        Commands::Compile { outfile, pretty, json } => {
             let constraints = builder.into_constraint_set()?;
             std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?
                 .write_all(
-                    if pretty {
-                        ron::ser::to_string_pretty(&constraints, ron::ser::PrettyConfig::default())
+                    if json && cfg!(feature="json-bin") {
+                        if pretty {
+                            serde_json::to_string_pretty(&constraints)?                            
+                        } else {
+                            serde_json::to_string(&constraints)?
+                        }
+                    } else if json {
+                        panic!("Exporting as JSON requires the `json-bin` feature.");
+                    } else if pretty {
+                        ron::ser::to_string_pretty(&constraints, ron::ser::PrettyConfig::default())?
                     } else {
-                        ron::ser::to_string(&constraints)
+                        ron::ser::to_string(&constraints)?
                     }
-                    .unwrap()
                     .as_bytes(),
                 )
                 .with_context(|| format!("while writing to `{}`", &outfile))?;
