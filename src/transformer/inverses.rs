@@ -39,7 +39,11 @@ impl Node {
                         // Intrinsic::Inv should never have more than one argument
                         assert!(args.len() == 1);
                         let arg = &args[0];
-                        if true {
+                        if arg.t().is_binary() {
+                            // No need for a normalised column if its
+                            // already binary.
+                            *self = arg.clone();
+                        } else if true {
                             let module = get_module(&arg.dependencies());
                             let inverted_handle =
                                 Handle::new(module, expression_to_name(arg, "INV"));
