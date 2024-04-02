@@ -5,6 +5,23 @@ use crate::compiler::{Conditioning, Constraint, ConstraintSet, Expression, Intri
 
 use super::{flatten_list, wrap};
 
+/// Expand if conditions, assuming they are roughly in "top-most"
+/// positions.  That is, we can have arbitrary nested if `List` and
+/// `IfZero` / `IfNotZero` but nothing else.  The simplest example is
+/// something like this:
+///
+/// ```
+/// (if (vanishes! A) B C)
+/// ```
+///
+/// Which is translated into a list of two constraints:
+///
+/// ```
+/// {
+///  (1 - NORM(A)) * B
+///  A * C
+/// }
+/// ```
 fn do_expand_ifs(e: &mut Node) -> Result<()> {
     match e.e_mut() {
         Expression::List(es) => {
@@ -183,11 +200,11 @@ fn raise_ifs(mut e: Node) -> Node {
 /// Would be compiled as follows:
 ///
 /// ```
-/// (1 - ~A) * B
+/// (1 - NORM(A)) * B
 /// ```
 ///
-/// Where `~A` is the normalised values of `A` (i.e. is `0` when `A=0`
-/// otherwise is `1`).
+/// Where `NORM(A)` is the normalised values of `A` (i.e. is `0` when
+/// `A=0` otherwise is `1`).
 ///
 /// **NOTE:** When the `if` condition is a constant expression, then
 /// it is evaluated at compile time and the entire `if` expression is
