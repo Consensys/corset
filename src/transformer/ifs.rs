@@ -92,66 +92,75 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
     Ok(())
 }
 
+/// Pull `if` conditionals out of nested positions and into top-most
+/// positions.  Specifically, something like this:
+///
+/// ```lisp
+/// (defconstraint test () (eq! (if A B) C))
+/// ```
+///
+/// Has the nested `if` raised into the following position:
+///
+/// ```lisp
+/// (defconstraint test () (if A (eq! B C)))
+/// ```
+///
+/// The purpose of this is to sanitize the structure of `if`
+/// conditions to make their subsequent translation easier.
+///
+/// **NOTE:** the algorithm implemented here is not particular
+/// efficient, and can result in unnecessary cloning of expressions.
 fn raise_ifs(mut e: Node) -> Node {
     match e.e_mut() {
         Expression::Funcall { func, ref mut args } => {
             *args = args.iter_mut().map(|a| raise_ifs(a.clone())).collect();
-
+            // This is a sanity check, though I'm not sure how it can
+            // arise.
+            assert!(args.iter().fold(true, |b,e| b&&!matches!(e.e(), Expression::Void)));
+            //
             match func {
                 Intrinsic::Add
-                | Intrinsic::Sub
-                | Intrinsic::Mul
-                | Intrinsic::VectorAdd
-                | Intrinsic::VectorSub
-                | Intrinsic::VectorMul => {
-                    for (i, a) in args.iter().enumerate() {
-                        if let Expression::Funcall {
-                            func: func_if @ (Intrinsic::IfZero | Intrinsic::IfNotZero),
-                            args: args_if,
-                        } = a.e()
-                        {
-                            let cond = args_if[0].clone();
-                            let new_then = func
-                                .call(
-                                    &args
-                                        .iter()
-                                        .take(i)
-                                        .chain(std::iter::once(&args_if[1]))
-                                        .cloned()
-                                        .collect::<Vec<_>>(),
-                                )
-                                .unwrap();
-
-                            let mut new_args = vec![cond, new_then];
-                            if let Some(arg_else) = args_if.get(2).cloned() {
-                                new_args.push(
-                                    func.call(
-                                        &args
-                                            .iter()
-                                            .take(i)
-                                            .cloned()
-                                            .chain(std::iter::once(arg_else))
-                                            .filter(|e| !matches!(e.e(), Expression::Void))
-                                            .collect::<Vec<_>>(),
-                                    )
-                                    .unwrap(),
-                                )
+                    | Intrinsic::Sub
+                    | Intrinsic::Mul
+                    | Intrinsic::VectorAdd
+                    | Intrinsic::VectorSub
+                    | Intrinsic::VectorMul => {    
+                        for (i, a) in args.iter().enumerate() {
+                            if let Expression::Funcall {
+                                func: func_if @ (Intrinsic::IfZero | Intrinsic::IfNotZero),
+                                args: args_if,
+                            } = a.e()
+                            {
+                                let cond = args_if[0].clone();                                
+                                // Pull out true-branch:
+                                //   (func a b (if cond c d) e)
+                                //   ==> (if cond (func a b c e))
+                                let mut then_args = args.clone();
+                                then_args[i] = args_if[1].clone();
+                                let new_then = func.call(&then_args).unwrap();
+                                let mut new_args = vec![cond, new_then];
+                                // Pull out false branch (if applicable):
+                                //   (func a b (if cond then else) c)
+                                //   ==> (if !cond (func a b d e))                                
+                                if let Some(arg_else) = args_if.get(2).cloned() {
+                                    let mut else_args = args.clone();
+                                    else_args[i] = arg_else;
+                                    new_args.push(func.call(&else_args).unwrap());
+                                }
+                                // Repeat this until ifs pulled out
+                                // from all argument positions.
+                                return raise_ifs(func_if.call(&new_args).unwrap().with_type(a.t()));
                             }
-
-                            let new_e =
-                                raise_ifs(func_if.call(&new_args).unwrap().with_type(a.t()));
-                            return new_e;
                         }
+                        e
                     }
-                    e
-                }
                 Intrinsic::IfZero
-                | Intrinsic::IfNotZero
-                | Intrinsic::Neg
-                | Intrinsic::Inv
-                | Intrinsic::Normalize
-                | Intrinsic::Exp
-                | Intrinsic::Begin => e,
+                    | Intrinsic::IfNotZero
+                    | Intrinsic::Neg
+                    | Intrinsic::Inv
+                    | Intrinsic::Normalize
+                    | Intrinsic::Exp
+                    | Intrinsic::Begin => e,
             }
         }
         Expression::List(xs) => {
