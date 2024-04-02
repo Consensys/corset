@@ -5,6 +5,23 @@ use crate::compiler::{Conditioning, Constraint, ConstraintSet, Expression, Intri
 
 use super::{flatten_list, wrap};
 
+/// Expand if conditions, assuming they are roughly in "top-most"
+/// positions.  That is, we can have arbitrary nested if `List` and
+/// `IfZero` / `IfNotZero` but nothing else.  The simplest example is
+/// something like this:
+///
+/// ```
+/// (if (vanishes! A) B C)
+/// ```
+///
+/// Which is translated into a list of two constraints:
+///
+/// ```
+/// {
+///  (1 - NORM(A)) * B
+///  A * C
+/// }
+/// ```
 fn do_expand_ifs(e: &mut Node) -> Result<()> {
     match e.e_mut() {
         Expression::List(es) => {
@@ -96,13 +113,13 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
 /// positions.  Specifically, something like this:
 ///
 /// ```lisp
-/// (defconstraint test () (eq! (if A B) C))
+/// (defconstraint test () (+ (if A B) C))
 /// ```
 ///
 /// Has the nested `if` raised into the following position:
 ///
 /// ```lisp
-/// (defconstraint test () (if A (eq! B C)))
+/// (defconstraint test () (if A (+ B C)))
 /// ```
 ///
 /// The purpose of this is to sanitize the structure of `if`
@@ -173,6 +190,25 @@ fn raise_ifs(mut e: Node) -> Node {
     }
 }
 
+/// Responsible for lowering `if` expressions into a multiplication
+/// over the normalised condition.  For example, this constraint:
+///
+/// ```lisp
+/// (defconstraint test () (if A B))
+/// ```
+///
+/// Would be compiled as follows:
+///
+/// ```
+/// (1 - NORM(A)) * B
+/// ```
+///
+/// Where `NORM(A)` is the normalised values of `A` (i.e. is `0` when
+/// `A=0` otherwise is `1`).
+///
+/// **NOTE:** When the `if` condition is a constant expression, then
+/// it is evaluated at compile time and the entire `if` expression is
+/// eliminated.
 pub fn expand_ifs(cs: &mut ConstraintSet) {
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr, .. } = c {
