@@ -994,7 +994,7 @@ impl ConstraintSet {
                     out.write_all(
                         cache
                             .cache_get_or_set_with(x.to_owned(), || {
-                                format!("\"0x0{}\"", x.to_string()[2..].trim_start_matches('0'))
+                                format!("\"0x0{}\"", x.to_string())
                             })
                             .as_bytes(),
                     )?;
