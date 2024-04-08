@@ -7,13 +7,13 @@ use compiler::ConstraintSet;
 use either::Either;
 use log::*;
 use owo_colors::OwoColorize;
+use serde::Serialize;
+use serde_json::Value;
 use std::sync::RwLock;
 use std::{
     io::{Read, Write},
     path::Path,
 };
-use serde::{Serialize};
-use serde_json::{Value};
 use transformer::{AutoConstraint, ExpansionLevel};
 
 use clap::{Parser, Subcommand};
@@ -380,9 +380,12 @@ enum Commands {
 
         #[arg(long, help = "human-readably serialize the constraint system")]
         pretty: bool,
-        
-        #[arg(long, help = "generate output as JSON instead of in the Rusty Object Notation (RON)")]
-        json: bool
+
+        #[arg(
+            long,
+            help = "generate output as JSON instead of in the Rusty Object Notation (RON)"
+        )]
+        json: bool,
     },
 }
 
@@ -935,14 +938,18 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Compile { outfile, pretty, json } => {
+        Commands::Compile {
+            outfile,
+            pretty,
+            json,
+        } => {
             let constraints = builder.into_constraint_set()?;
             std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?
                 .write_all(
-                    if json && cfg!(feature="json-bin") {
+                    if json && cfg!(feature = "json-bin") {
                         if pretty {
-                            serde_json::to_string_pretty(&constraints)?                            
+                            serde_json::to_string_pretty(&constraints)?
                         } else {
                             serde_json::to_string(&constraints)?
                         }
