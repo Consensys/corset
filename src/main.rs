@@ -700,12 +700,8 @@ fn main() -> Result<()> {
             exclude,
         } => {
             let mut cs = builder.into_constraint_set()?;
-            if tracefile.ends_with("lt") {
-                import::parse_binary_trace(&tracefile, &mut cs, true)
-            } else {
-                import::parse_json_trace(&tracefile, &mut cs, true)
-            }
-            .with_context(|| format!("while computing from `{}`", tracefile))?;
+            compute::compute_trace(&tracefile, &mut cs, false)
+                .with_context(|| format!("while expanding `{}`", tracefile))?;
 
             match format.as_str() {
                 "csv" => exporters::convert::to_csv(

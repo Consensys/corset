@@ -2,6 +2,7 @@ use crate::{
     column::ValueBacking,
     compiler::{ColumnRef, ConstraintSet, Kind},
     pretty::{Base, Pretty},
+    structs::Handle,
 };
 use anyhow::*;
 use itertools::Itertools;
@@ -33,25 +34,26 @@ pub(crate) fn to_csv(cs: &ConstraintSet, exclude: &[String], filename: &str) -> 
             let mut file = BufWriter::new(File::create(&filename)?);
 
             info!("Exporting {}", module);
-            let column_names = cs
+            let (column_refs, column_names): (Vec<ColumnRef>, Vec<Handle>) = cs
                 .columns
                 .iter_module(&module)
-                .map(|c| cs.handle(&c.0))
-                .sorted()
-                .collect::<Vec<_>>();
+                .map(|c| (c.0.clone(), cs.handle(&c.0).clone()))
+                .sorted_by(|x, y| x.1.cmp(&y.1))
+                .unzip();
 
             file.write(column_names.iter().map(|h| &h.name).join(",").as_bytes())?;
             file.write(&[b'\n'])?;
             let max_i = cs.iter_len(&module);
+            dbg!(&module, cs.iter_len(&module));
             for i in 0..max_i {
                 file.write(
-                    cs.columns
-                        .iter_module(&module)
+                    column_refs
+                        .iter()
                         .map(|col| {
                             cs.columns
-                                .get(&col.0, i.try_into().unwrap(), false)
+                                .get(&col, i.try_into().unwrap(), false)
                                 .unwrap_or_default()
-                                .pretty_with_base(col.1.base)
+                                .pretty()
                         })
                         .join(",")
                         .as_bytes(),
