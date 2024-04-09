@@ -455,7 +455,7 @@ impl Pretty for Value {
                 Base::Hex => format!("0x{}", i.to_str_radix(16)),
                 Base::Bin | Base::Bool | Base::Loob => i.to_str_radix(2),
                 Base::Bytes => i
-                    .to_bytes_le()
+                    .to_bytes_be()
                     .1
                     .iter()
                     .map(|b| format!("{b:0>2x}"))
