@@ -171,27 +171,36 @@ impl std::fmt::Display for Handle {
     }
 }
 
-#[cfg(feature="json-bin")]
+#[cfg(feature = "json-bin")]
 impl Serialize for Handle {
     fn serialize<S: serde::ser::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         // Sanity checks
-        assert!(!self.module.contains(":"),"JSON deserisalisation conflict on module");
-        assert!(!self.name.contains(":"),"JSON deserisalisation conflict on name");
-        assert!(!self.perspective.as_ref().map_or(false, |s| s.contains(":")),"JSON deserisalisation conflict on perspective");
+        assert!(
+            !self.module.contains(":"),
+            "JSON deserisalisation conflict on module"
+        );
+        assert!(
+            !self.name.contains(":"),
+            "JSON deserisalisation conflict on name"
+        );
+        assert!(
+            !self.perspective.as_ref().map_or(false, |s| s.contains(":")),
+            "JSON deserisalisation conflict on perspective"
+        );
         // Compute format string
         let fmt_str = match &self.perspective {
-            None => format!("{}:{}", self.module,self.name),
-            Some(p) => format!("{}:{}:{}", self.module,self.name,p),
+            None => format!("{}:{}", self.module, self.name),
+            Some(p) => format!("{}:{}:{}", self.module, self.name, p),
         };
         // Done
         serializer.serialize_str(&fmt_str)
     }
 }
 
-#[cfg(not(feature="json-bin"))]
-use serde::ser::{SerializeStruct};
+#[cfg(not(feature = "json-bin"))]
+use serde::ser::SerializeStruct;
 
-#[cfg(not(feature="json-bin"))]
+#[cfg(not(feature = "json-bin"))]
 impl Serialize for Handle {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

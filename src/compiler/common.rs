@@ -135,7 +135,7 @@ pub enum Builtin {
     Shift,
     /// This represents normalisation in the presence of
     /// field agnosticity.  Perhaps it might be considered
-    /// "vector normalisation"?    
+    /// "vector normalisation"?
     NormFlat,
     If,
 }
@@ -163,9 +163,9 @@ pub enum Intrinsic {
     Mul,
     /// Vector addition is required for field agnosticity.
     VectorAdd,
-    /// Vector subtraction is required for field agnosticity.    
+    /// Vector subtraction is required for field agnosticity.
     VectorSub,
-    /// Vector multiplication is required for field agnosticity.        
+    /// Vector multiplication is required for field agnosticity.
     VectorMul,
     Exp,
     Neg,
