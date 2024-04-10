@@ -25,6 +25,8 @@ mod compute;
 mod constants;
 mod dag;
 mod errors;
+#[cfg(test)]
+mod evaluation_tests;
 mod exporters;
 mod formatter;
 mod import;

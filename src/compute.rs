@@ -621,7 +621,7 @@ fn err_missing_column(c: &crate::column::Column) -> RuntimeError {
     }
 }
 
-fn prepare(cs: &mut ConstraintSet, fail_on_missing: bool) -> Result<()> {
+pub fn prepare(cs: &mut ConstraintSet, fail_on_missing: bool) -> Result<()> {
     compute_all(cs).with_context(|| "while computing columns")?;
     for h in cs.columns.all() {
         if !cs.columns.is_computed(&h) {
