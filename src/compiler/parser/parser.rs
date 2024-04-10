@@ -207,7 +207,7 @@ impl std::convert::TryInto<DisplayableColumn> for ColumnAttributes {
         }
         Ok(DisplayableColumn {
             name: self.name,
-            base: self.base.get().cloned().unwrap_or(Base::Dec),
+            base: self.base.get().cloned().unwrap_or(Base::Hex),
         })
     }
 }
