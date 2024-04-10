@@ -34,6 +34,8 @@ mod pretty;
 mod structs;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod evaluation_tests;
 mod transformer;
 mod utils;
 
