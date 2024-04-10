@@ -112,7 +112,9 @@ fn render_funcall(cs: &ConstraintSet, func: &Intrinsic, args: &[Node]) -> String
         Intrinsic::Exp => {
             let exp = args[1]
                 .pure_eval()
-                .unwrap_or_else(|_| panic!("Exponent `{}` is not evaluable", &args[1]))
+                .unwrap_or_else(|_| {
+                    panic!("Exponent `{}` is not evaluable at compile time", &args[1])
+                })
                 .to_usize()
                 .unwrap_or_else(|| {
                     panic!("Exponent `{}` is too large", &args[1].pure_eval().unwrap())
