@@ -12,9 +12,9 @@ use rayon::prelude::*;
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
 use serde_json::Value;
 #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
-use std::io::Read;
-#[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
 use simd_json::BorrowedValue as Value;
+#[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
+use std::io::Read;
 use std::{
     fs::File,
     io::{BufReader, Seek},
@@ -45,7 +45,7 @@ impl TraceMap {
             .map(|h| {
                 2  // i16: name length
                     + h.handle.name.len()
-                    +1 
+                    +1
                     + h.handle.name.len() // [u8]: name bytes
                     + 1 // u8: BPE
                     + 4 // i32: elt count
@@ -268,7 +268,8 @@ pub fn parse_json_trace(tracefile: &str, cs: &mut ConstraintSet, keep_raw: bool)
         .with_context(|| format!("while reading `{}`", tracefile))?;
         let v = simd_json::to_borrowed_value(&mut content)
             .map_err(|e| anyhow!("while parsing json: {}", e))?;
-        fill_traces_from_json(&v, vec![], cs, &mut None, keep_raw).with_context(|| "while reading columns")
+        fill_traces_from_json(&v, vec![], cs, &mut None, keep_raw)
+            .with_context(|| "while reading columns")
     }
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
     {
@@ -302,7 +303,8 @@ pub fn read_trace_str(tracestr: &[u8], cs: &mut ConstraintSet, keep_raw: bool) -
         };
         let v = simd_json::to_borrowed_value(&mut content)
             .map_err(|e| anyhow!("while parsing json: {}", e))?;
-        fill_traces_from_json(&v, vec![], cs, &mut None, keep_raw).with_context(|| "while reading columns")
+        fill_traces_from_json(&v, vec![], cs, &mut None, keep_raw)
+            .with_context(|| "while reading columns")
     }
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx")))]
     {

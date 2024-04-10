@@ -28,5 +28,5 @@ func ZkEVMDefine(build *Builder) {
 	//
 	{{ #each constraints }}
 	{{{ this }}}
-	{{ /each }}	
+	{{ /each }}
 }

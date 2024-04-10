@@ -63,4 +63,3 @@ Enter
 Sleep 5s
 Type "q"
 Ctrl+D
-
