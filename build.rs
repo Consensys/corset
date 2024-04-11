@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use std::{env, fs, io::Write, process::Command};
 
 fn main() {
@@ -63,10 +63,103 @@ fn generate_tests_from_lisp_files() {
         let p = e.as_ref().unwrap().path();
         let n = p.file_stem().unwrap().to_str().unwrap();
         //
-        if p.extension().unwrap() == "lisp" {
-            writeln!(f).unwrap();
-            writeln!(f, "#[test]").unwrap();
-            writeln!(f, "fn test_{n}() {{ check(\"{n}\"); }}").unwrap();
+        if let Some(ext) = p.extension() {
+	    if ext == "lisp" {
+		writeln!(f).unwrap();
+		writeln!(f, "#[test]").unwrap();
+		writeln!(f, "fn test_{n}() {{ check(\"{n}\"); }}").unwrap();
+		// 
+		generate_traces_from_model(n);
+	    }
         }
+    }
+}
+
+fn generate_traces_from_model(name: &str) {
+    let cols = &["X","Y"];
+    let domain = Domain{min:-1, max: 1};
+    //
+    let filename = format!("{}/{name}.accepts",TESTS_DIR);
+    let mut f = fs::File::create(filename).unwrap();
+    for nrows in 0..3 {
+	// Generate all possible traces with n rows.
+	for trace_data in generate_trace_data(cols.len(),nrows,domain) {
+	    let tr = generate_trace(cols, trace_data);
+	    f = write_trace(f,"<prelude>",tr);
+	}
+    }
+}
+
+fn generate_trace_data(width: usize, height: usize, domain: Domain) -> Vec<Vec<isize>> {
+    let mut tmp = vec![domain.min; (width * height)];
+    let mut data = Vec::new();
+    // Initial row
+    data.push(tmp.clone());
+    // Add remaining rows
+    while next_trace(&mut tmp,domain) { data.push(tmp.clone()); }
+    data
+}
+
+fn next_trace(data: &mut [isize], domain: Domain) -> bool {
+    let mut i = 0;
+    //
+    while i < data.len() {
+	if data[i] == domain.max {
+	    data[i] = domain.min;
+	    i = i + 1;	    
+	} else {
+	    data[i] += 1;
+	    return true;
+	}
+    }
+    // no more
+    return false;
+}
+
+fn generate_trace(cols: &[&str], data: Vec<isize>) -> Vec<(String,Vec<isize>)> {
+    let mut tr = Vec::new();
+    // Determine how many rows we're expected
+    let n = data.len() / cols.len();
+    let mut i = 0;
+    for col in cols {
+	let j = i + n;
+	tr.push((col.to_string(), data[i .. j].to_vec()));
+	i += n;
+    }
+    tr
+}
+
+fn write_trace<T:Write>(mut out: T, module: &str, trace: Vec<(String,Vec<isize>)>) -> T {
+    let mut first = true;
+    write!(out, "{{ \"{module}\": {{");    
+    for (col, data) in trace.into_iter() {
+	if !first { write!(out, ", "); }
+	first = false;
+	write!(out, "\"{col}\": {data:?}");
+    }
+    writeln!(out, "}} }}");
+    out
+}
+
+// Identifies a set of field elements.  This set could be constructed
+// by enumerating all possible elements within a give range, or by
+// sampling from the set of all elements, etc.
+#[derive(Clone,Copy,Debug)]
+struct Domain {
+    pub min: isize,
+    pub max: isize
+}
+
+impl Domain {
+    pub fn size(&self) -> usize {
+	(self.max - self.min) as usize
+    }
+}
+
+impl Iterator for Domain {
+    type Item = isize;
+    
+    fn next(&mut self) -> Option<isize> {
+	todo!()
     }
 }
