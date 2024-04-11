@@ -1,4 +1,4 @@
 (defcolumns A B)
 
 (defconstraint test1 ()
-  (is-zero A))
+  (if-not-zero B (is-zero A)))
