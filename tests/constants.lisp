@@ -5,4 +5,4 @@
   Z (+ 3 X (* 2 Y)))
 
 (defconstraint test ()
-  (+ A X B Z))
+  (if-not-zero B (+ A X B Z)))
