@@ -1,4 +1,5 @@
-use std::{env, path::PathBuf, process::Command};
+use std::path::{Path, PathBuf};
+use std::{env, fs, io::Write, process::Command};
 
 fn main() {
     // Export the current git hash
@@ -31,6 +32,9 @@ fn main() {
     cbindgen::generate_with_config(crate_dir, config)
         .unwrap()
         .write_to_file(output_file);
+
+    // Generate tests from lisp files
+    generate_tests_from_lisp_files();
 }
 
 /// Find the location of the `target/` directory. Note that this may be
@@ -41,5 +45,28 @@ fn target_dir() -> PathBuf {
         PathBuf::from(target)
     } else {
         PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("target")
+    }
+}
+
+pub static TESTS_DIR: &str = "tests";
+
+/// Generate a Rust file containing a test for each file in the given
+/// TEST_DIR.
+fn generate_tests_from_lisp_files() {
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    let target = std::path::Path::new(&out_dir).join("lisp_tests.rs");
+    let mut f = fs::File::create(target).unwrap();
+    // Open reference test directory
+    let dir = fs::read_dir(TESTS_DIR).unwrap();
+
+    for e in dir {
+        let p = e.as_ref().unwrap().path();
+        let n = p.file_stem().unwrap().to_str().unwrap();
+        //
+        if p.extension().unwrap() == "lisp" {
+            writeln!(f).unwrap();
+            writeln!(f, "#[test]").unwrap();
+            writeln!(f, "fn test_{n}() {{ check(\"{n}\"); }}").unwrap();
+        }
     }
 }

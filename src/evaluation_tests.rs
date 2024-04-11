@@ -3,13 +3,19 @@ use crate::{check, compiler, compute, import};
 use crate::{transformer::ExpansionLevel, ConstraintSetBuilder};
 use anyhow::*;
 use std::fs;
+use std::sync::Once;
 
 pub static TEST_DIR: &str = "tests";
 
-#[test]
-fn eval_test_01() {
-    check("iszero")
+// Configure for native evaluation, since this is the gold standard.
+static INIT: Once = Once::new();
+pub fn initialize() {
+    INIT.call_once(|| {
+        *crate::IS_NATIVE.write().unwrap() = true;
+    });
 }
+
+include!(concat!(env!("OUT_DIR"), "/lisp_tests.rs"));
 
 // Check that a given set of constraints agrees with each of the
 // traces provided.  By "agree" we mean that, if the trace is supposed
