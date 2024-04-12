@@ -37,11 +37,15 @@ fn check_json_traces(name: &str, expected: bool) {
     } else {
         format!("{}/{}.rejects", TEST_DIR, name)
     };
+    // Construct source file name
+    let lispfile = format!("{}/{}.lisp", TEST_DIR, name);
+    // Read source file
+    let source = fs::read_to_string(lispfile).unwrap();
     // Each line in the trace file is an "extended" trace.
     for trace in fs::read_to_string(&tracefile).unwrap().lines() {
         // Compile source constraints again (note: this is necessary
         // because ConstraintSet does not (yet) implement clone()).
-        let cs = compile(name).unwrap();
+        let cs = compile(&source).unwrap();
         // Determine trace outcome
         let outcome = check_json_trace(trace, cs, expected).is_ok();
         // Check against what was expected
@@ -50,13 +54,10 @@ fn check_json_traces(name: &str, expected: bool) {
     }
 }
 
-fn compile(name: &str) -> Result<ConstraintSet> {
-    let lispfile = format!("{}/{}.lisp", TEST_DIR, name);
-    // Read source file
-    let source = fs::read_to_string(lispfile).unwrap();
+fn compile(source: &str) -> Result<ConstraintSet> {
     // Configure the build
     let mut r = ConstraintSetBuilder::from_sources(false, false);
-    r.add_source(&source)?;
+    r.add_source(source)?;
     r.expand_to(ExpansionLevel::top());
     // Done
     r.into_constraint_set()
