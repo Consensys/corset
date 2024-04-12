@@ -6,6 +6,7 @@ use compiler::parser::Ast;
 use compiler::ConstraintSet;
 use either::Either;
 use log::*;
+use logging_timer::time;
 use owo_colors::OwoColorize;
 use serde::Serialize;
 use serde_json::Value;
@@ -577,6 +578,7 @@ impl ConstraintSetBuilder {
         }
     }
 
+    #[time("info", "Compiling into constraint set")]
     fn into_constraint_set(self) -> Result<ConstraintSet> {
         let mut cs = match self.source {
             Either::Left(ref sources) => compiler::make(

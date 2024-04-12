@@ -65,7 +65,7 @@ fn generate_tests_from_lisp_files() {
         writeln!(f, "#[test]").unwrap();
         writeln!(f, "fn test_{}() {{ check(\"{}\"); }}", m.name, m.name).unwrap();
         // Generate trace inputs (accepts / rejects)
-        let (accepts, rejects) = m.generate_traces_upto(3);
+        let (accepts, rejects) = m.generate_traces_upto(4);
         // Write them out.
         write_traces(&m, "accepts", &accepts);
         write_traces(&m, "rejects", &rejects);
