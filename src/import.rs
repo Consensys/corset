@@ -443,6 +443,12 @@ pub fn fill_traces_from_json(
                     // Atomic columns are always padded with zeroes, so there is
                     // no need to trigger a more complex padding system.
                     if !keep_raw && xs.len() < module_min_len {
+                        trace!(
+                            "padding {} to min module length ({} => {})",
+                            handle,
+                            xs.len(),
+                            module_min_len
+                        );
                         xs.reverse();
                         xs.resize_with(module_min_len, || {
                             padding_value.clone().unwrap_or_default()
