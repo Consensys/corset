@@ -1,4 +1,4 @@
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use std::{env, fs, io::Write, process::Command};
 
 fn main() {
@@ -50,116 +50,53 @@ fn target_dir() -> PathBuf {
 
 pub static TESTS_DIR: &str = "tests";
 
-/// Generate a Rust file containing a test for each file in the given
-/// TEST_DIR.
+include!("tests/models.rs");
+
+/// Generate a Rust file containing tests for each entry in the MODELS
+/// array.
 fn generate_tests_from_lisp_files() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let target = std::path::Path::new(&out_dir).join("lisp_tests.rs");
     let mut f = fs::File::create(target).unwrap();
-    // Open reference test directory
-    let dir = fs::read_dir(TESTS_DIR).unwrap();
-
-    for e in dir {
-        let p = e.as_ref().unwrap().path();
-        let n = p.file_stem().unwrap().to_str().unwrap();
-        //
-        if let Some(ext) = p.extension() {
-	    if ext == "lisp" {
-		writeln!(f).unwrap();
-		writeln!(f, "#[test]").unwrap();
-		writeln!(f, "fn test_{n}() {{ check(\"{n}\"); }}").unwrap();
-		// 
-		generate_traces_from_model(n);
-	    }
-        }
+    // Generate tests and inputs for each model.
+    for m in MODELS {
+        // Write out test runner
+        writeln!(f).unwrap();
+        writeln!(f, "#[test]").unwrap();
+        writeln!(f, "fn test_{}() {{ check(\"{}\"); }}", m.name, m.name).unwrap();
+        // Generate trace inputs (accepts / rejects)
+        let (accepts, rejects) = m.generate_traces_upto(3);
+        // Write them out.
+        write_traces(&m, "accepts", &accepts);
+        write_traces(&m, "rejects", &rejects);
     }
 }
 
-fn generate_traces_from_model(name: &str) {
-    let cols = &["X","Y"];
-    let domain = Domain{min:-1, max: 1};
-    //
-    let filename = format!("{}/{name}.accepts",TESTS_DIR);
+/// Write a set of zero or more traces into a file (whose is
+/// determined by the model) with the given extension (which should be
+/// either "accepts" or "rejects").
+fn write_traces(m: &Model, ext: &str, traces: &[Trace]) {
+    // Create output file
+    let filename = format!("{}/{}.{}", TESTS_DIR, m.name, ext);
     let mut f = fs::File::create(filename).unwrap();
-    for nrows in 0..3 {
-	// Generate all possible traces with n rows.
-	for trace_data in generate_trace_data(cols.len(),nrows,domain) {
-	    let tr = generate_trace(cols, trace_data);
-	    f = write_trace(f,"<prelude>",tr);
-	}
+    // Write it all out
+    for trace in traces {
+        write_trace(&f, "<prelude>", &m.cols, &trace);
     }
+    // Done
 }
 
-fn generate_trace_data(width: usize, height: usize, domain: Domain) -> Vec<Vec<isize>> {
-    let mut tmp = vec![domain.min; (width * height)];
-    let mut data = Vec::new();
-    // Initial row
-    data.push(tmp.clone());
-    // Add remaining rows
-    while next_trace(&mut tmp,domain) { data.push(tmp.clone()); }
-    data
-}
-
-fn next_trace(data: &mut [isize], domain: Domain) -> bool {
-    let mut i = 0;
-    //
-    while i < data.len() {
-	if data[i] == domain.max {
-	    data[i] = domain.min;
-	    i = i + 1;	    
-	} else {
-	    data[i] += 1;
-	    return true;
-	}
-    }
-    // no more
-    return false;
-}
-
-fn generate_trace(cols: &[&str], data: Vec<isize>) -> Vec<(String,Vec<isize>)> {
-    let mut tr = Vec::new();
-    // Determine how many rows we're expected
-    let n = data.len() / cols.len();
-    let mut i = 0;
-    for col in cols {
-	let j = i + n;
-	tr.push((col.to_string(), data[i .. j].to_vec()));
-	i += n;
-    }
-    tr
-}
-
-fn write_trace<T:Write>(mut out: T, module: &str, trace: Vec<(String,Vec<isize>)>) -> T {
+/// Write a specific trace to the output file.
+fn write_trace<T: Write>(mut out: T, module: &str, cols: &[&str], trace: &Trace) -> T {
     let mut first = true;
-    write!(out, "{{ \"{module}\": {{");    
-    for (col, data) in trace.into_iter() {
-	if !first { write!(out, ", "); }
-	first = false;
-	write!(out, "\"{col}\": {data:?}");
+    write!(out, "{{ \"{module}\": {{");
+    for (i, col) in cols.iter().enumerate() {
+        if !first {
+            write!(out, ", ");
+        }
+        first = false;
+        write!(out, "\"{col}\": {:?}", trace.get(i));
     }
     writeln!(out, "}} }}");
     out
-}
-
-// Identifies a set of field elements.  This set could be constructed
-// by enumerating all possible elements within a give range, or by
-// sampling from the set of all elements, etc.
-#[derive(Clone,Copy,Debug)]
-struct Domain {
-    pub min: isize,
-    pub max: isize
-}
-
-impl Domain {
-    pub fn size(&self) -> usize {
-	(self.max - self.min) as usize
-    }
-}
-
-impl Iterator for Domain {
-    type Item = isize;
-    
-    fn next(&mut self) -> Option<isize> {
-	todo!()
-    }
 }
