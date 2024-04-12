@@ -1,4 +1,5 @@
-use std::{env, path::PathBuf, process::Command};
+use std::path::PathBuf;
+use std::{env, fs, io::Write, process::Command};
 
 fn main() {
     // Export the current git hash
@@ -31,6 +32,9 @@ fn main() {
     cbindgen::generate_with_config(crate_dir, config)
         .unwrap()
         .write_to_file(output_file);
+
+    // Generate tests from lisp files
+    generate_tests_from_lisp_files();
 }
 
 /// Find the location of the `target/` directory. Note that this may be
@@ -42,4 +46,57 @@ fn target_dir() -> PathBuf {
     } else {
         PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("target")
     }
+}
+
+pub static TESTS_DIR: &str = "tests";
+
+include!("tests/models.rs");
+
+/// Generate a Rust file containing tests for each entry in the MODELS
+/// array.
+fn generate_tests_from_lisp_files() {
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    let target = std::path::Path::new(&out_dir).join("lisp_tests.rs");
+    let mut f = fs::File::create(target).unwrap();
+    // Generate tests and inputs for each model.
+    for m in MODELS {
+        // Write out test runner
+        writeln!(f).unwrap();
+        writeln!(f, "#[test]").unwrap();
+        writeln!(f, "fn test_{}() {{ check(\"{}\"); }}", m.name, m.name).unwrap();
+        // Generate trace inputs (accepts / rejects)
+        let (accepts, rejects) = m.generate_traces_upto(4);
+        // Write them out.
+        write_traces(&m, "accepts", &accepts);
+        write_traces(&m, "rejects", &rejects);
+    }
+}
+
+/// Write a set of zero or more traces into a file (whose is
+/// determined by the model) with the given extension (which should be
+/// either "accepts" or "rejects").
+fn write_traces(m: &Model, ext: &str, traces: &[Trace]) {
+    // Create output file
+    let filename = format!("{}/{}.{}", TESTS_DIR, m.name, ext);
+    let mut f = fs::File::create(filename).unwrap();
+    // Write it all out
+    for trace in traces {
+        write_trace(&f, "<prelude>", &m.cols, &trace);
+    }
+    // Done
+}
+
+/// Write a specific trace to the output file.
+fn write_trace<T: Write>(mut out: T, module: &str, cols: &[&str], trace: &Trace) -> T {
+    let mut first = true;
+    write!(out, "{{ \"{module}\": {{");
+    for (i, col) in cols.iter().enumerate() {
+        if !first {
+            write!(out, ", ");
+        }
+        first = false;
+        write!(out, "\"{col}\": {:?}", trace.get(i));
+    }
+    writeln!(out, "}} }}");
+    out
 }

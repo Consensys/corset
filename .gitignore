@@ -18,3 +18,10 @@ Cargo.lock
 
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
+
+# For emacs
+*~
+
+# For automatically generated test traces
+*.accepts
+*.rejects

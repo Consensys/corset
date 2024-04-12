@@ -24,7 +24,7 @@ fn must_fail(name: &str, source: &str) {
 
 #[test]
 fn types_declaration() -> Result<()> {
-    make("type", include_str!("../tests/types.lisp"))
+    make("type", include_str!("../tests/old/types.lisp"))
 }
 
 #[test]
