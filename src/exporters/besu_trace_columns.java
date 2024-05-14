@@ -15,6 +15,7 @@
 
 package net.consensys.linea.zktracer.module.{{ module }};
 
+import java.math.BigInteger;
 import java.nio.MappedByteBuffer;
 import java.util.BitSet;
 import java.util.List;
