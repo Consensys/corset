@@ -4,6 +4,8 @@ use crate::{
 };
 
 impl Node {
+    /// Convert all integer constants used within this expression to
+    /// field elements.
     pub(crate) fn concretize(&mut self) {
         match self.e_mut() {
             Expression::Funcall { args, .. } => {
@@ -26,6 +28,9 @@ impl Node {
 }
 
 impl ConstraintSet {
+    /// Concretize expressions used in all constraints found in this
+    /// constraint set.  That means, ensuring they operate over field
+    /// elements rather than big integers.
     fn make_constraints_native(&mut self) {
         for c in self.constraints.iter_mut() {
             match c {
@@ -41,6 +46,9 @@ impl ConstraintSet {
         }
     }
 
+    /// Concretize expressions used in all computations found in this
+    /// constraint set.  That means, ensuring they operate over field
+    /// elements rather than big integers.
     fn make_computations_native(&mut self) {
         for c in self.computations.iter_mut() {
             match c {
