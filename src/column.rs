@@ -874,7 +874,6 @@ impl Register {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Column {
     pub register: Option<RegisterID>,
-    pub shift: i16,
     pub padding_value: Option<Value>,
     pub used: bool,
     pub must_prove: bool,
@@ -890,7 +889,6 @@ impl Column {
     #[builder]
     pub fn new(
         register: Option<RegisterID>,
-        shift: Option<i16>,
         padding_value: Option<i64>, // TODO: Value
         used: Option<bool>,
         must_prove: Option<bool>,
@@ -902,7 +900,6 @@ impl Column {
     ) -> Self {
         Column {
             register,
-            shift: shift.unwrap_or(0),
             padding_value: padding_value.map(|v| Value::from(v as usize)),
             used: used.unwrap_or(true),
             must_prove: must_prove.unwrap_or(false),
