@@ -13,10 +13,10 @@ fn invert_expr(e: &Node) -> Node {
     Intrinsic::Inv.call(&[e.to_owned()]).unwrap()
 }
 
-/// For all Builtin::Inv encountered, create a new column and the associated constraints
-/// pre-computing and proving the inverted column.
-
 impl Node {
+    /// For all Intrinsic::Normalize expressions, create a new column
+    /// and the associated constraints pre-computing and proving the
+    /// inverted column.
     pub(crate) fn do_normalize(
         &mut self,
         get_module: &dyn Fn(&HashSet<ColumnRef>) -> String,
@@ -163,6 +163,23 @@ impl ConstraintSet {
     }
 }
 
+/// Expand every normalisation expression `e` by introducing a
+/// _computed column_ which holds their multiplicative inverse and two
+/// constraints which enforce this relationship.  For example,
+/// consider:
+///
+/// ```lisp
+/// (defcolumns A B)
+/// (defconstraint test1 () (vanishes! (~ A)))
+/// ```
+///
+/// Here, `(~ A)` represents a normalisation of column `A`.  Thus, a
+/// new computed column `C/INV[A]` is introduced which holds the
+/// (psedudo) multiplicative inverse of `A` (which holds `0` when `A`
+/// is `0`).  Then, `(~ A)` is translated as `A * C/INV[A]`.  To
+/// ensure the computed column holds correct values, two additional
+/// constraints are introduced: `A != 0 ==> (A*A⁻ == 1) ` and `A⁻ != 0
+/// ==> (A*A⁻==1)`.
 pub fn expand_invs(cs: &mut ConstraintSet) -> Result<()> {
     if *crate::IS_NATIVE.read().unwrap() {
         cs.expand_normalizations()
