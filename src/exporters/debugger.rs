@@ -406,6 +406,14 @@ fn render_spilling(cs: &ConstraintSet) {
     }
 }
 
+fn render_spilling_toml(cs: &ConstraintSet) {
+    println!("# Automatically generated via `corset debug -s --toml`");
+    println!("[spillings]");
+    for (module, spilling) in cs.columns.spilling.iter() {
+        println!("{:>10} = {:>4}", module.blue().bold(), spilling);
+    }
+}
+
 pub(crate) struct DebugSettings {
     pub modules: bool,
     pub constraints: bool,
@@ -415,6 +423,7 @@ pub(crate) struct DebugSettings {
     pub perspectives: bool,
     pub types: bool,
     pub spilling: bool,
+    pub toml: bool,
 }
 
 pub(crate) fn debug(
@@ -441,7 +450,9 @@ pub(crate) fn debug(
     if settings.perspectives {
         render_perspectives(cs);
     }
-    if settings.spilling {
+    if settings.spilling && settings.toml {
+        render_spilling_toml(cs);
+    } else if settings.spilling {
         render_spilling(cs);
     }
     Ok(())
