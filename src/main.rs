@@ -333,6 +333,12 @@ enum Commands {
             requires = "show_constraints"
         )]
         skip: Vec<String>,
+        #[arg(
+            long = "toml",
+            help = "generate information (where applicable) in TOML format",
+            requires = "show_spilling"
+        )]
+        toml: bool,
     },
     /// Format the given source in an idiomatic way
     Format {
@@ -907,6 +913,7 @@ fn main() -> Result<()> {
             show_spilling,
             only,
             skip,
+            toml,
         } => {
             let cs = builder.into_constraint_set()?;
 
@@ -921,6 +928,7 @@ fn main() -> Result<()> {
                     perspectives: show_perspectives,
                     computations: show_computations,
                     spilling: show_spilling,
+                    toml: toml,
                 },
                 only.as_ref(),
                 &skip,
