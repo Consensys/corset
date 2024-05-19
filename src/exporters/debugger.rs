@@ -5,6 +5,7 @@ use crate::constants;
 use crate::pretty::Pretty;
 use crate::structs::Handle;
 use anyhow::*;
+use convert_case::{Case, Casing};
 use ellipse::Ellipse;
 use itertools::Itertools;
 use owo_colors::XtermColors;
@@ -410,7 +411,10 @@ fn render_spilling_toml(cs: &ConstraintSet) {
     println!("# Automatically generated via `corset debug -s --toml`");
     println!("[spillings]");
     for (module, spilling) in cs.columns.spilling.iter() {
-        println!("{:>10} = {:>4}", module.blue().bold(), spilling);
+        // Convert name to screaming snake case.
+        let name = module.to_case(Case::UpperSnake);
+        //
+        println!("{:>10} = {:>4}", name.blue().bold(), spilling);
     }
 }
 
