@@ -852,7 +852,7 @@ impl ConstraintSet {
             .filter_map(|c| match c {
                 Computation::Composite { target, exp } => {
                     if target.as_handle().module == m {
-                        Some(exp.past_spill().abs().max(exp.future_spill().abs()))
+                        Some(exp.past_spill().abs())
                     } else {
                         None
                     }
@@ -862,7 +862,7 @@ impl ConstraintSet {
             .chain(self.constraints.iter().filter_map(|c| match c {
                 Constraint::Vanishes { handle, expr, .. } => {
                     if handle.module == m {
-                        Some(expr.past_spill().abs().max(expr.future_spill().abs()))
+                        Some(expr.past_spill().abs())
                     } else {
                         None
                     }
