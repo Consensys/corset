@@ -764,7 +764,7 @@ impl<'a> Iterator for ValueBackingIter<'a> {
                     None
                 } else {
                     self.i += 1;
-                    v.get(self.i as usize - 1 + self.spilling as usize).cloned()
+                    v.get((self.i + self.spilling - 1) as usize).cloned()
                 }
             }
             ValueBacking::Expression { .. } => {
