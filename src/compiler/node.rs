@@ -498,6 +498,23 @@ impl Node {
             .unwrap_or(0)
     }
 
+    /// Compute the maximum future (positive) shift coefficient in the AST rooted at `self`
+    pub fn future_spill(&self) -> isize {
+        self.leaves()
+            .iter()
+            .filter_map(|n| match n.e() {
+                Expression::Column { shift, .. } | Expression::ExoColumn { shift, .. } => {
+                    Some(*shift as isize)
+                }
+                Expression::ArrayColumn { .. } => unreachable!(),
+                _ => None,
+            })
+            .filter(|x| *x > 0)
+            .max()
+            .unwrap_or(0)
+            .max(0)
+    }
+
     // TODO: replace with a generic map()
     pub fn add_id_to_handles(&mut self, set_id: &dyn Fn(&mut ColumnRef)) {
         match self.e_mut() {

@@ -414,7 +414,7 @@ fn render_spilling_toml(cs: &ConstraintSet) {
         // Convert name to screaming snake case.
         let name = module.to_case(Case::UpperSnake);
         //
-        println!("{:>10} = {:>4}", name, spilling);
+        println!("{:>10} = {:>4}", name.blue().bold(), spilling);
     }
 }
 
