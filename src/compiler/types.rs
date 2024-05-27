@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use anyhow::*;
+use num_bigint::BigInt;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, sync::OnceLock};
@@ -292,8 +293,9 @@ impl TryFrom<&str> for Conditioning {
     }
 }
 
-static F_15: OnceLock<Value> = OnceLock::new();
-static F_255: OnceLock<Value> = OnceLock::new();
+const F_BITS_INIT: OnceLock<Value> = OnceLock::new();
+/// Cached field elements used for validation purposes.
+static F_BITS: [OnceLock<Value>; 256] = [F_BITS_INIT; 256];
 
 // TODO: implement PartialOrd
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, Ord, PartialOrd)]
@@ -340,14 +342,17 @@ impl RawMagma {
                 }
             }
             RawMagma::Nibble => {
-                if x.le(F_15.get_or_init(|| Value::from(15))) {
+                // Calculate 2^4
+                let two_4 = F_BITS[4].get_or_init(|| Value::from(16));
+                if x.lt(two_4) {
                     Ok(x)
                 } else {
                     bail!(RuntimeError::InvalidValue("nibble", x))
                 }
             }
             RawMagma::Byte => {
-                if x.le(F_255.get_or_init(|| Value::from(255))) {
+                let two_8 = F_BITS[8].get_or_init(|| Value::from(256));
+                if x.lt(two_8) {
                     Ok(x)
                 } else {
                     bail!(RuntimeError::InvalidValue("byte", x))
@@ -363,10 +368,22 @@ impl RawMagma {
                 }
             }
             RawMagma::Integer(b) => {
-                if x.bit_size() > *b {
-                    bail!(RuntimeError::InvalidValue("integer", x))
+                let bit_size = x.bit_size();
+                if bit_size > constants::FIELD_BITSIZE {
+                    Err(anyhow!(RuntimeError::InvalidValue("integer", x)))
+                        .with_context(|| format!("{}b > {}b", bit_size, constants::FIELD_BITSIZE))
                 } else {
-                    Ok(x)
+                    // Calulate 2^b lazily.
+                    let two_b = F_BITS[*b].get_or_init(|| {
+                        // Unwrap safe because of check above.
+                        Value::try_from(BigInt::from(2).pow(*b as u32)).unwrap()
+                    });
+                    // Check x fits.
+                    if x.lt(two_b) {
+                        Ok(x)
+                    } else {
+                        bail!(RuntimeError::InvalidValue("integer", x))
+                    }
                 }
             }
             RawMagma::Any => unreachable!(),
