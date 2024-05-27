@@ -190,9 +190,16 @@ pub fn parse_binary_trace(tracefile: &str, cs: &mut ConstraintSet, keep_raw: boo
                             )
                             .ok_or_else(|| anyhow!("error reading {}th element", i))
                             .and_then(|bs| {
-                                CValue::try_from(BigInt::from_bytes_be(Sign::Plus, bs))
+                                // Decode big integer from bytes in big endian form.
+                                let bigint = CValue::big_int(BigInt::from_bytes_be(Sign::Plus, bs));
+                                // Validate this value against its declared type.
+                                let CValue::BigInt(bi) = magma.rm().validate(bigint)? else {
+                                    // Should be unreachable, since we know its a big integer.
+                                    unreachable!()
+                                };
+                                // Final checks (such as whether it fits into a native field).
+                                CValue::try_from(bi)
                                     .with_context(|| anyhow!("while parsing {}th element", i))
-                                    .and_then(|x| magma.rm().validate(x))
                             })
                             .with_context(|| anyhow!("reading {}th element", i))
                     }
