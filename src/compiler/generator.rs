@@ -943,6 +943,9 @@ impl ConstraintSet {
         out.write_all("{\"columns\":{\n".as_bytes())?;
 
         for (i, module) in self.columns.modules().into_iter().enumerate() {
+            // Precompute the expected height of this module (including spilling).
+            let module_height = self.iter_len(&module);
+            // Begin exporting data.
             debug!("Exporting {}", &module);
             if i > 0 {
                 out.write_all(b",")?;
@@ -990,7 +993,10 @@ impl ConstraintSet {
                 out.write_all("\"values\":[".as_bytes())?;
 
                 let mut value = backing.iter(&self.columns).peekable();
-                while let Some(x) = value.next() {
+                for i in 0..module_height {
+                    let Some(x) = value.next() else {
+                        unreachable!();
+                    };
                     out.write_all(
                         cache
                             .cache_get_or_set_with(x.to_owned(), || {
