@@ -130,6 +130,7 @@ pub(crate) fn expand_to(
     }
 
     cs.convert_refs_to_ids()?;
+    cs.compute_spillings();
     cs.validate()
 }
 

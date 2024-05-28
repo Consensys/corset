@@ -886,7 +886,7 @@ impl ConstraintSet {
         self.columns.spilling.get(m).cloned()
     }
 
-    fn compute_spillings(&mut self) {
+    pub fn compute_spillings(&mut self) {
         let all_modules = self.columns.modules();
         for m in all_modules {
             let spilling = self.compute_spilling(&m);
