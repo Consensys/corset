@@ -931,6 +931,11 @@ impl ColumnSet {
         self.column(c).unwrap().handle.module.clone()
     }
 
+    /// Determine the appropriate module for a given column
+    /// expression.  This is done by looking at all the column
+    /// references within that expression.  If they all refer to the
+    /// same module, then that module is returned.  Otherwise, `None`
+    /// is returned.
     pub(crate) fn module_for<I: std::borrow::Borrow<ColumnRef>, C: IntoIterator<Item = I>>(
         &self,
         cols: C,
@@ -945,6 +950,46 @@ impl ColumnSet {
         } else {
             modules.into_iter().next()
         }
+    }
+
+    /// Determine the appropriate module for a set of column
+    /// expressions.  This is done by looking at all the column
+    /// references within those expressions.  If they all refer to the
+    /// same module, then that module is returned.  Otherwise, `None`
+    /// is returned.
+    pub(crate) fn module_forall<I: std::borrow::Borrow<Node>, C: IntoIterator<Item = I>>(
+        &self,
+        nodes: C,
+    ) -> Option<String> {
+        let mut module: Option<String> = None;
+        // Search though the dependencies of each node.  That is, the
+        // set of column references in that node.  For the first one
+        // encountered, we assign its module to to module.  Then, the
+        // module of any subsequent column references are checked
+        // against module to ensure they are the same.  If they're not
+        // the same, then the result is ambiguous and `None` is
+        // returned accordingly.
+        for n in nodes.into_iter() {
+            for c in n.borrow().dependencies() {
+                // Safe assuming initial expression well-formed.
+                let c_mod = &self.column(&c).unwrap().handle.module;
+                //
+                match module {
+                    None => module = Some(c_mod.clone()),
+                    Some(m) if &m != c_mod => {
+                        // Abort early because we have identified
+                        // there are two or more modules referenced in
+                        // this set of nodes.
+                        return None;
+                    }
+                    Some(_) => {
+                        // Continue
+                    }
+                }
+            }
+        }
+        // Done
+        module
     }
 
     pub fn set_min_len(&mut self, module: &str, len: usize) {
