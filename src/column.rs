@@ -780,8 +780,12 @@ impl<'a> Iterator for ValueBackingIter<'a> {
                 }
             }
             ValueBacking::Function { f, .. } => {
-                self.i += 1;
-                f(self.i - 1, self.columns)
+                if self.i >= self.len {
+                    None
+                } else {
+                    self.i += 1;
+                    f(self.i - 1, self.columns)
+                }
             }
         }
     }
