@@ -21,6 +21,9 @@ pub(crate) enum CompileError<'a> {
 
     #[error("column {} not found", .0.pretty())]
     NotFound(Handle),
+
+    #[error("ambiguous {} module for {} {}", .0, .1, .2.pretty())]
+    AmbiguousModule(&'static str, &'static str, Handle),
 }
 
 #[derive(Error, Debug)]

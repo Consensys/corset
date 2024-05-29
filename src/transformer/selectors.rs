@@ -1,6 +1,7 @@
 use crate::{
     column::{Column, ColumnSet, Computation},
     compiler::{ComputationTable, Constraint, ConstraintSet, Expression, Kind, Magma, Node},
+    errors::CompileError,
     pretty::Base,
     structs::Handle,
 };
@@ -18,9 +19,6 @@ fn do_expand_expr(
     match e.e() {
         Expression::Column { .. } | Expression::ExoColumn { .. } => Ok(e.clone()),
         _ => {
-            let module = cols
-                .module_for(e.dependencies())
-                .unwrap_or(module.to_owned());
             let new_handle = Handle::new(module, expression_to_name(e, "#EXPAND"));
             // TODO: replace name with exprs hash to 100% ensure bijectivity handle/expression
             // Only insert the computation if a column matching the expression has not already been created
@@ -62,10 +60,26 @@ pub fn expand_constraints(cs: &mut ConstraintSet) -> Result<()> {
                 including: parents,
                 included: children,
             } => {
-                for e in parents.iter_mut().chain(children.iter_mut()) {
+                let including_module = cs.columns.module_forall(parents.iter()).ok_or(
+                    CompileError::AmbiguousModule("target", "lookup", handle.clone()),
+                )?;
+                let included_module = cs.columns.module_forall(children.iter()).ok_or(
+                    CompileError::AmbiguousModule("source", "lookup", handle.clone()),
+                )?;
+                //
+                for e in parents.iter_mut() {
                     *e = do_expand_expr(
                         e,
-                        &handle.module,
+                        &including_module,
+                        &mut cs.columns,
+                        &mut cs.computations,
+                        &mut new_cs_exps,
+                    )?;
+                }
+                for e in children.iter_mut() {
+                    *e = do_expand_expr(
+                        e,
+                        &included_module,
                         &mut cs.columns,
                         &mut cs.computations,
                         &mut new_cs_exps,
@@ -77,9 +91,21 @@ pub fn expand_constraints(cs: &mut ConstraintSet) -> Result<()> {
                 exp: e,
                 max: _,
             } => {
+                let module = cs
+                    .columns
+                    .module_for(e.dependencies())
+                    // NOTE: this error is actually very hard to
+                    // trigger (though it is possible).  We can
+                    // essentially ignore its possibility.
+                    .ok_or(CompileError::AmbiguousModule(
+                        "target",
+                        "range",
+                        handle.clone(),
+                    ))?;
+                //
                 *e = do_expand_expr(
                     e,
-                    &handle.module,
+                    &module,
                     &mut cs.columns,
                     &mut cs.computations,
                     &mut new_cs_exps,
