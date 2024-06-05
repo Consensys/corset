@@ -594,7 +594,6 @@ impl ConstraintSetBuilder {
             .map(|r| r.1),
             Either::Right(cs) => Ok(cs),
         }?;
-
         transformer::expand_to(&mut cs, self.expand_to, &self.auto_constraints)?;
         transformer::concretize(&mut cs);
         Ok(cs)
