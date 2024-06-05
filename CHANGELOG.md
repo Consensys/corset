@@ -2,11 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
-## [9.7.10] - 2024-03-06
+## [0.9.11] - 2024-06-05
+
+### Bug Fixes
+
+- Fix `ifs::raise_ifs` #87 ([#97](https://github.com/Consensys/corset/issues/97))
+- Remove old `to_string` invokation ([#109](https://github.com/Consensys/corset/issues/109))
+- Fix Default Base for Interleaved Constraints ([#114](https://github.com/Consensys/corset/issues/114))
+- Rendering of columns in `convert` ([#110](https://github.com/Consensys/corset/issues/110))
+- Erroneous inversion optimization ([#108](https://github.com/Consensys/corset/issues/108))
+- Fix for `eq!` typing in `stdlib.lisp` ([#145](https://github.com/Consensys/corset/issues/145))
+- Fix for `corset compute` ([#156](https://github.com/Consensys/corset/issues/156))
+- Fix #158 ([#159](https://github.com/Consensys/corset/issues/159))
+- Incorrect typing of vector operations ([#175](https://github.com/Consensys/corset/issues/175))
+
+### Features
+
+- Add missing bigInt package ([#137](https://github.com/Consensys/corset/issues/137))
+
+### Build
+
+- Bump the cargo group across 1 directory with 2 updates ([#103](https://github.com/Consensys/corset/issues/103))
+
+## [9.7.10] - 2024-03-07
 
 ### Features
 
 - Add force-bin
+
+### Miscellaneous Tasks
+
+- Release corset version 9.7.10
 
 ### Refactor
 
@@ -1157,6 +1183,56 @@ All notable changes to this project will be documented in this file.
 - Release corset version 2.0.0
 
 ## [1.2.0] - 2022-12-18
+
+### Bug Fixes
+
+- Fix DEFUNALIAS
+- Fix non-deterministic behavior due to hashmaps
+- Fix Defconst
+- Fix BranchIfElse
+- Fix Go export
+- Fix
+- Fix module
+- Fix multiple constants definition
+- Fixed missing comma
+- Fix naming conventions
+- Fix inverted columns
+- Fix columns computation steps ordering
+- Fix mistake for in-range
+- Fix relative indexing
+- Fix relative indexing
+- Fix constraint checking
+- Fixes
+- Fix negative moduli
+- Fix ‶unreachable″ code
+- Fix wrapping
+- Fix go exporter
+- Fix off-by-one error
+- Fix wrong indices
+- Fix Go export
+- Fix permutation
+- Fix padding
+- Fix Binary/NOT padding
+- Fix JSON export
+- Fix
+- Fix
+- Fix missing initialization
+- Fix
+- Fix didnt-change
+- Fix postgres
+- Fix compile-time evaluation of constants
+- Fix unused symbols detection
+- Fix mangling
+- Fix(?) JSON export
+- Fix partial padding
+- Fix binary/not padding
+- Fix hashing of Handles
+- Fix computation & export of columns
+- Fix erroneous static if folding
+- Fix
+- Fix the computation not being shared across contexts
+- Fix if-eq
+- Fix padding of computed columns
 
 ### Miscellaneous Tasks
 
