@@ -197,13 +197,11 @@ impl Intrinsic {
             Intrinsic::Add | Intrinsic::Sub | Intrinsic::Neg => {
                 // Boolean is a corner case, as it is not stable under these operations
                 let max_t = max_type(argtype)?;
-                match max_t.m().rm() {
-                    RawMagma::Binary => max_t.with_raw_magma(RawMagma::Native),
-                    _ => max_t,
-                }
+                max_t.with_raw_magma(RawMagma::Native)
             }
             Intrinsic::VectorAdd | Intrinsic::VectorSub | Intrinsic::VectorMul => {
-                super::max_type(argtype.iter())?
+                let max_t = super::max_type(argtype.iter())?;
+                max_t.with_raw_magma(RawMagma::Native)
             }
             Intrinsic::Exp => argtype[0],
             Intrinsic::Mul => argtype.iter().max().cloned().unwrap_or(Type::INFIMUM),
