@@ -331,6 +331,46 @@ impl RawMagma {
         (bit_size + 8 - 1) / 8
     }
 
+    /// Returns an upper bound on the possible values which can be
+    /// stored by this magma.  This is one past the largest value
+    /// which can be stored.  For example, the upper bound for a byte
+    /// is 256.
+    pub fn upper_bound(&self) -> &Value {
+        match self {
+            RawMagma::None => unreachable!(),
+            RawMagma::Binary => {
+                // Calculate 2^4
+                let two_1 = F_BITS[1].get_or_init(|| Value::from(2));
+                //
+                two_1
+            }
+            RawMagma::Nibble => {
+                // Calculate 2^4
+                let two_4 = F_BITS[4].get_or_init(|| Value::from(16));
+                //
+                two_4
+            }
+            RawMagma::Byte => {
+                let two_8 = F_BITS[8].get_or_init(|| Value::from(256));
+                //
+                two_8
+            }
+            RawMagma::Native => {
+                unreachable!()
+            }
+            RawMagma::Integer(b) => {
+                // Calulate 2^b lazily.
+                let two_b = F_BITS[*b].get_or_init(|| {
+                    // Unwrap safe because of check above.
+                    Value::try_from(BigInt::from(2).pow(*b as u32)).unwrap()
+                });
+                //done
+                two_b
+            }
+            RawMagma::Any => unreachable!(),
+        }
+    }
+
     pub fn validate(&self, x: Value) -> Result<Value> {
         match self {
             RawMagma::None => unreachable!(),
@@ -342,17 +382,16 @@ impl RawMagma {
                 }
             }
             RawMagma::Nibble => {
-                // Calculate 2^4
-                let two_4 = F_BITS[4].get_or_init(|| Value::from(16));
-                if x.lt(two_4) {
+                // Check x < 16
+                if x.lt(self.upper_bound()) {
                     Ok(x)
                 } else {
                     bail!(RuntimeError::InvalidValue("nibble", x))
                 }
             }
             RawMagma::Byte => {
-                let two_8 = F_BITS[8].get_or_init(|| Value::from(256));
-                if x.lt(two_8) {
+                // Check x < 256
+                if x.lt(self.upper_bound()) {
                     Ok(x)
                 } else {
                     bail!(RuntimeError::InvalidValue("byte", x))
@@ -373,13 +412,8 @@ impl RawMagma {
                     Err(anyhow!(RuntimeError::InvalidValue("integer", x)))
                         .with_context(|| format!("{}b > {}b", bit_size, constants::FIELD_BITSIZE))
                 } else {
-                    // Calulate 2^b lazily.
-                    let two_b = F_BITS[*b].get_or_init(|| {
-                        // Unwrap safe because of check above.
-                        Value::try_from(BigInt::from(2).pow(*b as u32)).unwrap()
-                    });
-                    // Check x fits.
-                    if x.lt(two_b) {
+                    // Check x < 2^b
+                    if x.lt(self.upper_bound()) {
                         Ok(x)
                     } else {
                         bail!(RuntimeError::InvalidValue("integer", x))
