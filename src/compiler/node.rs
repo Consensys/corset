@@ -17,7 +17,7 @@ use crate::structs::Handle;
 
 use super::{ConstraintSet, Domain, EvalSettings, Intrinsic, Kind, Magma, Type};
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq)]
+#[derive(Clone, Deserialize, Debug, Eq)]
 pub struct ColumnRef {
     h: Option<Handle>,
     id: Option<ColumnID>,
@@ -153,6 +153,36 @@ impl From<Handle> for ColumnRef {
 impl From<ColumnID> for ColumnRef {
     fn from(i: ColumnID) -> ColumnRef {
         ColumnRef::from_id(i)
+    }
+}
+
+#[cfg(feature = "json-bin")]
+impl Serialize for ColumnRef {
+    fn serialize<S: serde::ser::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let fmt_str = match (&self.h, &self.id) {
+            (None, None) => unreachable!(),
+            (Some(h), None) => format!("{}", h),
+            (None, Some(id)) => format!("#{}", id),
+            (Some(h), Some(id)) => format!("{}#{}", h, id),
+        };
+        // Done
+        serializer.serialize_str(&fmt_str)
+    }
+}
+
+#[cfg(not(feature = "json-bin"))]
+use serde::ser::SerializeStruct;
+
+#[cfg(not(feature = "json-bin"))]
+impl Serialize for ColumnRef {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        let mut handle = serializer.serialize_struct("ColumnRef", 2)?;
+        handle.serialize_field("h", &self.h)?;
+        handle.serialize_field("id", &self.id)?;
+        handle.end()
     }
 }
 
