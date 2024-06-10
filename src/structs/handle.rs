@@ -172,8 +172,8 @@ impl std::fmt::Display for Handle {
 }
 
 #[cfg(feature = "json-bin")]
-impl Serialize for Handle {
-    fn serialize<S: serde::ser::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+impl Handle {
+    pub fn to_serialize_string(&self) -> String {
         // Sanity checks
         assert!(
             !self.module.contains(":"),
@@ -187,13 +187,19 @@ impl Serialize for Handle {
             !self.perspective.as_ref().map_or(false, |s| s.contains(":")),
             "JSON deserisalisation conflict on perspective"
         );
-        // Compute format string
-        let fmt_str = match &self.perspective {
+        //
+        match &self.perspective {
             None => format!("{}:{}", self.module, self.name),
             Some(p) => format!("{}:{}:{}", self.module, self.name, p),
-        };
+        }
+    }
+}
+
+#[cfg(feature = "json-bin")]
+impl Serialize for Handle {
+    fn serialize<S: serde::ser::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         // Done
-        serializer.serialize_str(&fmt_str)
+        serializer.serialize_str(&self.to_serialize_string())
     }
 }
 

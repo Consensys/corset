@@ -161,9 +161,9 @@ impl Serialize for ColumnRef {
     fn serialize<S: serde::ser::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let fmt_str = match (&self.h, &self.id) {
             (None, None) => unreachable!(),
-            (Some(h), None) => format!("{}", h),
+            (Some(h), None) => format!("{}", h.to_serialize_string()),
             (None, Some(id)) => format!("#{}", id),
-            (Some(h), Some(id)) => format!("{}#{}", h, id),
+            (Some(h), Some(id)) => format!("{}#{}", h.to_serialize_string(), id),
         };
         // Done
         serializer.serialize_str(&fmt_str)
