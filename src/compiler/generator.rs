@@ -1316,8 +1316,10 @@ fn apply_form(
                 | Expression::Funcall { .. }
                 | Expression::Const(_) => panic!(),
                 Expression::List(xs) => {
-                    if xs.len() < 2 {
+		    if xs.is_empty() {
                         Ok(Some(body))
+		    } else if xs.len() == 1 {
+                        Ok(Some(xs[0].clone()))
                     } else {
                         let mut r = apply_function(
                             &f,
