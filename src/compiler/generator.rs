@@ -263,9 +263,17 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Add
             | Intrinsic::Sub
             | Intrinsic::Mul
+            | Intrinsic::Neg
+            | Intrinsic::Normalize
             | Intrinsic::VectorAdd
             | Intrinsic::VectorSub
-            | Intrinsic::VectorMul => {}
+            | Intrinsic::VectorMul => {
+                for (i, arg) in args.iter().enumerate() {
+                    if arg.is_list() {
+                        bail!("unexpected list operand for {}", self.to_string())
+                    }
+                }
+            }
             Intrinsic::Begin => {
                 // TODO: maybe?
                 // if args_t
@@ -1727,7 +1735,7 @@ pub(crate) fn reduce_toplevel(
                 // controlled exceptions to the usual loobean typing rules
                 let body_type = body.t();
                 Intrinsic::Mul
-                    .call(&[persp_guard, body])
+                    .unchecked_call(&[persp_guard, body])
                     .with_context(|| anyhow!("constraint {}", name))?
                     .with_type(body_type)
             } else {

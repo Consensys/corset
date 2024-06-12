@@ -371,6 +371,18 @@ impl Node {
     pub fn is_exocolumn(&self) -> bool {
         matches!(self.e(), Expression::ExoColumn { .. })
     }
+    /// Determine whether this expression is a list or not.
+    pub fn is_list(&self) -> bool {
+        match self.e() {
+            // Obvious fails
+            Expression::List(_) => true,
+            Expression::Funcall { func, .. } => match func {
+                Intrinsic::Begin => true,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
     /// Determines whether this expression is "atomic" or not.  An
     /// atomic expression is one which is never split into two or more
     /// expressions.  For example, an expression containing an
@@ -380,7 +392,7 @@ impl Node {
     pub fn is_atomic(&self) -> bool {
         match self.e() {
             // Obvious fails
-            Expression::List(args) => false,
+            Expression::List(_) => false,
             Expression::Void => false,
             // Obvious passes
             Expression::Const(_) => true,
