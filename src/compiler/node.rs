@@ -371,6 +371,38 @@ impl Node {
     pub fn is_exocolumn(&self) -> bool {
         matches!(self.e(), Expression::ExoColumn { .. })
     }
+    /// Determines whether this expression is "atomic" or not.  An
+    /// atomic expression is one which is never split into two or more
+    /// expressions.  For example, an expression containing an
+    /// if-then-else conditional is not atomic, as it will split into
+    /// (at least) two expressions.  Likewise, an expression
+    /// containing a list is not considered atomic.
+    pub fn is_atomic(&self) -> bool {
+        match self.e() {
+            // Obvious fails
+            Expression::List(args) => false,
+            Expression::Void => false,
+            // Obvious passes
+            Expression::Const(_) => true,
+            Expression::Column { .. }
+            | Expression::ExoColumn { .. }
+            | Expression::ArrayColumn { .. } => true,
+            // Other
+            Expression::Funcall { func, args } => match func {
+                Intrinsic::Begin => false,
+                Intrinsic::IfZero if args.len() > 2 => false,
+                Intrinsic::IfNotZero if args.len() > 2 => false,
+                _ => {
+                    for arg in args {
+                        if !arg.is_atomic() {
+                            return false;
+                        }
+                    }
+                    true
+                }
+            },
+        }
+    }
     pub fn e(&self) -> &Expression {
         &self._e
     }

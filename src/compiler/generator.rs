@@ -1316,9 +1316,9 @@ fn apply_form(
                 | Expression::Funcall { .. }
                 | Expression::Const(_) => panic!(),
                 Expression::List(xs) => {
-		    if xs.is_empty() {
+                    if xs.is_empty() {
                         Ok(Some(body))
-		    } else if xs.len() == 1 {
+                    } else if xs.len() == 1 {
                         Ok(Some(xs[0].clone()))
                     } else {
                         let mut r = apply_function(
@@ -1703,6 +1703,11 @@ pub(crate) fn reduce_toplevel(
             let body = if let Some(guard) = guard {
                 let guard_expr = reduce(guard, &mut ctx, settings)?
                     .with_context(|| anyhow!("guard `{:?}` is empty", guard))?;
+                // Sanity check guard does not do strange things.
+                if !guard_expr.is_atomic() {
+                    bail!("unexpected non-atomic guard in {}", handle.pretty())
+                }
+                // Sanity check guard has the expected type.
                 match guard_expr.t().c() {
                     Conditioning::Loobean => {
                         bail!("unexpected loobean guard in {}", handle.pretty())
@@ -1722,12 +1727,12 @@ pub(crate) fn reduce_toplevel(
                 // controlled exceptions to the usual loobean typing rules
                 let body_type = body.t();
                 Intrinsic::Mul
-                    .call(&[persp_guard, body])?
+                    .call(&[persp_guard, body])
+                    .with_context(|| anyhow!("constraint {}", name))?
                     .with_type(body_type)
             } else {
                 body
             };
-
             if body.t() == Type::Void {
                 warn!(
                     "constraint {} should be of type {}, found {}",
