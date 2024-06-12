@@ -183,6 +183,10 @@ impl Intrinsic {
         Ok(Node::from_expr(self.raw_call(args)))
     }
 
+    pub fn unchecked_call(self, args: &[Node]) -> Result<Node> {
+        Ok(Node::from_expr(self.raw_call(args)))
+    }
+
     pub fn raw_call(self, args: &[Node]) -> Expression {
         Expression::Funcall {
             func: self,
