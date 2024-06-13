@@ -61,7 +61,7 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                     let conds = {
                         let cond_not_zero = cond.clone();
                         let cond_zero = Intrinsic::Sub
-                            .call(&[Node::one(), Intrinsic::Normalize.call(&[cond.clone()])?])?;
+                            .unchecked_call(&[Node::one(), Intrinsic::Normalize.unchecked_call(&[cond.clone()])?])?;
                         if if_not_zero {
                             [cond_not_zero, cond_zero]
                         } else {
@@ -84,7 +84,7 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                                     .map(|ex: &Node| {
                                         ex.flat_map(&|e| {
                                             Intrinsic::Mul
-                                                .call(&[conds[i].clone(), e.clone()])
+                                                .unchecked_call(&[conds[i].clone(), e.clone()])
                                                 .unwrap()
                                         })
                                     })
@@ -156,7 +156,7 @@ fn raise_ifs(mut e: Node) -> Node {
                             //   ==> (if cond (func a b c e))
                             let mut then_args = args.clone();
                             then_args[i] = args_if[1].clone();
-                            let new_then = func.call(&then_args).unwrap();
+                            let new_then = func.unchecked_call(&then_args).unwrap();
                             let mut new_args = vec![cond, new_then];
                             // Pull out false branch (if applicable):
                             //   (func a b (if cond then else) c)
@@ -164,11 +164,11 @@ fn raise_ifs(mut e: Node) -> Node {
                             if let Some(arg_else) = args_if.get(2).cloned() {
                                 let mut else_args = args.clone();
                                 else_args[i] = arg_else;
-                                new_args.push(func.call(&else_args).unwrap());
+                                new_args.push(func.unchecked_call(&else_args).unwrap());
                             }
                             // Repeat this until ifs pulled out
                             // from all argument positions.
-                            return raise_ifs(func_if.call(&new_args).unwrap().with_type(a.t()));
+                            return raise_ifs(func_if.unchecked_call(&new_args).unwrap().with_type(a.t()));
                         }
                     }
                     e
