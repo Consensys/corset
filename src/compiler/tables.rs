@@ -536,7 +536,7 @@ impl Scope {
         }
     }
 
-    fn resolve_symbol_with_path(&mut self, name: &str) -> Result<Node, symbols::Error> {
+    pub fn resolve_symbol_with_path(&mut self, name: &str) -> Result<Node, symbols::Error> {
         let components = name.split('.').collect::<Vec<_>>();
         self.root()._resolve_symbol_with_path(&components)
     }

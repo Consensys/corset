@@ -97,7 +97,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
 
             for i in domain.iter() {
                 let ith_handle = handle.ith(i.try_into().unwrap());
-                ctx.insert_used_symbol(
+                ctx.insert_symbol(
                     &ith_handle.name,
                     Node::column()
                         .handle(ith_handle.clone())
