@@ -60,8 +60,10 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                 } else {
                     let conds = {
                         let cond_not_zero = cond.clone();
-                        let cond_zero = Intrinsic::Sub
-                            .unchecked_call(&[Node::one(), Intrinsic::Normalize.unchecked_call(&[cond.clone()])?])?;
+                        let cond_zero = Intrinsic::Sub.unchecked_call(&[
+                            Node::one(),
+                            Intrinsic::Normalize.unchecked_call(&[cond.clone()])?,
+                        ])?;
                         if if_not_zero {
                             [cond_not_zero, cond_zero]
                         } else {
@@ -168,7 +170,9 @@ fn raise_ifs(mut e: Node) -> Node {
                             }
                             // Repeat this until ifs pulled out
                             // from all argument positions.
-                            return raise_ifs(func_if.unchecked_call(&new_args).unwrap().with_type(a.t()));
+                            return raise_ifs(
+                                func_if.unchecked_call(&new_args).unwrap().with_type(a.t()),
+                            );
                         }
                     }
                     e
