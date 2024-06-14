@@ -1562,13 +1562,18 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                     .and_then(|n| n.pure_eval().ok())
                     .and_then(|b| b.to_usize())
                     .ok_or_else(|| anyhow!("{:?} is not a valid index", index))?;
-                // Construct indexed handle
-                let ith_handle = handle.as_handle().ith(i.try_into().unwrap());
-                // Resolve it properly this time.
-                Ok(Some(
-                    ctx.resolve_symbol(&ith_handle.name)
-                        .with_context(|| make_ast_error(e))?,
-                ))
+                // Sanity check access within bounds
+                if domain.contains(i.try_into().unwrap()) {
+                    // Construct indexed handle
+                    let name = handle.as_handle().ith(i.try_into().unwrap()).to_string();
+                    // Resolve it properly this time.
+                    Ok(Some(
+                        ctx.resolve_symbol_with_path(&name)
+                            .with_context(|| make_ast_error(e))?,
+                    ))
+                } else {
+                    bail!("tried to access {} at index {}", symbol.pretty().bold(), i)
+                }
             } else {
                 bail!(anyhow!(
                     "{} of type {} is not indexable",

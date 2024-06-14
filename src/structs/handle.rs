@@ -55,6 +55,13 @@ impl Handle {
         }
     }
 
+    pub fn to_string(&self) -> String {
+        match &self.perspective {
+            None => format!("{}.{}", self.module, self.name),
+            Some(p) => format!("{}.{}/{}", self.module, p, self.name),
+        }
+    }
+
     pub fn maybe_with_perspective<S1: AsRef<str>, S2: AsRef<str>>(
         module: S1,
         name: S2,
