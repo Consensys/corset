@@ -56,9 +56,20 @@ impl Handle {
     }
 
     pub fn to_string(&self) -> String {
-        match &self.perspective {
-            None => format!("{}.{}", self.module, self.name),
-            Some(p) => format!("{}.{}/{}", self.module, p, self.name),
+        // NOTE: its unclear why a distinction is needed for the
+        // prelude.
+        if self.module == "<prelude>" {
+            match &self.perspective {
+                // Generate cases
+                None => format!("{}", self.name),
+                Some(p) => format!("{}/{}", p, self.name),
+            }
+        } else {
+            match &self.perspective {
+                // Generate cases
+                None => format!("{}.{}", self.module, self.name),
+                Some(p) => format!("{}.{}/{}", self.module, p, self.name),
+            }
         }
     }
 
