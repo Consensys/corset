@@ -58,50 +58,69 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                         }
                     }
                 } else {
+		    // Construct condition for then branch, and
+		    // condition for else branch. 
                     let conds = {
+			// Multiplier for if-non-zero branch.
                         let cond_not_zero = cond.clone();
+			// Multiplier for if-zero branch.			
                         let cond_zero = Intrinsic::Sub.unchecked_call(&[
                             Node::one(),
                             Intrinsic::Normalize.unchecked_call(&[cond.clone()])?,
                         ])?;
+			// Set ordering based on function itself.
                         if if_not_zero {
                             [cond_not_zero, cond_zero]
                         } else {
                             [cond_zero, cond_not_zero]
                         }
                     };
-
                     // Order the then/else blocks
-                    let then_else = vec![args.get(1), args.get(2)]
-                        .into_iter()
-                        .enumerate()
-                        // Only keep the non-empty branches
-                        .filter_map(|(i, ex)| ex.map(|ex| (i, ex)))
-                        // Ensure branches are wrapped in lists
-                        .map(|(i, ex)| (i, wrap(ex.clone())))
-                        // Map the corresponding then/else operations on the branches
-                        .flat_map(|(i, exs)| {
-                            if let Expression::List(exs) = exs.e() {
-                                exs.iter()
-                                    .map(|ex: &Node| {
-                                        ex.flat_map(&|e| {
-                                            Intrinsic::Mul
-                                                .unchecked_call(&[conds[i].clone(), e.clone()])
-                                                .unwrap()
-                                        })
-                                    })
-                                    .collect::<Vec<_>>()
-                            } else {
-                                unreachable!()
-                            }
-                        })
-                        .flatten()
-                        .collect::<Vec<_>>();
-                    *e = if then_else.len() == 1 {
-                        then_else[0].clone()
-                    } else {
-                        Node::from_expr(Expression::List(then_else))
-                    }
+                    // let then_else = vec![args.get(1), args.get(2)]
+                    //     .into_iter()
+                    //     .enumerate()
+                    //     // Only keep the non-empty branches
+                    //     .filter_map(|(i, ex)| ex.map(|ex| (i, ex)))
+                    //     // Ensure branches are wrapped in lists
+                    //     .map(|(i, ex)| (i, wrap(ex.clone())))
+                    //     // Map the corresponding then/else operations on the branches
+                    //     .flat_map(|(i, exs)| {
+                    //         if let Expression::List(exs) = exs.e() {
+                    //             exs.iter()
+                    //                 .map(|ex: &Node| {
+                    //                     ex.flat_map(&|e| {
+                    //                         Intrinsic::Mul
+                    //                             .unchecked_call(&[conds[i].clone(), e.clone()])
+                    //                             .unwrap()
+                    //                     })
+                    //                 })
+                    //                 .collect::<Vec<_>>()
+                    //         } else {
+                    //             unreachable!()
+                    //         }
+                    //     })
+                    //     .flatten()
+                    //     .collect::<Vec<_>>();
+		    //
+		    // *e = if then_else.len() == 1 {
+                    //     then_else[0].clone()
+                    // } else {
+                    //     Node::from_expr(Expression::List(then_else))
+                    // }
+
+		    // Apply condition to body.
+		    let then_else : Node = match (args.get(1),args.get(2)) {
+			(Some(e), None) => {
+			    let then_cond = conds[0].clone();
+			    Intrinsic::Mul.unchecked_call(&[then_cond, e.clone()]).unwrap()
+			}
+			(None, Some(e)) => {
+			    let else_cond = conds[1].clone();
+			    Intrinsic::Mul.unchecked_call(&[else_cond, e.clone()]).unwrap()
+			}
+			(_,_) => unreachable!()
+		    };
+                    *e = then_else.clone();
                 };
             }
         }
@@ -221,17 +240,86 @@ fn raise_lists(node: &Node) -> Vec<Node> {
             exprs
         }
         Expression::Funcall { func, args } if args.len() > 0 => {
-            // More challenging because we have to compute the cross
-            // product.
-            let mut exprs = vec![raise_lists(&args[0])];
-            //  Break down args
-            for arg in args {
-                exprs.push(raise_lists(&arg));
-            }
-            // Compute cross-product
-            todo!()
-        }
+	    match func {
+		Intrinsic::IfZero if args.len() > 2 => {
+		    let mut out = Vec::new();
+		    // if-then
+		    raise_binary(&args[0],&args[1],func,&mut out);
+		    // if-else
+		    raise_binary(&args[0],&args[2],&Intrinsic::IfNotZero,&mut out);
+		    // done
+		    out
+		}
+		Intrinsic::IfNotZero if args.len() > 2 => {
+		    let mut out = Vec::new();
+		    // if-then
+		    raise_binary(&args[0],&args[1],func,&mut out);
+		    // if-else
+		    raise_binary(&args[0],&args[2],&Intrinsic::IfZero,&mut out);
+		    // done
+		    out
+		}
+		Intrinsic::Begin => unreachable!(),
+		_ => {
+		    // More challenging because we have to compute the cross
+		    // product.
+		    let mut out = Vec::new();
+		    raise_intrinsic(args,func,&mut out,&mut Vec::new());
+		    out	    
+		}
+	    }
+	}
         _ => vec![node.clone()],
+    }
+}
+
+/// Enumerate all atomic invocations of this intrinsic by expanding
+/// the cross-product of all arguments.  To understand this, consider:
+///
+/// ```lisp
+/// (* (begin A B) (begin X Y))
+/// ```
+///
+/// This is considered "non-atomic" because it contains lists within.
+/// This is expanded into the following distinct invocations:
+///
+/// ```lisp
+/// (* A X)
+/// (* B X)
+/// (* A Y)
+/// (* B Y)
+/// ```
+///
+/// This method is responsible for enumerating the argument
+/// combinations.
+fn raise_intrinsic(args: &[Node], f: &Intrinsic, out: &mut Vec<Node>, acc: &mut Vec<Node>) {
+    let n = acc.len();
+    //
+    if n == args.len() {
+        out.push(Node::from_expr(f.raw_call(acc)));
+    } else {
+        // Raise nth expression
+        let raised_args = raise_lists(&args[n]);
+        // Continue
+        for e in raised_args {
+            acc.push(e);
+            raise_intrinsic(args,f,out,acc);
+            acc.pop();
+        }
+    }
+    // Done
+}
+
+/// Special case of `raise_intrinsic` for binary operands.  
+fn raise_binary(lhs: &Node, rhs: &Node, f: &Intrinsic, out: &mut Vec<Node>) {
+    let raised_lhs = raise_lists(lhs);
+    let raised_rhs = raise_lists(rhs);
+    // Simple cross product
+    for l in raised_lhs {
+	for r in &raised_rhs {
+	    let l_r_expr = f.raw_call(&[l.clone(),r.clone()]);
+            out.push(Node::from_expr(l_r_expr));
+	}
     }
 }
 
@@ -258,7 +346,6 @@ pub fn expand_ifs(cs: &mut ConstraintSet) {
     // Raise lists
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr, .. } = c {
-            println!("BEFORE: {}", expr);
             let mut exprs = raise_lists(&*expr);
             // Construct new expression
             let nexpr = if exprs.len() == 1 {
@@ -271,22 +358,17 @@ pub fn expand_ifs(cs: &mut ConstraintSet) {
             };
             // Replace old expression with new
             *expr = Box::new(nexpr);
-            println!("AFTER: {}", expr);
         }
     }
     // Raise ifs
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr, .. } = c {
-            println!("BEFORE: {}", expr);
             *expr = Box::new(raise_ifs(*expr.clone()));
-            println!("AFTER: {}", expr);
         }
     }
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr: e, .. } = c {
-            println!("BEFORE: {}", e);
             do_expand_ifs(e).unwrap();
-            println!("AFTER: {}", e);
         }
     }
 }
