@@ -152,14 +152,6 @@ fn expression_to_name(e: &Node, prefix: &str) -> String {
     format!("C/{}[{}]", prefix, e)
 }
 
-/// Wraps `ex` into a `List` if it is not already one.
-fn wrap(ex: Node) -> Node {
-    match ex.e() {
-        Expression::List(_) => ex,
-        _ => Node::from_expr(Expression::List(vec![ex])),
-    }
-}
-
 fn flatten_list(mut e: Node) -> Node {
     match e.e_mut() {
         Expression::List(ref mut xs) => {

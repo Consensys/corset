@@ -278,42 +278,6 @@ fn reg_mangle_ith(cs: &ConstraintSet, c: &ColumnRef, i: usize) -> Result<String>
         .unwrap_or_else(|| Handle::new("", format!("{}_#{}", reg_id, i)).mangle()))
 }
 
-fn reg(cs: &ConstraintSet, c: &Handle) -> Result<Handle> {
-    let reg_id = cs
-        .columns
-        .by_handle(c)?
-        .register
-        .ok_or_else(|| anyhow!("column {} has no backing register", c.pretty()))?;
-    let reg = &cs
-        .columns
-        .registers
-        .get(reg_id)
-        .ok_or_else(|| anyhow!("register {} for column {} does not exist", reg_id, c))?;
-    Ok(reg
-        .handle
-        .as_ref()
-        .cloned()
-        .unwrap_or_else(|| Handle::new(&c.module, reg_id.to_string())))
-}
-
-fn reg_splatter(cs: &ConstraintSet, c: &Handle, i: usize) -> Result<Handle> {
-    let reg_id = cs
-        .columns
-        .by_handle(c)?
-        .register
-        .ok_or_else(|| anyhow!("column {} has no backing register", c.pretty()))?;
-    let reg = &cs
-        .columns
-        .registers
-        .get(reg_id)
-        .ok_or_else(|| anyhow!("register {} for column {} does not exist", reg_id, c))?;
-    Ok(reg
-        .handle
-        .as_ref()
-        .map(|h| h.iota(i))
-        .unwrap_or_else(|| Handle::new(&c.module, reg_id.to_string())))
-}
-
 #[derive(Serialize, Debug)]
 struct WiopColumn {
     go_id: String,

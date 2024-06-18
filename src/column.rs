@@ -1201,7 +1201,7 @@ impl ColumnSet {
     }
 
     pub fn maybe_insert_column(&mut self, column: Column) -> Option<ColumnRef> {
-        if let Some(id) = self.cols.get(&column.handle) {
+        if let Some(_) = self.cols.get(&column.handle) {
             None
         } else {
             let id = self._cols.len();
