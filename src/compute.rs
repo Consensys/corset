@@ -3,7 +3,6 @@ use itertools::Itertools;
 use log::*;
 use logging_timer::time;
 use owo_colors::OwoColorize;
-use rayon::prelude::*;
 use std::{cmp::Ordering, collections::HashSet};
 
 use crate::{

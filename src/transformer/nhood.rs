@@ -1,13 +1,9 @@
 use anyhow::{bail, Result};
 use owo_colors::OwoColorize;
-use std::collections::HashMap;
-
 use crate::{
-    column::{Column, Computation},
     compiler::{
-        ColumnRef, Constraint, ConstraintSet, Domain, Intrinsic, Kind, Magma, Node, RawMagma,
+        ColumnRef, Constraint, ConstraintSet, Intrinsic, Kind, Node, RawMagma,
     },
-    pretty::Base,
     structs::Handle,
 };
 

@@ -1,9 +1,9 @@
 use anyhow::Result;
 use num_traits::Zero;
 
-use crate::compiler::{Conditioning, Constraint, ConstraintSet, Expression, Intrinsic, Node};
+use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
 
-use super::{flatten_list, wrap};
+use super::{flatten_list};
 
 /// Expand if conditions, assuming they are roughly in "top-most"
 /// positions.  That is, we can have arbitrary nested if `List` and
@@ -36,11 +36,6 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
             if matches!(func, Intrinsic::IfZero | Intrinsic::IfNotZero) {
                 let cond = args[0].clone();
                 let if_not_zero = matches!(func, Intrinsic::IfNotZero);
-                assert!(if if_not_zero {
-                    matches!(cond.t().c(), Conditioning::Boolean | Conditioning::None)
-                } else {
-                    matches!(cond.t().c(), Conditioning::Loobean | Conditioning::None)
-                });
 
                 // If the condition reduces to a constant, we can determine the result
                 if let Ok(constant_cond) = cond.pure_eval() {
@@ -75,39 +70,6 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                             [cond_zero, cond_not_zero]
                         }
                     };
-                    // Order the then/else blocks
-                    // let then_else = vec![args.get(1), args.get(2)]
-                    //     .into_iter()
-                    //     .enumerate()
-                    //     // Only keep the non-empty branches
-                    //     .filter_map(|(i, ex)| ex.map(|ex| (i, ex)))
-                    //     // Ensure branches are wrapped in lists
-                    //     .map(|(i, ex)| (i, wrap(ex.clone())))
-                    //     // Map the corresponding then/else operations on the branches
-                    //     .flat_map(|(i, exs)| {
-                    //         if let Expression::List(exs) = exs.e() {
-                    //             exs.iter()
-                    //                 .map(|ex: &Node| {
-                    //                     ex.flat_map(&|e| {
-                    //                         Intrinsic::Mul
-                    //                             .unchecked_call(&[conds[i].clone(), e.clone()])
-                    //                             .unwrap()
-                    //                     })
-                    //                 })
-                    //                 .collect::<Vec<_>>()
-                    //         } else {
-                    //             unreachable!()
-                    //         }
-                    //     })
-                    //     .flatten()
-                    //     .collect::<Vec<_>>();
-		    //
-		    // *e = if then_else.len() == 1 {
-                    //     then_else[0].clone()
-                    // } else {
-                    //     Node::from_expr(Expression::List(then_else))
-                    // }
-
 		    // Apply condition to body.
 		    let then_else : Node = match (args.get(1),args.get(2)) {
 			(Some(e), None) => {
@@ -120,6 +82,7 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
 			}
 			(_,_) => unreachable!()
 		    };
+		    // Finally, replace existing node.
                     *e = then_else.clone();
                 };
             }

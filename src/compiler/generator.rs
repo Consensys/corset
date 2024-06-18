@@ -268,7 +268,7 @@ impl FuncVerifier<Node> for Intrinsic {
             | Intrinsic::VectorAdd
             | Intrinsic::VectorSub
             | Intrinsic::VectorMul => {
-                for (i, arg) in args.iter().enumerate() {
+                for (_, arg) in args.iter().enumerate() {
                     if arg.is_list() {
                         bail!("unexpected list operand for {}", self.to_string())
                     }
