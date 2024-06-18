@@ -327,44 +327,60 @@ struct WiopInterleaved {
 }
 
 fn render_columns(cs: &ConstraintSet, sizes: &mut HashSet<String>) -> Vec<WiopColumn> {
-    cs.columns
-        .iter()
-        .filter(|(r, _)| {
-            cs.computations
-                .computation_for(r)
-                .map(|c| c.is_interleaved())
-                != Some(true)
-        })
-        .sorted_by_cached_key(|(_, c)| c.handle.mangle())
-        .filter(|(_, c)| c.used)
-        .flat_map(|(reference, column)| {
-            let size_multiplier = cs.length_multiplier(&reference);
-            let register = cs.columns.register_of(&reference);
-            if register.width() > 1 {
-                (0..register.width())
-                    .map(|i| WiopColumn {
-                        go_id: reg_mangle_ith(cs, &reference, i).unwrap(),
-                        json_register: reg_splatter(cs, &column.handle, i).unwrap().to_string(),
-                        size: if size_multiplier == 1 {
-                            make_size(&column.handle, sizes)
-                        } else {
-                            format!("{} * {}", size_multiplier, make_size(&column.handle, sizes))
-                        },
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                vec![WiopColumn {
-                    go_id: reg_mangle(cs, &reference).unwrap(),
-                    json_register: reg(cs, &column.handle).unwrap().to_string(),
-                    size: if size_multiplier == 1 {
-                        make_size(&column.handle, sizes)
-                    } else {
-                        format!("{} * {}", size_multiplier, make_size(&column.handle, sizes))
-                    },
-                }]
-            }
-        })
-        .collect()
+    let mut regs = Vec::new();
+    // Determine set of registers allocated to any column which is
+    // actually used in a constraint somewhere.
+    for (cref, col) in cs.columns.iter() {
+        // Determine whether this is an interleaved column (or not).
+        let interleaved = cs
+            .computations
+            .computation_for(&cref)
+            .map(|c| c.is_interleaved())
+            == Some(true);
+        // Only declare columns which are not interleaved, and which
+        // are actually used.  Note: interleaved columns are declared
+        // separately.
+        if !interleaved && col.used {
+            // Determine the column size multiplier
+            let size_multiplier = cs.length_multiplier(&cref);
+            // Store regid and multiplier
+            regs.push((col.register.unwrap(), size_multiplier));
+        }
+    }
+    // Sort and remove duplicates (to avoid declaring them twice).
+    regs.sort();
+    regs.dedup();
+    // Construct column declarations
+    let mut w_cols = Vec::new();
+    // Each unique register requires a declaration.
+    for (rid, multiplier) in regs {
+        // Access register info
+        let register = &cs.columns.registers[rid];
+        //
+        if register.width() > 1 {
+            // Should be unreachable since we are not using exo
+            // columns at this time.
+            unreachable!()
+        } else {
+            let handle: &Handle = register.handle.as_ref().unwrap();
+            w_cols.push(WiopColumn {
+                go_id: handle.mangle(),
+                json_register: handle.to_string(),
+                size: if multiplier == 1 {
+                    make_size(handle, sizes)
+                } else {
+                    format!("{} * {}", multiplier, make_size(handle, sizes))
+                },
+            });
+        }
+    }
+    // Sort by go_id so that columns from the same module are grouped
+    // together.  This is not strictly necessarily, but is helpful in
+    // diagnosing problems.  Also it ensures the column order is
+    // deterministic.
+    w_cols.sort_by(|l, r| l.go_id.cmp(&r.go_id));
+    //
+    w_cols
 }
 
 fn render_interleaved(cs: &ConstraintSet, _sizes: &mut HashSet<String>) -> Vec<WiopInterleaved> {
