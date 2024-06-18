@@ -196,6 +196,45 @@ fn raise_ifs(mut e: Node) -> Node {
     }
 }
 
+/// Pull `lists` out of nested positions and into top-most
+/// positions.  Specifically, something like this:
+///
+/// ```lisp
+/// (defconstraint test () (if A (begin B C)))
+/// ```
+///
+/// Has the nested `list` raised into the following position:
+///
+/// ```lisp
+/// (defconstraint test () (begin (if A B) (if A C)))
+/// ```
+///
+/// The purpose of this is to sanitize the structure of expressions
+/// conditions to make their subsequent translation easier.
+fn raise_lists(node: &Node) -> Vec<Node> {
+    match node.e() {
+        Expression::List(xs) => {
+            let mut exprs = Vec::new();
+            for x in xs {
+                exprs.extend(raise_lists(x));
+            }
+            exprs
+        }
+        Expression::Funcall { func, args } if args.len() > 0 => {
+            // More challenging because we have to compute the cross
+            // product.
+            let mut exprs = vec![raise_lists(&args[0])];
+            //  Break down args
+            for arg in args {
+                exprs.push(raise_lists(&arg));
+            }
+            // Compute cross-product
+            todo!()
+        }
+        _ => vec![node.clone()],
+    }
+}
+
 /// Responsible for lowering `if` expressions into a multiplication
 /// over the normalised condition.  For example, this constraint:
 ///
@@ -216,14 +255,38 @@ fn raise_ifs(mut e: Node) -> Node {
 /// it is evaluated at compile time and the entire `if` expression is
 /// eliminated.
 pub fn expand_ifs(cs: &mut ConstraintSet) {
+    // Raise lists
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr, .. } = c {
+            println!("BEFORE: {}", expr);
+            let mut exprs = raise_lists(&*expr);
+            // Construct new expression
+            let nexpr = if exprs.len() == 1 {
+                // Optimise case where only a single expression, as we
+                // don't need a list in this case.
+                exprs.pop().unwrap()
+            } else {
+                // When there are multiple expressions, use a list.
+                Node::from_expr(Expression::List(exprs))
+            };
+            // Replace old expression with new
+            *expr = Box::new(nexpr);
+            println!("AFTER: {}", expr);
+        }
+    }
+    // Raise ifs
+    for c in cs.constraints.iter_mut() {
+        if let Constraint::Vanishes { expr, .. } = c {
+            println!("BEFORE: {}", expr);
             *expr = Box::new(raise_ifs(*expr.clone()));
+            println!("AFTER: {}", expr);
         }
     }
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr: e, .. } = c {
+            println!("BEFORE: {}", e);
             do_expand_ifs(e).unwrap();
+            println!("AFTER: {}", e);
         }
     }
 }

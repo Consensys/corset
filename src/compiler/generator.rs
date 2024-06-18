@@ -1734,6 +1734,7 @@ pub(crate) fn reduce_toplevel(
                 // Perspectives are just multiplicative coefficients, and are
                 // controlled exceptions to the usual loobean typing rules
                 let body_type = body.t();
+                println!("APPLYING PERSPECTIVE");
                 Intrinsic::Mul
                     .unchecked_call(&[persp_guard, body])
                     .with_context(|| anyhow!("constraint {}", name))?
