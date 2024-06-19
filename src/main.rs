@@ -8,8 +8,6 @@ use either::Either;
 use log::*;
 use logging_timer::time;
 use owo_colors::OwoColorize;
-use serde::Serialize;
-use serde_json::Value;
 use std::sync::RwLock;
 use std::{
     io::{Read, Write},

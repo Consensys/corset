@@ -449,7 +449,7 @@ impl Node {
     }
     pub fn perspective(&self) -> Option<String> {
         match self.e() {
-            Expression::Funcall { args, .. } | Expression::List(args) => todo!(),
+            Expression::Funcall { args: _, .. } | Expression::List(_) => todo!(),
             Expression::Const(_) => None,
             Expression::Column { handle, .. }
             | Expression::ExoColumn { handle, .. }

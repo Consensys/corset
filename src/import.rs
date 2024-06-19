@@ -37,23 +37,7 @@ struct RegisterHeader {
 struct TraceMap {
     headers: Vec<RegisterHeader>,
 }
-impl TraceMap {
-    fn size(&self) -> usize {
-        4 + self
-            .headers
-            .iter()
-            .map(|h| {
-                2  // i16: name length
-                    + h.handle.name.len()
-                    +1
-                    + h.handle.name.len() // [u8]: name bytes
-                    + 1 // u8: BPE
-                    + 4 // i32: elt count
-                    + h.bytes_per_element * h.length as usize
-            })
-            .sum::<usize>()
-    }
-}
+
 impl std::fmt::Debug for TraceMap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (module, columns) in &self.headers.iter().group_by(|c| &c.handle.module) {

@@ -209,12 +209,12 @@ impl Value {
         }
     }
 
-    pub(crate) fn from_str(s: &str) -> Result<Value> {
-        Ok(Value::BigInt(
-            s.parse::<BigInt>()
-                .with_context(|| anyhow!("while parsing `{}`", s))?,
-        ))
-    }
+    // pub(crate) fn from_str(s: &str) -> Result<Value> {
+    //     Ok(Value::BigInt(
+    //         s.parse::<BigInt>()
+    //             .with_context(|| anyhow!("while parsing `{}`", s))?,
+    //     ))
+    // }
 
     pub fn exoize(&self) -> Value {
         match self {
@@ -259,12 +259,12 @@ impl Value {
         }
     }
 
-    pub(crate) fn make_bi(&mut self) {
-        match self {
-            Value::BigInt(_) => {}
-            _ => *self = Value::BigInt(BigInt::from_bytes_le(Sign::Plus, &self.to_bytes())),
-        }
-    }
+    // pub(crate) fn make_bi(&mut self) {
+    //     match self {
+    //         Value::BigInt(_) => {}
+    //         _ => *self = Value::BigInt(BigInt::from_bytes_le(Sign::Plus, &self.to_bytes())),
+    //     }
+    // }
 
     pub(crate) fn to_bi_variant(&self) -> Value {
         match self {
@@ -519,8 +519,6 @@ impl std::fmt::Display for Value {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FieldRegister {
     pub handle: Handle,
-    #[serde(skip)]
-    value: Option<Vec<Fr>>,
 }
 
 // #[derive(Debug)]
@@ -1459,18 +1457,6 @@ impl Computation {
                 .map(|t| t.to_string())
                 .collect::<Vec<_>>()
                 .join(", "),
-        }
-    }
-
-    pub(crate) fn module(&self, cs: &ColumnSet) -> String {
-        match self {
-            Computation::Composite { target, .. } => cs.module_of(target),
-            Computation::ExoOperation { target, .. } => cs.module_of(target),
-            Computation::ExoConstant { target, .. } => cs.module_of(target),
-            Computation::Interleaved { target, .. } => cs.module_of(target),
-            Computation::Sorted { tos, .. } => cs.module_for(tos).unwrap(),
-            Computation::CyclicFrom { target, .. } => cs.module_of(target),
-            Computation::SortingConstraints { sorted, .. } => cs.module_for(sorted).unwrap(),
         }
     }
 

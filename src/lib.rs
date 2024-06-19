@@ -6,17 +6,12 @@ use compiler::ConstraintSet;
 use errno::{set_errno, Errno};
 use libc::c_char;
 use log::*;
-use rayon::{prelude::*, ThreadPool};
+use rayon::{ThreadPool};
 use std::{
     ffi::{c_uint, CStr, CString},
     sync::RwLock,
 };
-use transformer::{AutoConstraint, ExpansionLevel};
-
-use crate::{
-    column::{Computation, Value, ValueBacking},
-    compiler::EvalSettings,
-};
+use crate::cgo::{Trace};
 
 mod check;
 mod column;
@@ -30,6 +25,7 @@ mod pretty;
 mod structs;
 mod transformer;
 mod utils;
+mod cgo;
 
 pub(crate) static IS_NATIVE: RwLock<bool> = RwLock::new(true);
 
@@ -84,6 +80,7 @@ impl std::fmt::Display for CorsetError {
     }
 }
 
+
 fn cstr_to_string<'a>(s: *const c_char) -> &'a str {
     let name = unsafe {
         assert!(!s.is_null());
@@ -93,163 +90,10 @@ fn cstr_to_string<'a>(s: *const c_char) -> &'a str {
     name.to_str().unwrap()
 }
 
-const EMPTY_MARKER: [u8; 32] = [
-    2, 4, 8, 16, 32, 64, 128, 255, 255, 128, 64, 32, 16, 8, 4, 2, 2, 4, 8, 16, 32, 64, 128, 255,
-    255, 128, 64, 32, 16, 8, 4, 2,
-];
-struct ComputedColumn {
-    padding_value: [u8; 32],
-    values: Vec<[u8; 32]>,
-}
-impl ComputedColumn {
-    fn empty() -> Self {
-        ComputedColumn {
-            padding_value: EMPTY_MARKER,
-            values: vec![EMPTY_MARKER],
-        }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.values.is_empty() && self.padding_value == EMPTY_MARKER
-    }
-}
-
-#[derive(Default)]
-pub struct Trace {
-    columns: Vec<ComputedColumn>,
-    ids: Vec<String>,
-}
-impl Trace {
-    fn from_constraints(c: &Corset) -> Self {
-        let mut r = Trace {
-            ..Default::default()
-        };
-
-        let rs = c
-            .columns
-            .all()
-            .par_iter()
-            .map(|cref| {
-                let empty_backing: ValueBacking = ValueBacking::default();
-
-                let column = c.columns.column(cref).unwrap();
-                let handle = &column.handle;
-                let spilling = c.spilling_of(&handle.module).unwrap_or(0);
-                let backing = c.columns.backing(cref).unwrap_or(&empty_backing);
-                let padding: Value = if let Some(v) = column.padding_value.as_ref() {
-                    v.clone()
-                } else {
-                    backing
-                        .get(-spilling, false, &c.columns)
-                        .unwrap_or_else(|| {
-                            c.computations
-                                .computation_for(cref)
-                                .map(|c| match c {
-                                    Computation::Composite { exp, .. } => exp
-                                        .eval(
-                                            0,
-                                            |_, _, _| Some(Value::zero()),
-                                            &mut None,
-                                            &EvalSettings::default(),
-                                        )
-                                        .unwrap_or_else(Value::zero),
-                                    Computation::Interleaved { .. } => Value::zero(),
-                                    Computation::Sorted { .. } => Value::zero(),
-                                    Computation::CyclicFrom { .. } => Value::zero(),
-                                    Computation::SortingConstraints { .. } => Value::zero(),
-                                    Computation::ExoOperation { .. } => Value::zero(), // TODO: FIXME:
-                                    Computation::ExoConstant { value, .. } => value.clone(),
-                                })
-                                .unwrap_or_else(Value::zero)
-                        })
-                };
-
-                let values: Vec<[u8; 32]> = backing
-                    .iter(&c.columns)
-                    .map(|x| x.to_bytes().try_into().unwrap())
-                    .collect::<Vec<_>>();
-
-                trace!("Writing {}", handle);
-                (
-                    ComputedColumn {
-                        values,
-                        padding_value: { padding.to_bytes().try_into().unwrap() },
-                    },
-                    c.handle(cref).to_string(),
-                )
-            })
-            .collect::<Vec<_>>();
-
-        for (col, id) in rs.into_iter() {
-            r.columns.push(col);
-            r.ids.push(id);
-        }
-
-        r
-    }
-
-    fn from_ptr<'a>(ptr: *const Trace) -> &'a Self {
-        assert!(!ptr.is_null());
-        unsafe { &*ptr }
-    }
-
-    fn mut_from_ptr<'a>(ptr: *mut Trace) -> &'a mut Self {
-        assert!(!ptr.is_null());
-        unsafe { &mut *ptr }
-    }
-}
-
-fn make_corset(mut constraints: ConstraintSet) -> Result<Corset> {
-    transformer::expand_to(
-        &mut constraints,
-        ExpansionLevel::all().into(),
-        AutoConstraint::all(),
-    )?;
-    transformer::concretize(&mut constraints);
-    Ok(constraints)
-}
-
-fn _corset_from_file(zkevmfile: &str) -> Result<Corset> {
-    info!("Loading `{}`", &zkevmfile);
-    let constraints = ron::from_str(
-        &std::fs::read_to_string(zkevmfile)
-            .with_context(|| anyhow!("while reading `{}`", zkevmfile))?,
-    )
-    .with_context(|| anyhow!("while parsing `{}`", zkevmfile))?;
-    make_corset(constraints)
-}
-
-fn _corset_from_str(zkevmstr: &str) -> Result<Corset> {
-    let constraints =
-        ron::from_str(zkevmstr).with_context(|| anyhow!("while parsing the provided zkEVM"))?;
-
-    make_corset(constraints)
-}
-
-fn _compute_trace_from_file(
-    constraints: &mut Corset,
-    tracefile: &str,
-    fail_on_missing: bool,
-) -> Result<Trace> {
-    compute::compute_trace(tracefile, constraints, fail_on_missing)
-        .with_context(|| format!("while computing from file `{}`", tracefile))?;
-    Ok(Trace::from_constraints(constraints))
-}
-
-fn _compute_trace_from_str(
-    constraints: &mut Corset,
-    tracestr: &str,
-    fail_on_missing: bool,
-) -> Result<Trace> {
-    compute::compute_trace_str(tracestr.as_bytes(), constraints, fail_on_missing)
-        .with_context(|| format!("while computing from string `{}`", tracestr))?;
-    Ok(Trace::from_constraints(constraints))
-}
-
 #[no_mangle]
 pub extern "C" fn corset_from_file(zkevmfile: *const c_char) -> *mut Corset {
     let zkevmfile = cstr_to_string(zkevmfile);
-    match _corset_from_file(zkevmfile) {
+    match cgo::corset_from_file(zkevmfile) {
         Result::Ok(constraints) => {
             set_errno(Errno(0));
             Box::into_raw(Box::new(constraints))
@@ -265,7 +109,7 @@ pub extern "C" fn corset_from_file(zkevmfile: *const c_char) -> *mut Corset {
 #[no_mangle]
 pub extern "C" fn corset_from_string(zkevmstr: *const c_char) -> *mut Corset {
     let zkevmstr = cstr_to_string(zkevmstr);
-    match _corset_from_str(zkevmstr) {
+    match cgo::corset_from_str(zkevmstr) {
         Result::Ok(constraints) => {
             set_errno(Errno(0));
             Box::into_raw(Box::new(constraints))
@@ -363,7 +207,7 @@ pub extern "C" fn trace_compute_from_file(
             let tracefile = cstr_to_string(tracefile);
             let constraints = Corset::mut_from_ptr(corset);
             let r =
-                tp.install(|| _compute_trace_from_file(constraints, tracefile, fail_on_missing));
+                tp.install(|| cgo::compute_trace_from_file(constraints, tracefile, fail_on_missing));
             match r {
                 Err(e) => {
                     eprintln!("{:?}", e);
@@ -396,7 +240,7 @@ pub extern "C" fn trace_compute_from_string(
             }
 
             let constraints = Corset::mut_from_ptr(corset);
-            let r = tp.install(|| _compute_trace_from_str(constraints, tracestr, fail_on_missing));
+            let r = tp.install(|| cgo::compute_trace_from_str(constraints, tracestr, fail_on_missing));
             match r {
                 Err(e) => {
                     eprintln!("{:?}", e);
@@ -509,7 +353,7 @@ pub extern "C" fn free_column_by_name(trace: *mut Trace, name: *const c_char) {
 
     let i = r.ids.iter().position(|n| *n == name);
     if let Some(i) = i {
-        r.columns[i] = ComputedColumn::empty();
+        r.columns[i] = cgo::ComputedColumn::empty();
     } else {
         set_errno(CorsetError::ColumnNameNotFound.into());
     }
