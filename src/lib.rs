@@ -1,18 +1,19 @@
 #![allow(dead_code)]
 #[macro_use]
 extern crate pest_derive;
+use crate::cgo::Trace;
 use anyhow::*;
 use compiler::ConstraintSet;
 use errno::{set_errno, Errno};
 use libc::c_char;
 use log::*;
-use rayon::{ThreadPool};
+use rayon::ThreadPool;
 use std::{
     ffi::{c_uint, CStr, CString},
     sync::RwLock,
 };
-use crate::cgo::{Trace};
 
+mod cgo;
 mod check;
 mod column;
 mod compiler;
@@ -25,7 +26,6 @@ mod pretty;
 mod structs;
 mod transformer;
 mod utils;
-mod cgo;
 
 pub(crate) static IS_NATIVE: RwLock<bool> = RwLock::new(true);
 
@@ -79,7 +79,6 @@ impl std::fmt::Display for CorsetError {
         }
     }
 }
-
 
 fn cstr_to_string<'a>(s: *const c_char) -> &'a str {
     let name = unsafe {
@@ -206,8 +205,8 @@ pub extern "C" fn trace_compute_from_file(
         Result::Ok(tp) => {
             let tracefile = cstr_to_string(tracefile);
             let constraints = Corset::mut_from_ptr(corset);
-            let r =
-                tp.install(|| cgo::compute_trace_from_file(constraints, tracefile, fail_on_missing));
+            let r = tp
+                .install(|| cgo::compute_trace_from_file(constraints, tracefile, fail_on_missing));
             match r {
                 Err(e) => {
                     eprintln!("{:?}", e);
@@ -240,7 +239,8 @@ pub extern "C" fn trace_compute_from_string(
             }
 
             let constraints = Corset::mut_from_ptr(corset);
-            let r = tp.install(|| cgo::compute_trace_from_str(constraints, tracestr, fail_on_missing));
+            let r =
+                tp.install(|| cgo::compute_trace_from_str(constraints, tracestr, fail_on_missing));
             match r {
                 Err(e) => {
                     eprintln!("{:?}", e);

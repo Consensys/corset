@@ -3,7 +3,7 @@ use num_traits::Zero;
 
 use crate::compiler::{Constraint, ConstraintSet, Expression, Intrinsic, Node};
 
-use super::{flatten_list};
+use super::flatten_list;
 
 /// Expand if conditions, assuming they are roughly in "top-most"
 /// positions.  That is, we can have arbitrary nested if `List` and
@@ -53,36 +53,40 @@ fn do_expand_ifs(e: &mut Node) -> Result<()> {
                         }
                     }
                 } else {
-		    // Construct condition for then branch, and
-		    // condition for else branch. 
+                    // Construct condition for then branch, and
+                    // condition for else branch.
                     let conds = {
-			// Multiplier for if-non-zero branch.
+                        // Multiplier for if-non-zero branch.
                         let cond_not_zero = cond.clone();
-			// Multiplier for if-zero branch.			
+                        // Multiplier for if-zero branch.
                         let cond_zero = Intrinsic::Sub.unchecked_call(&[
                             Node::one(),
                             Intrinsic::Normalize.unchecked_call(&[cond.clone()])?,
                         ])?;
-			// Set ordering based on function itself.
+                        // Set ordering based on function itself.
                         if if_not_zero {
                             [cond_not_zero, cond_zero]
                         } else {
                             [cond_zero, cond_not_zero]
                         }
                     };
-		    // Apply condition to body.
-		    let then_else : Node = match (args.get(1),args.get(2)) {
-			(Some(e), None) => {
-			    let then_cond = conds[0].clone();
-			    Intrinsic::Mul.unchecked_call(&[then_cond, e.clone()]).unwrap()
-			}
-			(None, Some(e)) => {
-			    let else_cond = conds[1].clone();
-			    Intrinsic::Mul.unchecked_call(&[else_cond, e.clone()]).unwrap()
-			}
-			(_,_) => unreachable!()
-		    };
-		    // Finally, replace existing node.
+                    // Apply condition to body.
+                    let then_else: Node = match (args.get(1), args.get(2)) {
+                        (Some(e), None) => {
+                            let then_cond = conds[0].clone();
+                            Intrinsic::Mul
+                                .unchecked_call(&[then_cond, e.clone()])
+                                .unwrap()
+                        }
+                        (None, Some(e)) => {
+                            let else_cond = conds[1].clone();
+                            Intrinsic::Mul
+                                .unchecked_call(&[else_cond, e.clone()])
+                                .unwrap()
+                        }
+                        (_, _) => unreachable!(),
+                    };
+                    // Finally, replace existing node.
                     *e = then_else.clone();
                 };
             }
@@ -203,35 +207,35 @@ fn raise_lists(node: &Node) -> Vec<Node> {
             exprs
         }
         Expression::Funcall { func, args } if args.len() > 0 => {
-	    match func {
-		Intrinsic::IfZero if args.len() > 2 => {
-		    let mut out = Vec::new();
-		    // if-then
-		    raise_binary(&args[0],&args[1],func,&mut out);
-		    // if-else
-		    raise_binary(&args[0],&args[2],&Intrinsic::IfNotZero,&mut out);
-		    // done
-		    out
-		}
-		Intrinsic::IfNotZero if args.len() > 2 => {
-		    let mut out = Vec::new();
-		    // if-then
-		    raise_binary(&args[0],&args[1],func,&mut out);
-		    // if-else
-		    raise_binary(&args[0],&args[2],&Intrinsic::IfZero,&mut out);
-		    // done
-		    out
-		}
-		Intrinsic::Begin => unreachable!(),
-		_ => {
-		    // More challenging because we have to compute the cross
-		    // product.
-		    let mut out = Vec::new();
-		    raise_intrinsic(args,func,&mut out,&mut Vec::new());
-		    out	    
-		}
-	    }
-	}
+            match func {
+                Intrinsic::IfZero if args.len() > 2 => {
+                    let mut out = Vec::new();
+                    // if-then
+                    raise_binary(&args[0], &args[1], func, &mut out);
+                    // if-else
+                    raise_binary(&args[0], &args[2], &Intrinsic::IfNotZero, &mut out);
+                    // done
+                    out
+                }
+                Intrinsic::IfNotZero if args.len() > 2 => {
+                    let mut out = Vec::new();
+                    // if-then
+                    raise_binary(&args[0], &args[1], func, &mut out);
+                    // if-else
+                    raise_binary(&args[0], &args[2], &Intrinsic::IfZero, &mut out);
+                    // done
+                    out
+                }
+                Intrinsic::Begin => unreachable!(),
+                _ => {
+                    // More challenging because we have to compute the cross
+                    // product.
+                    let mut out = Vec::new();
+                    raise_intrinsic(args, func, &mut out, &mut Vec::new());
+                    out
+                }
+            }
+        }
         _ => vec![node.clone()],
     }
 }
@@ -266,23 +270,23 @@ fn raise_intrinsic(args: &[Node], f: &Intrinsic, out: &mut Vec<Node>, acc: &mut 
         // Continue
         for e in raised_args {
             acc.push(e);
-            raise_intrinsic(args,f,out,acc);
+            raise_intrinsic(args, f, out, acc);
             acc.pop();
         }
     }
     // Done
 }
 
-/// Special case of `raise_intrinsic` for binary operands.  
+/// Special case of `raise_intrinsic` for binary operands.
 fn raise_binary(lhs: &Node, rhs: &Node, f: &Intrinsic, out: &mut Vec<Node>) {
     let raised_lhs = raise_lists(lhs);
     let raised_rhs = raise_lists(rhs);
     // Simple cross product
     for l in raised_lhs {
-	for r in &raised_rhs {
-	    let l_r_expr = f.raw_call(&[l.clone(),r.clone()]);
+        for r in &raised_rhs {
+            let l_r_expr = f.raw_call(&[l.clone(), r.clone()]);
             out.push(Node::from_expr(l_r_expr));
-	}
+        }
     }
 }
 

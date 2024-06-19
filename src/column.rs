@@ -794,7 +794,7 @@ pub struct Register {
     pub handle: Option<Handle>,
     pub magma: Magma,
     #[serde(skip_serializing, skip_deserializing, default)]
-    value: Option<ValueBacking>,
+    backing: Option<ValueBacking>,
     width: usize,
 }
 
@@ -808,18 +808,22 @@ impl Register {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.value.is_none()
+        self.backing.is_none()
     }
 
     pub fn width(&self) -> usize {
         self.width
     }
 
+    pub fn backing(&self) -> Option<&ValueBacking> {
+        self.backing.as_ref()
+    }
+
     fn set_value(&mut self, v: Vec<Value>, spilling: isize) -> Result<()> {
-        if let Some(ref mut provider) = self.value.as_mut() {
+        if let Some(ref mut provider) = self.backing.as_mut() {
             provider.update_value(v, spilling)
         } else {
-            let _ = self.value.insert(ValueBacking::from_vec(
+            let _ = self.backing.insert(ValueBacking::from_vec(
                 Self::make_with_spilling(
                     &mut |i| v.get(i as usize).cloned().unwrap_or_else(Value::zero),
                     v.len(),
@@ -832,43 +836,43 @@ impl Register {
     }
 
     fn set_raw_value(&mut self, v: Vec<Value>, spilling: isize) -> Result<()> {
-        if let Some(ref mut provider) = self.value.as_mut() {
+        if let Some(ref mut provider) = self.backing.as_mut() {
             provider.update_value(v, spilling)
         } else {
-            let _ = self.value.insert(ValueBacking::from_vec(v, spilling));
+            let _ = self.backing.insert(ValueBacking::from_vec(v, spilling));
             Ok(())
         }
     }
 
     pub fn set_backing(&mut self, v: ValueBacking) -> Result<()> {
-        if self.value.is_some() {
+        if self.backing.is_some() {
             bail!("backing already set");
         }
-        self.value = Some(v);
+        self.backing = Some(v);
         Ok(())
     }
 
     pub fn padded_len(&self) -> Option<usize> {
-        self.value.as_ref().map(|v| v.padded_len())
+        self.backing.as_ref().map(|v| v.padded_len())
     }
 
     pub fn len(&self) -> Option<usize> {
-        self.value.as_ref().map(|v| v.len())
+        self.backing.as_ref().map(|v| v.len())
     }
 
     pub fn get(&self, i: isize, wrap: bool, columns: &ColumnSet) -> Option<Value> {
-        self.value.as_ref().and_then(|v| v.get(i, wrap, columns))
+        self.backing.as_ref().and_then(|v| v.get(i, wrap, columns))
     }
 
     pub fn get_raw(&self, i: isize, wrap: bool, columns: &ColumnSet) -> Option<Value> {
-        self.value
+        self.backing
             .as_ref()
             .and_then(|v| v.get_raw(i, wrap, columns))
     }
 
     pub fn concretize(&mut self) {
-        if let Some(v) = self.value.take() {
-            let _ = self.value.insert(v.concretize());
+        if let Some(v) = self.backing.take() {
+            let _ = self.backing.insert(v.concretize());
         }
     }
 }
@@ -1093,6 +1097,10 @@ impl ColumnSet {
         (0..self._cols.len()).map(ColumnRef::from).collect()
     }
 
+    pub fn regs(&self) -> Vec<RegisterID> {
+        (0..self.registers.len()).collect()
+    }
+
     pub fn by_handle(&self, handle: &Handle) -> Result<&Column> {
         self.cols
             .get(handle)
@@ -1159,7 +1167,7 @@ impl ColumnSet {
         self.registers.push(Register {
             handle: Some(handle),
             magma,
-            value: None,
+            backing: None,
             width: crate::constants::col_count_magma(magma),
         });
         self.registers.len() - 1
@@ -1231,6 +1239,21 @@ impl ColumnSet {
             .all(|c| self.registers[c.register.unwrap()].is_empty())
     }
 
+    /// Determine the set of columns which are allocated to a given
+    /// register.
+    pub fn columns_of(&self, reg_id: RegisterID) -> Vec<ColumnRef> {
+        let mut crefs = Vec::new();
+        for i in 0..self._cols.len() {
+            let Some(r) = self._cols[i].register else {
+                continue;
+            };
+            if r == reg_id {
+                crefs.push(ColumnRef::from(i));
+            }
+        }
+        return crefs;
+    }
+
     pub fn register_of_mut(&mut self, h: &ColumnRef) -> &mut Register {
         let reg = self.column(h).unwrap().register.unwrap();
         &mut self.registers[reg]
@@ -1258,7 +1281,7 @@ impl ColumnSet {
     }
 
     pub fn backing(&self, h: &ColumnRef) -> Option<&ValueBacking> {
-        self.register_of(h).value.as_ref()
+        self.register_of(h).backing.as_ref()
     }
 
     pub fn is_computed(&self, h: &ColumnRef) -> bool {
