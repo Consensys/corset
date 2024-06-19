@@ -53,10 +53,7 @@ fn main() {
     // Construct constraint set
     let mut corset = cgo::corset_from_file(&args.binfile).unwrap();
     // Read trace file
-    let trace =
+    let _trace =
         cgo::compute_trace_from_file(&mut corset, &args.tracefile, args.fail_on_missing).unwrap();
     //
-    for col in trace.ids {
-        println!("COLUMN: {col}");
-    }
 }

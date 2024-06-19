@@ -23,13 +23,13 @@ fn do_expand_expr(
             // TODO: replace name with exprs hash to 100% ensure bijectivity handle/expression
             // Only insert the computation if a column matching the expression has not already been created
             if cols
-                .insert_column_and_register(
+                .maybe_insert_column_and_register(
                     Column::builder()
                         .handle(new_handle.clone())
                         .kind(Kind::Computed)
                         .build(),
                 )
-                .is_ok()
+                .is_some()
             {
                 validate_computation(new_cs, e, &new_handle);
                 let _ = comps.insert(

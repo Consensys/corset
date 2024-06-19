@@ -124,7 +124,8 @@ impl Trace {
         let crefs = corset.columns.columns_of(reg_id);
         //
         if crefs.is_empty() {
-            todo!("NO COLUMNS ASSIGNED FOR: {handle}")
+            // This should be unreachable.
+            unreachable!("No column assigned to register ({handle}:{reg_id})")
         } else {
             // I'm assuming every register is mapped to at least one
             // column.
