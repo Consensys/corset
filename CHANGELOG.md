@@ -2,7 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.9.11] - 2024-06-05
+## [9.7.12] - 2024-06-20
+
+### Bug Fixes
+
+- Custom `Serializer` for `ColumnRef` ([#184](https://github.com/Consensys/corset/issues/184))
+- Fix for Singleton Reduce ([#192](https://github.com/Consensys/corset/issues/192))
+- Error when missing reduce ([#194](https://github.com/Consensys/corset/issues/194))
+- Fix for unexpected list on `*` ([#196](https://github.com/Consensys/corset/issues/196))
+- Unused Declaration for Array Columns (`define.go`) ([#197](https://github.com/Consensys/corset/issues/197))
+- Fix #178 ([#202](https://github.com/Consensys/corset/issues/202))
+- Incorrect Handling of Perspective Selectors ([#204](https://github.com/Consensys/corset/issues/204))
+- Incorrect Trace Construction ([#208](https://github.com/Consensys/corset/issues/208))
+- Fix #209 ([#210](https://github.com/Consensys/corset/issues/210))
+
+### Features
+
+- Implement `byte@prove` using range constraints ([#182](https://github.com/Consensys/corset/issues/182))
+
+## [9.7.11] - 2024-06-05
 
 ### Bug Fixes
 
@@ -19,6 +37,10 @@ All notable changes to this project will be documented in this file.
 ### Features
 
 - Add missing bigInt package ([#137](https://github.com/Consensys/corset/issues/137))
+
+### Miscellaneous Tasks
+
+- Release `corset` v9.7.11
 
 ### Build
 
