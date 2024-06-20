@@ -1547,11 +1547,11 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
             ),
         )),
         Token::Symbol(name) => Ok(Some(
-            ctx.resolve_symbol(name)
+            ctx.resolve_symbol(name, true)
                 .with_context(|| make_ast_error(e))?,
         )),
         Token::IndexedSymbol { name, index } => {
-            let symbol = ctx.resolve_symbol(name)?;
+            let symbol = ctx.resolve_symbol(name, true)?;
             if let Expression::ArrayColumn {
                 handle,
                 domain,
@@ -1568,7 +1568,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                     let name = handle.as_handle().ith(i.try_into().unwrap()).to_string();
                     // Resolve it properly this time.
                     Ok(Some(
-                        ctx.resolve_symbol_with_path(&name)
+                        ctx.resolve_symbol_with_path(&name, true)
                             .with_context(|| make_ast_error(e))?,
                     ))
                 } else {
@@ -1619,18 +1619,21 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
             _ => Ok(None),
         },
         Token::DefInterleaving { target, froms } => {
-            let target_handle =
-                if let Expression::Column { handle, .. } = ctx.resolve_symbol(&target.name)?.e() {
-                    handle.to_owned()
-                } else {
-                    unreachable!()
-                };
+            let target_handle = if let Expression::Column { handle, .. } =
+                ctx.resolve_symbol(&target.name, true)?.e()
+            {
+                handle.to_owned()
+            } else {
+                unreachable!()
+            };
 
             let mut from_handles = Vec::new();
             for from in froms {
                 match &from.class {
                     Token::Symbol(name) => {
-                        if let Expression::Column { handle, .. } = ctx.resolve_symbol(name)?.e() {
+                        if let Expression::Column { handle, .. } =
+                            ctx.resolve_symbol(name, true)?.e()
+                        {
                             from_handles.push(handle.clone());
                         } else {
                             bail!("{} is not a column", name.white().bold());
@@ -1638,7 +1641,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
                     }
                     Token::IndexedSymbol { name, index } => {
                         if let Expression::ArrayColumn { handle, domain, .. } =
-                            ctx.resolve_symbol(name)?.e()
+                            ctx.resolve_symbol(name, true)?.e()
                         {
                             let index_usize = reduce(index, ctx, settings)?
                                 .and_then(|n| n.pure_eval().ok())
@@ -1875,7 +1878,7 @@ pub(crate) fn reduce_toplevel(
 
             // TODO is this needed?
             to.iter()
-                .map(|f| ctx.resolve_symbol(&f.name))
+                .map(|f| ctx.resolve_symbol(&f.name, true))
                 .collect::<Result<Vec<_>, errors::symbols::Error>>()
                 .with_context(|| anyhow!("while defining permutation"))?;
             let suffix = hash_strings(froms.iter().map(|f| f.as_handle().name.clone()));

@@ -488,13 +488,13 @@ impl Scope {
         Ok(())
     }
 
-    pub fn resolve_symbol(&mut self, name: &str) -> Result<Node, symbols::Error> {
+    pub fn resolve_symbol(&mut self, name: &str, used: bool) -> Result<Node, symbols::Error> {
         let module = self.module();
         let global = data!(self).global;
 
         if name.contains('.') {
             if global {
-                self.resolve_symbol_with_path(name)
+                self.resolve_symbol_with_path(name, used)
             } else {
                 Err(symbols::Error::NotAGlobalScope(
                     name.split('.').next().unwrap().to_owned(),
@@ -513,6 +513,7 @@ impl Scope {
                 &mut self.tree.borrow_mut(),
                 name,
                 perspective,
+                used,
             )
             .map_err(|e| match e {
                 symbols::Error::SymbolNotFound(s, _, _) => {
@@ -531,14 +532,19 @@ impl Scope {
                 &mut HashSet::new(),
                 false,
                 false,
+                used,
             )
             .map_err(|_| symbols::Error::SymbolNotFound(name.to_owned(), module, None))
         }
     }
 
-    pub fn resolve_symbol_with_path(&mut self, name: &str) -> Result<Node, symbols::Error> {
+    pub fn resolve_symbol_with_path(
+        &mut self,
+        name: &str,
+        used: bool,
+    ) -> Result<Node, symbols::Error> {
         let components = name.split('.').collect::<Vec<_>>();
-        self.root()._resolve_symbol_with_path(&components)
+        self.root()._resolve_symbol_with_path(&components, used)
     }
 
     fn _resolve_symbol(
@@ -548,6 +554,7 @@ impl Scope {
         ax: &mut HashSet<String>,
         absolute_path: bool,
         pure: bool,
+        used: bool,
     ) -> Result<Node, symbols::Error> {
         if ax.contains(name) {
             Err(symbols::Error::CircularDefinition(name.to_string()))
@@ -556,13 +563,15 @@ impl Scope {
             match tree[n].unwrap_data_mut().symbols.get_mut(name) {
                 Some(Symbol::Alias(target)) => {
                     let target = target.to_owned();
-                    Self::_resolve_symbol(n, tree, &target, ax, absolute_path, pure)
+                    Self::_resolve_symbol(n, tree, &target, ax, absolute_path, pure, used)
                 }
                 Some(Symbol::Final(exp, ref mut visited)) => {
                     if pure && !matches!(exp.e(), Expression::Const(..)) {
                         Err(symbols::Error::UnavailableInPureContext(exp.to_string()))
                     } else {
-                        *visited = true;
+                        if used {
+                            *visited = true;
+                        }
                         Result::Ok(exp.clone())
                     }
                 }
@@ -580,6 +589,7 @@ impl Scope {
                                     &mut HashSet::new(),
                                     false,
                                     tree[n].unwrap_data().closed || pure,
+                                    used,
                                 )
                             },
                         )
@@ -594,6 +604,7 @@ impl Scope {
         tree: &mut SymbolTableTree,
         name: &str,
         perspective: &str,
+        used: bool,
     ) -> Result<Node, symbols::Error> {
         match tree.find_child(n, |o| {
             o.perspective
@@ -601,24 +612,30 @@ impl Scope {
                 .map(|p| p == perspective)
                 .unwrap_or(false)
         }) {
-            Some(o) => Self::_resolve_symbol(o, tree, name, &mut HashSet::new(), true, false),
+            Some(o) => Self::_resolve_symbol(o, tree, name, &mut HashSet::new(), true, false, used),
             None => tree.parent(n).map_or(
                 Err(symbols::Error::PerspectiveNotFound(
                     perspective.into(),
                     tree[n].data().unwrap().module.clone(),
                 )),
-                |parent| Self::_resolve_symbol_in_perspective(parent, tree, name, perspective),
+                |parent| {
+                    Self::_resolve_symbol_in_perspective(parent, tree, name, perspective, used)
+                },
             ),
         }
     }
 
-    fn _resolve_symbol_with_path(&mut self, path: &[&str]) -> Result<Node, symbols::Error> {
+    fn _resolve_symbol_with_path(
+        &mut self,
+        path: &[&str],
+        used: bool,
+    ) -> Result<Node, symbols::Error> {
         if path.len() == 1 {
-            self.resolve_symbol(path[0])
+            self.resolve_symbol(path[0], used)
         } else {
             for c in self.children() {
                 if data!(c).name == path[0] {
-                    return self.at(c.id)._resolve_symbol_with_path(&path[1..]);
+                    return self.at(c.id)._resolve_symbol_with_path(&path[1..], used);
                 }
             }
             return Err(symbols::Error::ModuleNotFound(
@@ -707,12 +724,6 @@ impl Scope {
             Ok(())
         }
     }
-
-    // pub fn insert_used_symbol(&mut self, name: &str, e: Node) -> Result<()> {
-    //     self.insert_symbol(name, e)?;
-    //     let _ = self.resolve_symbol(name).unwrap();
-    //     Ok(())
-    // }
 
     pub fn insert_function(&mut self, name: &str, f: Function) -> Result<()> {
         let my_name = data!(self).name.to_owned();
