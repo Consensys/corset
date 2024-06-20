@@ -220,8 +220,11 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
             )
         }
         Token::DefAlias(from, to) => {
+            // NOTE: false here (for used) is needed to prevent this
+            // symbol resolution from marking the column being aliased
+            // as used.
             let _ = ctx
-                .resolve_symbol(to)
+                .resolve_symbol(to, false)
                 .with_context(|| anyhow!("while defining alias `{}`", from))?;
 
             ctx.insert_alias(from, to)
