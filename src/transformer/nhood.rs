@@ -1,11 +1,9 @@
-use anyhow::{bail, Result};
-use owo_colors::OwoColorize;
 use crate::{
-    compiler::{
-        ColumnRef, Constraint, ConstraintSet, Intrinsic, Kind, Node, RawMagma,
-    },
+    compiler::{ColumnRef, Constraint, ConstraintSet, Intrinsic, Kind, Node, RawMagma},
     structs::Handle,
 };
+use anyhow::{bail, Result};
+use owo_colors::OwoColorize;
 
 fn process_binarity(column_ref: ColumnRef, cs: &mut ConstraintSet) {
     let handle = cs.handle(&column_ref);

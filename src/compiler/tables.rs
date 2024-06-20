@@ -708,11 +708,11 @@ impl Scope {
         }
     }
 
-    pub fn insert_used_symbol(&mut self, name: &str, e: Node) -> Result<()> {
-        self.insert_symbol(name, e)?;
-        let _ = self.resolve_symbol(name).unwrap();
-        Ok(())
-    }
+    // pub fn insert_used_symbol(&mut self, name: &str, e: Node) -> Result<()> {
+    //     self.insert_symbol(name, e)?;
+    //     let _ = self.resolve_symbol(name).unwrap();
+    //     Ok(())
+    // }
 
     pub fn insert_function(&mut self, name: &str, f: Function) -> Result<()> {
         let my_name = data!(self).name.to_owned();

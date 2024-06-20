@@ -190,6 +190,7 @@ static MODELS: &[Model] = &[
 // Arrays
 // ===================================================================
 
+#[allow(non_snake_case)]
 fn arrays_1_oracle(tr: &Trace) -> bool {
     let (A, B_1, B_2, B_3) = (tr.col("A"), tr.col("B_1"), tr.col("B_2"), tr.col("B_3"));
 
@@ -208,6 +209,7 @@ fn arrays_1_oracle(tr: &Trace) -> bool {
 // // IsZero
 // // ===================================================================
 
+#[allow(non_snake_case)]
 fn iszero_oracle(tr: &Trace) -> bool {
     let (A, B) = (tr.col("A"), tr.col("B"));
 
@@ -223,6 +225,7 @@ fn iszero_oracle(tr: &Trace) -> bool {
 // // Shift
 // // ===================================================================
 
+#[allow(non_snake_case)]
 fn shift_1_oracle(tr: &Trace) -> bool {
     let (A, B) = (tr.col("A"), tr.col("B"));
 
@@ -235,6 +238,7 @@ fn shift_1_oracle(tr: &Trace) -> bool {
     true
 }
 
+#[allow(non_snake_case)]
 fn shift_2_oracle(tr: &Trace) -> bool {
     let (A, B) = (tr.col("A"), tr.col("B"));
 
@@ -247,6 +251,7 @@ fn shift_2_oracle(tr: &Trace) -> bool {
     true
 }
 
+#[allow(non_snake_case)]
 fn shift_3_oracle(tr: &Trace) -> bool {
     let (A, B) = (tr.col("A"), tr.col("B"));
 

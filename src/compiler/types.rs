@@ -406,7 +406,7 @@ impl RawMagma {
                     Ok(x)
                 }
             }
-            RawMagma::Integer(b) => {
+            RawMagma::Integer(_b) => {
                 let bit_size = x.bit_size();
                 if bit_size > constants::FIELD_BITSIZE {
                     Err(anyhow!(RuntimeError::InvalidValue("integer", x)))

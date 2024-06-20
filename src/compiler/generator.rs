@@ -1555,7 +1555,7 @@ pub fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Resul
             if let Expression::ArrayColumn {
                 handle,
                 domain,
-                base,
+                base: _,
             } = symbol.e()
             {
                 let i = reduce(index, ctx, settings)?

@@ -78,7 +78,7 @@ fn generate_tests_from_lisp_files() {
 fn write_traces(m: &Model, ext: &str, traces: &[Trace]) {
     // Create output file
     let filename = format!("{}/{}.{}", TESTS_DIR, m.name, ext);
-    let mut f = fs::File::create(filename).unwrap();
+    let f = fs::File::create(filename).unwrap();
     // Write it all out
     for trace in traces {
         write_trace(&f, "<prelude>", &m.cols, &trace);
@@ -89,14 +89,14 @@ fn write_traces(m: &Model, ext: &str, traces: &[Trace]) {
 /// Write a specific trace to the output file.
 fn write_trace<T: Write>(mut out: T, module: &str, cols: &[&str], trace: &Trace) -> T {
     let mut first = true;
-    write!(out, "{{ \"{module}\": {{");
+    let _ = write!(out, "{{ \"{module}\": {{");
     for (i, col) in cols.iter().enumerate() {
         if !first {
-            write!(out, ", ");
+            let _ = write!(out, ", ");
         }
         first = false;
-        write!(out, "\"{col}\": {:?}", trace.get(i));
+        let _ = write!(out, "\"{col}\": {:?}", trace.get(i));
     }
-    writeln!(out, "}} }}");
+    let _ = writeln!(out, "}} }}");
     out
 }
