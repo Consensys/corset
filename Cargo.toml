@@ -46,7 +46,7 @@ owo-colors = "4"
 pest = "2.4"
 pest_derive = "2.4"
 postgres = { version = "0.19", optional = true }
-ratatui = {version = "0.26", optional = true }
+ratatui = {version = "0.27", optional = true }
 rayon = "1.5"
 regex-lite = "0.1"
 ron = "^0.7.0"
