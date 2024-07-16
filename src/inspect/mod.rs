@@ -11,7 +11,7 @@ use crossterm::{
 };
 use itertools::Itertools;
 use ratatui::{prelude::*, widgets::*};
-use ratatui::{TerminalOptions,Viewport};
+use ratatui::{TerminalOptions, Viewport};
 use regex_lite::Regex;
 use std::collections::HashMap;
 
