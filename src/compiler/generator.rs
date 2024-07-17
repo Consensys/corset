@@ -1864,7 +1864,7 @@ pub(crate) fn reduce_toplevel(
         | Token::DefunAlias(..)
         | Token::DefConsts(..) => Ok(None),
         Token::DefPermutation { from, to, signs } => {
-            let froms = from
+            let froms: Vec<ColumnRef> = from
                 .iter()
                 .map(|from| {
                     if let Some(n) = reduce(from, ctx, settings)? {
@@ -1907,16 +1907,16 @@ pub(crate) fn reduce_toplevel(
                     signs: signs.clone(),
                 },
             )?;
-
+            // Determine suitably unique name for the permutation
+            // constraint.
+            let name = format!(
+                "{}_intrld_{}",
+                froms.iter().map(|f| f.as_handle().mangled_name()).join("_"),
+                tos.iter().map(|f| f.as_handle().mangled_name()).join("_"),
+            );
+            // Done
             Ok(Some(Constraint::Permutation {
-                handle: Handle::new(
-                    ctx.module(),
-                    format!(
-                        "{}_intrld_{}",
-                        froms.iter().map(|f| f.to_string()).join("_"),
-                        tos.iter().map(|f| f.to_string()).join("_"),
-                    ),
-                ),
+                handle: Handle::new(ctx.module(), name),
                 from: froms,
                 to: tos,
             }))

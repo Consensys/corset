@@ -71,7 +71,6 @@ exporters = ["dep:handlebars"]
 inspector = ["dep:crossterm", "dep:ratatui", "dep:tui-textarea", "cli"]
 postgres = ["dep:postgres"]
 sqlite = ["dep:rusqlite"]
-json-bin = []
 
 [package.metadata.release]
 tag-prefix = ""
