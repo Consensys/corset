@@ -63,8 +63,8 @@ fn magma_to_java_type(m: Magma) -> String {
         RawMagma::Native => "Bytes",
         RawMagma::Integer(w) => match w {
             1 => "boolean",
-            2..=15 => "short",
-            16..=31 => "int",
+            2..=15 => "long",
+            16..=31 => "long",
             32..=63 => "long",
             _ => "Bytes",
         },
@@ -97,13 +97,13 @@ fn magma_to_java_bytewidth(m: Magma) -> i16 {
     match m.rm() {
         RawMagma::Binary | RawMagma::Nibble | RawMagma::Byte => 1,
         RawMagma::Native => 32,
-        RawMagma::Integer(w) => match w {
-            1 => 1,
-            2..=15 => 2,
-            16..=31 => 4,
-            32..=63 => 8,
-            _ => 32,
-        },
+        RawMagma::Integer(w) => {
+            let mut n = w / 8;
+            if w % 8 != 0 {
+                n += 1;
+            }
+            n.try_into().unwrap()
+        }
         _ => unreachable!(),
     }
 }
@@ -117,30 +117,72 @@ fn magma_to_java_putter(m: Magma, register: &str) -> String {
         }
         RawMagma::Integer(w) => match w {
             1 => format!("{}.put((byte) (b ? 1 : 0));", &register),
-            2..=15 => format!("{}.putShort(b);", &register),
-            16..=31 => format!("{}.putInt(b);", &register),
-            32..=63 => format!("{}.putLong(b);", &register),
-            _ => {
-                format!(
-                    r#"final byte[] bs = b.toArrayUnsafe();
-    for (int i = bs.length; i < 32; i++) {{
-      {0}.put((byte) 0);
-    }}
-    {0}.put(b.toArrayUnsafe());"#,
-                    &register,
-                )
-            }
+            2..=63 => magma_to_java_long_putter(w, register).unwrap(),
+            w => magma_to_java_bytes_putter(w, register).unwrap(),
         },
-        RawMagma::Native => format!(
-            r#"final byte[] bs = b.toArrayUnsafe();
-    for (int i = bs.length; i < 32; i++) {{
-      {0}.put((byte) 0);
-    }}
-    {0}.put(b.toArrayUnsafe());"#,
-            &register,
-        ),
+        RawMagma::Native => magma_to_java_bytes_putter(256, register).unwrap(),
         _ => unreachable!(),
     }
+}
+
+fn magma_to_java_long_putter(width: usize, register: &str) -> Result<String> {
+    use std::fmt::Write;
+    let max = 2i64.pow(width as u32);
+    let mut putter = String::new();
+    // Calculate number of bytes
+    let mut n = width / 8;
+    if width % 8 != 0 {
+        n += 1;
+    }
+    // Sanity Check
+    writeln!(
+        putter,
+        r#"if(b >= {max}L) {{ throw new IllegalArgumentException("{} has invalid value (" + b + ")"); }}"#,
+        &register
+    )?;
+    // Write bytes
+    for i in (0..n).rev() {
+        if i == 0 {
+            writeln!(putter, "    {}.put((byte) b);", &register)?;
+        } else {
+            writeln!(putter, "    {}.put((byte) (b >> {}));", &register, i * 8)?;
+        }
+    }
+    //
+    Ok(putter)
+}
+
+fn magma_to_java_bytes_putter(width: usize, register: &str) -> Result<String> {
+    use std::fmt::Write;
+    let mut putter = String::new();
+    // Round up bitwidth if necessary
+    let mut n = width / 8;
+    if width % 8 != 0 {
+        n += 1;
+    }
+    // Trim bytes
+    writeln!(putter, "// Trim array to size")?;
+    writeln!(putter, "    Bytes bs = b.trimLeadingZeros();")?;
+    writeln!(putter, "    // Sanity check against expected width")?;
+    writeln!(
+        putter,
+        r#"    if(bs.bitLength() > {width}) {{ throw new IllegalArgumentException("{} has invalid width (" + bs.bitLength() + "bits)"); }}"#,
+        &register
+    )?;
+    writeln!(putter, "    // Write padding (if necessary)")?;
+    writeln!(
+        putter,
+        "    for(int i=bs.size(); i<{n}; i++) {{ {}.put((byte) 0); }}",
+        &register
+    )?;
+    writeln!(putter, "    // Write bytes")?;
+    write!(
+        putter,
+        "    for(int j=0; j<bs.size(); j++) {{ {}.put(bs.get(j)); }}",
+        &register
+    )?;
+    //
+    Ok(putter)
 }
 
 /// Return the conventional method name to add an element to a trace register
@@ -212,16 +254,16 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
         .iter()
         .map(|c| BesuConstant {
             name: crate::utils::purify(&c.0.name),
-            value: if c.1.bits() <= 31 {
+            value: if c.1.bits() <= 32 {
                 format!("0x{:x}", c.1)
-            } else if c.1.bits() <= 63 {
+            } else if c.1.bits() <= 64 {
                 format!("0x{:x}L", c.1)
             } else {
                 format!("new BigInteger(\"{}\")", c.1)
             },
-            tupe: (if c.1.bits() <= 31 {
+            tupe: (if c.1.bits() <= 32 {
                 "int"
-            } else if c.1.bits() <= 63 {
+            } else if c.1.bits() <= 64 {
                 "long"
             } else {
                 "BigInteger"
