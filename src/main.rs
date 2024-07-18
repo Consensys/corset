@@ -894,6 +894,7 @@ fn main() -> Result<()> {
                 InspectorSettings {
                     open_module,
                     high_contrast,
+                    blank_perspectives: true,
                 },
             )
             .with_context(|| format!("while checking {}", tracefile.bright_white().bold()))?;
