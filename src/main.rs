@@ -62,6 +62,13 @@ pub struct Args {
     debug: bool,
 
     #[arg(
+        long,
+        help = "generate binfile using Rusty Object Notation (RON) instead of JSON",
+        global = true
+    )]
+    ron: bool,
+
+    #[arg(
         short = 't',
         long = "threads",
         help = "number of threads to use",
@@ -387,12 +394,6 @@ enum Commands {
 
         #[arg(long, help = "human-readably serialize the constraint system")]
         pretty: bool,
-
-        #[arg(
-            long,
-            help = "generate output as JSON instead of in the Rusty Object Notation (RON)"
-        )]
-        json: bool,
     },
 }
 
@@ -415,17 +416,23 @@ impl ConstraintSetBuilder {
         }
     }
 
-    fn from_bin(filename: &str) -> Result<ConstraintSetBuilder> {
+    fn from_bin(ron: bool, filename: &str) -> Result<ConstraintSetBuilder> {
+        // Read the constraint-set bin file
+        let contents = &std::fs::read_to_string(filename)
+            .with_context(|| anyhow!("while reading `{}`", filename))?;
+        // format.
+        let cs = if ron {
+            ron::from_str(contents)
+                .with_context(|| anyhow!("while parsing `{}` (RON)", filename))?
+        } else {
+            serde_json::from_str(contents)
+                .with_context(|| anyhow!("while parsing `{}` (JSON)", filename))?
+        };
+        //
         Ok(ConstraintSetBuilder {
             debug: false,
             no_stdlib: false,
-            source: Either::Right(
-                ron::from_str(
-                    &std::fs::read_to_string(filename)
-                        .with_context(|| anyhow!("while reading `{}`", filename))?,
-                )
-                .with_context(|| anyhow!("while parsing `{}`", filename))?,
-            ),
+            source: Either::Right(cs),
             expand_to: Default::default(),
             auto_constraints: Default::default(),
         })
@@ -642,7 +649,7 @@ fn main() -> Result<()> {
             .unwrap_or(false)
     {
         info!("Loading `{}`", &args.source[0]);
-        ConstraintSetBuilder::from_bin(&args.source[0])?
+        ConstraintSetBuilder::from_bin(args.ron, &args.source[0])?
     } else {
         info!("Parsing Corset source files...");
         let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
@@ -944,23 +951,19 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Compile {
-            outfile,
-            pretty,
-            json,
-        } => {
+        Commands::Compile { outfile, pretty } => {
             let constraints = builder.into_constraint_set()?;
             std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?
                 .write_all(
-                    if json && pretty {
-                        serde_json::to_string_pretty(&constraints)?
-                    } else if json {
-                        serde_json::to_string(&constraints)?
-                    } else if pretty {
+                    if args.ron && pretty {
                         ron::ser::to_string_pretty(&constraints, ron::ser::PrettyConfig::default())?
-                    } else {
+                    } else if args.ron {
                         ron::ser::to_string(&constraints)?
+                    } else if pretty {
+                        serde_json::to_string_pretty(&constraints)?
+                    } else {
+                        serde_json::to_string(&constraints)?
                     }
                     .as_bytes(),
                 )
