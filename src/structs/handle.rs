@@ -1,6 +1,5 @@
-use serde::de::{Error, Visitor};
+use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt;
 
 use crate::{compiler::MAIN_MODULE, utils::purify};
 

@@ -4,7 +4,7 @@ use cached::Cached;
 use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
 use owo_colors::{colored::Color, OwoColorize};
-use serde::de::{Error, Visitor};
+use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::write;
 use std::{
