@@ -46,9 +46,18 @@ struct ModuleView {
 
     /// If set, avoid low-constrast colors
     high_contrast: bool,
+
+    /// if set, values are blanked in cells relating to inactive
+    /// perspectives.
+    blank_perspectives: bool,
 }
 impl ModuleView {
-    fn from_cs(cs: &ConstraintSet, name: &str, high_contrast: bool) -> ModuleView {
+    fn from_cs(
+        cs: &ConstraintSet,
+        name: &str,
+        high_contrast: bool,
+        blank_perspectives: bool,
+    ) -> ModuleView {
         let mut max_size = 0;
         let columns: Vec<(ColumnRef, Handle)> = cs
             .columns
@@ -72,6 +81,7 @@ impl ModuleView {
 
             last_scan: String::new(),
             high_contrast,
+            blank_perspectives,
         }
     }
 
@@ -178,8 +188,7 @@ impl ModuleView {
                             .get(column_ref, i, false)
                             .map(|x| {
                                 let base = cs.columns.column(column_ref).unwrap().base;
-                                let x_str = x.pretty_with_base(base);
-                                maxes[k + 1] = maxes[k + 1].max(x_str.len());
+                                let mut x_str = x.pretty_with_base(base);
                                 // map color to the 231-17 range of readable color
                                 // https://i.stack.imgur.com/KTSQa.png
                                 let hash =
@@ -211,21 +220,25 @@ impl ModuleView {
                                 } else {
                                     false
                                 };
-
+                                // Blank out the column if its not in
+                                // an active perspective.
+                                if dim && self.blank_perspectives {
+                                    x_str = String::new();
+                                }
+                                // Update column widths
+                                maxes[k + 1] = maxes[k + 1].max(x_str.len());
                                 // render the cell
-                                Cell::from(x_str)
-                                    .fg(if dim {
-                                        dimmed_value
+                                if dim {
+                                    Cell::from(x_str).fg(dimmed_value).bg(Color::Reset)
+                                } else {
+                                    let bg_col = if bg_color > 0 {
+                                        Color::Indexed(bg_color.wrapping_add(16) % 251)
                                     } else {
-                                        corrected_fg_color
-                                    })
-                                    .bg({
-                                        if bg_color > 0 && !dim {
-                                            Color::Indexed(bg_color.wrapping_add(16) % 251)
-                                        } else {
-                                            Color::Reset
-                                        }
-                                    })
+                                        Color::Reset
+                                    };
+                                    //
+                                    Cell::from(x_str).fg(corrected_fg_color).bg(bg_col)
+                                }
                             })
                             .unwrap_or(Cell::from("."))
                     })),
@@ -257,14 +270,18 @@ struct Inspector<'a> {
     message: Span<'a>,
 }
 impl<'a> Inspector<'a> {
-    fn from_cs(cs: &'a ConstraintSet, high_contrast: bool) -> Result<Self> {
+    fn from_cs(
+        cs: &'a ConstraintSet,
+        high_contrast: bool,
+        blank_perspectives: bool,
+    ) -> Result<Self> {
         let r = Inspector {
             cs,
             modules: cs
                 .columns
                 .modules()
                 .iter()
-                .map(|n| ModuleView::from_cs(cs, n, high_contrast))
+                .map(|n| ModuleView::from_cs(cs, n, high_contrast, blank_perspectives))
                 .sorted_by(|m1, m2| m1.name.cmp(&m2.name))
                 .collect(),
             current_module: 0,
@@ -347,6 +364,9 @@ impl<'a> Inspector<'a> {
             // "[p]".yellow().bold(),
             // "lookup".into(),
             // " :: ".into(),
+            "[p]".yellow().bold(),
+            "erspectives".into(),
+            " :: ".into(),
             "[q]".red().bold(),
             "uit".into(),
         ];
@@ -477,6 +497,11 @@ impl<'a> Inspector<'a> {
                             let _ = terminal.clear();
                         }
                         KeyCode::Char('F') => self.current_module_mut().clear_filter(),
+                        KeyCode::Char('p') => {
+                            let flag = self.current_module().blank_perspectives;
+                            self.current_module_mut().blank_perspectives = !flag;
+                            let _ = terminal.clear();
+                        }
                         KeyCode::BackTab => {
                             self.prev();
                         }
@@ -530,10 +555,12 @@ impl<'a> Inspector<'a> {
 pub(crate) struct InspectorSettings {
     pub open_module: Option<String>,
     pub high_contrast: bool,
+    pub blank_perspectives: bool,
 }
 
 pub(crate) fn inspect(cs: &ConstraintSet, settings: InspectorSettings) -> Result<()> {
-    let mut inspector = Inspector::from_cs(cs, settings.high_contrast)?;
+    let mut inspector =
+        Inspector::from_cs(cs, settings.high_contrast, settings.blank_perspectives)?;
     if let Some(module) = settings.open_module.as_ref() {
         inspector.open_module(module);
     }
