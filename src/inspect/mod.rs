@@ -168,7 +168,7 @@ impl ModuleView {
             .current_columns()
             .skip(self.v_shift as usize)
             .map(|(column_ref, h)| {
-                maxes[0] = maxes[0].max(h.name.len() + max_perspective_len);
+                maxes[0] = maxes[0].max(h.name.len() + 1 + max_perspective_len);
                 Row::new(
                     std::iter::once(
                         Cell::from(format!(
