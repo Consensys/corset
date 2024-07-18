@@ -952,14 +952,10 @@ fn main() -> Result<()> {
             std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?
                 .write_all(
-                    if json && cfg!(feature = "json-bin") {
-                        if pretty {
-                            serde_json::to_string_pretty(&constraints)?
-                        } else {
-                            serde_json::to_string(&constraints)?
-                        }
+                    if json && pretty {
+                        serde_json::to_string_pretty(&constraints)?
                     } else if json {
-                        panic!("Exporting as JSON requires the `json-bin` feature.");
+                        serde_json::to_string(&constraints)?
                     } else if pretty {
                         ron::ser::to_string_pretty(&constraints, ron::ser::PrettyConfig::default())?
                     } else {

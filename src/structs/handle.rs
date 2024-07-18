@@ -1,11 +1,13 @@
-use serde::{Deserialize, Serialize};
+use serde::de::{Error, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt;
 
 use crate::{compiler::MAIN_MODULE, utils::purify};
 
 use super::{ARRAY_SEPARATOR, MODULE_SEPARATOR};
 
 /// A handle uniquely and absolutely defines a symbol
-#[derive(Clone, Deserialize)]
+#[derive(Clone)]
 pub struct Handle {
     /// the module to which the symbol belongs
     /// NOTE multi-level paths are not yet implemented
@@ -189,51 +191,45 @@ impl std::fmt::Display for Handle {
     }
 }
 
-#[cfg(feature = "json-bin")]
 impl Handle {
-    pub fn to_serialize_string(&self) -> String {
-        // Sanity checks
-        assert!(
-            !self.module.contains(":"),
-            "JSON deserisalisation conflict on module"
-        );
-        assert!(
-            !self.name.contains(":"),
-            "JSON deserisalisation conflict on name"
-        );
-        assert!(
-            !self.perspective.as_ref().map_or(false, |s| s.contains(":")),
-            "JSON deserisalisation conflict on perspective"
-        );
-        //
+    pub fn to_serialized_string(&self) -> String {
         match &self.perspective {
-            None => format!("{}:{}", self.module, self.name),
-            Some(p) => format!("{}:{}:{}", self.module, self.name, p),
+            None => format!("{}.{}", self.module, self.name),
+            Some(p) => format!("{}.{}:{}", self.module, self.name, p),
+        }
+    }
+    pub fn from_serialized_string(input: &str) -> Result<Handle, String> {
+        let p1: Vec<&str> = input.split(":").collect();
+        // Split up module / name
+        let p2: Vec<&str> = p1[0].split(".").collect();
+        // Error check
+        if p1.len() > 2 || p2.len() > 2 {
+            Err(format!("invalid serialized Handle: {}", input))
+        } else {
+            // Attempt to extract perspective (if present)
+            let perspective = if p1.len() == 1 {
+                // No perspective provided
+                None
+            } else {
+                // Extract perspective name
+                Some(p1[1].to_string())
+            };
+            // Done
+            Ok(Handle::maybe_with_perspective(p2[0], p2[1], perspective))
         }
     }
 }
 
-#[cfg(feature = "json-bin")]
-impl Serialize for Handle {
-    fn serialize<S: serde::ser::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        // Done
-        serializer.serialize_str(&self.to_serialize_string())
+impl<'a> Deserialize<'a> for Handle {
+    fn deserialize<S: Deserializer<'a>>(deserializer: S) -> Result<Self, S::Error> {
+        let st = String::deserialize(deserializer)?;
+        // Decode it
+        Self::from_serialized_string(&st).map_err(S::Error::custom)
     }
 }
 
-#[cfg(not(feature = "json-bin"))]
-use serde::ser::SerializeStruct;
-
-#[cfg(not(feature = "json-bin"))]
 impl Serialize for Handle {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        let mut handle = serializer.serialize_struct("Handle", 3)?;
-        handle.serialize_field("module", &self.module)?;
-        handle.serialize_field("name", &self.name)?;
-        handle.serialize_field("perspective", &self.perspective)?;
-        handle.end()
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_serialized_string())
     }
 }

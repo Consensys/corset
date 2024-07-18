@@ -4,7 +4,8 @@ use cached::Cached;
 use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
 use owo_colors::{colored::Color, OwoColorize};
-use serde::{Deserialize, Serialize};
+use serde::de::{Error, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::write;
 use std::{
     collections::HashSet,
@@ -17,7 +18,7 @@ use crate::structs::Handle;
 
 use super::{ConstraintSet, Domain, EvalSettings, Intrinsic, Kind, Magma, Type};
 
-#[derive(Clone, Deserialize, Debug, Eq)]
+#[derive(Clone, Debug, Eq)]
 pub struct ColumnRef {
     h: Option<Handle>,
     id: Option<ColumnID>,
@@ -156,33 +157,45 @@ impl From<ColumnID> for ColumnRef {
     }
 }
 
-#[cfg(feature = "json-bin")]
 impl Serialize for ColumnRef {
-    fn serialize<S: serde::ser::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let fmt_str = match (&self.h, &self.id) {
             (None, None) => unreachable!(),
-            (Some(h), None) => format!("{}", h.to_serialize_string()),
+            (Some(h), None) => format!("{}", h.to_serialized_string()),
             (None, Some(id)) => format!("#{}", id),
-            (Some(h), Some(id)) => format!("{}#{}", h.to_serialize_string(), id),
+            (Some(h), Some(id)) => format!("{}#{}", h.to_serialized_string(), id),
         };
         // Done
         serializer.serialize_str(&fmt_str)
     }
 }
 
-#[cfg(not(feature = "json-bin"))]
-use serde::ser::SerializeStruct;
-
-#[cfg(not(feature = "json-bin"))]
-impl Serialize for ColumnRef {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        let mut handle = serializer.serialize_struct("ColumnRef", 2)?;
-        handle.serialize_field("h", &self.h)?;
-        handle.serialize_field("id", &self.id)?;
-        handle.end()
+impl<'a> Deserialize<'a> for ColumnRef {
+    fn deserialize<S: Deserializer<'a>>(deserializer: S) -> Result<Self, S::Error> {
+        let st = String::deserialize(deserializer)?;
+        // Split out column/register index
+        let p1: Vec<&str> = st.split("#").collect();
+        //
+        match p1.len() {
+            1 => {
+                // Parse the handle itself
+                let h = Handle::from_serialized_string(p1[0]).map_err(S::Error::custom)?;
+                // Done
+                std::result::Result::Ok(ColumnRef::from_handle(h))
+            }
+            2 => {
+                // Parser the column ID (or report error)
+                let id: ColumnID = p1[1].parse().map_err(S::Error::custom)?;
+                // Parse the handle itself
+                let h = Handle::from_serialized_string(p1[0]).map_err(S::Error::custom)?;
+                // Done
+                std::result::Result::Ok(ColumnRef::from_handle(h).id(id))
+            }
+            _ => {
+                let msg = format!("invalid serialized ColumnRef: {}", st);
+                Err(S::Error::custom(msg))
+            }
+        }
     }
 }
 
