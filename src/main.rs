@@ -63,10 +63,10 @@ pub struct Args {
 
     #[arg(
         long,
-        help = "generate binfile as JSON instead of Rusty Object Notation (RON)",
+        help = "generate binfile using Rusty Object Notation (RON) instead of JSON",
         global = true
     )]
-    json: bool,
+    ron: bool,
 
     #[arg(
         short = 't',
@@ -416,17 +416,17 @@ impl ConstraintSetBuilder {
         }
     }
 
-    fn from_bin(json: bool, filename: &str) -> Result<ConstraintSetBuilder> {
+    fn from_bin(ron: bool, filename: &str) -> Result<ConstraintSetBuilder> {
         // Read the constraint-set bin file
         let contents = &std::fs::read_to_string(filename)
             .with_context(|| anyhow!("while reading `{}`", filename))?;
         // format.
-        let cs = if json {
-            serde_json::from_str(contents)
-                .with_context(|| anyhow!("while parsing `{}` (JSON)", filename))?
-        } else {
+        let cs = if ron {
             ron::from_str(contents)
                 .with_context(|| anyhow!("while parsing `{}` (RON)", filename))?
+        } else {
+            serde_json::from_str(contents)
+                .with_context(|| anyhow!("while parsing `{}` (JSON)", filename))?
         };
         //
         Ok(ConstraintSetBuilder {
@@ -649,7 +649,7 @@ fn main() -> Result<()> {
             .unwrap_or(false)
     {
         info!("Loading `{}`", &args.source[0]);
-        ConstraintSetBuilder::from_bin(args.json, &args.source[0])?
+        ConstraintSetBuilder::from_bin(args.ron, &args.source[0])?
     } else {
         info!("Parsing Corset source files...");
         let mut r = ConstraintSetBuilder::from_sources(args.no_stdlib, args.debug);
@@ -956,14 +956,14 @@ fn main() -> Result<()> {
             std::fs::File::create(&outfile)
                 .with_context(|| format!("while creating `{}`", &outfile))?
                 .write_all(
-                    if args.json && pretty {
-                        serde_json::to_string_pretty(&constraints)?
-                    } else if args.json {
-                        serde_json::to_string(&constraints)?
-                    } else if pretty {
+                    if args.ron && pretty {
                         ron::ser::to_string_pretty(&constraints, ron::ser::PrettyConfig::default())?
-                    } else {
+                    } else if args.ron {
                         ron::ser::to_string(&constraints)?
+                    } else if pretty {
+                        serde_json::to_string_pretty(&constraints)?
+                    } else {
+                        serde_json::to_string(&constraints)?
                     }
                     .as_bytes(),
                 )

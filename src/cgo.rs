@@ -20,6 +20,9 @@ const EMPTY_MARKER: [u8; 32] = [
     255, 128, 64, 32, 16, 8, 4, 2,
 ];
 
+// For backwards compatibility.
+const RON_BINFILE: bool = false;
+
 pub struct ComputedColumn {
     pub padding_value: [u8; 32],
     pub values: Vec<[u8; 32]>,
@@ -212,20 +215,27 @@ pub fn make_corset(mut constraints: ConstraintSet) -> Result<Corset> {
     Ok(constraints)
 }
 
-pub fn corset_from_file(zkevmfile: &str) -> Result<Corset> {
-    info!("Loading `{}`", &zkevmfile);
-    let constraints = ron::from_str(
-        &std::fs::read_to_string(zkevmfile)
-            .with_context(|| anyhow!("while reading `{}`", zkevmfile))?,
-    )
-    .with_context(|| anyhow!("while parsing `{}`", zkevmfile))?;
+pub fn corset_from_file(filename: &str) -> Result<Corset> {
+    info!("Loading `{}`", &filename);
+    // Read the constraint-set bin file
+    let binfile = &std::fs::read_to_string(filename)
+        .with_context(|| anyhow!("while reading `{}`", filename))?;
+    //
+    let constraints = if RON_BINFILE {
+        ron::from_str(binfile).with_context(|| anyhow!("while parsing `{}` (RON)", filename))?
+    } else {
+        serde_json::from_str(binfile)
+            .with_context(|| anyhow!("while parsing `{}` (JSON)", filename))?
+    };
     make_corset(constraints)
 }
 
-pub fn corset_from_str(zkevmstr: &str) -> Result<Corset> {
-    let constraints =
-        ron::from_str(zkevmstr).with_context(|| anyhow!("while parsing the provided zkEVM"))?;
-
+pub fn corset_from_str(binfile: &str) -> Result<Corset> {
+    let constraints = if RON_BINFILE {
+        ron::from_str(binfile).with_context(|| anyhow!("while parsing bin file (RON)"))?
+    } else {
+        serde_json::from_str(binfile).with_context(|| anyhow!("while parsing bin file (JSON)"))?
+    };
     make_corset(constraints)
 }
 
