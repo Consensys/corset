@@ -149,12 +149,22 @@ fn fail(
             .sorted_by_key(|h| cs.handle(h).name.clone())
             .collect::<Vec<_>>()
     };
-
+    // Determine max perspective length
+    let mut max_perspective_len = 0;
+    for h in &handles {
+        if let Some(p) = &cs.handle(h).perspective {
+            max_perspective_len = max_perspective_len.max(p.len());
+        }
+    }
+    //
     let mut m_columns = vec![vec![String::new()]
         .into_iter()
-        .chain(handles.iter().map(|h| cs.handle(h).name.to_string()))
+        .chain(
+            handles
+                .iter()
+                .map(|h| to_column_name(cs.handle(h), max_perspective_len)),
+        )
         .collect::<Vec<_>>()];
-
     let (eval_columns_range, idx_highlight) = if wrap {
         (
             (i - settings.context_span_before)..=i + settings.context_span_after,
@@ -576,5 +586,12 @@ pub fn check(
                 .collect::<Vec<_>>()
                 .join(", ")
         )
+    }
+}
+
+fn to_column_name(h: &Handle, max_perspective: usize) -> String {
+    match &h.perspective {
+        Some(p) => format!("{} {}", p, h.name),
+        None => format!("{:width$} {}", "", h.name, width = max_perspective),
     }
 }

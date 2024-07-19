@@ -21,20 +21,6 @@ impl Model {
     const MIN_ELEMENT: isize = -1;
     const MAX_ELEMENT: isize = 1;
 
-    pub fn new(
-        name: &'static str,
-        cols: &'static [&'static str],
-        limit: usize,
-        oracle: Option<fn(data: &Trace) -> bool>,
-    ) -> Self {
-        Self {
-            name,
-            cols,
-            limit,
-            oracle,
-        }
-    }
-
     /// Generate all traces matching the model configuration upto
     /// length `n`, and split them into the `accepts` and `rejects`.
     /// The former are those traces which are expected to pass, whilst
@@ -304,7 +290,7 @@ fn shift_3_oracle(tr: &Trace) -> bool {
 
 #[allow(non_snake_case)]
 fn shift_5_oracle(tr: &Trace) -> bool {
-    let (A, B, C) = (tr.col("A"), tr.col("B"), tr.col("C"));
+    let (A, C) = (tr.col("A"), tr.col("C"));
 
     for k in 0..tr.height() {
         let c1 = k < 4 || A[k - 4] == 0;
