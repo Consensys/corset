@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.7.13] - 2024-07-19
+
+### Bug Fixes
+
+- Fixes for `ratatui` dependency issue ([#216](https://github.com/Consensys/corset/issues/216))
+- Truncated Column Names ([#226](https://github.com/Consensys/corset/issues/226))
+- Different Behavior for Expansion and Native Flag Combinations ([#228](https://github.com/Consensys/corset/issues/228))
+- Update `check` reporting for perspectives ([#229](https://github.com/Consensys/corset/issues/229))
+
+### Features
+
+- Support `RON` and `JSON` bin formats ([#223](https://github.com/Consensys/corset/issues/223))
+- Support Perspective "blanking" ([#224](https://github.com/Consensys/corset/issues/224))
+- Switch default `bin` format from `RON` to `JSON` ([#225](https://github.com/Consensys/corset/issues/225))
+
 ## [9.7.12] - 2024-06-20
 
 ### Bug Fixes

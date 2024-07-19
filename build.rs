@@ -76,7 +76,12 @@ fn generate_tests_from_lisp_files() {
             // Write them out.
             write_traces(&m, "accepts", &accepts);
             write_traces(&m, "rejects", &rejects);
-            println!("DONE");
+            println!(
+                " Wrote {} / {} traces for {}.",
+                accepts.len(),
+                rejects.len(),
+                m.name
+            );
         }
     }
 }
