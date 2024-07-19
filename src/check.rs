@@ -240,6 +240,7 @@ fn check_constraint_at(
         cache,
         &EvalSettings::new().wrap(wrap),
     );
+
     if let Some(r) = r {
         if !r.is_zero() {
             return fail(cs, expr, i, wrap, settings);
@@ -284,37 +285,37 @@ fn check_constraint(
     name: &Handle,
     settings: DebugSettings,
 ) -> Result<()> {
-    let l = cs
-        .dependencies_len(expr, true)
-        .map_err(CheckingError::MismatchingLengths)?;
-    if let Some(l) = l {
-        let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
-        match domain {
-            Some(is) => {
-                for i in is.iter() {
-                    check_constraint_at(cs, expr, i, true, true, &mut cache, settings)?;
-                }
+    let mut cache = Some(cached::SizedCache::with_size(200000)); // ~1.60MB cache
+    match domain {
+        Some(is) => {
+            for i in is.iter() {
+                check_constraint_at(cs, expr, i, true, true, &mut cache, settings)?;
             }
-            None => {
-                for i in 0..l as isize {
-                    let err = check_constraint_at(cs, expr, i, false, false, &mut cache, settings)
-                        .map_err(|e| CheckingError::FailingConstraint(name.clone(), e.to_string()));
+        }
+        None => {
+            // Determine columns accessed by this expression
+            let l = cs
+                .dependencies_len(expr, true)
+                .map_err(CheckingError::MismatchingLengths)?;
+            // Determine number of rows for checking
+            let nrows = if let Some(l) = l { l as isize } else { 1 };
+            // Check all the rows
+            for i in 0..nrows as isize {
+                let err = check_constraint_at(cs, expr, i, false, false, &mut cache, settings)
+                    .map_err(|e| CheckingError::FailingConstraint(name.clone(), e.to_string()));
 
-                    if err.is_err() {
-                        if settings.continue_on_error {
-                            eprintln!("{:?}", err);
-                        } else {
-                            bail!(err.err().unwrap());
-                        }
+                if err.is_err() {
+                    if settings.continue_on_error {
+                        eprintln!("{:?}", err);
+                    } else {
+                        bail!(err.err().unwrap());
                     }
                 }
             }
-        };
-        info!("{} validated", name.pretty());
-        Ok(())
-    } else {
-        bail!(CheckingError::NoColumnsFound(name.clone()))
-    }
+        }
+    };
+    info!("{} validated", name.pretty());
+    Ok(())
 }
 
 fn check_lookup(

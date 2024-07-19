@@ -205,6 +205,12 @@ static MODELS: &[Model] = &[
         oracle: Some(shift_3_oracle),
     },
     Model {
+        name: "shift_5",
+        cols: &["A", "B", "C"],
+        limit: 2,
+        oracle: Some(shift_5_oracle),
+    },
+    Model {
         name: "vanish_1",
         cols: &["X"],
         limit: 3,
@@ -290,6 +296,20 @@ fn shift_3_oracle(tr: &Trace) -> bool {
     for k in 0..tr.height() {
         let c1 = k + 2 >= tr.height() || B[k] == 0 || B[k] == A[k + 2];
         if !c1 {
+            return false;
+        }
+    }
+    true
+}
+
+#[allow(non_snake_case)]
+fn shift_5_oracle(tr: &Trace) -> bool {
+    let (A, B, C) = (tr.col("A"), tr.col("B"), tr.col("C"));
+
+    for k in 0..tr.height() {
+        let c1 = k < 4 || A[k - 4] == 0;
+        let c2 = k < 4 || A[k - 4] + C[k - 1] == 0;
+        if !c1 || !c2 {
             return false;
         }
     }
