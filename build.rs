@@ -56,6 +56,10 @@ include!("tests/models.rs");
 /// array.
 fn generate_tests_from_lisp_files() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
+    let limit = match env::var("CORSET_TEST_LIMIT") {
+        Ok(s) => s.parse().unwrap(),
+        Err(_) => 0,
+    };
     let target = std::path::Path::new(&out_dir).join("lisp_tests.rs");
     let mut f = fs::File::create(target).unwrap();
     // Generate tests and inputs for each model.
@@ -64,11 +68,16 @@ fn generate_tests_from_lisp_files() {
         writeln!(f).unwrap();
         writeln!(f, "#[test]").unwrap();
         writeln!(f, "fn test_{}() {{ check(\"{}\"); }}", m.name, m.name).unwrap();
-        // Generate trace inputs (accepts / rejects)
-        let (accepts, rejects) = m.generate_traces_upto(4);
-        // Write them out.
-        write_traces(&m, "accepts", &accepts);
-        write_traces(&m, "rejects", &rejects);
+        // Check whether oracle provided or not
+        if m.oracle.is_some() {
+            let limit = limit.max(m.limit);
+            // Generate trace inputs (accepts / rejects)
+            let (accepts, rejects) = m.generate_traces_upto(limit);
+            // Write them out.
+            write_traces(&m, "accepts", &accepts);
+            write_traces(&m, "rejects", &rejects);
+            println!("DONE");
+        }
     }
 }
 
