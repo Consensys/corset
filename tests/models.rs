@@ -10,9 +10,11 @@ struct Model {
     name: &'static str,
     /// The column names needed for this test.
     cols: &'static [&'static str],
+    /// Number of rows to generate for.
+    limit: usize,
     /// The oracle determines, for a given set of column data, whether
     /// or not it should be accepted or rejected.
-    oracle: fn(data: &Trace) -> bool,
+    oracle: Option<fn(data: &Trace) -> bool>,
 }
 
 impl Model {
@@ -22,9 +24,15 @@ impl Model {
     pub fn new(
         name: &'static str,
         cols: &'static [&'static str],
-        oracle: fn(data: &Trace) -> bool,
+        limit: usize,
+        oracle: Option<fn(data: &Trace) -> bool>,
     ) -> Self {
-        Self { name, cols, oracle }
+        Self {
+            name,
+            cols,
+            limit,
+            oracle,
+        }
     }
 
     /// Generate all traces matching the model configuration upto
@@ -32,6 +40,9 @@ impl Model {
     /// The former are those traces which are expected to pass, whilst
     /// the latter are those which are expected to fail.
     pub fn generate_traces_upto(&self, n: usize) -> (Vec<Trace>, Vec<Trace>) {
+        let Some(oracle) = self.oracle else {
+            panic!();
+        };
         let mut accepts = Vec::new();
         let mut rejects = Vec::new();
         //
@@ -39,7 +50,7 @@ impl Model {
             for tr in self.generate_all_traces(i) {
                 // Test the trace using the given oracle to check whether
                 // (or not) it should be accepted.
-                if (self.oracle)(&tr) {
+                if (oracle)(&tr) {
                     accepts.push(tr);
                 } else {
                     rejects.push(tr);
@@ -163,26 +174,53 @@ impl<'a> Index<usize> for Column<'a> {
 /// The master list of active models.  Tests will be automatically
 /// generated for each item in this list.
 static MODELS: &[Model] = &[
-    //Model {name: "arrays_1", cols: &["A", "B_1","B_2","B_3"], oracle: arrays_1_oracle},
+    Model {
+        name: "arrays_1",
+        cols: &["A", "B_1", "B_2", "B_3"],
+        limit: 2,
+        oracle: Some(arrays_1_oracle),
+    },
     Model {
         name: "iszero",
         cols: &["A", "B"],
-        oracle: iszero_oracle,
+        limit: 3,
+        oracle: Some(iszero_oracle),
     },
     Model {
         name: "shift_1",
         cols: &["A", "B"],
-        oracle: shift_1_oracle,
+        limit: 3,
+        oracle: Some(shift_1_oracle),
     },
     Model {
         name: "shift_2",
         cols: &["A", "B"],
-        oracle: shift_2_oracle,
+        limit: 3,
+        oracle: Some(shift_2_oracle),
     },
     Model {
         name: "shift_3",
         cols: &["A", "B"],
-        oracle: shift_3_oracle,
+        limit: 3,
+        oracle: Some(shift_3_oracle),
+    },
+    Model {
+        name: "shift_5",
+        cols: &["A", "B", "C"],
+        limit: 2,
+        oracle: Some(shift_5_oracle),
+    },
+    Model {
+        name: "vanish_1",
+        cols: &["X"],
+        limit: 3,
+        oracle: Some(|_| false),
+    },
+    Model {
+        name: "vanish_2",
+        cols: &["X"],
+        limit: 3,
+        oracle: Some(|_| false),
     },
 ];
 
@@ -258,6 +296,20 @@ fn shift_3_oracle(tr: &Trace) -> bool {
     for k in 0..tr.height() {
         let c1 = k + 2 >= tr.height() || B[k] == 0 || B[k] == A[k + 2];
         if !c1 {
+            return false;
+        }
+    }
+    true
+}
+
+#[allow(non_snake_case)]
+fn shift_5_oracle(tr: &Trace) -> bool {
+    let (A, B, C) = (tr.col("A"), tr.col("B"), tr.col("C"));
+
+    for k in 0..tr.height() {
+        let c1 = k < 4 || A[k - 4] == 0;
+        let c2 = k < 4 || A[k - 4] + C[k - 1] == 0;
+        if !c1 || !c2 {
             return false;
         }
     }
