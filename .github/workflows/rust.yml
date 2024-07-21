@@ -20,8 +20,8 @@ jobs:
       with:
           rustflags: ""
     - name: Build
-      run: cargo build --verbose
+      run: cargo build -vv --locked
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test -v --locked
       env:
         CORSET_TEST_LIMIT: 4
