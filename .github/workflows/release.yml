@@ -26,7 +26,7 @@ jobs:
         uses: rust-build/rust-build.action@v1.4.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-	  RUSTFLAGS: --locked
+          RUSTFLAGS: --locked
         with:
           RUSTTARGET: ${{ matrix.target }}
           ARCHIVE_TYPES: ${{ matrix.archive }}
