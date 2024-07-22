@@ -10,8 +10,6 @@ struct Model {
     name: &'static str,
     /// The column names needed for this test.
     cols: &'static [&'static str],
-    /// Number of rows to generate for.
-    limit: usize,
     /// The oracle determines, for a given set of column data, whether
     /// or not it should be accepted or rejected.
     oracle: Option<fn(data: &Trace) -> bool>,
@@ -25,14 +23,16 @@ impl Model {
     /// length `n`, and split them into the `accepts` and `rejects`.
     /// The former are those traces which are expected to pass, whilst
     /// the latter are those which are expected to fail.
-    pub fn generate_traces_upto(&self, n: usize) -> (Vec<Trace>, Vec<Trace>) {
+    pub fn generate_traces_upto(&self, m: usize) -> (Vec<Trace>, Vec<Trace>) {
+        let max_rows = Self::determine_max_rows(self.cols.len(), m);
+        //
         let Some(oracle) = self.oracle else {
             panic!();
         };
         let mut accepts = Vec::new();
         let mut rejects = Vec::new();
         //
-        for i in 0..n {
+        for i in 0..max_rows {
             for tr in self.generate_all_traces(i) {
                 // Test the trace using the given oracle to check whether
                 // (or not) it should be accepted.
@@ -76,6 +76,36 @@ impl Model {
         }
         // no more
         return false;
+    }
+
+    // Determine maximum number of trace rows we can generate within
+    // the given budget (i.e. maximum number of traces).
+    fn determine_max_rows(n: usize, m: usize) -> usize {
+        let mut cost = 0;
+        // You can compute this with pow
+        for i in 0..10 {
+            let ith = Self::cost_max_rows(i, n);
+            //
+            if (cost + ith) >= m {
+                return i;
+            }
+            //
+            cost += ith;
+        }
+        // Should be
+        unreachable!()
+    }
+
+    fn cost_max_rows(i: usize, n: usize) -> usize {
+        let diff = 1 + (Self::MAX_ELEMENT - Self::MIN_ELEMENT) as usize;
+        //
+        let mut acc = 1;
+        // You can compute this with pow
+        for _ in 0..(i * n) {
+            acc *= diff;
+        }
+        //
+        acc
     }
 }
 
@@ -163,49 +193,41 @@ static MODELS: &[Model] = &[
     Model {
         name: "arrays_1",
         cols: &["A", "B_1", "B_2", "B_3"],
-        limit: 2,
         oracle: Some(arrays_1_oracle),
     },
     Model {
         name: "iszero",
         cols: &["A", "B"],
-        limit: 3,
         oracle: Some(iszero_oracle),
     },
     Model {
         name: "shift_1",
         cols: &["A", "B"],
-        limit: 3,
         oracle: Some(shift_1_oracle),
     },
     Model {
         name: "shift_2",
         cols: &["A", "B"],
-        limit: 3,
         oracle: Some(shift_2_oracle),
     },
     Model {
         name: "shift_3",
         cols: &["A", "B"],
-        limit: 3,
         oracle: Some(shift_3_oracle),
     },
     Model {
         name: "shift_5",
         cols: &["A", "B", "C"],
-        limit: 2,
         oracle: Some(shift_5_oracle),
     },
     Model {
         name: "vanish_1",
         cols: &["X"],
-        limit: 3,
         oracle: Some(|_| false),
     },
     Model {
         name: "vanish_2",
         cols: &["X"],
-        limit: 3,
         oracle: Some(|_| false),
     },
 ];

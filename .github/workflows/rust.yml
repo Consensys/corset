@@ -21,7 +21,7 @@ jobs:
           rustflags: ""
     - name: Build
       run: cargo build -vv
+      env:
+        CORSET_TEST_LIMIT: 1000
     - name: Run tests
       run: cargo test -v
-      env:
-        CORSET_TEST_LIMIT: 4
