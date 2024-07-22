@@ -240,6 +240,26 @@ static MODELS: &[Model] = &[
         cols: &["ST", "X"],
         oracle: Some(issue241_b_oracle),
     },
+    Model {
+        name: "issue219_a",
+        cols: &["X"],
+        oracle: Some(|_| false),
+    },
+    Model {
+        name: "issue219_b",
+        cols: &["ST", "X"],
+        oracle: Some(|_| true),
+    },
+    Model {
+        name: "issue219_c",
+        cols: &["ST", "X"],
+        oracle: Some(|_| true),
+    },
+    Model {
+        name: "issue219_d",
+        cols: &["ST", "X", "Y"],
+        oracle: Some(issue219_d_oracle),
+    },
 ];
 
 // ===================================================================
@@ -345,6 +365,22 @@ fn issue241_b_oracle(tr: &Trace) -> bool {
         let c1 = ST[k] == 0 || X[k] != 1;
         let c2 = ST[k] == 0 || X[k] != 0;
         if !c1 || !c2 {
+            return false;
+        }
+    }
+    true
+}
+
+// ===================================================================
+// Issue 219
+// ===================================================================
+
+#[allow(non_snake_case)]
+fn issue219_d_oracle(tr: &Trace) -> bool {
+    let (ST, X, Y) = (tr.col("ST"), tr.col("X"), tr.col("Y"));
+
+    for k in 0..tr.height() {
+        if ST[k] != 0 && X[k] == 0 && Y[k] != 1 {
             return false;
         }
     }

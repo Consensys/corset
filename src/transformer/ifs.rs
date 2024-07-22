@@ -126,7 +126,11 @@ fn raise_ifs(mut e: Node) -> Node {
                 .fold(true, |b, e| b && !matches!(e.e(), Expression::Void)));
             //
             match func {
-                Intrinsic::Add
+                Intrinsic::Neg
+                | Intrinsic::Inv
+                | Intrinsic::Normalize
+                | Intrinsic::Exp
+                | Intrinsic::Add
                 | Intrinsic::Sub
                 | Intrinsic::Mul
                 | Intrinsic::VectorAdd
@@ -147,7 +151,7 @@ fn raise_ifs(mut e: Node) -> Node {
                             let new_then = func.unchecked_call(&then_args).unwrap();
                             let mut new_args = vec![cond, new_then];
                             // Pull out false branch (if applicable):
-                            //   (func a b (if cond then else) c)
+                            //   (func a b (if cond c d) e)
                             //   ==> (if !cond (func a b d e))
                             if let Some(arg_else) = args_if.get(2).cloned() {
                                 let mut else_args = args.clone();
@@ -163,13 +167,7 @@ fn raise_ifs(mut e: Node) -> Node {
                     }
                     e
                 }
-                Intrinsic::IfZero
-                | Intrinsic::IfNotZero
-                | Intrinsic::Neg
-                | Intrinsic::Inv
-                | Intrinsic::Normalize
-                | Intrinsic::Exp
-                | Intrinsic::Begin => e,
+                Intrinsic::IfZero | Intrinsic::IfNotZero | Intrinsic::Begin => e,
             }
         }
         Expression::List(xs) => {
@@ -330,7 +328,9 @@ pub fn expand_ifs(cs: &mut ConstraintSet) {
     // Raise ifs
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr, .. } = c {
-            *expr = Box::new(raise_ifs(*expr.clone()));
+            let nexpr = raise_ifs(*expr.clone());
+            // Replace old expression with new
+            *expr = Box::new(nexpr);
         }
     }
     for c in cs.constraints.iter_mut() {
