@@ -243,12 +243,12 @@ static MODELS: &[Model] = &[
     Model {
         name: "issue241_c",
         cols: &["ST", "X"],
-        oracle: Some(|_| true),
+        oracle: Some(issue241_cd_oracle),
     },
     Model {
         name: "issue241_d",
         cols: &["ST", "X"],
-        oracle: Some(|_| true),
+        oracle: Some(issue241_cd_oracle),
     },
     Model {
         name: "issue241_e",
@@ -380,6 +380,18 @@ fn issue241_b_oracle(tr: &Trace) -> bool {
         let c1 = ST[k] == 0 || X[k] != 1;
         let c2 = ST[k] == 0 || X[k] != 0;
         if !c1 || !c2 {
+            return false;
+        }
+    }
+    true
+}
+
+#[allow(non_snake_case)]
+fn issue241_cd_oracle(tr: &Trace) -> bool {
+    let (X, ST) = (tr.col("X"), tr.col("ST"));
+    for k in 0..tr.height() {
+        let c1 = ST[k] == 0 || X[k] == 0;
+        if !c1 {
             return false;
         }
     }

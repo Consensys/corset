@@ -180,6 +180,204 @@ fn raise_ifs(mut e: Node) -> Node {
     }
 }
 
+/// Lower an expression by eliminating if conditionals.  The simplest
+/// example is something like this:
+///
+/// ```
+/// (if (vanishes! A) B C)
+/// ```
+///
+/// Which is translated into a list of two lowered constraints:
+///
+/// ```
+/// {
+///  (1 - NORM(A)) * B
+///  A * C
+/// }
+/// ```
+fn lower_expr(node: &Node) -> Node {
+    match node.e() {
+        Expression::List(es) => {
+            let mut nes = Vec::new();
+            // Lower each expression in turn
+            for e in es {
+                nes.push(lower_expr(e));
+            }
+            // Fold back into a list
+            Expression::List(nes).into()
+        }
+        _ => {
+            let body = extract_body(node);
+            // Construct lowered expression
+            match extract_condition(node) {
+                None => body,
+                Some(cond) => {
+                    // Construct cond * body
+                    mul2(Some(cond), Some(body)).unwrap()
+                }
+            }
+        }
+    }
+}
+
+/// Extract the _condition_ of an expression.  Every expression can be
+/// view as a conditional constraint of the form `if c then e`, where
+/// `c` is the condition.  This is allowed to return `None` if the
+/// body is unconditional.  For example, consider this:
+///
+/// ```lisp
+/// (defconstraint test () (+ (if A B) C))
+/// ```
+///
+/// Then, the extracted condition is `A`.  Likewise, for this case:
+///
+/// ```lisp
+/// (defconstraint test () (+ (if A (if B C)) D))
+/// ```
+///
+/// Then, the extracted condition is `A * B`.
+fn extract_condition(node: &Node) -> Option<Node> {
+    match node.e() {
+        Expression::Funcall { func, args } => {
+            match func {
+                Intrinsic::Neg | Intrinsic::Inv | Intrinsic::Normalize => {
+                    assert_eq!(args.len(), 1);
+                    extract_condition(&args[0])
+                }
+                Intrinsic::Add
+                | Intrinsic::Sub
+                | Intrinsic::Mul
+                | Intrinsic::VectorAdd
+                | Intrinsic::VectorSub
+                | Intrinsic::VectorMul
+                | Intrinsic::Exp => extract_conditions(args),
+                Intrinsic::IfZero => {
+                    assert_eq!(args.len(), 2);
+                    extract_condition_if(true, &args[0], &args[1])
+                }
+                Intrinsic::IfNotZero => {
+                    assert_eq!(args.len(), 2);
+                    extract_condition_if(false, &args[0], &args[1])
+                }
+                Intrinsic::Begin => {
+                    // Should be unreachable here since this function should only
+                    // never be called with a list, or a node containing a list.
+                    unreachable!()
+                }
+            }
+        }
+        Expression::List(_) => {
+            // Should be unreachable here since this function should only
+            // never be called with a list, or a node containing a list.
+            unreachable!()
+        }
+        _ => None, // unconditional
+    }
+}
+
+fn extract_conditions(nodes: &[Node]) -> Option<Node> {
+    let mut r = None;
+
+    for n in nodes {
+        r = mul2(r, extract_condition(n));
+    }
+    //
+    r
+}
+
+fn extract_condition_if(sign: bool, cond: &Node, body: &Node) -> Option<Node> {
+    let cc = extract_condition(cond);
+    let mut cb = extract_body(cond);
+    // Account for true branch
+
+    if sign {
+        // 1 - X
+        let args = &[
+            Node::one(),
+            Intrinsic::Normalize.unchecked_call(&[cb]).unwrap(),
+        ];
+        cb = Intrinsic::Sub.unchecked_call(args).unwrap();
+    }
+    //
+    let bc = extract_condition(body);
+    //
+    mul3(cc, Some(cb), bc)
+}
+
+/// Translate the _body_ of an expression.  Every expression can be
+/// viewed as a conditional constraint of the form `if c then e`,
+/// where `e` is the constraint.
+fn extract_body(node: &Node) -> Node {
+    match node.e() {
+        Expression::Funcall { func, args } => {
+            match func {
+                Intrinsic::IfZero => extract_body(&args[1]),
+                Intrinsic::IfNotZero => extract_body(&args[1]),
+                Intrinsic::Neg
+                | Intrinsic::Inv
+                | Intrinsic::Normalize
+                | Intrinsic::Exp
+                | Intrinsic::Add
+                | Intrinsic::Sub
+                | Intrinsic::Mul
+                | Intrinsic::VectorAdd
+                | Intrinsic::VectorSub
+                | Intrinsic::VectorMul => func.unchecked_call(&extract_bodies(args)).unwrap(),
+                Intrinsic::Begin => {
+                    // Should be unreachable here since this function should only
+                    // never be called with a list, or a node containing a list.
+                    unreachable!()
+                }
+            }
+        }
+        Expression::List(_) => {
+            // Should be unreachable here since this function should only
+            // never be called with a list, or a node containing a list.
+            unreachable!()
+        }
+        _ => node.clone(),
+    }
+}
+
+fn extract_bodies(nodes: &[Node]) -> Vec<Node> {
+    let mut bodies = Vec::new();
+    for n in nodes {
+        bodies.push(extract_body(n));
+    }
+    bodies
+}
+
+/// Multiply two optional nodes together.
+fn mul2(lhs: Option<Node>, rhs: Option<Node>) -> Option<Node> {
+    if is_zero(lhs.as_ref()) || is_zero(rhs.as_ref()) {
+        Some(Node::zero())
+    } else {
+        match (lhs, rhs) {
+            (None, r) => r,
+            (l, None) => l,
+            (Some(l), Some(r)) => Some(Intrinsic::Mul.unchecked_call(&[l, r]).unwrap()),
+        }
+    }
+}
+
+/// Multiply three optional nodes together.
+fn mul3(lhs: Option<Node>, mhs: Option<Node>, rhs: Option<Node>) -> Option<Node> {
+    mul2(lhs, mul2(mhs, rhs))
+}
+
+fn is_zero(node: Option<&Node>) -> bool {
+    match node {
+        Some(n) => {
+            if let Ok(constant) = n.pure_eval() {
+                constant.is_zero()
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
 /// Pull `lists` out of nested positions and into top-most
 /// positions.  Specifically, something like this:
 ///
@@ -326,16 +524,23 @@ pub fn expand_ifs(cs: &mut ConstraintSet) {
         }
     }
     // Raise ifs
+    // for c in cs.constraints.iter_mut() {
+    //     if let Constraint::Vanishes { expr, .. } = c {
+    //         let nexpr = raise_ifs(*expr.clone());
+    //         // Replace old expression with new
+    //         *expr = Box::new(nexpr);
+    //     }
+    // }
+    // for c in cs.constraints.iter_mut() {
+    //     if let Constraint::Vanishes { expr: e, .. } = c {
+    //         do_expand_ifs(e).unwrap();
+    //     }
+    // }
     for c in cs.constraints.iter_mut() {
         if let Constraint::Vanishes { expr, .. } = c {
-            let nexpr = raise_ifs(*expr.clone());
-            // Replace old expression with new
+            let nexpr = lower_expr(expr);
+            // Done
             *expr = Box::new(nexpr);
-        }
-    }
-    for c in cs.constraints.iter_mut() {
-        if let Constraint::Vanishes { expr: e, .. } = c {
-            do_expand_ifs(e).unwrap();
         }
     }
 }
