@@ -241,6 +241,21 @@ static MODELS: &[Model] = &[
         oracle: Some(issue241_b_oracle),
     },
     Model {
+        name: "issue241_c",
+        cols: &["ST", "X"],
+        oracle: Some(|_| true),
+    },
+    Model {
+        name: "issue241_d",
+        cols: &["ST", "X"],
+        oracle: Some(|_| true),
+    },
+    Model {
+        name: "issue241_e",
+        cols: &["ST"],
+        oracle: Some(|_| true),
+    },
+    Model {
         name: "issue219_a",
         cols: &["X"],
         oracle: Some(|_| false),
