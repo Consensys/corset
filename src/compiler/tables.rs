@@ -54,10 +54,10 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "shift"),
             class: FunctionClass::Builtin(Builtin::Shift),
         },
-        "~>>" => Function{
-            handle: Handle::new(super::MAIN_MODULE, "~>>"),
-            class: FunctionClass::Builtin(Builtin::NormFlat),
-        },
+        // "~>>" => Function{
+        //     handle: Handle::new(super::MAIN_MODULE, "~>>"),
+        //     class: FunctionClass::Builtin(Builtin::NormFlat),
+        // },
         "if" => Function {
             handle: Handle::new(super::MAIN_MODULE, "if"),
             class: FunctionClass::Builtin(Builtin::If)
@@ -76,18 +76,18 @@ lazy_static::lazy_static! {
             handle: Handle::new(super::MAIN_MODULE, "-"),
             class: FunctionClass::Intrinsic(Intrinsic::Sub)
         },
-        "+." => Function {
-            handle: Handle::new(super::MAIN_MODULE, "+"),
-            class: FunctionClass::Intrinsic(Intrinsic::VectorAdd)
-        },
-        "*." => Function {
-            handle: Handle::new(super::MAIN_MODULE, "*"),
-            class: FunctionClass::Intrinsic(Intrinsic::VectorMul)
-        },
-        "-." => Function {
-            handle: Handle::new(super::MAIN_MODULE, "-"),
-            class: FunctionClass::Intrinsic(Intrinsic::VectorSub)
-        },
+        // "+." => Function {
+        //     handle: Handle::new(super::MAIN_MODULE, "+"),
+        //     class: FunctionClass::Intrinsic(Intrinsic::VectorAdd)
+        // },
+        // "*." => Function {
+        //     handle: Handle::new(super::MAIN_MODULE, "*"),
+        //     class: FunctionClass::Intrinsic(Intrinsic::VectorMul)
+        // },
+        // "-." => Function {
+        //     handle: Handle::new(super::MAIN_MODULE, "-"),
+        //     class: FunctionClass::Intrinsic(Intrinsic::VectorSub)
+        // },
         "~" => Function {
             handle: Handle::new(super::MAIN_MODULE, "~"),
             class: FunctionClass::Intrinsic(Intrinsic::Normalize)
