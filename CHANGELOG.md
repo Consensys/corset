@@ -2,7 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-## [9.7.13] - 2024-07-19
+## [9.7.14] - 2024-10-03
+
+### Bug Fixes
+
+- Wrong Evaluation of Constraint Expressions using Expansion ([#242](https://github.com/Consensys/corset/issues/242))
+- Rework `ifs` transform ([#245](https://github.com/Consensys/corset/issues/245))
+- Remove vector operations
+
+## [9.7.13] - 2024-07-22
 
 ### Bug Fixes
 
@@ -10,6 +18,7 @@ All notable changes to this project will be documented in this file.
 - Truncated Column Names ([#226](https://github.com/Consensys/corset/issues/226))
 - Different Behavior for Expansion and Native Flag Combinations ([#228](https://github.com/Consensys/corset/issues/228))
 - Update `check` reporting for perspectives ([#229](https://github.com/Consensys/corset/issues/229))
+- Update Github Release Action ([#237](https://github.com/Consensys/corset/issues/237))
 
 ### Features
 
