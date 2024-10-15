@@ -46,6 +46,7 @@ struct BesuConstant {
 }
 #[derive(Serialize)]
 struct TemplateData {
+    class: String,
     module: String,
     module_prefix: String,
     columns: Vec<BesuColumn>,
@@ -201,7 +202,12 @@ fn perspectivize_name(h: &Handle, p: &str) -> String {
     )
 }
 
-pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -> Result<()> {
+pub fn render(
+    cs: &ConstraintSet,
+    package: &str,
+    class: &str,
+    output_path: Option<&String>,
+) -> Result<()> {
     let registers = cs
         .columns
         .registers
@@ -277,6 +283,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
     handlebars.register_escape_fn(handlebars::no_escape);
 
     let template_data = TemplateData {
+        class: class.to_owned(),
         module: package.to_owned(),
         module_prefix: package.to_case(Case::Pascal),
         constants,
@@ -294,7 +301,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                 bail!("{} is not a directory", f.bold().yellow());
             }
 
-            let trace_columns_java_filepath = Path::new(f).join("Trace.java");
+            let trace_columns_java_filepath = Path::new(f).join(format!("{class}.java"));
 
             File::create(&trace_columns_java_filepath)?
                 .write_all(trace_columns_render.as_bytes())
