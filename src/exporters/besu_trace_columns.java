@@ -17,6 +17,7 @@ package net.consensys.linea.zktracer.module.{{ module }};
 
 import java.math.BigInteger;
 import java.nio.MappedByteBuffer;
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 
@@ -43,10 +44,11 @@ public class Trace {
   {{/each}}
 
   static List<ColumnHeader> headers(int length) {
-    return List.of(
-        {{ #each registers }}
-        new ColumnHeader("{{ this.corset_name }}", {{ this.bytes_width }}, length){{ #if @last }});{{ else }},{{ /if }}
-        {{ /each }}
+      List<ColumnHeader> headers = new ArrayList<>();
+      {{ #each registers }}
+      headers.add(new ColumnHeader("{{ this.corset_name }}", {{ this.bytes_width }}, length));
+      {{ /each }}
+      return headers;
   }
 
   public Trace(List<MappedByteBuffer> buffers) {
