@@ -31,7 +31,7 @@ import org.apache.tuweni.bytes.Bytes;
  * <p>Any modifications to this code may be overwritten and could lead to unexpected behavior.
  * Please DO NOT ATTEMPT TO MODIFY this code directly.
  */
-public class Trace {
+public class {{ class }} {
   {{#each constants}}
   public static final {{ this.tupe }} {{ this.name }} = {{ this.value }};
   {{/each}}
