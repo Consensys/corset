@@ -172,6 +172,8 @@ pub enum Token {
         kind: Kind<Box<AstNode>>,
         /// the value to pad the column with; defaults to 0 if None
         padding_value: Option<i64>,
+        /// the length multiplier for this column; defaults to 1 if None
+        length_multiplier: Option<usize>,
         /// if set, generate constraint to prove the column type
         must_prove: bool,
         /// which numeric base should be used to display column values; this is a purely aesthetic setting

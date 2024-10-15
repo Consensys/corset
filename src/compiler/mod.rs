@@ -70,11 +70,13 @@ pub fn make<S1: AsRef<str>, S2: AsRef<str>>(
                         padding_value,
                         base,
                         must_prove,
+                        length_multiplier,
                         ..
                     } => {
                         let column = Column::builder()
                             .handle(handle.as_handle().clone())
                             .and_padding_value(padding_value.to_owned())
+                            .and_intrinsic_size_factor(length_multiplier.to_owned())
                             .kind(k.to_nil())
                             .t(symbol.t().m())
                             .must_prove(*must_prove)
