@@ -47,6 +47,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
             t,
             kind,
             padding_value,
+            length_multiplier,
             must_prove,
             base,
         } => {
@@ -63,6 +64,7 @@ fn reduce(e: &AstNode, ctx: &mut Scope, settings: &CompileSettings) -> Result<()
                     Kind::Expression(_) => Kind::Computed,
                 })
                 .and_padding_value(*padding_value)
+                .and_length_multiplier(*length_multiplier)
                 .t(t.m())
                 .must_prove(*must_prove)
                 .base(*base)

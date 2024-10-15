@@ -188,6 +188,7 @@ struct ColumnAttributes {
     must_prove: bool,
     range: OnceCell<Box<Domain<AstNode>>>,
     padding_value: OnceCell<i64>,
+    length_multiplier: OnceCell<usize>,
     base: OnceCell<Base>,
     computation: Option<AstNode>,
 }
@@ -220,6 +221,7 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
         Array,
         Computation,
         PaddingValue,
+        LengthMultiplier,
         Base,
     }
     let re_type = regex_lite::Regex::new(
@@ -257,6 +259,8 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
                         ":padding" => ColumnParser::PaddingValue,
                         // how to display the column values in debug
                         ":display" => ColumnParser::Base,
+                        // a specific length multiplier
+                        ":length" => ColumnParser::LengthMultiplier,
                         _ => {
                             if let Some(caps) = re_type.captures(kw) {
                                 let raw_magma = if let Some(integer) = caps.name("Integer") {
@@ -339,6 +343,19 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
                 })?;
                 ColumnParser::Begin
             }
+            ColumnParser::LengthMultiplier => {
+                attributes
+                    .length_multiplier
+                    .set(x.as_u64()? as usize)
+                    .map_err(|_| {
+                        anyhow!(
+                            "invalid length multiplier for column {} ({})",
+                            attributes.name,
+                            x.as_i64().unwrap()
+                        )
+                    })?;
+                ColumnParser::Begin
+            }
             ColumnParser::Base => {
                 let base = if let Token::Keyword(ref kw) = x.class {
                     kw.as_str().try_into()?
@@ -363,6 +380,7 @@ fn parse_column_attributes(source: AstNode) -> Result<ColumnAttributes> {
         ColumnParser::Array => bail!("incomplete :array definition"),
         ColumnParser::Computation => bail!("incomplate :comp definition"),
         ColumnParser::PaddingValue => bail!("incomplete :padding definition"),
+        ColumnParser::LengthMultiplier => bail!("incomplete :length definition"),
         ColumnParser::Base => bail!("incomplete :display definition"),
     }
     Ok(attributes)
@@ -411,6 +429,7 @@ fn parse_defcolumns<I: Iterator<Item = Result<AstNode>>>(
                                 .map(|c| Kind::Expression(Box::new(c)))
                                 .unwrap_or(Kind::Commitment),
                             padding_value: column_attributes.padding_value.get().cloned(),
+                            length_multiplier: column_attributes.length_multiplier.get().cloned(),
                             must_prove: column_attributes.must_prove,
                             base,
                         }
