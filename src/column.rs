@@ -793,6 +793,7 @@ impl<'a> Iterator for ValueBackingIter<'a> {
 pub struct Register {
     pub handle: Option<Handle>,
     pub magma: Magma,
+    pub length_multiplier: usize,
     #[serde(skip_serializing, skip_deserializing, default)]
     backing: Option<ValueBacking>,
     width: usize,
@@ -1163,10 +1164,16 @@ impl ColumnSet {
         self._cols.iter()
     }
 
-    pub(crate) fn new_register(&mut self, handle: Handle, magma: Magma) -> RegisterID {
+    pub(crate) fn new_register(
+        &mut self,
+        handle: Handle,
+        magma: Magma,
+        length_multiplier: usize,
+    ) -> RegisterID {
         self.registers.push(Register {
             handle: Some(handle),
             magma,
+            length_multiplier,
             backing: None,
             width: crate::constants::col_count_magma(magma),
         });
@@ -1219,7 +1226,9 @@ impl ColumnSet {
     }
 
     pub fn insert_column_and_register(&mut self, mut column: Column) -> Result<ColumnRef> {
-        column.register = Some(self.new_register(column.handle.clone(), column.t));
+        let length_multiplier = column.intrinsic_size_factor.unwrap_or(1);
+        column.register =
+            Some(self.new_register(column.handle.clone(), column.t, length_multiplier));
         self.insert_column(column)
     }
 
@@ -1227,7 +1236,9 @@ impl ColumnSet {
         if self.cols.contains_key(&column.handle) {
             None
         } else {
-            column.register = Some(self.new_register(column.handle.clone(), column.t));
+            let length_multiplier = column.intrinsic_size_factor.unwrap_or(1);
+            column.register =
+                Some(self.new_register(column.handle.clone(), column.t, length_multiplier));
             self.maybe_insert_column(column)
         }
     }

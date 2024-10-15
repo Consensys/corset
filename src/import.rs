@@ -159,29 +159,38 @@ pub fn parse_binary_trace(tracefile: &str, cs: &mut ConstraintSet, keep_raw: boo
         let register_bytes = trace_reader
             .slice(trace_register.length as usize * trace_register.bytes_per_element)?;
 
-        if let Some(Register { magma, .. }) = cs.columns.register(&column_ref) {
-            let mut xs = (if keep_raw { 0 } else { -1 }..trace_register.length)
+        if let Some(Register {
+            magma,
+            length_multiplier,
+            ..
+        }) = cs.columns.register(&column_ref)
+        {
+            let mut xs = Vec::new();
+            if !keep_raw {
+                // Add initial padding row
+                for _i in 0..*length_multiplier {
+                    xs.push(CValue::zero());
+                }
+            }
+            // Read data
+            let mut rs = (0..trace_register.length)
                 .into_par_iter()
                 .map(|i| {
-                    if i == -1 {
-                        Ok(CValue::zero())
-                    } else {
-                        let i = i as usize;
-                        register_bytes
-                            .get(
-                                i * trace_register.bytes_per_element
-                                    ..(i + 1) * trace_register.bytes_per_element,
-                            )
-                            .ok_or_else(|| anyhow!("error reading {}th element", i))
-                            .and_then(|bs| {
-                                CValue::try_from(BigInt::from_bytes_be(Sign::Plus, bs))
-                                    .with_context(|| anyhow!("while parsing {}th element", i))
-                                    .and_then(|x| magma.rm().validate(x))
-                            })
-                            .with_context(|| anyhow!("reading {}th element", i))
-                    }
+                    let i = i as usize;
+                    register_bytes
+                        .get(
+                            i * trace_register.bytes_per_element
+                                ..(i + 1) * trace_register.bytes_per_element,
+                        )
+                        .ok_or_else(|| anyhow!("error reading {}th element", i))
+                        .and_then(|bs| {
+                            CValue::try_from(BigInt::from_bytes_be(Sign::Plus, bs))
+                                .with_context(|| anyhow!("while parsing {}th element", i))
+                                .and_then(|x| magma.rm().validate(x))
+                        })
+                        .with_context(|| anyhow!("reading {}th element", i))
                 })
-                .collect::<Result<Vec<_>>>()
+                .collect::<Result<Vec<CValue>>>()
                 .with_context(|| {
                     anyhow!(
                         "reading data for {} ({} elts. expected)",
@@ -189,7 +198,20 @@ pub fn parse_binary_trace(tracefile: &str, cs: &mut ConstraintSet, keep_raw: boo
                         trace_register.length
                     )
                 })?;
-
+            // Append values
+            xs.extend(rs);
+            // Sanity check length has multiplier as factor
+            if xs.len() % length_multiplier != 0 {
+                bail!(
+                    "{} has an incorrect length multiplier: length {} not divisible by {}",
+                    trace_register.handle.to_string().blue(),
+                    xs.len(),
+                    length_multiplier,
+                );
+            }
+            // Extract module-normalised length
+            let xs_len = xs.len() / length_multiplier;
+            //
             let module_min_len = cs
                 .columns
                 .min_len
@@ -207,23 +229,22 @@ pub fn parse_binary_trace(tracefile: &str, cs: &mut ConstraintSet, keep_raw: boo
             // required.
             // Atomic columns are always padded with zeroes, so there is
             // no need to trigger a more complex padding system.
-            if !keep_raw && xs.len() < module_min_len {
+            if !keep_raw && xs_len < module_min_len {
                 xs.reverse();
-                xs.resize(module_min_len, CValue::zero()); // TODO: register padding values
+                xs.resize(module_min_len * length_multiplier, CValue::zero()); // TODO: register padding values
                 xs.reverse();
             }
 
             let module_raw_size =
-                cs.effective_len_or_set(&trace_register.handle.module, xs.len() as isize);
-            if xs.len() as isize != module_raw_size {
+                cs.effective_len_or_set(&trace_register.handle.module, xs_len as isize);
+            if xs_len as isize != module_raw_size {
                 bail!(
                     "{} has an incorrect length: expected {}, found {}",
                     trace_register.handle.to_string().blue(),
                     module_raw_size.to_string().red().bold(),
-                    xs.len().to_string().yellow().bold(),
+                    xs_len.to_string().yellow().bold(),
                 );
             }
-
             cs.columns
                 .set_register_value(&trace_register.handle.into(), xs, module_spilling)?
         } else {
@@ -484,32 +505,49 @@ pub fn fill_traces_from_json(
                     }
 
                     cs.columns.set_column_value(&handle, xs, module_spilling)?
-                } else if let Some(Register { magma, .. }) = cs.columns.register(&handle) {
+                } else if let Some(Register {
+                    magma,
+                    length_multiplier,
+                    ..
+                }) = cs.columns.register(&handle)
+                {
                     let module_spilling = module_spilling
                         .ok_or_else(|| anyhow!("no spilling found for {}", handle.pretty()))?;
 
-                    let mut xs = parse_column(xs, handle.as_handle(), *magma, keep_raw, 1)
-                        .with_context(|| anyhow!("importing {}", handle.pretty()))?;
+                    let mut xs =
+                        parse_column(xs, handle.as_handle(), *magma, keep_raw, *length_multiplier)
+                            .with_context(|| anyhow!("importing {}", handle.pretty()))?;
+                    // Sanity check length has multiplier as factor
+                    if xs.len() % length_multiplier != 0 {
+                        bail!(
+                            "{} has an incorrect length multiplier: length {} not divisible by {}",
+                            handle.to_string().blue(),
+                            xs.len(),
+                            length_multiplier,
+                        );
+                    }
+                    // Extract module-normalised length
+                    let xs_len = xs.len() / length_multiplier;
 
                     // If the parsed column is not long enought w.r.t. the
                     // minimal module length, prepend it with as many zeroes as
                     // required.
                     // Atomic columns are always padded with zeroes, so there is
                     // no need to trigger a more complex padding system.
-                    if xs.len() < module_min_len {
+                    if !keep_raw && xs_len < module_min_len {
                         xs.reverse();
-                        xs.resize(module_min_len, CValue::zero()); // TODO: register padding values
+                        xs.resize(module_min_len * length_multiplier, CValue::zero()); // TODO: register padding values
                         xs.reverse();
                     }
 
-                    let module_raw_size = cs.effective_len_or_set(&module, xs.len() as isize);
-                    if xs.len() as isize != module_raw_size {
+                    let module_raw_size = cs.effective_len_or_set(&module, xs_len as isize);
+                    if xs_len as isize != module_raw_size {
                         bail!(
                             "{} has an incorrect length: expected {} (from {}), found {}",
                             handle.to_string().blue(),
                             module_raw_size.to_string().red().bold(),
                             initiator.as_ref().unwrap(),
-                            xs.len().to_string().yellow().bold(),
+                            xs_len.to_string().yellow().bold(),
                         );
                     }
 
