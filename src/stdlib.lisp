@@ -18,23 +18,12 @@
 ;; ~-prefix denotes normalized-functions (i.e. output is 0/1)
 (defpurefun (and a b) (* a b))
 (defpurefun ((~and :binary@bool) a b) (~ (and a b)))
-;; WARNING: the "and!" function is unsafe when a and b can be
-;; arbirarily large.  Unfortunately, Corset has not mechanism for
-;; checking this.
-(defpurefun ((and! :@loob) a b) (+ a b))
-(defpurefun ((~and! :binary@loob) a b) (~ (and! a b)))
-
-;; WARNING: the "or" function is unsafe when a and b can be
-;; arbirarily large.  Unfortunately, Corset has not mechanism for
-;; checking this.
-(defpurefun (or a b) (+ a b))
-(defpurefun ((~or :binary@bool) a b) (~ (or a b)))
 (defpurefun ((or! :@loob) a b) (* a b))
 (defpurefun ((~or! :binary@loob) a b) (~ (or! a b)))
 
 (defpurefun ((not :binary@bool :force) (x :binary)) (- 1 x))
 
-(defpurefun ((eq! :@loob :force) x y) (~ (- x y)))
+(defpurefun ((eq! :@loob) x y) (- x y))
 (defpurefun ((neq! :binary@loob :force) x y) (not (~ (eq! x y))))
 (defunalias = eq!)
 
@@ -42,26 +31,14 @@
 (defpurefun ((eq :binary@bool :force) x y) (- 1 (~ (eq! x y))))
 (defpurefun ((neq :binary@bool :force) x y) (eq! x y))
 
-
-;; Variadic versions of and/or
-
-;; WARNING: the "any" function is unsafe when a and b can be
-;; arbirarily large.  Unfortunately, Corset has not mechanism for
-;; checking this.
-(defunalias any +)
+;; Variadic variations on and/or
 (defunalias any! *)
 (defunalias all *)
-;; WARNING: the "all" function is unsafe when a and b can be
-;; arbirarily large.  Unfortunately, Corset has not mechanism for
-;; checking this.
-(defunalias all! +)
 
 ;; Boolean functions
 (defpurefun ((is-not-zero :binary@bool) x) (~ x))
 (defpurefun ((is-not-zero! :binary@loob :force) x) (- 1 (is-not-zero x)))
 (defpurefun ((is-zero :binary@bool :force) x) (- 1 (~ x)))
-
-
 
 ;; Chronological functions
 (defpurefun (next X) (shift X 1))
