@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.7.15] - 2024-10-15
+
+### Bug Fixes
+
+- Fix `Trace.java` template ([#270](https://github.com/Consensys/corset/issues/270))
+
+### Features
+
+- Update implementation of `eq!` ([#269](https://github.com/Consensys/corset/issues/269))
+- Support custom class name for trace file. ([#272](https://github.com/Consensys/corset/issues/272))
+- Setting column size factor manually ([#274](https://github.com/Consensys/corset/issues/274))
+
 ## [9.7.14] - 2024-10-03
 
 ### Bug Fixes
