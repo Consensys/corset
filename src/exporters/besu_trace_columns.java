@@ -51,7 +51,7 @@ public class {{ class }} {
       return headers;
   }
 
-  public Trace(List<MappedByteBuffer> buffers) {
+  public {{ class }} (List<MappedByteBuffer> buffers) {
     {{ #each registers }}
     this.{{ java_name }} = buffers.get({{ @index }});
     {{ /each }}
@@ -66,7 +66,7 @@ public class {{ class }} {
   }
 
   {{#each columns}}
-  public Trace {{ this.appender }}(final {{ this.tupe }} b) {
+  public {{ class }} {{ this.appender }}(final {{ this.tupe }} b) {
     if (filled.get({{ this.reg_id }})) {
       throw new IllegalStateException("{{ this.corset_name }} already set");
     } else {
@@ -79,7 +79,7 @@ public class {{ class }} {
   }
 
   {{/each}}
-  public Trace validateRow() {
+  public {{ class }} validateRow() {
     {{#each registers}}
     if (!filled.get({{ this.id }})) {
       throw new IllegalStateException("{{ this.corset_name }} has not been filled");
@@ -92,7 +92,7 @@ public class {{ class }} {
     return this;
   }
 
-  public Trace fillAndValidateRow() {
+  public {{ class }} fillAndValidateRow() {
     {{#each registers}}
     if (!filled.get({{ this.id }})) {
       {{ this.java_name }}.position({{ this.java_name }}.position() + {{ this.bytes_width }});
