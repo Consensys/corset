@@ -124,12 +124,11 @@ impl ModuleView {
             .iter()
             .enumerate()
             .filter_map(|(i, (_, handle))| {
-                if self.regexps.is_empty()
-                    || self
-                        .regexps
+                if self.regexps.is_empty() || {
+                    self.regexps
                         .iter()
-                        .any(|regex| regex.is_match(&handle.name))
-                {
+                        .any(|regex| regex.is_match(&handle.to_string()))
+                } {
                     Some(i)
                 } else {
                     None
