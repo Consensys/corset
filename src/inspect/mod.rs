@@ -265,6 +265,7 @@ struct Inspector<'a> {
     cs: &'a ConstraintSet,
     modules: Vec<ModuleView>,
     current_module: usize,
+    tab_offset: usize,
     minibuffer: Rect,
     message: Span<'a>,
 }
@@ -284,6 +285,7 @@ impl<'a> Inspector<'a> {
                 .sorted_by(|m1, m2| m1.name.cmp(&m2.name))
                 .collect(),
             current_module: 0,
+            tab_offset: 0,
             minibuffer: Default::default(),
             message: Span::from(""),
         };
@@ -312,12 +314,17 @@ impl<'a> Inspector<'a> {
         self.modules.get_mut(self.current_module).unwrap()
     }
 
-    fn render_tabs(&self, f: &mut Frame, place: Rect) {
-        let titles = self
+    fn render_tabs(&mut self, f: &mut Frame, place: Rect) {
+        let mut titles = self
             .modules
             .iter()
             .map(|t| t.name.clone())
             .collect::<Vec<_>>();
+        // Determine how much space
+        let tab_offset = self.update_tab_offset(place.width as usize, &titles);
+        // Slice out hidden tabs
+        titles.drain(0..tab_offset);
+        //
         let tabs = Tabs::new(titles)
             .block(
                 Block::default()
@@ -330,7 +337,7 @@ impl<'a> Inspector<'a> {
                         " →".into(),
                     ])),
             )
-            .select(self.current_module)
+            .select(self.current_module - tab_offset)
             // .style(Style::default().dark_gray())
             .highlight_style(
                 Style::default()
@@ -339,6 +346,39 @@ impl<'a> Inspector<'a> {
                     .add_modifier(Modifier::UNDERLINED),
             );
         f.render_widget(tabs, place);
+    }
+
+    fn update_tab_offset(&mut self, width: usize, titles: &[String]) -> usize {
+        let mut count = 10;
+        loop {
+            let (start, end) = self.determine_selected_offset(titles);
+            if end >= (width as isize) {
+                self.tab_offset += 1;
+            } else if start < 0 {
+                self.tab_offset -= 1;
+            } else if count == 0 {
+                // this just ensures we can never enter an infinite loop.
+                return 0;
+            } else {
+                return self.tab_offset;
+            }
+            count -= 1;
+        }
+    }
+
+    fn determine_selected_offset(&self, titles: &[String]) -> (isize, isize) {
+        let mut offset = 0isize;
+        for t in 0..self.current_module {
+            offset += (titles[t].len() + 3) as isize;
+        }
+        for t in 0..self.tab_offset {
+            offset -= (titles[t].len() + 3) as isize;
+        }
+        // Done
+        (
+            offset,
+            offset + (titles[self.current_module].len() as isize),
+        )
     }
 
     fn render_columns(&self, f: &mut Frame, target: Rect) {
