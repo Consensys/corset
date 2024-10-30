@@ -94,7 +94,7 @@
 ;; base-X decomposition constraints
 (defpurefun (base-X-decomposition ct base acc digits)
   (if-zero ct
-           (eq! acc bytes)
+           (eq! acc digits)
            (eq! acc (+ (* base (prev acc)) digits))))
 
 ;; byte decomposition constraint
