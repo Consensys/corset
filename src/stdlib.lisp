@@ -91,6 +91,11 @@
   (if-not-zero ct
                (remained-constant! X)))
 
+;; perspective constancy constraint
+(defpurefun ((perspective-constancy :@loob) PERSPECTIVE_SELECTOR X)
+            (if-not-zero (* PERSPECTIVE_SELECTOR (prev PERSPECTIVE_SELECTOR))
+                         (remained-constant! X)))
+
 ;; base-X decomposition constraints
 (defpurefun (base-X-decomposition ct base acc digits)
   (if-zero ct
@@ -102,6 +107,10 @@
 
 ;; bit decomposition constraint
 (defpurefun (bit-decomposition ct acc bits) (base-X-decomposition ct 2 acc bits))
+
+;; bit decomposition constraint
+(defconstraint   bit-decompositions (:perspective computation :guard IS_MODEXP_LOG)
+                 (bit-decomposition CT MSB_ACC MSB_BIT))
 
 ;; plateau constraints
 (defpurefun (plateau-constraint CT (X :binary) C)
