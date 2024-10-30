@@ -97,6 +97,8 @@
            (eq! acc digits)
            (eq! acc (+ (* base (prev acc)) digits))))
 
+;; WTF
+
 ;; byte decomposition constraint
 (defpurefun (byte-decomposition ct acc bytes) (base-X-decomposition ct 256 acc bytes))
 
