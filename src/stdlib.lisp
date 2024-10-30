@@ -91,11 +91,17 @@
   (if-not-zero ct
                (remained-constant! X)))
 
-;; byte decomposition constraint
-(defpurefun (byte-decomposition ct acc bytes)
+;; base-X decomposition constraints
+(defpurefun (base-X-decomposition ct base acc digits)
   (if-zero ct
            (eq! acc bytes)
-           (eq! acc (+ (* 256 (prev acc)) bytes))))
+           (eq! acc (+ (* base (prev acc)) digits))))
+
+;; byte decomposition constraint
+(defpurefun (byte-decomposition ct acc bytes) (base-X-decomposition ct 256 acc bytes))
+
+;; bit decomposition constraint
+(defpurefun (bit-decomposition ct acc bits) (base-X-decomposition ct 2 acc bits))
 
 ;; plateau constraints
 (defpurefun (plateau-constraint CT (X :binary) C)
