@@ -108,10 +108,6 @@
 ;; bit decomposition constraint
 (defpurefun (bit-decomposition ct acc bits) (base-X-decomposition ct 2 acc bits))
 
-;; bit decomposition constraint
-(defconstraint   bit-decompositions (:perspective computation :guard IS_MODEXP_LOG)
-                 (bit-decomposition CT MSB_ACC MSB_BIT))
-
 ;; plateau constraints
 (defpurefun (plateau-constraint CT (X :binary) C)
             (begin (debug-assert (stamp-constancy CT C))
