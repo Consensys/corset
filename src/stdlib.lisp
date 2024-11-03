@@ -91,6 +91,11 @@
   (if-not-zero ct
                (remained-constant! X)))
 
+;; perspective constancy constraint
+(defpurefun ((perspective-constancy :@loob) PERSPECTIVE_SELECTOR X)
+            (if-not-zero (* PERSPECTIVE_SELECTOR (prev PERSPECTIVE_SELECTOR))
+                         (remained-constant! X)))
+
 ;; base-X decomposition constraints
 (defpurefun (base-X-decomposition ct base acc digits)
   (if-zero ct
