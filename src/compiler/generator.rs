@@ -251,7 +251,7 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Neg => Arity::Monadic,
             Intrinsic::Inv => Arity::Monadic,
             Intrinsic::Normalize => Arity::Monadic,
-            Intrinsic::Begin => Arity::AtLeast(1),
+            Intrinsic::Begin => Arity::AtLeast(0),
             Intrinsic::IfZero | Intrinsic::IfNotZero => Arity::Between(2, 3),
         }
     }
