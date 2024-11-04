@@ -2,11 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
-## [9.7.15] - 2024-10-15
+## [9.7.16] - 2024-11-04
+
+### Bug Fixes
+
+- Column setters in trace template ([#290](https://github.com/Consensys/corset/issues/290))
+
+### Features
+
+- Support filtering of perspectives ([#281](https://github.com/Consensys/corset/issues/281))
+- Enabling scrolling of tabs ([#282](https://github.com/Consensys/corset/issues/282))
+- Add bit-decomposition to stdlib ([#286](https://github.com/Consensys/corset/issues/286))
+- Perspective constancy function ([#288](https://github.com/Consensys/corset/issues/288))
+- Allow empty `(begin ..)` ([#289](https://github.com/Consensys/corset/issues/289))
+- Improved error reporting in generated `Trace.java` ([#291](https://github.com/Consensys/corset/issues/291))
+
+## [9.7.15] - 2024-10-16
 
 ### Bug Fixes
 
 - Fix `Trace.java` template ([#270](https://github.com/Consensys/corset/issues/270))
+- Trace file template (([#278](https://github.com/Consensys/corset/issues/278))
 
 ### Features
 
@@ -18,19 +34,14 @@ All notable changes to this project will be documented in this file.
 
 ### Bug Fixes
 
-- Wrong Evaluation of Constraint Expressions using Expansion ([#242](https://github.com/Consensys/corset/issues/242))
-- Rework `ifs` transform ([#245](https://github.com/Consensys/corset/issues/245))
-- Remove vector operations
-
-## [9.7.13] - 2024-07-22
-
-### Bug Fixes
-
 - Fixes for `ratatui` dependency issue ([#216](https://github.com/Consensys/corset/issues/216))
 - Truncated Column Names ([#226](https://github.com/Consensys/corset/issues/226))
 - Different Behavior for Expansion and Native Flag Combinations ([#228](https://github.com/Consensys/corset/issues/228))
 - Update `check` reporting for perspectives ([#229](https://github.com/Consensys/corset/issues/229))
 - Update Github Release Action ([#237](https://github.com/Consensys/corset/issues/237))
+- Wrong Evaluation of Constraint Expressions using Expansion ([#242](https://github.com/Consensys/corset/issues/242))
+- Rework `ifs` transform ([#245](https://github.com/Consensys/corset/issues/245))
+- Remove vector operations
 
 ### Features
 
