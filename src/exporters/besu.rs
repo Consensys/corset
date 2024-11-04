@@ -21,6 +21,7 @@ const TRACE_COLUMNS_TEMPLATE: &str = include_str!("besu_trace_columns.java");
 
 #[derive(Serialize)]
 struct BesuColumn {
+    class: String,
     corset_name: String,
     java_name: String,
     appender: String,
@@ -240,6 +241,7 @@ pub fn render(
                 let r = c.register.unwrap();
                 let register = reg_to_string(&cs.columns.registers[r], r).to_case(Case::Camel);
                 Some(BesuColumn {
+                    class: class.to_owned(),
                     corset_name: c.handle.to_string(),
                     java_name: c.handle.name.to_case(Case::Camel),
                     appender: handle_to_appender(&c.handle),
