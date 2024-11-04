@@ -31,7 +31,7 @@ import org.apache.tuweni.bytes.Bytes;
  * <p>Any modifications to this code may be overwritten and could lead to unexpected behavior.
  * Please DO NOT ATTEMPT TO MODIFY this code directly.
  */
-public class {{ class }} {
+public class {{ this.class }} {
   {{#each constants}}
   public static final {{ this.tupe }} {{ this.name }} = {{ this.value }};
   {{/each}}
@@ -51,7 +51,7 @@ public class {{ class }} {
       return headers;
   }
 
-  public {{ class }} (List<MappedByteBuffer> buffers) {
+  public {{ this.class }} (List<MappedByteBuffer> buffers) {
     {{ #each registers }}
     this.{{ java_name }} = buffers.get({{ @index }});
     {{ /each }}
@@ -66,7 +66,7 @@ public class {{ class }} {
   }
 
   {{#each columns}}
-  public {{ class }} {{ this.appender }}(final {{ this.tupe }} b) {
+  public {{ this.class }} {{ this.appender }}(final {{ this.tupe }} b) {
     if (filled.get({{ this.reg_id }})) {
       throw new IllegalStateException("{{ this.corset_name }} already set");
     } else {
@@ -79,7 +79,7 @@ public class {{ class }} {
   }
 
   {{/each}}
-  public {{ class }} validateRow() {
+  public {{ this.class }} validateRow() {
     {{#each registers}}
     if (!filled.get({{ this.id }})) {
       throw new IllegalStateException("{{ this.corset_name }} has not been filled");
@@ -92,7 +92,7 @@ public class {{ class }} {
     return this;
   }
 
-  public {{ class }} fillAndValidateRow() {
+  public {{ this.class }} fillAndValidateRow() {
     {{#each registers}}
     if (!filled.get({{ this.id }})) {
       {{ this.java_name }}.position({{ this.java_name }}.position() + {{ this.bytes_width }});
