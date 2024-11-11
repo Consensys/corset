@@ -663,11 +663,11 @@ impl ValueBacking {
             ValueBacking::Expression { e, .. } => e.eval(
                 i,
                 |handle, j, _| {
-                    cs.get(handle, j, false)
+                    cs.get(handle, j, wrap)
                         .or_else(|| cs.column(handle).unwrap().padding_value.as_ref().cloned())
                 },
                 &mut None,
-                &EvalSettings { wrap: false },
+                &EvalSettings { wrap },
             ),
             ValueBacking::Function { f, .. } => f(i, cs),
         }
@@ -677,8 +677,9 @@ impl ValueBacking {
         match self {
             ValueBacking::Vector { v, spilling } => {
                 if i < 0 {
-                    if wrap {
-                        v.get((v.len() as isize + i) as usize)
+                    let new_i = v.len() as isize + i;
+                    if wrap && new_i >= 0 {
+                        v.get(new_i as usize)
                     } else {
                         None
                     }
@@ -690,11 +691,11 @@ impl ValueBacking {
             ValueBacking::Expression { e, .. } => e.eval(
                 i,
                 |handle, j, _| {
-                    cs.get(handle, j, false)
+                    cs.get(handle, j, wrap)
                         .or_else(|| cs.column(handle).unwrap().padding_value.as_ref().cloned())
                 },
                 &mut None,
-                &EvalSettings { wrap: false },
+                &EvalSettings { wrap },
             ),
             ValueBacking::Function { f, .. } => f(i, cs),
         }
