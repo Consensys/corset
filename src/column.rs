@@ -645,10 +645,11 @@ impl ValueBacking {
                 if i < 0 {
                     if wrap {
                         let new_i = v.len() as isize + i;
-                        if new_i < 0 || new_i >= v.len() as isize {
-                            panic!("abnormal wrapping value {}", new_i)
+                        if new_i < 0 {
+                            Some(v.get(0).unwrap())
+                        } else {
+                            v.get(new_i as usize)
                         }
-                        v.get((v.len() as isize + i) as usize)
                     } else if i < -spilling {
                         Some(v.get(0).unwrap())
                     } else {
