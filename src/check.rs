@@ -193,7 +193,6 @@ fn fail(
                 .collect(),
         )
     }
-
     let mut trace = String::new();
     for ii in 0..m_columns[0].len() {
         for (j, col) in m_columns.iter().enumerate() {
@@ -218,7 +217,6 @@ fn fail(
         trace.push('\n');
     }
     trace.push('\n');
-
     bail!(
         trace
             + &expr.debug(
@@ -299,7 +297,16 @@ fn check_constraint(
     match domain {
         Some(is) => {
             for i in is.iter() {
-                check_constraint_at(cs, expr, i, true, true, &mut cache, settings)?;
+                let err = check_constraint_at(cs, expr, i, true, true, &mut cache, settings)
+                    .map_err(|e| CheckingError::FailingConstraint(name.clone(), e.to_string()));
+
+                if err.is_err() {
+                    if settings.continue_on_error {
+                        eprintln!("{:?}", err);
+                    } else {
+                        bail!(err.err().unwrap());
+                    }
+                }
             }
         }
         None => {
