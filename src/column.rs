@@ -8,7 +8,7 @@ use anyhow::*;
 use ark_bls12_377::fr::Fr;
 use ark_ff::{fields::Field, BigInteger, PrimeField};
 use itertools::Itertools;
-use num_bigint::{BigInt, Sign};
+use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::{Euclid, FromPrimitive, Num, One, ToPrimitive, Zero};
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
@@ -451,8 +451,8 @@ impl Pretty for Value {
     fn pretty_with_base(&self, base: Base) -> String {
         match self {
             Value::BigInt(i) => match base {
-                Base::Dec => i.to_str_radix(10),
-                Base::Hex => format!("0x{}", i.to_str_radix(16)),
+                Base::Dec => to_negable_str(i, 10),
+                Base::Hex => format!("0x{}", to_negable_str(i, 16)),
                 Base::Bin | Base::Bool | Base::Loob => i.to_str_radix(2),
                 Base::Bytes => i
                     .to_bytes_be()
@@ -485,6 +485,23 @@ impl std::cmp::PartialOrd for Value {
         }
     }
 }
+
+lazy_static::lazy_static! {
+    pub static ref TWO_128 : BigInt = BigInt::from_str_radix("1_0000_0000_0000_0000_0000_0000_0000_0000", 16).unwrap();
+}
+
+// Return a value which can be show as negative when its large enough.
+fn to_negable_str(i: &BigInt, base: u32) -> String {
+    if i.cmp(&TWO_128).is_ge() {
+        let j: BigUint = Fr::MODULUS.into();
+        let k: BigInt = j.into();
+        let d: BigInt = -(k - i);
+        d.to_str_radix(base)
+    } else {
+        i.to_str_radix(base)
+    }
+}
+
 impl std::cmp::PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
