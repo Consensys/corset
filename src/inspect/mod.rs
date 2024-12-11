@@ -393,9 +393,8 @@ impl<'a> Inspector<'a> {
             "[f]".yellow().bold(),
             "ilter".into(),
             " :: ".dark_gray(),
-            "clear ".into(),
-            "[F]".yellow().bold(),
-            "ilter".into(),
+            "[#]".yellow().bold(),
+            "clear filter".into(),
             " :: ".dark_gray(),
             "[s]".yellow().bold(),
             "can".into(),
@@ -535,7 +534,7 @@ impl<'a> Inspector<'a> {
                             }
                             let _ = terminal.clear();
                         }
-                        KeyCode::Char('F') => self.current_module_mut().clear_filter(),
+                        KeyCode::Char('#') => self.current_module_mut().clear_filter(),
                         KeyCode::Char('p') => {
                             let flag = self.current_module().blank_perspectives;
                             self.current_module_mut().blank_perspectives = !flag;
