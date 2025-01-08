@@ -663,12 +663,12 @@ impl ValueBacking {
                     if wrap {
                         let new_i = v.len() as isize + i;
                         if new_i < 0 {
-                            Some(v.get(0).unwrap())
+                            v.get(0)
                         } else {
                             v.get(new_i as usize)
                         }
                     } else if i < -spilling {
-                        Some(v.get(0).unwrap())
+                        v.get(0)
                     } else {
                         v.get((i + spilling) as usize)
                     }
