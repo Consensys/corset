@@ -17,6 +17,7 @@ package net.consensys.linea.zktracer.module.{{ module }};
 
 import java.math.BigInteger;
 import java.nio.MappedByteBuffer;
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 
@@ -30,7 +31,7 @@ import org.apache.tuweni.bytes.Bytes;
  * <p>Any modifications to this code may be overwritten and could lead to unexpected behavior.
  * Please DO NOT ATTEMPT TO MODIFY this code directly.
  */
-public class Trace {
+public class {{ this.class }} {
   {{#each constants}}
   public static final {{ this.tupe }} {{ this.name }} = {{ this.value }};
   {{/each}}
@@ -43,13 +44,14 @@ public class Trace {
   {{/each}}
 
   static List<ColumnHeader> headers(int length) {
-    return List.of(
-        {{ #each registers }}
-        new ColumnHeader("{{ this.corset_name }}", {{ this.bytes_width }}, length){{ #if @last }});{{ else }},{{ /if }}
-        {{ /each }}
+      List<ColumnHeader> headers = new ArrayList<>();
+      {{ #each registers }}
+      headers.add(new ColumnHeader("{{ this.corset_name }}", {{ this.bytes_width }}, length));
+      {{ /each }}
+      return headers;
   }
 
-  public Trace(List<MappedByteBuffer> buffers) {
+  public {{ this.class }} (List<MappedByteBuffer> buffers) {
     {{ #each registers }}
     this.{{ java_name }} = buffers.get({{ @index }});
     {{ /each }}
@@ -64,7 +66,7 @@ public class Trace {
   }
 
   {{#each columns}}
-  public Trace {{ this.appender }}(final {{ this.tupe }} b) {
+  public {{ this.class }} {{ this.appender }}(final {{ this.tupe }} b) {
     if (filled.get({{ this.reg_id }})) {
       throw new IllegalStateException("{{ this.corset_name }} already set");
     } else {
@@ -77,7 +79,7 @@ public class Trace {
   }
 
   {{/each}}
-  public Trace validateRow() {
+  public {{ this.class }} validateRow() {
     {{#each registers}}
     if (!filled.get({{ this.id }})) {
       throw new IllegalStateException("{{ this.corset_name }} has not been filled");
@@ -90,7 +92,7 @@ public class Trace {
     return this;
   }
 
-  public Trace fillAndValidateRow() {
+  public {{ this.class }} fillAndValidateRow() {
     {{#each registers}}
     if (!filled.get({{ this.id }})) {
       {{ this.java_name }}.position({{ this.java_name }}.position() + {{ this.bytes_width }});

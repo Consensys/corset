@@ -8,7 +8,7 @@ use anyhow::*;
 use ark_bls12_377::fr::Fr;
 use ark_ff::{fields::Field, BigInteger, PrimeField};
 use itertools::Itertools;
-use num_bigint::{BigInt, Sign};
+use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::{Euclid, FromPrimitive, Num, One, ToPrimitive, Zero};
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
@@ -451,8 +451,8 @@ impl Pretty for Value {
     fn pretty_with_base(&self, base: Base) -> String {
         match self {
             Value::BigInt(i) => match base {
-                Base::Dec => i.to_str_radix(10),
-                Base::Hex => format!("0x{}", i.to_str_radix(16)),
+                Base::Dec => to_negable_str(i, 10),
+                Base::Hex => format!("0x{}", to_negable_str(i, 16)),
                 Base::Bin | Base::Bool | Base::Loob => i.to_str_radix(2),
                 Base::Bytes => i
                     .to_bytes_be()
@@ -485,6 +485,23 @@ impl std::cmp::PartialOrd for Value {
         }
     }
 }
+
+lazy_static::lazy_static! {
+    pub static ref TWO_128 : BigInt = BigInt::from_str_radix("1_0000_0000_0000_0000_0000_0000_0000_0000", 16).unwrap();
+}
+
+// Return a value which can be show as negative when its large enough.
+fn to_negable_str(i: &BigInt, base: u32) -> String {
+    if i.cmp(&TWO_128).is_ge() {
+        let j: BigUint = Fr::MODULUS.into();
+        let k: BigInt = j.into();
+        let d: BigInt = -(k - i);
+        d.to_str_radix(base)
+    } else {
+        i.to_str_radix(base)
+    }
+}
+
 impl std::cmp::PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -645,10 +662,11 @@ impl ValueBacking {
                 if i < 0 {
                     if wrap {
                         let new_i = v.len() as isize + i;
-                        if new_i < 0 || new_i >= v.len() as isize {
-                            panic!("abnormal wrapping value {}", new_i)
+                        if new_i < 0 {
+                            Some(v.get(0).unwrap())
+                        } else {
+                            v.get(new_i as usize)
                         }
-                        v.get((v.len() as isize + i) as usize)
                     } else if i < -spilling {
                         Some(v.get(0).unwrap())
                     } else {
@@ -662,11 +680,11 @@ impl ValueBacking {
             ValueBacking::Expression { e, .. } => e.eval(
                 i,
                 |handle, j, _| {
-                    cs.get(handle, j, false)
+                    cs.get(handle, j, wrap)
                         .or_else(|| cs.column(handle).unwrap().padding_value.as_ref().cloned())
                 },
                 &mut None,
-                &EvalSettings { wrap: false },
+                &EvalSettings { wrap },
             ),
             ValueBacking::Function { f, .. } => f(i, cs),
         }
@@ -676,8 +694,9 @@ impl ValueBacking {
         match self {
             ValueBacking::Vector { v, spilling } => {
                 if i < 0 {
-                    if wrap {
-                        v.get((v.len() as isize + i) as usize)
+                    let new_i = v.len() as isize + i;
+                    if wrap && new_i >= 0 {
+                        v.get(new_i as usize)
                     } else {
                         None
                     }
@@ -689,11 +708,11 @@ impl ValueBacking {
             ValueBacking::Expression { e, .. } => e.eval(
                 i,
                 |handle, j, _| {
-                    cs.get(handle, j, false)
+                    cs.get(handle, j, wrap)
                         .or_else(|| cs.column(handle).unwrap().padding_value.as_ref().cloned())
                 },
                 &mut None,
-                &EvalSettings { wrap: false },
+                &EvalSettings { wrap },
             ),
             ValueBacking::Function { f, .. } => f(i, cs),
         }
@@ -793,6 +812,7 @@ impl<'a> Iterator for ValueBackingIter<'a> {
 pub struct Register {
     pub handle: Option<Handle>,
     pub magma: Magma,
+    pub length_multiplier: usize,
     #[serde(skip_serializing, skip_deserializing, default)]
     backing: Option<ValueBacking>,
     width: usize,
@@ -1163,10 +1183,16 @@ impl ColumnSet {
         self._cols.iter()
     }
 
-    pub(crate) fn new_register(&mut self, handle: Handle, magma: Magma) -> RegisterID {
+    pub(crate) fn new_register(
+        &mut self,
+        handle: Handle,
+        magma: Magma,
+        length_multiplier: usize,
+    ) -> RegisterID {
         self.registers.push(Register {
             handle: Some(handle),
             magma,
+            length_multiplier,
             backing: None,
             width: crate::constants::col_count_magma(magma),
         });
@@ -1219,7 +1245,9 @@ impl ColumnSet {
     }
 
     pub fn insert_column_and_register(&mut self, mut column: Column) -> Result<ColumnRef> {
-        column.register = Some(self.new_register(column.handle.clone(), column.t));
+        let length_multiplier = column.intrinsic_size_factor.unwrap_or(1);
+        column.register =
+            Some(self.new_register(column.handle.clone(), column.t, length_multiplier));
         self.insert_column(column)
     }
 
@@ -1227,7 +1255,9 @@ impl ColumnSet {
         if self.cols.contains_key(&column.handle) {
             None
         } else {
-            column.register = Some(self.new_register(column.handle.clone(), column.t));
+            let length_multiplier = column.intrinsic_size_factor.unwrap_or(1);
+            column.register =
+                Some(self.new_register(column.handle.clone(), column.t, length_multiplier));
             self.maybe_insert_column(column)
         }
     }

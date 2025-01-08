@@ -129,6 +129,14 @@ enum Commands {
         )]
         package: String,
 
+        #[arg(
+            short = 'c',
+            long = "class",
+            default_value = "Trace",
+            help = "class name for generated trace file"
+        )]
+        class: String,
+
         #[arg(short = 'o', long = "out", help = "where to render the columns")]
         output_file_path: Option<String>,
     },
@@ -674,11 +682,13 @@ fn main() -> Result<()> {
         #[cfg(feature = "exporters")]
         Commands::Besu {
             package,
+            class,
             output_file_path: output_path,
         } => {
             exporters::besu::render(
                 &builder.into_constraint_set()?,
                 &package,
+                &class,
                 output_path.as_ref(),
             )?;
         }

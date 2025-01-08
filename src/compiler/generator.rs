@@ -251,7 +251,7 @@ impl FuncVerifier<Node> for Intrinsic {
             Intrinsic::Neg => Arity::Monadic,
             Intrinsic::Inv => Arity::Monadic,
             Intrinsic::Normalize => Arity::Monadic,
-            Intrinsic::Begin => Arity::AtLeast(1),
+            Intrinsic::Begin => Arity::AtLeast(0),
             Intrinsic::IfZero | Intrinsic::IfNotZero => Arity::Between(2, 3),
         }
     }
@@ -434,9 +434,11 @@ impl ConstraintSet {
 
         // module-global columns all have their own register
         for c in pool.root {
+            let col = self.columns.column(&c).unwrap();
             let reg = self.columns.new_register(
                 self.handle(&c).to_owned(),
-                self.columns.column(&c).unwrap().t,
+                col.t,
+                col.intrinsic_size_factor.unwrap_or(1),
             );
             self.columns.assign_register(&c, reg).unwrap();
         }
@@ -459,9 +461,9 @@ impl ConstraintSet {
                             .filter_map(|v| v.get(i))
                             .map(|r| self.handle(r).name.to_owned())
                             .join("_xor_");
-                        let reg = self
-                            .columns
-                            .new_register(Handle::new(module, names), *magma);
+                        let reg =
+                            self.columns
+                                .new_register(Handle::new(module, names), *magma, *size);
                         for cols in sets.values() {
                             if let Some(col_id) = cols.get(i) {
                                 self.columns.assign_register(col_id, reg).unwrap();
@@ -494,7 +496,11 @@ impl ConstraintSet {
                     | Computation::CyclicFrom { target, .. }
                     | Computation::Composite { target, .. } => {
                         let col = self.columns.column(&target).unwrap();
-                        let reg = self.columns.new_register(col.handle.clone(), col.t);
+                        let reg = self.columns.new_register(
+                            col.handle.clone(),
+                            col.t,
+                            col.intrinsic_size_factor.unwrap_or(1),
+                        );
                         self.columns.assign_register(&target, reg).unwrap();
                     }
                     Computation::Sorted { froms, tos, .. } => {
@@ -504,7 +510,11 @@ impl ConstraintSet {
                                 .entry(self.columns.column(f).unwrap().register.unwrap())
                                 .or_insert_with(|| {
                                     let col = self.columns.column(t).unwrap();
-                                    self.columns.new_register(col.handle.clone(), col.t)
+                                    self.columns.new_register(
+                                        col.handle.clone(),
+                                        col.t,
+                                        col.intrinsic_size_factor.unwrap_or(1),
+                                    )
                                 });
                             self.columns.assign_register(t, *reg).unwrap();
                         }
@@ -522,7 +532,11 @@ impl ConstraintSet {
                             .chain(delta_bytes.iter())
                         {
                             let col = self.columns.column(r).unwrap();
-                            let reg = self.columns.new_register(col.handle.clone(), col.t);
+                            let reg = self.columns.new_register(
+                                col.handle.clone(),
+                                col.t,
+                                col.intrinsic_size_factor.unwrap_or(1),
+                            );
                             self.columns.assign_register(r, reg).unwrap();
                         }
                     }

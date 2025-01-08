@@ -21,6 +21,7 @@ const TRACE_COLUMNS_TEMPLATE: &str = include_str!("besu_trace_columns.java");
 
 #[derive(Serialize)]
 struct BesuColumn {
+    class: String,
     corset_name: String,
     java_name: String,
     appender: String,
@@ -46,6 +47,7 @@ struct BesuConstant {
 }
 #[derive(Serialize)]
 struct TemplateData {
+    class: String,
     module: String,
     module_prefix: String,
     columns: Vec<BesuColumn>,
@@ -109,7 +111,7 @@ fn magma_to_java_bytewidth(m: Magma) -> i16 {
 }
 
 /// Generate the Java code to add an element in a trace register
-fn magma_to_java_putter(m: Magma, register: &str) -> String {
+fn magma_to_java_putter(m: Magma, register: &str, column: &str) -> String {
     match m.rm() {
         RawMagma::Binary => format!("{}.put((byte) (b ? 1 : 0));", &register),
         RawMagma::Nibble | RawMagma::Byte => {
@@ -117,15 +119,15 @@ fn magma_to_java_putter(m: Magma, register: &str) -> String {
         }
         RawMagma::Integer(w) => match w {
             1 => format!("{}.put((byte) (b ? 1 : 0));", &register),
-            2..=63 => magma_to_java_long_putter(w, register).unwrap(),
-            w => magma_to_java_bytes_putter(w, register).unwrap(),
+            2..=63 => magma_to_java_long_putter(w, register, column).unwrap(),
+            w => magma_to_java_bytes_putter(w, register, column).unwrap(),
         },
-        RawMagma::Native => magma_to_java_bytes_putter(256, register).unwrap(),
+        RawMagma::Native => magma_to_java_bytes_putter(256, register, column).unwrap(),
         _ => unreachable!(),
     }
 }
 
-fn magma_to_java_long_putter(width: usize, register: &str) -> Result<String> {
+fn magma_to_java_long_putter(width: usize, register: &str, column: &str) -> Result<String> {
     use std::fmt::Write;
     let max = 2i64.pow(width as u32);
     let mut putter = String::new();
@@ -138,7 +140,7 @@ fn magma_to_java_long_putter(width: usize, register: &str) -> Result<String> {
     writeln!(
         putter,
         r#"if(b >= {max}L) {{ throw new IllegalArgumentException("{} has invalid value (" + b + ")"); }}"#,
-        &register
+        &column
     )?;
     // Write bytes
     for i in (0..n).rev() {
@@ -152,7 +154,7 @@ fn magma_to_java_long_putter(width: usize, register: &str) -> Result<String> {
     Ok(putter)
 }
 
-fn magma_to_java_bytes_putter(width: usize, register: &str) -> Result<String> {
+fn magma_to_java_bytes_putter(width: usize, register: &str, column: &str) -> Result<String> {
     use std::fmt::Write;
     let mut putter = String::new();
     // Round up bitwidth if necessary
@@ -167,7 +169,7 @@ fn magma_to_java_bytes_putter(width: usize, register: &str) -> Result<String> {
     writeln!(
         putter,
         r#"    if(bs.bitLength() > {width}) {{ throw new IllegalArgumentException("{} has invalid width (" + bs.bitLength() + "bits)"); }}"#,
-        &register
+        &column
     )?;
     writeln!(putter, "    // Write padding (if necessary)")?;
     writeln!(
@@ -201,13 +203,19 @@ fn perspectivize_name(h: &Handle, p: &str) -> String {
     )
 }
 
-pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -> Result<()> {
+pub fn render(
+    cs: &ConstraintSet,
+    package: &str,
+    class: &str,
+    output_path: Option<&String>,
+) -> Result<()> {
     let registers = cs
         .columns
         .registers
         .iter()
         .enumerate()
         .map(|(i, r)| {
+            let hnd = r.handle.as_ref().unwrap();
             let corset_name = format!(
                 "{}.{}",
                 r.handle.as_ref().unwrap().module,
@@ -233,14 +241,25 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
             if matches!(c.kind, Kind::Commitment) {
                 let r = c.register.unwrap();
                 let register = reg_to_string(&cs.columns.registers[r], r).to_case(Case::Camel);
+                let corset_name = if c.handle.perspective.is_some() {
+                    format!(
+                        "{}.{}/{}",
+                        c.handle.module,
+                        c.handle.perspective.as_ref().unwrap(),
+                        c.handle.name
+                    )
+                } else {
+                    format!("{}.{}", c.handle.module, c.handle.name)
+                };
                 Some(BesuColumn {
-                    corset_name: c.handle.to_string(),
+                    class: class.to_owned(),
+                    putter: magma_to_java_putter(c.t, &register, &corset_name),
+                    corset_name: corset_name,
                     java_name: c.handle.name.to_case(Case::Camel),
                     appender: handle_to_appender(&c.handle),
                     tupe: magma_to_java_type(c.t),
                     register: register.clone(),
                     reg_id: r,
-                    putter: magma_to_java_putter(c.t, &register),
                 })
             } else {
                 None
@@ -277,6 +296,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
     handlebars.register_escape_fn(handlebars::no_escape);
 
     let template_data = TemplateData {
+        class: class.to_owned(),
         module: package.to_owned(),
         module_prefix: package.to_case(Case::Pascal),
         constants,
@@ -294,7 +314,7 @@ pub fn render(cs: &ConstraintSet, package: &str, output_path: Option<&String>) -
                 bail!("{} is not a directory", f.bold().yellow());
             }
 
-            let trace_columns_java_filepath = Path::new(f).join("Trace.java");
+            let trace_columns_java_filepath = Path::new(f).join(format!("{class}.java"));
 
             File::create(&trace_columns_java_filepath)?
                 .write_all(trace_columns_render.as_bytes())

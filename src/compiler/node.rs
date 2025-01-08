@@ -212,6 +212,7 @@ pub enum Expression {
         kind: Kind<Box<Node>>,
         must_prove: bool,
         padding_value: Option<i64>,
+        length_multiplier: Option<usize>,
         base: Base,
     },
     ArrayColumn {
@@ -304,6 +305,7 @@ impl Node {
         base: Option<Base>,
         kind: Option<Kind<Box<Node>>>,
         padding_value: Option<i64>,
+        length_multiplier: Option<usize>,
         must_prove: Option<bool>,
         t: Option<Magma>,
     ) -> Node {
@@ -327,6 +329,7 @@ impl Node {
                     kind: kind.unwrap_or(Kind::Computed),
                     must_prove: must_prove.unwrap_or(false),
                     padding_value,
+                    length_multiplier,
                     base: base.unwrap_or_else(|| t.unwrap_or(Magma::native()).into()),
                 },
                 _t: Some(Type::Column(t.unwrap_or(Magma::native()))),
