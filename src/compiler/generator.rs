@@ -21,6 +21,7 @@ use super::parser::{Ast, AstNode, Token};
 use super::tables::{ComputationTable, Scope};
 use super::{common::*, CompileSettings, Conditioning, Expression, Magma, Node, Type};
 use crate::column::{Column, ColumnSet, Computation, RegisterID, Value, ValueBacking};
+use crate::compiler::RawMagma;
 use crate::dag::ComputationDag;
 use crate::errors::{self, CompileError, RuntimeError};
 use crate::pretty::Pretty;
@@ -413,7 +414,13 @@ impl ConstraintSet {
                 match &col.handle.perspective {
                     Some(name) => {
                         let module = col.handle.module.to_string();
-                        let magma = col.t;
+                        let mut magma = col.t;
+                        // Allow byte and i8 to be coalesced
+                        match magma.rm() {
+                            RawMagma::Byte => magma = Magma::new(RawMagma::Integer(8), magma.c()),
+                            _ => {}
+                        }
+                        //
                         pool.perspectives
                             .entry(module)
                             .or_default()
