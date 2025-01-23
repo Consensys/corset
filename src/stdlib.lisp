@@ -27,7 +27,6 @@
 (defpurefun ((neq! :binary@loob :force) x y) (not (~ (eq! x y))))
 (defunalias = eq!)
 
-(defpurefun ((eq :binary@bool :force) (x :binary) (y :binary)) (^ (- x y) 2))
 (defpurefun ((eq :binary@bool :force) x y) (- 1 (~ (eq! x y))))
 (defpurefun ((neq :binary@bool :force) x y) (eq! x y))
 
