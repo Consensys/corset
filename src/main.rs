@@ -325,11 +325,19 @@ enum Commands {
         )]
         show_perspectives: bool,
         #[arg(
+            short = 'R',
+            long = "registers",
+            help = "show regsters and their properties"
+        )]
+        show_registers: bool,
+        #[arg(
             short = 's',
             long = "spilling",
             help = "display spilling for all modules"
         )]
         show_spilling: bool,
+        #[arg(long = "stats", help = "display statistical information")]
+        show_stats: bool,
         #[arg(short = 'T', long = "types", help = "display types information")]
         show_types: bool,
         #[arg(
@@ -924,8 +932,10 @@ fn main() -> Result<()> {
             show_constraints,
             show_computations,
             show_perspectives,
+            show_registers,
             show_types,
             show_spilling,
+            show_stats,
             only,
             skip,
             toml,
@@ -941,8 +951,10 @@ fn main() -> Result<()> {
                     columns: show_columns,
                     types: show_types,
                     perspectives: show_perspectives,
+                    registers: show_registers,
                     computations: show_computations,
                     spilling: show_spilling,
+                    stats: show_stats,
                     toml: toml,
                 },
                 only.as_ref(),

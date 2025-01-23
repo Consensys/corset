@@ -400,6 +400,133 @@ fn render_perspectives(cs: &ConstraintSet) {
     }
 }
 
+fn render_registers(cs: &ConstraintSet) {
+    println!("\n{}", "=== Registers ===".bold().yellow());
+    for (i, r) in cs.columns.registers.iter().enumerate() {
+        print!("r{}\t{}", i, r.magma);
+
+        match &r.handle {
+            Some(h) => {
+                println!("\t{}", h);
+            }
+            _ => {
+                println!();
+            }
+        }
+    }
+}
+
+fn render_stats(cs: &ConstraintSet) {
+    println!("\n{}", "=== Stats ===".bold().yellow());
+    print_constraint_stats(cs);
+    print_assignment_stats(cs);
+    print_register_count(cs);
+    print_register_stats(cs, "    ", 1, 1);
+    print_register_stats(cs, "    ", 2, 4);
+    print_register_stats(cs, "    ", 5, 8);
+    print_register_stats(cs, "   ", 9, 16);
+    print_register_stats(cs, "  ", 17, 32);
+    print_register_stats(cs, "  ", 33, 64);
+    print_register_stats(cs, " ", 65, 128);
+    print_register_stats(cs, "", 129, 256);
+}
+
+fn print_constraint_stats(cs: &ConstraintSet) {
+    let mut vanishes = 0;
+    let mut lookups = 0;
+    let mut permutations = 0;
+    let mut ranges = 0;
+    for c in &cs.constraints {
+        match c {
+            Constraint::Vanishes { expr, .. } => {
+                // Vanishing constraints are typically packaged up as
+                // one.
+                vanishes += subconstraint_count(expr.e());
+            }
+            Constraint::Lookup { .. } => {
+                lookups += 1;
+            }
+            Constraint::Permutation { .. } => {
+                permutations += 1;
+            }
+            Constraint::InRange { .. } => {
+                ranges += 1;
+            }
+            Constraint::Normalization { .. } => {
+                vanishes += 2;
+            }
+        }
+    }
+    //
+    println!("             Constraints = {vanishes}");
+    println!("                 Lookups = {lookups}");
+    println!("            Permutations = {permutations}");
+    println!("                   Range = {ranges}");
+}
+
+fn print_assignment_stats(cs: &ConstraintSet) {
+    let mut composites = 0;
+    let mut interleaved = 0;
+    let mut lex_sorting = 0;
+    let mut sorted = 0;
+    let mut other = 0;
+
+    for c in &cs.computations.computations {
+        match c {
+            Computation::Composite { .. } => {
+                composites += 1;
+            }
+            Computation::Interleaved { .. } => {
+                interleaved += 1;
+            }
+            Computation::Sorted { .. } => {
+                sorted += 1;
+            }
+            Computation::SortingConstraints { .. } => {
+                lex_sorting += 1;
+            }
+            _ => {
+                other += 1;
+            }
+        }
+    }
+
+    println!("        Computed Columns = {composites}");
+    println!("           Interleavings = {interleaved}");
+    println!(" Lexicographic Orderings = {lex_sorting}");
+    println!("     Sorted Permutations = {sorted}");
+    println!("                   Other = {other}");
+}
+
+fn subconstraint_count(expr: &Expression) -> usize {
+    match expr {
+        Expression::List(es) => es.len(),
+        _ => 1,
+    }
+}
+
+fn print_register_count(cs: &ConstraintSet) {
+    let mut count = 0;
+
+    for (_, _) in cs.columns.registers.iter().enumerate() {
+        count += 1;
+    }
+    //
+    println!("           Columns (all) = {count}");
+}
+fn print_register_stats(cs: &ConstraintSet, padding: &str, low_width: usize, high_width: usize) {
+    let mut count = 0;
+    print!("{padding}");
+    for (_, r) in cs.columns.registers.iter().enumerate() {
+        let bw = r.magma.bit_size();
+        if bw >= low_width && bw <= high_width {
+            count += 1;
+        }
+    }
+    //
+    println!(" Columns ({low_width}..{high_width} bits) = {count}");
+}
+
 fn render_spilling(cs: &ConstraintSet) {
     println!("\n{}", "=== Spilling ===".bold().yellow());
     for (module, spilling) in cs.columns.spilling.iter() {
@@ -425,8 +552,10 @@ pub(crate) struct DebugSettings {
     pub columns: bool,
     pub computations: bool,
     pub perspectives: bool,
+    pub registers: bool,
     pub types: bool,
     pub spilling: bool,
+    pub stats: bool,
     pub toml: bool,
 }
 
@@ -453,6 +582,12 @@ pub(crate) fn debug(
     }
     if settings.perspectives {
         render_perspectives(cs);
+    }
+    if settings.registers {
+        render_registers(cs);
+    }
+    if settings.stats {
+        render_stats(cs);
     }
     if settings.spilling && settings.toml {
         render_spilling_toml(cs);
