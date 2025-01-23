@@ -336,6 +336,8 @@ enum Commands {
             help = "display spilling for all modules"
         )]
         show_spilling: bool,
+        #[arg(long = "stats", help = "display statistical information")]
+        show_stats: bool,
         #[arg(short = 'T', long = "types", help = "display types information")]
         show_types: bool,
         #[arg(
@@ -933,6 +935,7 @@ fn main() -> Result<()> {
             show_registers,
             show_types,
             show_spilling,
+            show_stats,
             only,
             skip,
             toml,
@@ -951,6 +954,7 @@ fn main() -> Result<()> {
                     registers: show_registers,
                     computations: show_computations,
                     spilling: show_spilling,
+                    stats: show_stats,
                     toml: toml,
                 },
                 only.as_ref(),
