@@ -1350,12 +1350,8 @@ fn apply_form(
                     } else if xs.len() == 1 {
                         Ok(Some(xs[0].clone()))
                     } else {
-                        let mut r = apply_function(
-                            &f,
-                            vec![xs.pop().unwrap(), xs.pop().unwrap()],
-                            ctx,
-                            settings,
-                        );
+                        let mut r = Ok(Some(xs.pop().unwrap()));
+                        //
                         while let Some(x) = xs.pop() {
                             r = apply_function(&f, vec![x, r?.unwrap()], ctx, settings);
                         }
