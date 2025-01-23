@@ -400,6 +400,22 @@ fn render_perspectives(cs: &ConstraintSet) {
     }
 }
 
+fn render_registers(cs: &ConstraintSet) {
+    println!("\n{}", "=== Registers ===".bold().yellow());
+    for (i, r) in cs.columns.registers.iter().enumerate() {
+        print!("r{}\t{}", i, r.magma);
+
+        match &r.handle {
+            Some(h) => {
+                println!("\t{}", h);
+            }
+            _ => {
+                println!();
+            }
+        }
+    }
+}
+
 fn render_spilling(cs: &ConstraintSet) {
     println!("\n{}", "=== Spilling ===".bold().yellow());
     for (module, spilling) in cs.columns.spilling.iter() {
@@ -425,6 +441,7 @@ pub(crate) struct DebugSettings {
     pub columns: bool,
     pub computations: bool,
     pub perspectives: bool,
+    pub registers: bool,
     pub types: bool,
     pub spilling: bool,
     pub toml: bool,
@@ -453,6 +470,9 @@ pub(crate) fn debug(
     }
     if settings.perspectives {
         render_perspectives(cs);
+    }
+    if settings.registers {
+        render_registers(cs);
     }
     if settings.spilling && settings.toml {
         render_spilling_toml(cs);
