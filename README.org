@@ -6,6 +6,21 @@ It offers all the tools to:
 2. Parse, compile down to polynomial arithmetic, and serialize constraint systems written in Corset Lisp;
 3. Export those constraint systems in many formats, from Go to LaTeX;
 4. Check & debug traces against a compiled constraint system.
+
+* How to contribute
+
+Contributions are welcome!
+
+Guidelines for Non-Code and other Trivial Contributions
+Please keep in mind that we do not accept non-code contributions like fixing comments, typos or some other trivial fixes. Although we appreciate the extra help, managing lots of these small contributions is unfeasible, and puts extra pressure in our continuous delivery systems (running all tests, etc). Feel free to open an issue pointing to any of those errors, and we will batch them into a single change.
+
+1. [Create an issue](https://github.com/Consensys/corset/issues).
+> If the proposed update requires input, also tag us for discussion.
+2. Submit the update as a pull request from your [fork of this repo](https://github.com/Consensys/corset/fork), and tag us for review. 
+> Include the issue number in the pull request description and (optionally) in the branch name.
+
+Consider starting with a ["good first issue"](https://github.com/Consensys/corset/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+
 * Installation
 The only dependency to run Corset is [[https://www.rust-lang.org/][the Rust compiler]]. Once it is available, Corset can be installed with ~cargo install --git https://github.com/ConsenSys/corset~; or, within a local copy of the repo: ~cargo install --path .~
 * Usage
