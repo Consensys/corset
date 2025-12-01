@@ -1,4 +1,8 @@
-* Corset
+* Status: Archived
+
+This project is no longer maintained, please use [go-corset](https://github.com/Consensys/go-corset/) instead.
+
+** Corset
 Corset is a Lisp-based DSL (Domain-Specific Language), designed to implement constraint systems in the context of zero-knowledge proof systems. It aims at simplifying the writing and understanding of complicated, intricate, commitments by abstracting over cryptographic polynomial primitives while letting users work at their preferred granularity level.
 
 It offers all the tools to:
@@ -7,7 +11,7 @@ It offers all the tools to:
 3. Export those constraint systems in many formats, from Go to LaTeX;
 4. Check & debug traces against a compiled constraint system.
 
-* How to contribute
+** How to contribute
 
 Contributions are welcome!
 
@@ -21,12 +25,12 @@ Please keep in mind that we do not accept non-code contributions like fixing com
 
 Consider starting with a ["good first issue"](https://github.com/Consensys/corset/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
 
-* Installation
+** Installation
 The only dependency to run Corset is [[https://www.rust-lang.org/][the Rust compiler]]. Once it is available, Corset can be installed with ~cargo install --git https://github.com/ConsenSys/corset~; or, within a local copy of the repo: ~cargo install --path .~
-* Usage
+** Usage
 Corset is a simple Lisp dialect, compiling expressions to a representation compatible with a polynomial cryptographic proof system featuring the following operations: ~Add~, ~Mul~, ~Sub~, ~Neg~, and ~Inv~.
 
-** Command Line Interface
+*** Command Line Interface
 #+begin_src
 Usage: corset [OPTIONS] [SOURCE]... <COMMAND>
 
@@ -55,15 +59,15 @@ Options:
   -V, --version            Print version
 #+end_src
 
-** General Concept
+*** General Concept
 A program takes the form of a list of Lisp-like expression written in the Corset dialect of Lisp, that are then parsed as a list of Lisp constraints and compiled as a succession of constraints expressed as composition of the aforementioned base functions.
 
 Once formalized by the Corset compiler, these "programs" can then be exported to any backend – although for now, only Go exporting is implemented.
 
-* Programming in Corset
-** General Form of a Corset Program
+** Programming in Corset
+*** General Form of a Corset Program
 A Corset program is defined as a succession of top-level forms. Each of these forms define a piece of the final program, which can be a *column*, a *constant*, a *function*, an *alias*, or a *constraint*.
-*** Columns
+**** Columns
 Columns are the basic building block of Corset programs, as they represent the values that the constraint system will be checked against. Columns are defined with the ~defcolumns~ keyword, and can be either *scalar* or *composite* (/i.e./ array-like). All the elements of a column can be: *integer* (/i.e./ field elements), *bytes* (integers in the 0-255 range), *nibbles* (integers in the 0-32 range) or *booleans*.
 
 #+begin_src lisp
